@@ -1,0 +1,322 @@
+'use strict';
+
+import { state } from './state.js';
+import { saveEntries, savePeople, saveClubs } from './state.js';
+import { GENDER, COURSE, TIMING } from './constants.js';
+import { normaliseDate, cleanName, iequal } from './utils.js';
+import { calculateCategory, calculateCourse, seniorAllowed } from './categories.js';
+import { addPerson, addClub, sortPeople, sortClubs, getNextBibNumber, getNextDibberNumber, mapDibberNumber } from './data.js';
+import { getTimingMethod, usingDibbers } from './time-utils.js';
+
+// ============================================================
+// Entry registration logic (translated from Entries.xml)
+// ============================================================
+
+/** Get total registered entries */
+export function getNumberOfEntries() {
+  return state.entries.length;
+}
+
+/** Count entries on a given course */
+export function getEntriesOnCourse(course) {
+  return state.entries.filter(e => iequal(e.course, course)).length;
+}
+
+/** Get the entry limit for a course */
+export function getEntryLimit(course) {
+  if (course && course.toUpperCase().startsWith(COURSE.JUNIORS_PREFIX.toUpperCase())) {
+    return +state.event.juniorEntryLimit || 0;
+  }
+  return +state.event.entryLimit || 0;
+}
+
+/** Check if a course is full */
+export function courseFull(course) {
+  const limit = getEntryLimit(course);
+  if (!limit) return false;
+  return getEntriesOnCourse(course) >= limit;
+}
+
+/** Find an entry row by bib number. Returns index or -1. */
+export function findEntryByBib(bibNumber) {
+  if (!bibNumber || +bibNumber <= 0) return -1;
+  return state.entries.findIndex(e => +e.bibNumber === +bibNumber);
+}
+
+/** Find an entry row by dibber short code. Returns index or -1. */
+export function findEntryByDibber(dibberShortCode) {
+  if (!dibberShortCode || +dibberShortCode <= 0) return -1;
+  const longCode = mapDibberNumber(dibberShortCode);
+  if (longCode <= 0) return -1;
+  return state.entries.findIndex(e => +e.dibberNumber === +longCode);
+}
+
+/** Get an entry object by bib number. Returns null if not found. */
+export function getEntry(bibNumber) {
+  const idx = findEntryByBib(bibNumber);
+  return idx >= 0 ? state.entries[idx] : null;
+}
+
+/**
+ * Add or update a single entry.
+ * Returns the index in state.entries, or -1 on validation failure.
+ */
+export function addEntry({
+  bibNumber, dibberNumber, fraNumber, name, club,
+  gender, dob, category, course, preEntry, startTime, retired, status
+}) {
+  if (!bibNumber || +bibNumber <= 0) return -1;
+  const bib = +bibNumber;
+
+  let idx = findEntryByBib(bib);
+  if (idx < 0) {
+    idx = state.entries.length;
+    state.entries.push({});
+  }
+
+  const e = state.entries[idx];
+  e.bibNumber    = bib;
+  e.dibberNumber = dibberNumber !== undefined ? dibberNumber : (e.dibberNumber || 0);
+  e.fraNumber    = fraNumber    !== undefined ? fraNumber    : (e.fraNumber    || '');
+  e.name         = cleanName(name  || e.name  || '');
+  e.club         = cleanName(club  || e.club  || '');
+  e.gender       = gender        !== undefined ? gender      : (e.gender       || '');
+  e.dob          = normaliseDate(dob || e.dob || '');
+  e.category     = category      !== undefined ? category    : (e.category     || '');
+  e.course       = course        !== undefined ? course      : (e.course       || COURSE.SENIORS);
+  e.preEntry     = preEntry      !== undefined ? preEntry    : (e.preEntry     || '');
+  e.startTime    = startTime     !== undefined ? startTime   : (e.startTime    || '');
+  e.retired      = retired       !== undefined ? retired     : (e.retired      || '');
+  e.status       = status        !== undefined ? status      : (e.status       || '');
+
+  return idx;
+}
+
+/**
+ * Submit a new entry from the registration form.
+ * formData: {name, gender, dob, club, fraNumber, category, course, preEntry}
+ * Allocates bib number and dibber if needed.
+ * Returns {bibNumber, dibberNumber, error} — error is '' on success.
+ */
+export async function submitEntry(formData) {
+  const name    = cleanName(formData.name || '');
+  const gender  = (formData.gender || '').charAt(0).toUpperCase();
+  const dob     = normaliseDate(formData.dob || '');
+  const club    = cleanName(formData.club || '');
+  const fra     = formData.fraNumber || '';
+  const preEntry = formData.preEntry || '';
+
+  if (!name) return { error: 'Name is required' };
+  if (!gender) return { error: 'Gender is required' };
+  if (!dob && gender !== GENDER.PAIR_PREFIX) return { error: 'Date of birth is required' };
+
+  let category = formData.category || '';
+  if (!category && dob) category = calculateCategory(dob, gender);
+
+  let course = formData.course || '';
+  if (!course) course = calculateCourse(category, dob);
+
+  if (courseFull(course)) {
+    return { error: `${course} is full (limit ${getEntryLimit(course)})` };
+  }
+
+  const bibNumber = getNextBibNumber();
+  let dibberNumber = 0;
+
+  if (usingDibbers(course)) {
+    const shortCode = getNextDibberNumber();
+    dibberNumber = mapDibberNumber(shortCode);
+    if (dibberNumber < 0) dibberNumber = 0;
+  }
+
+  addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry });
+
+  // Update people and clubs lists
+  const nameId = null;
+  addPerson(name, nameId, gender, dob, club, fra, category, false);
+  if (club) addClub(club);
+
+  sortPeople();
+  sortClubs();
+  await saveEntries();
+  await savePeople();
+  await saveClubs();
+
+  return { bibNumber, dibberNumber, error: '' };
+}
+
+/**
+ * Update an existing entry (edit mode).
+ * Returns {error} — error is '' on success.
+ */
+export async function updateEntry(bibNumber, formData) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+
+  const e = state.entries[idx];
+  if (formData.name     !== undefined) e.name     = cleanName(formData.name);
+  if (formData.gender   !== undefined) e.gender   = formData.gender;
+  if (formData.dob      !== undefined) e.dob      = normaliseDate(formData.dob);
+  if (formData.club     !== undefined) e.club     = cleanName(formData.club);
+  if (formData.fraNumber!== undefined) e.fraNumber= formData.fraNumber;
+  if (formData.category !== undefined) e.category = formData.category;
+  if (formData.course   !== undefined) e.course   = formData.course;
+  if (formData.startTime!== undefined) e.startTime= formData.startTime;
+  if (formData.retired  !== undefined) e.retired  = formData.retired;
+  if (formData.status   !== undefined) e.status   = formData.status;
+
+  await saveEntries();
+  return { error: '' };
+}
+
+/** Delete an entry by bib number */
+export async function deleteEntry(bibNumber) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+  state.entries.splice(idx, 1);
+  await saveEntries();
+  return { error: '' };
+}
+
+/** Mark an entry as retired (DNF) */
+export async function retireEntry(bibNumber) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+  state.entries[idx].retired = 'Y';
+  await saveEntries();
+  return { error: '' };
+}
+
+/** Clear the retired flag on an entry */
+export async function unretireEntry(bibNumber) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+  state.entries[idx].retired = '';
+  await saveEntries();
+  return { error: '' };
+}
+
+/** Assign a dibber to an entry (short code → long code) */
+export async function assignDibber(bibNumber, dibberShortCode) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+  const longCode = mapDibberNumber(dibberShortCode);
+  if (longCode < 0) return { error: `Dibber ${dibberShortCode} not found in dibber list` };
+  state.entries[idx].dibberNumber = longCode;
+  await saveEntries();
+  return { error: '' };
+}
+
+/** Set individual start time for an entry */
+export async function setEntryStartTime(bibNumber, timeStr) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+  state.entries[idx].startTime = timeStr;
+  await saveEntries();
+  return { error: '' };
+}
+
+/**
+ * Load pre-entries into the entries list.
+ * Matches by pre-entry participant number or by name/dob.
+ * Returns {added, updated, errors[]}.
+ */
+export async function loadPreEntries() {
+  let added = 0, updated = 0;
+  const errors = [];
+
+  for (const pe of state.preEntries) {
+    const name    = cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim());
+    const gender  = (pe.gender || '').charAt(0).toUpperCase() === 'F' ? GENDER.FEMALE : GENDER.MALE;
+    const dob     = normaliseDate(pe.dob || '');
+    const club    = cleanName(pe.club || '');
+    const fra     = pe.fraNumber || '';
+    const preNum  = pe.participantNumber || '';
+
+    if (!name) continue;
+    if (!dob && gender !== GENDER.PAIR_PREFIX) {
+      errors.push(`Pre-entry ${preNum} (${name}) has no DoB`);
+      continue;
+    }
+
+    let category = pe.category || '';
+    if (!category && dob) category = calculateCategory(dob, gender);
+    const course = calculateCourse(category, dob);
+
+    // Check if already in entries by preEntry number
+    let existing = -1;
+    if (preNum) existing = state.entries.findIndex(e => e.preEntry === preNum);
+
+    if (existing >= 0) {
+      // Update existing entry
+      const e = state.entries[existing];
+      e.name = name; e.gender = gender; e.dob = dob;
+      e.club = club; e.fraNumber = fra; e.category = category; e.course = course;
+      updated++;
+    } else {
+      // New entry
+      const bibNumber = getNextBibNumber();
+      let dibberNumber = 0;
+      if (usingDibbers(course)) {
+        const shortCode = getNextDibberNumber();
+        dibberNumber = mapDibberNumber(shortCode);
+        if (dibberNumber < 0) dibberNumber = 0;
+      }
+      addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry: preNum });
+      added++;
+    }
+  }
+
+  await saveEntries();
+  return { added, updated, errors };
+}
+
+/** Get entries sorted by bib number */
+export function getSortedEntries() {
+  return [...state.entries].sort((a, b) => (+a.bibNumber || 0) - (+b.bibNumber || 0));
+}
+
+/** Get entries for a given course */
+export function getEntriesForCourse(course) {
+  return state.entries.filter(e => iequal(e.course, course));
+}
+
+/** Count unique categories in entries */
+export function getCategoryCount() {
+  const cats = new Set(state.entries.map(e => e.category).filter(Boolean));
+  return cats.size;
+}
+
+/**
+ * Export entries in SI (SportIdent) CSV format for timing boxes.
+ * Returns an array of row objects with SI field names.
+ */
+export function buildSITimingExport() {
+  const rows = [];
+  for (const e of getSortedEntries()) {
+    if (!e.bibNumber) continue;
+    rows.push({
+      'Stno':     e.bibNumber,
+      'XStno':    '',
+      'Chipno':   e.dibberNumber || '',
+      'Database Id': '',
+      'Surname':  e.name || '',
+      'First name': '',
+      'YB':       '',
+      'S':        e.gender === GENDER.FEMALE ? 'F' : 'M',
+      'NC':       '',
+      'Start':    e.startTime || '',
+      'Finish':   '',
+      'Time':     '',
+      'Classifier': '',
+      'club+city': e.club || '',
+      'Cl.':      e.category || '',
+      'short':    e.course || '',
+      'long':     e.course || '',
+      'num':      '',
+      'Start fee': '',
+      'Paid':     '',
+    });
+  }
+  return rows;
+}

@@ -1,0 +1,254 @@
+/* ============================================================
+   RaceMaster — Print styles
+   All measurements in mm for accurate A4 / A5 output
+   ============================================================ */
+
+/* ---- Page setup ---- */
+@page {
+  size: A4 portrait;
+  margin: 8mm 8mm 8mm 8mm;
+}
+
+@page :first { margin-top: 8mm; }
+
+/* ---- Preview wrapper (non-print) ---- */
+body.print-preview {
+  background: #888;
+  padding: 20px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+}
+
+/* ---- Page block ---- */
+.print-page {
+  background: #fff;
+  width: 194mm;      /* A4 210mm - 2×8mm margins */
+  min-height: 277mm; /* A4 297mm - 2×8mm margins */
+  margin: 0 auto 20px;
+  padding: 5mm;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  page-break-after: always;
+}
+
+.print-page:last-child { page-break-after: avoid; }
+
+/* ============================================================
+   Entry Form
+   ============================================================ */
+.entry-form-page { font-size: 8pt; }
+
+.ef-header {
+  text-align: center;
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 0.5mm solid #000;
+}
+
+.ef-title    { font-size: 13pt; font-weight: bold; }
+.ef-subtitle { font-size: 9pt; margin-top: 1mm; }
+.ef-dist     { font-size: 8pt; color: #333; margin-top: 0.5mm; }
+
+.entry-form-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+}
+
+.entry-form-table th {
+  background: #ddd;
+  border: 0.3mm solid #999;
+  padding: 1mm 1.5mm;
+  text-align: left;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.entry-form-table td {
+  border: 0.3mm solid #bbb;
+  padding: 1mm 1.5mm;
+  height: 7mm;
+  vertical-align: middle;
+}
+
+/* Column widths — totals ≈ 184mm */
+.col-pos  { width: 7mm;  text-align: right; }
+.col-bib  { width: 10mm; text-align: center; font-weight: bold; }
+.col-name { width: 55mm; }
+.col-club { width: 40mm; }
+.col-cat  { width: 14mm; text-align: center; }
+.col-dib  { width: 16mm; text-align: center; font-family: monospace; }
+.col-fra  { width: 18mm; }
+.col-sig  { width: 24mm; }
+
+.ef-footer {
+  margin-top: 2mm;
+  font-size: 7pt;
+  color: #666;
+  text-align: right;
+}
+
+/* ============================================================
+   Finish Sheet
+   ============================================================ */
+.finish-sheet-page { font-size: 8pt; }
+
+.fs-header {
+  text-align: center;
+  border-bottom: 0.5mm solid #000;
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+}
+
+.fs-title { font-size: 13pt; font-weight: bold; }
+.fs-sub   { font-size: 9pt; margin-top: 1mm; }
+
+.finish-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8pt;
+}
+
+.finish-sheet-table th {
+  background: #ddd;
+  border: 0.3mm solid #999;
+  padding: 1.5mm 2mm;
+  font-weight: bold;
+}
+
+.finish-sheet-table td {
+  border: 0.3mm solid #bbb;
+  height: 8mm;
+  padding: 1mm 2mm;
+  vertical-align: middle;
+}
+
+.col-fpos  { width: 10mm; text-align: center; font-weight: bold; }
+.col-ftime { width: 28mm; font-family: monospace; font-size: 9pt; }
+.col-fbib  { width: 18mm; font-size: 11pt; font-weight: bold; }
+.col-fname { }  /* takes remaining width */
+
+.fs-footer {
+  margin-top: 3mm;
+  font-size: 7.5pt;
+  border-top: 0.3mm solid #999;
+  padding-top: 1.5mm;
+}
+
+/* ============================================================
+   Number Matrix
+   ============================================================ */
+.number-matrix-page { font-size: 8pt; }
+
+.nm-header { text-align: center; margin-bottom: 3mm; }
+.nm-title  { font-size: 12pt; font-weight: bold; }
+.nm-date   { font-size: 8pt; color: #444; }
+
+.number-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.nm-cell {
+  width: 20%;
+  border: 0.3mm solid #bbb;
+  padding: 1.5mm 2mm;
+  vertical-align: top;
+  height: 14mm;
+}
+
+.nm-empty { background: #f5f5f5; }
+
+.nm-bib  { display: block; font-size: 14pt; font-weight: bold; line-height: 1; }
+.nm-name { display: block; font-size: 7pt; margin-top: 1mm; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nm-cat  { display: block; font-size: 7pt; color: #555; }
+
+/* ============================================================
+   Results Sheet
+   ============================================================ */
+.results-page { font-size: 8pt; }
+
+.rs-header { text-align: center; margin-bottom: 3mm; border-bottom: 0.5mm solid #000; padding-bottom: 2mm; }
+.rs-title  { font-size: 13pt; font-weight: bold; }
+.rs-sub    { font-size: 9pt; margin-top: 1mm; }
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8pt;
+}
+
+.results-table th {
+  background: #ddd;
+  border: 0.3mm solid #999;
+  padding: 1.5mm 2mm;
+  font-weight: bold;
+}
+
+.results-table td {
+  border: 0.3mm solid #eee;
+  padding: 1.5mm 2mm;
+  vertical-align: middle;
+}
+
+.col-rpos    { width: 10mm; text-align: center; font-weight: bold; }
+.col-rtime   { width: 22mm; font-family: monospace; }
+.col-rname   { }
+.col-rclub   { width: 45mm; }
+.col-rcat    { width: 16mm; }
+.col-rcpos   { width: 12mm; text-align: center; }
+.col-rbehind { width: 22mm; font-family: monospace; color: #555; }
+
+.rs-dnf td   { color: #999; }
+.rs-prize td { font-weight: bold; background: #fffde7; }
+
+.rs-footer { margin-top: 3mm; font-size: 7pt; color: #666; text-align: right; }
+
+/* ============================================================
+   Prize List
+   ============================================================ */
+.prize-list-page { font-size: 9pt; }
+
+.pl-header { text-align: center; margin-bottom: 4mm; }
+.pl-title  { font-size: 14pt; font-weight: bold; }
+.pl-date   { font-size: 8pt; color: #444; margin-top: 1mm; }
+
+.prize-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.prize-table th {
+  background: #ddd;
+  border-bottom: 0.5mm solid #999;
+  padding: 2mm 3mm;
+  font-weight: bold;
+}
+
+.prize-table td {
+  border-bottom: 0.2mm solid #eee;
+  padding: 2.5mm 3mm;
+  vertical-align: middle;
+}
+
+.pl-cat-start td { border-top: 0.4mm solid #ccc; }
+.pl-cat  { font-weight: bold; }
+.pl-pos  { width: 18mm; }
+.pl-name { }
+.pl-time { width: 22mm; font-family: monospace; }
+
+.pl-footer { margin-top: 4mm; font-size: 7pt; color: #888; text-align: right; }
+
+/* ============================================================
+   Print media — hide everything else
+   ============================================================ */
+@media print {
+  body { background: none; padding: 0; }
+  body.print-preview { background: none; }
+  .print-page {
+    box-shadow: none;
+    margin: 0;
+    width: 100%;
+    min-height: auto;
+  }
+}
