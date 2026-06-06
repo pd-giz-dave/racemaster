@@ -11,7 +11,7 @@ import { parseSICSV } from './csv.js';
 // ============================================================
 
 /**
- * Parse raw SI Entries CSV text into preEntries array.
+ * Parse raw pre-entries CSV text into preEntries array.
  * Supports both Sportident and EntryCentral formats.
  * Returns array of preEntry objects.
  */
@@ -22,14 +22,15 @@ export function parseSIEntriesCSV(text) {
 
   // Detect format by header fields
   const headers = rawHeaders.map(h => h.toUpperCase());
-  const isEC = headers.some(h => h.includes('FIRST NAME') || h.includes('FIRSTNAME'));
-  const isSI = headers.some(h => h === 'STNO' || h === 'CHIPNO');
 
-  return rows.map(r => parsePreEntryRow(r, isEC));
+  return rows.map(r => parsePreEntryRow(r));
 }
 
-function parsePreEntryRow(r, isEC) {
-  // Normalise key access: try common field name variants
+function parsePreEntryRow(r) {
+  // Pick all the fields we want from all those available.
+  // Try field name variants for SI and EC (there is no overlap, so no ambiguity)
+
+  // local function to test what we've got
   const get = (...keys) => {
     for (const k of keys) {
       const found = Object.keys(r).find(rk => rk.trim().toUpperCase() === k.toUpperCase());
@@ -38,52 +39,40 @@ function parsePreEntryRow(r, isEC) {
     return '';
   };
 
-  const participantNumber = get('participantNumber','Stno','Bib','BibNumber','Number');
-  const firstName  = get('firstName','First name','Firstname','Given name','Forename');
-  const lastName   = get('lastName','Surname','Last name','Lastname','Family name');
-  const genderRaw  = get('gender','S','Sex','Gender');
-  const dobRaw     = get('dob','YB','DOB','DateOfBirth','Date of birth','Birth date');
-  const club       = get('club','club+city','Club','Team','Organisation');
-  const fraNumber  = get('fraNumber','FRA','FRANumber','FRA Number');
-  const category   = get('category','Cl.','Class','Category','Cat');
-  const email      = get('email','Email','E-mail');
-  const address1   = get('address1','Address','Address1','Add1');
-  const address2   = get('address2','Address2','Add2');
-  const town       = get('town','Town','City');
-  const county     = get('county','County');
-  const postcode   = get('postcode','Postcode','Post code','Zip');
-  const country    = get('country','Country');
-  const telephone  = get('telephone','Telephone','Phone','Tel');
-  const mobile     = get('mobile','Mobile','Cell');
-  const eligibility= get('eligibility','Eligibility');
-  const contactName= get('contactName','Emergency contact','EmergencyContact','Contact name');
-  const contactTel = get('contactTelephone','Emergency telephone','ContactTelephone','Contact tel');
-  const medical    = get('medical','Medical','MedicalInfo');
-  const carReg     = get('carReg','Car reg','CarReg','Car registration');
-  const participantId = get('participantId','ParticipantId','Id');
+  // get each field of interest (case insensitive)
+  const participantNumber = get('Participant - Participant No','RaceNumber');
+  const firstName  = get('Participant - First Name','Forename');
+  const lastName   = get('Participant - Last Name','Surname');
+  const genderRaw  = get('Participant - Gender','Participant - Class Sex at Birth','Participant - Sex','Gender');
+  const dob        = get('Participant - Date of Birth','DOB');
+  const club       = get('Entry Details - Club','Club');
+  const fraNumber  = get('Entry Details - FRA Membership Number','MembershipId');
+  const category   = get('Participant - Class','AgeGroup');
+  const email      = get('Participant - Email Address','email');
+  const address1   = get('Participant - Address Line 1','Address1');
+  const address2   = get('Participant - Address Line 2','Address2');
+  const town       = get('Participant - Postal Town','Town/City');
+  const county     = get('Participant - County','Region');
+  const postcode   = get('Participant - Post Code','Postcode');
+  const country    = get('Participant - Country','Country');
+  const telephone  = get('Participant - Telephone No','phone');
+  const mobile     = get('Participant - Mobile No');
+  const eligibility= get('English Championships Eligibility - I am eligible for English Champs');
+  const contactName= get('Emergency Details - Emergency Contact Name');
+  const contactTelephone = get('Emergency Details - Emergency Contact Telephone');
+  const medical    = get('Emergency Details - Medical Conditions');
+  const carReg     = get('Emergency Details - Car Registration');
 
   // Normalise gender
   const genderFirst = genderRaw.toUpperCase().charAt(0);
   const gender = genderFirst === 'F' ? GENDER.FEMALE : GENDER.MALE;
-
-  // Normalise dob — may be year only (YB) or full date
-  let dob = '';
-  if (dobRaw) {
-    if (/^\d{4}$/.test(dobRaw.trim())) {
-      // Year-only from SI: convert to 01/01/YYYY
-      dob = `01/01/${dobRaw.trim()}`;
-    } else {
-      dob = normaliseDate(dobRaw);
-    }
-  }
 
   return {
     participantNumber, firstName, lastName, gender, dob,
     club, fraNumber, category, email,
     address1, address2, town, county, postcode, country,
     telephone, mobile, eligibility,
-    contactName, contactTelephone: contactTel, medical, carReg,
-    participantId,
+    contactName, contactTelephone, medical, carReg,
   };
 }
 

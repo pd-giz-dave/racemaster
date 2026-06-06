@@ -35,6 +35,16 @@ export function normaliseDate(d) {
     if (isNaN(dt)) return '';
     return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
   }
+  // Try DD/MM/YY — expand 2-digit year: if 2000+yy is in the future use 1900+yy
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (m) {
+    const [,dd,mm,yy] = m;
+    const century = (2000 + +yy) > new Date().getFullYear() ? 1900 : 2000;
+    const yyyy = String(century + +yy);
+    const dt = new Date(+yyyy, +mm-1, +dd);
+    if (isNaN(dt)) return '';
+    return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+  }
   // Try YYYY-MM-DD
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
