@@ -15,7 +15,7 @@ import { exportSITimingCSV } from '../si-results.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, confirm,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
-  downloadText, sanitise,
+  downloadText, sanitise, escHtml,
 } from '../ui.js';
 import { renderHome } from './home.js';
 
@@ -265,14 +265,25 @@ export function wireEntries() {
       if (penoEl.value === '' && e.key.length === 1 && /[a-zA-Z]/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
         const nameField = document.getElementById('entry-form-name');
-        if (nameField) { nameField.value = e.key; nameField.focus(); }
+        if (nameField) {
+          nameField.value = e.key;
+          nameField.focus();
+          nameField.dispatchEvent(new Event('input'));
+        }
       }
     });
-    penoEl.addEventListener('change', () => {
+    penoEl.addEventListener('input', () => {
       const num = penoEl.value.trim();
-      if (!num || !/^\d+$/.test(num)) return;
-      const pe = state.preEntries.find(p => String(p.participantNumber).trim() === num);
-      if (!pe) return;
+      const pe = (num && /^\d+$/.test(num))
+        ? state.preEntries.find(p => String(p.participantNumber).trim() === num)
+        : null;
+      if (!pe) {
+        fillForm('', {
+          'entry-form-name': '', 'entry-form-gender': '',
+          'entry-form-dob':  '', 'entry-form-club':   '', 'entry-form-fra': '',
+        });
+        return;
+      }
       const name = cleanName(`${pe.firstName || ''} ${pe.lastName || ''}`.trim());
       const g = (pe.gender || '').toUpperCase().trim();
       const gender = (g === 'M' || g === 'MALE')   ? 'M'
@@ -290,29 +301,114 @@ export function wireEntries() {
     });
   }
 
-  // Auto-populate entry form from people database when a name is selected
+  // Name field: live typeahead against people database; ↓ opens disambiguation list for duplicate names
   const nameEl = document.getElementById('entry-form-name');
   if (nameEl) {
-    const populateFromPeople = () => {
-      const name = nameEl.value.trim();
-      const person = name ? state.people.find(p => iequal(p.name, name)) : null;
-      if (!person) return;
-      // People may store gender as full word ('Male','Female','Pair') or single char (M/F/P)
-      const g = (person.gender || '').toUpperCase().trim();
-      const gender = (g === 'M' || g === 'MALE')   ? 'M'
-                   : (g === 'F' || g === 'FEMALE') ? 'F'
-                   : (g === 'P' || g === 'PAIR')   ? 'P'
-                   : '';
+    const dropdown = document.createElement('ul');
+    dropdown.className = 'name-typeahead';
+    dropdown.hidden = true;
+    const nameWrapper = nameEl.closest('.form-field');
+    nameWrapper.style.position = 'relative';
+    nameWrapper.appendChild(dropdown);
+
+    let currentMatches = [];
+
+    const normGender = g => {
+      const u = (g || '').toUpperCase().trim();
+      return u === 'M' || u === 'MALE' ? 'M' : u === 'F' || u === 'FEMALE' ? 'F' : u === 'P' || u === 'PAIR' ? 'P' : '';
+    };
+
+    const fillFromPerson = p => {
       fillForm('', {
-        'entry-form-gender': gender,
-        'entry-form-dob':    person.dob       || '',
-        'entry-form-club':   person.club      || '',
-        'entry-form-fra':    person.fraNumber || '',
+        'entry-form-gender': normGender(p.gender),
+        'entry-form-dob':    p.dob       || '',
+        'entry-form-club':   p.club      || '',
+        'entry-form-fra':    p.fraNumber || '',
       });
       autoFillCategory();
     };
-    nameEl.addEventListener('change', populateFromPeople);
-    nameEl.addEventListener('input',  populateFromPeople);
+
+    const closeDropdown = () => { dropdown.hidden = true; dropdown.innerHTML = ''; };
+
+    const showDropdown = () => {
+      if (currentMatches.length < 2) { closeDropdown(); return; }
+      dropdown.innerHTML = currentMatches.map((p, i) => {
+        const detail = [p.dob, p.club].filter(Boolean).join(' – ');
+        return `<li data-i="${i}" tabindex="-1">${escHtml(p.name)}${detail ? ` <span class="text-muted text-sm">(${escHtml(detail)})</span>` : ''}</li>`;
+      }).join('');
+      dropdown.hidden = false;
+      dropdown.querySelectorAll('li').forEach(li =>
+        li.addEventListener('mousedown', e => {
+          e.preventDefault();
+          const p = currentMatches[+li.dataset.i];
+          nameEl.value = p.name;
+          fillFromPerson(p);
+          closeDropdown();
+        })
+      );
+    };
+
+    nameEl.addEventListener('input', () => {
+      const typed = nameEl.value.trim();
+      if (!typed) {
+        currentMatches = [];
+        closeDropdown();
+        fillForm('', { 'entry-form-gender': '', 'entry-form-dob': '', 'entry-form-club': '', 'entry-form-fra': '' });
+        return;
+      }
+      const low = typed.toLowerCase();
+      currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
+      if (currentMatches.length) {
+        fillFromPerson(currentMatches[0]);
+      } else {
+        fillForm('', { 'entry-form-gender': '', 'entry-form-dob': '', 'entry-form-club': '', 'entry-form-fra': '' });
+      }
+      showDropdown();
+    });
+
+    nameEl.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' && currentMatches.length > 1) {
+        e.preventDefault();
+        showDropdown();
+        dropdown.querySelector('li')?.focus();
+      }
+    });
+
+    dropdown.addEventListener('keydown', e => {
+      const items = [...dropdown.querySelectorAll('li')];
+      const idx = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : nameEl.focus(); }
+      else if (e.key === 'Enter' && idx >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        const p = currentMatches[idx];
+        nameEl.value = p.name;
+        fillFromPerson(p);
+        closeDropdown();
+        nameEl.focus();
+      }
+      else if (e.key === 'Escape') { closeDropdown(); nameEl.focus(); }
+    });
+
+    nameEl.addEventListener('change', () => {
+      const typed = nameEl.value.trim();
+      if (!typed) return;
+      const exact = state.people.find(p => iequal(p.name, typed));
+      if (exact) fillFromPerson(exact);
+    });
+
+    nameEl.addEventListener('blur', () => setTimeout(() => {
+      if (dropdown.contains(document.activeElement)) return; // user navigating dropdown
+      const typed = nameEl.value.trim();
+      if (!typed) {
+        fillForm('', { 'entry-form-gender': '', 'entry-form-dob': '', 'entry-form-club': '', 'entry-form-fra': '' });
+        currentMatches = [];
+      } else if (currentMatches.length > 0) {
+        nameEl.value = currentMatches[0].name;
+        fillFromPerson(currentMatches[0]);
+      }
+      closeDropdown();
+    }, 150));
   }
 
   // Auto-capitalise name and club fields as the user types

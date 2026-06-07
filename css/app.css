@@ -508,3 +508,30 @@ input:focus, select:focus, textarea:focus {
 }
 
 @media print { .app-shell { display: block; } .app-sidebar, .app-header, #status-bar { display: none; } }
+
+/* ---- Name typeahead dropdown ---- */
+.name-typeahead {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  list-style: none;
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.name-typeahead li {
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.name-typeahead li:hover,
+.name-typeahead li:focus { background: var(--accent-light); outline: none; }

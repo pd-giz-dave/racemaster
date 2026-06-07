@@ -58,7 +58,7 @@ export function showStatus(msg, isError = false) {
   const inlineEls = document.querySelectorAll('.view-status-msg');
   for (const el of inlineEls) {
     el.textContent = msg;
-    el.className = `entry-status ${cls}`;
+    el.className = `entry-status view-status-msg ${cls}`;
     el.hidden = !msg;
     setTimeout(() => { if (el.textContent === msg) { el.textContent = ''; el.hidden = true; } }, 10000);
   }
