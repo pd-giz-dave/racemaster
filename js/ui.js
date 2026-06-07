@@ -108,6 +108,13 @@ export function updateDatalistClubs() {
   dl.innerHTML = clubs.map(c => `<option value="${escHtml(c)}">`).join('');
 }
 
+export function updateDatalistRoles() {
+  const dl = document.getElementById('datalist-roles');
+  if (!dl) return;
+  const roles = [...new Set(state.roles.map(r => r.role).filter(Boolean))].sort();
+  dl.innerHTML = roles.map(r => `<option value="${escHtml(r)}">`).join('');
+}
+
 // Normalise date/time inputs on blur — delegated so it covers dynamically created inputs too
 document.addEventListener('focusout', e => {
   const el = e.target;

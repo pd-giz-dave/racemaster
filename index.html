@@ -47,6 +47,7 @@
       <div class="nav-section">Data</div>
       <a href="#" data-view="people">People</a>
       <a href="#" data-view="clubs">Clubs</a>
+      <a href="#" data-view="roles">Roles</a>
       <a href="#" data-view="dibbers">Dibbers</a>
       <a href="#" data-view="categories">Categories</a>
 
@@ -362,13 +363,22 @@
             </div>
             <div class="form-field mb-8">
               <label for="helper-form-club">Club</label>
-              <input type="text" id="helper-form-club">
+              <input type="text" id="helper-form-club" autocomplete="off" list="datalist-clubs">
             </div>
             <div class="form-field mb-8">
               <label for="helper-form-role">Role</label>
-              <input type="text" id="helper-form-role" placeholder="e.g. Timekeeper, Marshal">
+              <input type="text" id="helper-form-role" autocomplete="off" list="datalist-roles">
             </div>
-            <button class="btn" id="btn-submit-helper" style="width:100%">Add Helper</button>
+            <div class="form-field mb-8">
+              <label for="helper-form-role-desc">Role Description</label>
+              <input type="text" id="helper-form-role-desc" placeholder="Auto-filled for known roles; enter for new roles">
+            </div>
+            <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:10px">
+              <input type="checkbox" id="helper-form-confirm">
+              <label for="helper-form-confirm" style="font-size:0.85rem;color:var(--text);cursor:pointer">Confirm helper details are correct</label>
+            </div>
+            <button class="btn" id="btn-submit-helper" style="width:100%;margin-top:8px">Add Helper</button>
+            <button class="btn btn-secondary" id="btn-cancel-helper-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
           </div>
         </div>
 
@@ -602,7 +612,7 @@
       <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Count</th><th>Actions</th></tr>
+            <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Seen</th><th>Last Helped</th><th>Helped</th><th>Actions</th></tr>
           </thead>
           <tbody id="people-tbody"></tbody>
         </table>
@@ -627,6 +637,28 @@
             <tr><th>Name</th><th>Last Seen</th><th>Count</th><th>Actions</th></tr>
           </thead>
           <tbody id="clubs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ======================================================
+         ROLES
+         ====================================================== -->
+    <div class="view" id="view-roles" hidden>
+      <div class="view-header">
+        <h2>Roles</h2>
+        <span class="count-badge" id="roles-count">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-add-role">Add Role</button>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Role</th><th>Description</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="roles-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -752,6 +784,7 @@
     <!-- Datalists for typeahead autocomplete -->
     <datalist id="datalist-names"></datalist>
     <datalist id="datalist-clubs"></datalist>
+    <datalist id="datalist-roles"></datalist>
 
   </main><!-- end .app-main -->
 </div><!-- end .app-shell -->

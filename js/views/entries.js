@@ -61,7 +61,12 @@ export function renderEntries() {
   tbody.querySelectorAll('.btn-delete-entry').forEach(b =>
     b.addEventListener('click', () => deleteFromEntry(+b.dataset.bib)));
 
-  setHTML('entry-count-display', `${entries.length} entries`);
+  const juniorCount  = entries.filter(e => e.course === COURSE.JUNIORS).length;
+  const seniorCount  = entries.length - juniorCount;
+  setHTML('entry-count-display',
+    juniorCount > 0
+      ? `${seniorCount} seniors · ${juniorCount} juniors`
+      : `${entries.length} entries`);
   populateCategoryDropdown('entry-form-category', '');
   populateCategoryDropdown('entry-edit-category', '');
   updateDatalistNames();

@@ -34,6 +34,7 @@ const PRECACHE = [
   '/js/views/safety.js',
   '/js/views/people.js',
   '/js/views/clubs.js',
+  '/js/views/roles.js',
   '/js/views/dibbers.js',
   '/js/views/categories.js',
   '/js/views/view-forms.js',

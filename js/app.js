@@ -3,7 +3,7 @@
 import { state, loadAll } from './state.js';
 import { restoreDirectory, dumpState, restoreState } from './storage.js';
 import { showBusy } from './utils.js';
-import { on, showStatus, updateDatalistNames, updateDatalistClubs, confirm, pickFile, downloadText, sanitise } from './ui.js';
+import { on, showStatus, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, confirm, pickFile, downloadText, sanitise } from './ui.js';
 
 import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
@@ -15,6 +15,7 @@ import { renderPreEntries, wirePreEntries } from './views/pre-entries.js';
 import { renderSafety, wireSafety }         from './views/safety.js';
 import { renderPeople, wirePeople }         from './views/people.js';
 import { renderClubs, wireClubs }           from './views/clubs.js';
+import { renderRoles, wireRoles }           from './views/roles.js';
 import { renderDibbers, wireDibbers }       from './views/dibbers.js';
 import { renderCategories, wireCategories } from './views/categories.js';
 import { renderForms, wireForms }           from './views/view-forms.js';
@@ -77,6 +78,7 @@ function renderAll() {
   renderHome();
   updateDatalistNames();
   updateDatalistClubs();
+  updateDatalistRoles();
 }
 
 function renderView(v) {
@@ -98,6 +100,7 @@ function renderView(v) {
     case 'safety':       renderSafety();       break;
     case 'people':       renderPeople();       break;
     case 'clubs':        renderClubs();        break;
+    case 'roles':        renderRoles();        break;
     case 'dibbers':      renderDibbers();      break;
     case 'categories':   renderCategories();   break;
     case 'forms':        renderForms();        break;
@@ -145,6 +148,7 @@ function wireEvents() {
   wirePreEntries();
   wirePeople();
   wireClubs();
+  wireRoles();
   wireDibbers();
   wireCategories();
   wireForms();

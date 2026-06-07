@@ -15,6 +15,8 @@ export function renderPeople() {
       <td>${p.fraNumber || ''}</td>
       <td>${p.lastSeen || ''}</td>
       <td>${p.seenTotal || 0}</td>
+      <td>${p.lastHelped || ''}</td>
+      <td>${p.helpedTotal || 0}</td>
       <td>
         <button class="btn-sm btn-edit"   data-idx="${i}">Edit</button>
         <button class="btn-sm btn-delete" data-idx="${i}">Del</button>
@@ -38,8 +40,10 @@ export function personEditCells(prefix, p) {
     <td><input id="${prefix}-dob"      type="text" value="${escHtml(p.dob || '')}"        style="width:95px" data-normalise="date"></td>
     <td><input id="${prefix}-club"     type="text" value="${escHtml(p.club || '')}"       style="width:110px"></td>
     <td><input id="${prefix}-fra"      type="text" value="${escHtml(p.fraNumber || '')}"  style="width:70px"></td>
-    <td><input id="${prefix}-lastseen" type="text" value="${escHtml(p.lastSeen || '')}"   style="width:75px"></td>
-    <td><input id="${prefix}-count"    type="number" value="${p.seenTotal || 0}"           style="width:50px" min="0"></td>`;
+    <td><input id="${prefix}-lastseen"    type="text"   value="${escHtml(p.lastSeen || '')}"    style="width:75px" data-normalise="date"></td>
+    <td><input id="${prefix}-count"       type="number" value="${p.seenTotal || 0}"            style="width:50px" min="0"></td>
+    <td><input id="${prefix}-lasthelped"  type="text"   value="${escHtml(p.lastHelped || '')}" style="width:75px" data-normalise="date"></td>
+    <td><input id="${prefix}-helpedcount" type="number" value="${p.helpedTotal || 0}"           style="width:50px" min="0"></td>`;
 }
 
 export function readPersonCells(prefix, p) {
@@ -48,8 +52,10 @@ export function readPersonCells(prefix, p) {
   p.dob       = document.getElementById(`${prefix}-dob`)?.value.trim()      || p.dob;
   p.club      = document.getElementById(`${prefix}-club`)?.value.trim()     || '';
   p.fraNumber = document.getElementById(`${prefix}-fra`)?.value.trim()      || '';
-  p.lastSeen  = document.getElementById(`${prefix}-lastseen`)?.value.trim() || '';
-  p.seenTotal = parseInt(document.getElementById(`${prefix}-count`)?.value, 10) || 0;
+  p.lastSeen    = document.getElementById(`${prefix}-lastseen`)?.value.trim()    || '';
+  p.seenTotal   = parseInt(document.getElementById(`${prefix}-count`)?.value, 10)        || 0;
+  p.lastHelped  = document.getElementById(`${prefix}-lasthelped`)?.value.trim()  || '';
+  p.helpedTotal = parseInt(document.getElementById(`${prefix}-helpedcount`)?.value, 10)  || 0;
 }
 
 export function editPersonRow(idx) {
