@@ -6,52 +6,58 @@ import { GENDER, LIST_SEP, SUFFIX_SEP } from './constants.js';
 // Utility functions (translated from Utils.xml)
 // ============================================================
 
-/** Normalise a time string to HH:MM:SS. Returns '' on failure. */
+/** Normalise a time string to HH:MM:SS. Returns '' on failure.
+ *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.
+ *  Two parts → M:S (h=0); one part → S (h=m=0).
+ */
 export function normaliseTime(t) {
   if (!t || typeof t !== 'string') return '';
   t = t.trim();
   if (!t) return '';
-  // Accept HH:MM:SS, H:MM:SS, MM:SS, M:SS, SS
-  const parts = t.split(':').map(Number);
+  const parts = t.split(/[^\d]+/).filter(Boolean).map(Number);
   if (parts.some(isNaN)) return '';
   let h = 0, m = 0, s = 0;
-  if (parts.length === 3) { [h, m, s] = parts; }
-  else if (parts.length === 2) { [m, s] = parts; }
-  else if (parts.length === 1) { s = parts[0]; }
+  if      (parts.length === 3) { [h, m, s] = parts; }
+  else if (parts.length === 2) { [m, s]    = parts; }
+  else if (parts.length === 1) { [s]        = parts; }
   else return '';
   if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return '';
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-/** Normalise a date string to DD/MM/YYYY. Returns '' on failure. */
+/** Normalise a date string to DD/MM/YYYY. Returns '' on failure.
+ *  Accepts any separator and leading-zero suppression, e.g. 1/1/90, 01-01-1990, 1.1.2000.
+ */
 export function normaliseDate(d) {
   if (!d) return '';
   const s = String(d).trim();
-  // Try DD/MM/YYYY
-  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  // Try YYYY?MM?DD (ISO-like, year first — check before day-first to avoid ambiguity)
+  let m = s.match(/^(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})$/);
+  if (m) {
+    const [,yyyy,mm,dd] = m;
+    const dt = new Date(+yyyy, +mm-1, +dd);
+    if (isNaN(dt)) return '';
+    return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
+  }
+  // Try DD?MM?YYYY (any separator, with or without leading zeros)
+  m = s.match(/^(\d{1,2})[^\d](\d{1,2})[^\d](\d{4})$/);
   if (m) {
     const [,dd,mm,yyyy] = m;
     const dt = new Date(+yyyy, +mm-1, +dd);
     if (isNaN(dt)) return '';
-    return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+    return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
   }
-  // Try DD/MM/YY — expand 2-digit year: if 2000+yy is in the future use 1900+yy
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  // Try DD?MM?YY (any separator) — expand 2-digit year: if 2000+yy is in the future use 1900+yy
+  m = s.match(/^(\d{1,2})[^\d](\d{1,2})[^\d](\d{2})$/);
   if (m) {
     const [,dd,mm,yy] = m;
     const century = (2000 + +yy) > new Date().getFullYear() ? 1900 : 2000;
     const yyyy = String(century + +yy);
     const dt = new Date(+yyyy, +mm-1, +dd);
     if (isNaN(dt)) return '';
-    return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
+    return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
   }
-  // Try YYYY-MM-DD
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) {
-    const [,yyyy,mm,dd] = m;
-    return `${dd}/${mm}/${yyyy}`;
-  }
-  // Try to parse with Date (fallback)
+  // Fallback to Date constructor (handles "1 Jan 2000" etc.)
   const dt = new Date(s);
   if (isNaN(dt)) return '';
   const dd  = String(dt.getDate()).padStart(2,'0');

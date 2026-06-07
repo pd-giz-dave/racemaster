@@ -108,7 +108,7 @@
          EVENT SETTINGS
          ====================================================== -->
     <div class="view" id="view-event" hidden>
-      <div class="view-header"><h2>Event Settings</h2></div>
+      <div class="view-header"><h2>Event Settings</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="card">
         <h3>Race Details</h3>
@@ -119,7 +119,7 @@
           </div>
           <div class="form-field">
             <label for="ev-date">Date (DD/MM/YYYY)</label>
-            <input type="text" id="ev-date" placeholder="DD/MM/YYYY">
+            <input type="text" id="ev-date" placeholder="DD/MM/YYYY" data-normalise="date">
           </div>
           <div class="form-field">
             <label for="ev-distance">Distance (km)</label>
@@ -128,8 +128,8 @@
           <div class="form-field">
             <label for="ev-categories">Categories</label>
             <select id="ev-categories">
-              <option value="FRA">FRA</option>
-              <option value="WFRA">WFRA</option>
+              <option value="FRA">FRA (5 year)</option>
+              <option value="WFRA">WFRA (10 year)</option>
             </select>
           </div>
           <div class="form-field">
@@ -144,7 +144,7 @@
         <div class="form-grid">
           <div class="form-field">
             <label for="ev-start-time">Start Time (HH:MM:SS)</label>
-            <input type="text" id="ev-start-time" placeholder="11:00:00">
+            <input type="text" id="ev-start-time" placeholder="11:00:00" data-normalise="time">
           </div>
           <div class="form-field">
             <label for="ev-entry-limit">Entry Limit</label>
@@ -160,11 +160,11 @@
           </div>
           <div class="form-field">
             <label for="ev-male-record">Male Record (HH:MM:SS)</label>
-            <input type="text" id="ev-male-record" placeholder="HH:MM:SS">
+            <input type="text" id="ev-male-record" placeholder="HH:MM:SS" data-normalise="time">
           </div>
           <div class="form-field">
             <label for="ev-female-record">Female Record (HH:MM:SS)</label>
-            <input type="text" id="ev-female-record" placeholder="HH:MM:SS">
+            <input type="text" id="ev-female-record" placeholder="HH:MM:SS" data-normalise="time">
           </div>
         </div>
       </div>
@@ -174,7 +174,7 @@
         <div class="form-grid">
           <div class="form-field">
             <label for="ev-junior-start-time">Start Time (HH:MM:SS)</label>
-            <input type="text" id="ev-junior-start-time" placeholder="11:00:00">
+            <input type="text" id="ev-junior-start-time" placeholder="11:00:00" data-normalise="time">
           </div>
           <div class="form-field">
             <label for="ev-junior-limit-n">Entry Limit</label>
@@ -215,7 +215,7 @@
         <div class="form-field" style="flex-direction:row;align-items:center;gap:8px">
           <input type="checkbox" id="ev-clear-previous">
           <label for="ev-clear-previous" style="font-size:0.85rem;color:var(--text);cursor:pointer">
-            Clear all entries, pre-entries, finishers, results, prizes and helpers
+            Clear all previous state
           </label>
         </div>
       </div>
@@ -233,7 +233,7 @@
         <h2>Entries</h2>
         <span class="count-badge" id="entry-count-display">0</span>
         <button class="btn btn-secondary" id="btn-export-entries-si" style="margin-left:auto">Export to SI</button>
-        <span id="entry-status-msg" class="entry-status" hidden></span>
+        <span id="entry-status-msg" class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="split-layout">
@@ -262,7 +262,7 @@
             <div class="form-grid" style="grid-template-columns:1fr 1fr">
               <div class="form-field">
                 <label for="entry-form-dob">Date of Birth (DD/MM/YYYY)</label>
-                <input type="text" id="entry-form-dob" placeholder="DD/MM/YYYY">
+                <input type="text" id="entry-form-dob" placeholder="DD/MM/YYYY" data-normalise="date">
               </div>
               <div class="form-field">
                 <label for="entry-form-gender">Gender</label>
@@ -334,6 +334,7 @@
       <div class="view-header">
         <h2>Helpers</h2>
         <span class="count-badge" id="helper-count-display">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="split-layout">
@@ -355,7 +356,7 @@
               </div>
               <div class="form-field">
                 <label for="helper-form-dob">Date of Birth (DD/MM/YYYY)</label>
-                <input type="text" id="helper-form-dob" placeholder="DD/MM/YYYY">
+                <input type="text" id="helper-form-dob" placeholder="DD/MM/YYYY" data-normalise="date">
               </div>
             </div>
             <div class="form-field mb-8">
@@ -390,7 +391,7 @@
       <div class="view-header">
         <h2>Pre-Entries (SportIdent)</h2>
         <span class="count-badge" id="pre-entry-count">0</span>
-        <span id="pre-entry-status-msg" class="entry-status" hidden></span>
+        <span id="pre-entry-status-msg" class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="card">
@@ -422,7 +423,7 @@
          FINISHERS
          ====================================================== -->
     <div class="view" id="view-finishers" hidden>
-      <div class="view-header"><h2>Finishers</h2></div>
+      <div class="view-header"><h2>Finishers</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <!-- Toolbar: course selector · pass selector · actions -->
       <div class="finisher-toolbar">
@@ -488,6 +489,7 @@
       <div class="view-header">
         <h2>Safety Check</h2>
         <span class="count-badge" id="safety-outstanding">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="btn-row">
@@ -511,6 +513,7 @@
       <div class="view-header">
         <h2>SI Results Import</h2>
         <span class="count-badge" id="si-results-count">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="card">
@@ -534,7 +537,7 @@
          RESULTS & PRIZES
          ====================================================== -->
     <div class="view" id="view-results" hidden>
-      <div class="view-header"><h2>Results &amp; Prizes</h2></div>
+      <div class="view-header"><h2>Results &amp; Prizes</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="btn-row">
         <button class="btn" id="btn-format-results">Generate Results</button>
@@ -588,6 +591,7 @@
       <div class="view-header">
         <h2>People</h2>
         <span class="count-badge" id="people-count">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="btn-row">
@@ -611,6 +615,7 @@
       <div class="view-header">
         <h2>Clubs</h2>
         <span class="count-badge" id="clubs-count">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
       <div class="btn-row">
         <button class="btn btn-secondary" id="btn-add-club">Add Club</button>
@@ -632,6 +637,7 @@
       <div class="view-header">
         <h2>Dibbers</h2>
         <span class="count-badge" id="dibbers-count">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
       <div class="btn-row">
         <button class="btn" id="btn-import-dibbers">Import Dibber CSV</button>
@@ -651,7 +657,7 @@
          CATEGORIES
          ====================================================== -->
     <div class="view" id="view-categories" hidden>
-      <div class="view-header"><h2>Categories</h2></div>
+      <div class="view-header"><h2>Categories</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="tab-bar" id="cat-tab-bar">
         <button class="active" data-cat-tab="active">Active</button>
@@ -713,7 +719,7 @@
          PRINT FORMS
          ====================================================== -->
     <div class="view" id="view-forms" hidden>
-      <div class="view-header"><h2>Print Forms</h2></div>
+      <div class="view-header"><h2>Print Forms</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="card">
         <h3>Entry Forms</h3>

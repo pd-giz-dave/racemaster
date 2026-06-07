@@ -35,7 +35,7 @@ export function personEditCells(prefix, p) {
       <option value="F"${p.gender==='F'?' selected':''}>F</option>
       <option value="P"${p.gender==='P'?' selected':''}>P</option>
     </select></td>
-    <td><input id="${prefix}-dob"      type="text" value="${escHtml(p.dob || '')}"        style="width:95px"></td>
+    <td><input id="${prefix}-dob"      type="text" value="${escHtml(p.dob || '')}"        style="width:95px" data-normalise="date"></td>
     <td><input id="${prefix}-club"     type="text" value="${escHtml(p.club || '')}"       style="width:110px"></td>
     <td><input id="${prefix}-fra"      type="text" value="${escHtml(p.fraNumber || '')}"  style="width:70px"></td>
     <td><input id="${prefix}-lastseen" type="text" value="${escHtml(p.lastSeen || '')}"   style="width:75px"></td>

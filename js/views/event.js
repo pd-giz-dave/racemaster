@@ -1,7 +1,7 @@
 'use strict';
 
-import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults, savePrizes, saveCategories } from '../state.js';
-import { applyFRAPreset, applyWFRAPreset } from '../categories.js';
+import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults, savePrizes, saveCategories, saveSafety, saveSIResults } from '../state.js';
+import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
 import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, confirm, showStatus, on } from '../ui.js';
 import { showBusy } from '../utils.js';
@@ -53,6 +53,8 @@ export async function saveEventForm() {
       ['Results',     state.results.length],
       ['Prizes',      state.prizes.length],
       ['Helpers',     state.helpers.length],
+      ['Safety',      state.safety.length],
+      ['SI Results',  state.siResults.length],
     ].filter(([, n]) => n > 0);
     if (counts.length) {
       lines.push('\nThe following will be permanently cleared:');
@@ -95,9 +97,11 @@ export async function saveEventForm() {
     state.entries   = [];  state.finishers = [];
     state.results   = [];  state.prizes    = [];
     state.helpers   = [];  state.finishNumbersMap = {};
+    state.safety    = [];  state.siResults = [];
     await Promise.all([
       saveEntries(), saveHelpers(), saveFinishers(),
       saveResults(), savePrizes(), clearSIEntries(),
+      saveSafety(), saveSIResults(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
   }
@@ -122,4 +126,14 @@ export function wireEvent() {
   on('btn-save-event',  'click', saveEventForm);
   on('btn-apply-fra',   'click', applyCatPreset('FRA'));
   on('btn-apply-wfra',  'click', applyCatPreset('WFRA'));
+
+  const distEl = document.getElementById('ev-distance');
+  if (distEl) {
+    distEl.addEventListener('change', () => {
+      const dist = +distEl.value || 0;
+      if (!dist) return;
+      const limitEl = document.getElementById('ev-junior-limit');
+      if (limitEl) limitEl.value = categoryFromDistance(dist);
+    });
+  }
 }

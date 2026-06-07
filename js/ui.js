@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { getMaleCategories, getFemaleCategories, getPairCategories } from './categories.js';
+import { normaliseDate, normaliseTime } from './utils.js';
 
 // ---- DOM helpers ----
 
@@ -54,8 +55,7 @@ export function showStatus(msg, isError = false) {
     setTimeout(() => { if (bar.textContent === msg) bar.textContent = ''; }, 10000);
   }
 
-  const inlineEls = ['entry-status-msg', 'pre-entry-status-msg']
-    .map(id => document.getElementById(id)).filter(Boolean);
+  const inlineEls = document.querySelectorAll('.view-status-msg');
   for (const el of inlineEls) {
     el.textContent = msg;
     el.className = `entry-status ${cls}`;
@@ -107,6 +107,17 @@ export function updateDatalistClubs() {
   const clubs = [...new Set(state.clubs.map(c => c.name).filter(Boolean))].sort();
   dl.innerHTML = clubs.map(c => `<option value="${escHtml(c)}">`).join('');
 }
+
+// Normalise date/time inputs on blur — delegated so it covers dynamically created inputs too
+document.addEventListener('focusout', e => {
+  const el = e.target;
+  const type = el.dataset?.normalise;
+  if (!type || el.tagName !== 'INPUT') return;
+  const raw = el.value.trim();
+  if (!raw) return;
+  if (type === 'date') { const n = normaliseDate(raw); if (n) el.value = n; }
+  if (type === 'time') { const n = normaliseTime(raw); if (n) el.value = n; }
+});
 
 export function populateCategoryDropdown(selectId, currentVal) {
   const el = document.getElementById(selectId);
