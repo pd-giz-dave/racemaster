@@ -32,6 +32,8 @@ export const state = {
   results:    [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}
   prizes:     [],  // {position, category, inCatPos, time, number, name, priority}
   siResults:  [],  // dynamic - whatever comes from SI timing CSV
+  fraPreset:  [],  // editable FRA category preset (saved to fra_preset.csv)
+  wfraPreset: [],  // editable WFRA category preset (saved to wfra_preset.csv)
 
   // Runtime-only (not persisted)
   finishNumbersMap: {},  // 'S101' -> ['5','7'] (course-prefix + bib -> array of finisher indices)
@@ -56,6 +58,8 @@ export async function loadAll() {
     loadList('results',    RESULT_FIELDS),
     loadList('prizes',     PRIZE_FIELDS),
     loadList('siResults',  null, FILE.SI_RESULTS),
+    loadPreset('fraPreset',  FRA_CATEGORIES),
+    loadPreset('wfraPreset', WFRA_CATEGORIES),
   ]);
   if (state.categories.length === 0) applyFRACategories();
 }
@@ -74,10 +78,27 @@ async function loadEvent() {
   }
 }
 
+async function loadPreset(key, defaults) {
+  const filename = key === 'fraPreset' ? FILE.FRA_PRESET : FILE.WFRA_PRESET;
+  const rows = await readCSV(filename);
+  if (rows && rows.length > 0) {
+    state[key] = rows;
+  } else {
+    state[key] = defaults.map((row, i) => {
+      const pair = DEFAULT_PAIR_CATEGORIES[i] || [999, 'none', 'NOW', 999];
+      return {
+        maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
+        femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
+        pairMinAge: pair[0], pairCat: pair[1], pairRef: pair[2], pairMaxDist: pair[3],
+      };
+    });
+  }
+}
+
 async function loadList(key, fields, filename) {
   const fn = filename || FILE[key.toUpperCase()] || FILE[key.replace(/([A-Z])/g, '_$1').toUpperCase()];
   const actualFile = filename || guessFile(key);
-  const rows = await readCSV(actualFile);
+  const throughtrows = await readCSV(actualFile);
   state[key] = rows;
 }
 
@@ -103,6 +124,8 @@ export async function savePeople()     { await writeCSV(FILE.PEOPLE,      state.
 export async function saveClubs()      { await writeCSV(FILE.CLUBS,       state.clubs,      CLUBS_FIELDS); }
 export async function saveDibbers()    { await writeCSV(FILE.DIBBERS,     state.dibbers,    DIBBERS_FIELDS); }
 export async function saveCategories() { await writeCSV(FILE.CATEGORIES,  state.categories, CAT_FIELDS); }
+export async function saveFraPreset()  { await writeCSV(FILE.FRA_PRESET,  state.fraPreset,  CAT_FIELDS); }
+export async function saveWfraPreset() { await writeCSV(FILE.WFRA_PRESET, state.wfraPreset, CAT_FIELDS); }
 export async function saveRoles()      { await writeCSV(FILE.ROLES,       state.roles,      ROLES_FIELDS); }
 export async function savePreEntries() { await writeCSV(FILE.PRE_ENTRIES, state.preEntries, PRE_ENTRY_FIELDS); }
 export async function saveEntries()    { await writeCSV(FILE.ENTRIES,     state.entries,    ENTRY_FIELDS); }
@@ -150,7 +173,7 @@ export const PEOPLE_FIELDS = [
 
 export const CLUBS_FIELDS = ['name','lastSeen','seenTotal'];
 
-export const DIBBERS_FIELDS = ['shortCode','longCode','availability'];
+export const DIBBERS_FIELDS = ['shortCode','longCode','availability','notes'];
 
 export const CAT_FIELDS = [
   'maleMinAge','maleCat','maleRef','maleMaxDist',

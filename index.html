@@ -44,7 +44,9 @@
       <a href="#" data-view="results">Results &amp; Prizes</a>
 
       <div class="nav-section">Data</div>
-      <a href="#" data-view="people">People / Clubs</a>
+      <a href="#" data-view="people">People</a>
+      <a href="#" data-view="clubs">Clubs</a>
+      <a href="#" data-view="dibbers">Dibbers</a>
       <a href="#" data-view="categories">Categories</a>
 
       <div class="nav-section">Print</div>
@@ -124,31 +126,30 @@
             <input type="number" id="ev-distance" min="0" step="0.1">
           </div>
           <div class="form-field">
-            <label for="ev-start-time">Start Time (HH:MM:SS)</label>
-            <input type="text" id="ev-start-time" placeholder="11:00:00">
+            <label for="ev-categories">Categories</label>
+            <select id="ev-categories">
+              <option value="FRA">FRA</option>
+              <option value="WFRA">WFRA</option>
+            </select>
           </div>
           <div class="form-field">
             <label for="ev-first-bib">First Bib Number</label>
             <input type="number" id="ev-first-bib" min="1" value="1">
           </div>
-          <div class="form-field">
-            <label for="ev-entry-limit">Entry Limit (Seniors)</label>
-            <input type="number" id="ev-entry-limit" min="0" value="200">
-          </div>
-          <div class="form-field">
-            <label for="ev-male-record">Male Record (HH:MM:SS)</label>
-            <input type="text" id="ev-male-record" placeholder="HH:MM:SS">
-          </div>
-          <div class="form-field">
-            <label for="ev-female-record">Female Record (HH:MM:SS)</label>
-            <input type="text" id="ev-female-record" placeholder="HH:MM:SS">
-          </div>
         </div>
       </div>
 
       <div class="card">
-        <h3>Timing</h3>
+        <h3>Seniors</h3>
         <div class="form-grid">
+          <div class="form-field">
+            <label for="ev-start-time">Start Time (HH:MM:SS)</label>
+            <input type="text" id="ev-start-time" placeholder="11:00:00">
+          </div>
+          <div class="form-field">
+            <label for="ev-entry-limit">Entry Limit</label>
+            <input type="number" id="ev-entry-limit" min="0" value="200">
+          </div>
           <div class="form-field">
             <label for="ev-timing-method">Timing Method</label>
             <select id="ev-timing-method">
@@ -158,16 +159,12 @@
             </select>
           </div>
           <div class="form-field">
-            <label for="ev-sw-offset">Stopwatch Offset (HH:MM:SS)</label>
-            <input type="text" id="ev-sw-offset" placeholder="00:00:00">
-          </div>
-          <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;padding-top:20px">
-            <input type="checkbox" id="ev-sw-late">
-            <label for="ev-sw-late">Late start (subtract offset)</label>
+            <label for="ev-male-record">Male Record (HH:MM:SS)</label>
+            <input type="text" id="ev-male-record" placeholder="HH:MM:SS">
           </div>
           <div class="form-field">
-            <label for="ev-sw-start">Course Start Offset (HH:MM:SS)</label>
-            <input type="text" id="ev-sw-start" placeholder="00:00:00">
+            <label for="ev-female-record">Female Record (HH:MM:SS)</label>
+            <input type="text" id="ev-female-record" placeholder="HH:MM:SS">
           </div>
         </div>
       </div>
@@ -192,8 +189,8 @@
             <input type="number" id="ev-junior-limit-n" min="0" value="0">
           </div>
           <div class="form-field">
-            <label for="ev-sw-jstart">Junior Start Offset (HH:MM:SS)</label>
-            <input type="text" id="ev-sw-jstart" placeholder="00:00:00">
+            <label for="ev-junior-start-time">Junior Start Time (HH:MM:SS)</label>
+            <input type="text" id="ev-junior-start-time" placeholder="11:00:00">
           </div>
         </div>
       </div>
@@ -212,25 +209,19 @@
         </div>
       </div>
 
-      <div class="btn-row">
-        <button class="btn" id="btn-save-event">Save Event Settings</button>
+      <div class="card">
+        <h3>New Race Setup</h3>
+        <p class="text-muted text-sm mb-8">Tick before saving to wipe all race data from a previous event and start fresh.</p>
+        <div class="form-field" style="flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" id="ev-clear-previous">
+          <label for="ev-clear-previous" style="font-size:0.85rem;color:var(--text);cursor:pointer">
+            Clear all entries, pre-entries, finishers, results, prizes and helpers
+          </label>
+        </div>
       </div>
 
-      <div class="card">
-        <h3>Start Time Adjuster</h3>
-        <p class="text-muted text-sm mb-8">Convert a stopwatch clock time to an adjusted race start time.</p>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="adjust-start-course">Course / Bib</label>
-            <input type="text" id="adjust-start-course" placeholder="Seniors or Junior or bib no.">
-          </div>
-          <div class="form-field">
-            <label for="adjust-start-time">Clock Time (HH:MM:SS)</label>
-            <input type="text" id="adjust-start-time" placeholder="HH:MM:SS">
-          </div>
-        </div>
-        <button class="btn btn-secondary" id="btn-adjust-start">Calculate</button>
-        <div class="mt-8">Adjusted start time: <strong id="adjust-start-result">—</strong></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-save-event">Save Event Settings</button>
       </div>
     </div>
 
@@ -241,6 +232,8 @@
       <div class="view-header">
         <h2>Entries</h2>
         <span class="count-badge" id="entry-count-display">0</span>
+        <button class="btn btn-secondary" id="btn-export-entries-si" style="margin-left:auto">Export to SI</button>
+        <span id="entry-status-msg" class="entry-status" hidden></span>
       </div>
 
       <div class="split-layout">
@@ -248,11 +241,29 @@
         <div class="card">
           <h3>Register Competitor</h3>
           <div id="entry-form-fields">
+            <div class="form-grid mb-8" style="grid-template-columns:2fr 1fr 1fr">
+              <div class="form-field">
+                <label for="entry-form-peno">Pre-Entry No. <span style="font-weight:400;color:var(--muted)">(or type a name)</span></label>
+                <input type="text" id="entry-form-peno" autocomplete="off" inputmode="numeric" placeholder="Pre-entry number">
+              </div>
+              <div class="form-field">
+                <label for="entry-form-bib">Bib <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
+                <input type="text" id="entry-form-bib" tabindex="-1" inputmode="numeric" style="font-weight:700">
+              </div>
+              <div class="form-field">
+                <label for="entry-form-dibber">Dibber <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
+                <input type="text" id="entry-form-dibber" tabindex="-1" inputmode="numeric" style="font-weight:700">
+              </div>
+            </div>
             <div class="form-field mb-8">
               <label for="entry-form-name">Name</label>
-              <input type="text" id="entry-form-name" autocomplete="off">
+              <input type="text" id="entry-form-name" autocomplete="off" list="datalist-names">
             </div>
             <div class="form-grid" style="grid-template-columns:1fr 1fr">
+              <div class="form-field">
+                <label for="entry-form-dob">Date of Birth (DD/MM/YYYY)</label>
+                <input type="text" id="entry-form-dob" placeholder="DD/MM/YYYY">
+              </div>
               <div class="form-field">
                 <label for="entry-form-gender">Gender</label>
                 <select id="entry-form-gender">
@@ -262,14 +273,10 @@
                   <option value="P">Pair</option>
                 </select>
               </div>
-              <div class="form-field">
-                <label for="entry-form-dob">Date of Birth (DD/MM/YYYY)</label>
-                <input type="text" id="entry-form-dob" placeholder="DD/MM/YYYY">
-              </div>
             </div>
             <div class="form-field mb-8">
               <label for="entry-form-club">Club</label>
-              <input type="text" id="entry-form-club" autocomplete="off">
+              <input type="text" id="entry-form-club" autocomplete="off" list="datalist-clubs">
             </div>
             <div class="form-grid" style="grid-template-columns:1fr 1fr">
               <div class="form-field">
@@ -290,12 +297,17 @@
                   <option value="Juniors">Juniors</option>
                 </select>
               </div>
-              <div class="form-field">
-                <label for="entry-form-preentry">Pre-Entry Ref</label>
-                <input type="text" id="entry-form-preentry">
-              </div>
             </div>
-            <button class="btn" id="btn-submit-entry" style="width:100%;margin-top:10px">Register</button>
+            <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:10px">
+              <input type="checkbox" id="entry-form-confirm">
+              <label for="entry-form-confirm" style="font-size:0.85rem;color:var(--text);cursor:pointer">Confirm entry details are correct</label>
+            </div>
+            <button class="btn" id="btn-submit-entry" style="width:100%;margin-top:8px">Register</button>
+            <button class="btn btn-secondary" id="btn-cancel-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button class="btn btn-secondary" id="btn-reset-entry" style="flex:1">Reset</button>
+              <button class="btn btn-warn" id="btn-clear-from" style="flex:1">Clear from Bib</button>
+            </div>
           </div>
         </div>
 
@@ -307,7 +319,7 @@
                 <tr>
                   <th>Bib</th><th>Name</th><th>Club</th>
                   <th>G</th><th>DoB</th><th>Cat</th><th>Course</th>
-                  <th>Dibber</th><th>FRA</th><th>Start</th><th>Status</th>
+                  <th>Dibber</th><th>FRA</th><th>Pre-No</th><th>Start</th><th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -381,6 +393,7 @@
       <div class="view-header">
         <h2>Pre-Entries (SportIdent)</h2>
         <span class="count-badge" id="pre-entry-count">0</span>
+        <span id="pre-entry-status-msg" class="entry-status" hidden></span>
       </div>
 
       <div class="card">
@@ -390,8 +403,6 @@
         </p>
         <div class="btn-row">
           <button class="btn" id="btn-import-si-entries">Import CSV File</button>
-          <button class="btn btn-secondary" id="btn-verify-pre-entries">Verify</button>
-          <button class="btn btn-secondary" id="btn-merge-pre-entries">Merge into People</button>
           <button class="btn btn-secondary" id="btn-load-pre-to-entries" style="display:none">Load to Entries</button>
           <button class="btn btn-danger" id="btn-clear-pre-entries">Clear All</button>
         </div>
@@ -416,93 +427,60 @@
     <div class="view" id="view-finishers" hidden>
       <div class="view-header"><h2>Finishers</h2></div>
 
-      <div class="finish-recorder">
-        <!-- Seniors -->
-        <div class="recorder-panel">
-          <h3>Seniors <span class="count-badge" id="finisher-senior-count">0</span></h3>
-          <div class="bib-input-row">
-            <div class="form-field" style="flex:1">
-              <label for="finish-bib-senior">Bib Number</label>
-              <input type="number" id="finish-bib-senior" min="0" placeholder="Bib">
-            </div>
-          </div>
-          <div class="time-input-row form-field mb-8">
-            <label for="finish-time-senior">Clock Time (HH:MM:SS)</label>
-            <input type="text" id="finish-time-senior" placeholder="HH:MM:SS">
-          </div>
-          <div class="form-field mb-8">
-            <label for="finish-action-senior">Action</label>
-            <select id="finish-action-senior">
-              <option value="F">Finish</option>
-              <option value="N">DNF</option>
-              <option value="D">DSQ</option>
-            </select>
-          </div>
-          <div class="btn-row">
-            <button class="btn" id="btn-record-finish-senior">Record</button>
-            <button class="btn btn-warn" id="btn-undo-senior">Undo Last</button>
-          </div>
+      <!-- Toolbar: course selector · pass selector · actions -->
+      <div class="finisher-toolbar">
+        <div class="fin-course-btns">
+          <button class="pass-btn active" id="fcourse-senior">Seniors <span class="count-badge" id="finisher-senior-count">0</span></button>
+          <button class="pass-btn" id="fcourse-junior">Juniors <span class="count-badge" id="finisher-junior-count">0</span></button>
         </div>
+        <div class="fin-pass-btns">
+          <button class="pass-btn active" id="fpass-1">Pass 1 — Bibs</button>
+          <button class="pass-btn" id="fpass-2">Pass 2 — Times</button>
+        </div>
+        <div class="fin-action-btns">
+          <button class="btn btn-warn" id="btn-undo-rapid">Undo Last</button>
+          <button class="btn btn-secondary" id="btn-scan-finishers">Scan</button>
+          <button class="btn btn-secondary" id="btn-process-finishers">Process</button>
+        </div>
+      </div>
 
-        <!-- Juniors -->
-        <div class="recorder-panel">
-          <h3>Juniors <span class="count-badge" id="finisher-junior-count">0</span></h3>
-          <div class="bib-input-row">
-            <div class="form-field" style="flex:1">
-              <label for="finish-bib-junior">Bib Number</label>
-              <input type="number" id="finish-bib-junior" min="0" placeholder="Bib">
-            </div>
-          </div>
-          <div class="time-input-row form-field mb-8">
-            <label for="finish-time-junior">Clock Time (HH:MM:SS)</label>
-            <input type="text" id="finish-time-junior" placeholder="HH:MM:SS">
-          </div>
-          <div class="form-field mb-8">
-            <label for="finish-action-junior">Action</label>
-            <select id="finish-action-junior">
-              <option value="F">Finish</option>
-              <option value="N">DNF</option>
-              <option value="D">DSQ</option>
-            </select>
-          </div>
-          <div class="btn-row">
-            <button class="btn" id="btn-record-finish-junior">Record</button>
-            <button class="btn btn-warn" id="btn-undo-junior">Undo Last</button>
+      <!-- Pass 1: rapid bib entry -->
+      <div id="finisher-pass1">
+        <div class="rapid-recorder">
+          <div class="rapid-hint">Type bib and press <kbd>Enter</kbd> &nbsp;&middot;&nbsp; <kbd>Esc</kbd> = undo last</div>
+          <div class="rapid-input-row">
+            <span class="rapid-pos-label">Pos&nbsp;<strong id="rapid-next-pos">1</strong></span>
+            <input type="number" id="finish-bib-rapid" min="1" placeholder="Bib"
+                   class="rapid-input" autocomplete="off" inputmode="numeric">
           </div>
         </div>
       </div>
 
-      <div class="btn-row">
-        <button class="btn btn-secondary" id="btn-scan-finishers">Scan / Validate</button>
-        <button class="btn btn-secondary" id="btn-process-finishers">Process Times</button>
-      </div>
-
-      <!-- Tabs for senior/junior tables -->
-      <div class="tab-bar">
-        <button class="active" onclick="switchFinisherTab('senior',this)">Seniors</button>
-        <button onclick="switchFinisherTab('junior',this)">Juniors</button>
-      </div>
-
-      <div class="tab-panel active" id="tab-finisher-senior">
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr><th>Pos</th><th>Clock</th><th>Race Time</th><th>Bib</th><th>Name</th><th>Cat</th><th>Error</th></tr>
-            </thead>
-            <tbody id="finishers-senior-tbody"></tbody>
-          </table>
+      <!-- Pass 2: sequential time entry -->
+      <div id="finisher-pass2" hidden>
+        <div class="rapid-recorder">
+          <div class="rapid-hint"><kbd>Enter</kbd> = next &nbsp;&middot;&nbsp; <kbd>&uarr;</kbd>/<kbd>&darr;</kbd> = navigate &nbsp;&middot;&nbsp; <code>ss</code> / <code>mm:ss</code> / <code>hh:mm:ss</code> (any separator) &nbsp;&middot;&nbsp; blank = skip</div>
+          <div class="pass2-current">
+            <span class="pass2-label">Pos</span><span class="pass2-pos" id="pass2-pos">1</span>
+            <span class="pass2-label">Bib</span><span class="pass2-bib" id="pass2-bib">—</span>
+            <span class="pass2-name" id="pass2-name"></span>
+          </div>
+          <div class="rapid-input-row">
+            <input type="text" id="finish-time-rapid" placeholder="time"
+                   class="rapid-input" autocomplete="off" spellcheck="false">
+            <span class="pass2-inherit" id="pass2-inherit"></span>
+          </div>
         </div>
       </div>
 
-      <div class="tab-panel" id="tab-finisher-junior">
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr><th>Pos</th><th>Clock</th><th>Race Time</th><th>Bib</th><th>Name</th><th>Cat</th><th>Error</th></tr>
-            </thead>
-            <tbody id="finishers-junior-tbody"></tbody>
-          </table>
-        </div>
+      <!-- Finisher table for current course -->
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Pos</th><th>Clock</th><th>Race Time</th><th>Bib</th><th>Name</th><th>Cat</th><th>Error</th></tr>
+          </thead>
+          <tbody id="finishers-tbody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -627,27 +605,104 @@
     </div>
 
     <!-- ======================================================
+         CLUBS
+         ====================================================== -->
+    <div class="view" id="view-clubs" hidden>
+      <div class="view-header">
+        <h2>Clubs</h2>
+        <span class="count-badge" id="clubs-count">0</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>Last Seen</th><th>Count</th></tr>
+          </thead>
+          <tbody id="clubs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ======================================================
+         DIBBERS
+         ====================================================== -->
+    <div class="view" id="view-dibbers" hidden>
+      <div class="view-header">
+        <h2>Dibbers</h2>
+        <span class="count-badge" id="dibbers-count">0</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-import-dibbers">Import Dibber CSV</button>
+        <button class="btn btn-secondary" id="btn-add-dibber">Add Dibber</button>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Short Code</th><th>Long Code</th><th>Availability</th><th>Notes</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="dibbers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ======================================================
          CATEGORIES
          ====================================================== -->
     <div class="view" id="view-categories" hidden>
       <div class="view-header"><h2>Categories</h2></div>
 
-      <div class="btn-row">
-        <button class="btn btn-secondary" id="btn-apply-fra">Apply FRA Preset</button>
-        <button class="btn btn-secondary" id="btn-apply-wfra">Apply WFRA Preset</button>
+      <div class="tab-bar" id="cat-tab-bar">
+        <button class="active" data-cat-tab="active">Active</button>
+        <button data-cat-tab="fra">FRA Preset</button>
+        <button data-cat-tab="wfra">WFRA Preset</button>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>M MinAge</th><th>M Cat</th><th>M Ref</th><th>M MaxDist</th>
-              <th>F MinAge</th><th>F Cat</th><th>F Ref</th><th>F MaxDist</th>
-              <th>Pair Cat</th>
-            </tr>
-          </thead>
-          <tbody id="categories-tbody"></tbody>
-        </table>
+      <!-- Active categories (per-race, ad-hoc) -->
+      <div class="tab-panel active" id="cat-tab-active">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-apply-fra">Apply FRA Preset</button>
+          <button class="btn btn-secondary" id="btn-apply-wfra">Apply WFRA Preset</button>
+          <button class="btn" id="btn-add-category">Add Row</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table"><thead><tr>
+            <th>M MinAge</th><th>M Cat</th><th>M Ref</th><th>M MaxDist</th>
+            <th>F MinAge</th><th>F Cat</th><th>F Ref</th><th>F MaxDist</th>
+            <th>P MinAge</th><th>P Cat</th><th>P Ref</th><th>P MaxDist</th>
+            <th>Actions</th>
+          </tr></thead><tbody id="categories-tbody"></tbody></table>
+        </div>
+      </div>
+
+      <!-- FRA preset (editable template) -->
+      <div class="tab-panel" id="cat-tab-fra">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-reset-fra">Reset to Built-in</button>
+          <button class="btn" id="btn-add-fra-row">Add Row</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table"><thead><tr>
+            <th>M MinAge</th><th>M Cat</th><th>M Ref</th><th>M MaxDist</th>
+            <th>F MinAge</th><th>F Cat</th><th>F Ref</th><th>F MaxDist</th>
+            <th>P MinAge</th><th>P Cat</th><th>P Ref</th><th>P MaxDist</th>
+            <th>Actions</th>
+          </tr></thead><tbody id="fra-preset-tbody"></tbody></table>
+        </div>
+      </div>
+
+      <!-- WFRA preset (editable template) -->
+      <div class="tab-panel" id="cat-tab-wfra">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-reset-wfra">Reset to Built-in</button>
+          <button class="btn" id="btn-add-wfra-row">Add Row</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table"><thead><tr>
+            <th>M MinAge</th><th>M Cat</th><th>M Ref</th><th>M MaxDist</th>
+            <th>F MinAge</th><th>F Cat</th><th>F Ref</th><th>F MaxDist</th>
+            <th>P MinAge</th><th>P Cat</th><th>P Ref</th><th>P MaxDist</th>
+            <th>Actions</th>
+          </tr></thead><tbody id="wfra-preset-tbody"></tbody></table>
+        </div>
       </div>
     </div>
 
@@ -683,6 +738,10 @@
         </div>
       </div>
     </div>
+
+    <!-- Datalists for typeahead autocomplete -->
+    <datalist id="datalist-names"></datalist>
+    <datalist id="datalist-clubs"></datalist>
 
   </main><!-- end .app-main -->
 </div><!-- end .app-shell -->
@@ -764,13 +823,6 @@
      Tab switching helpers (simple inline — no framework needed)
      ============================================================ -->
 <script>
-function switchFinisherTab(name, btn) {
-  document.querySelectorAll('#view-finishers .tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('#view-finishers .tab-bar button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-finisher-' + name).classList.add('active');
-  btn.classList.add('active');
-}
-
 function switchResultsTab(name, btn) {
   document.querySelectorAll('#view-results .tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('#view-results .tab-bar button').forEach(b => b.classList.remove('active'));

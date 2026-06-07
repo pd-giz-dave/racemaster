@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { saveSIResults, saveSITiming } from './state.js';
 import { COURSE, FINISHER, GENDER, SI_COL_NAMES, SI_RESULTS_COL_NAMES, SI_TIMING_COL_NAMES } from './constants.js';
 import { normaliseTime, normaliseDate, cleanName, iequal, timeToSeconds } from './utils.js';
-import { parseCSV, formatCSV, parseSICSV } from './csv.js';
+import { parseSICSV } from './csv.js';
 import { adjustedFinishTime } from './time-utils.js';
 import { findEntryByBib, getEntry } from './entries.js';
 import { buildFinishNumbersMap } from './finishers.js';
@@ -127,41 +127,34 @@ export async function formatSIResults(course) {
 
 /**
  * Export entries in SI Timing CSV format (for loading into SI timing software).
- * Returns CSV text string.
+ * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
+ * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
  */
-const SI_TIMING_FIELDS = [
-  'Stno','XStno','Chipno','Database Id','Surname','First name','YB','S','NC',
-  'Start','Finish','Time','Classifier','club+city','Cl.','short','long',
-  'num','Start fee','Paid',
-];
-
 export function exportSITimingCSV(entries) {
   const rows = [];
   for (const e of entries) {
+    if (!e.bibNumber) continue;
+    const dibberLong = e.dibberNumber > 0
+      ? (state.dibbers.find(d => +d.shortCode === +e.dibberNumber)?.longCode || '')
+      : '';
+    const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
     rows.push({
-      'Stno':       e.bibNumber,
-      'XStno':      '',
-      'Chipno':     e.dibberNumber || '',
-      'Database Id':'',
-      'Surname':    e.name || '',
-      'First name': '',
-      'YB':         '',
-      'S':          e.gender === GENDER.FEMALE ? 'F' : 'M',
-      'NC':         '',
-      'Start':      e.startTime || '',
-      'Finish':     '',
-      'Time':       '',
-      'Classifier': '',
-      'club+city':  e.club || '',
-      'Cl.':        e.category || '',
-      'short':      e.course || '',
-      'long':       e.course || '',
-      'num':        '',
-      'Start fee':  '',
-      'Paid':       '',
+      'RaceNumber':         e.bibNumber,
+      'NumberCompetitors':  '',
+      'CardNumbers':        dibberLong,
+      'MembershipNumbers':  e.fraNumber || '',
+      'Forenames':          '',
+      'Surnames':           e.name || '',
+      'Name (Free Format)': e.name || '',
+      'Category':           e.category || '',
+      'Club':               e.club || '',
+      'CourseClass':        e.course || '',
+      'Entry System IDs':   e.preEntry || '',
+      'Eligibility':        '',
+      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }
-  return formatCSV(rows, SI_TIMING_FIELDS);
+  return rows;
 }
 
 // ---- Field accessor helpers for SI result rows ----

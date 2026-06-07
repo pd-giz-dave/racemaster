@@ -46,9 +46,7 @@ export function findEntryByBib(bibNumber) {
 /** Find an entry row by dibber short code. Returns index or -1. */
 export function findEntryByDibber(dibberShortCode) {
   if (!dibberShortCode || +dibberShortCode <= 0) return -1;
-  const longCode = mapDibberNumber(dibberShortCode);
-  if (longCode <= 0) return -1;
-  return state.entries.findIndex(e => +e.dibberNumber === +longCode);
+  return state.entries.findIndex(e => +e.dibberNumber === +dibberShortCode);
 }
 
 /** Get an entry object by bib number. Returns null if not found. */
@@ -120,14 +118,21 @@ export async function submitEntry(formData) {
     return { error: `${course} is full (limit ${getEntryLimit(course)})` };
   }
 
-  const bibNumber = getNextBibNumber();
-  let dibberNumber = 0;
-
-  if (usingDibbers(course)) {
-    const shortCode = getNextDibberNumber();
-    dibberNumber = mapDibberNumber(shortCode);
-    if (dibberNumber < 0) dibberNumber = 0;
+  const normName = name.toUpperCase();
+  const duplicate = state.entries.find(e => {
+    if (cleanName(e.name || '').toUpperCase() !== normName) return false;
+    return dob ? normaliseDate(e.dob || '') === dob : true;
+  });
+  if (duplicate) {
+    return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
   }
+
+  const bibNumber = (formData.bibOverride && +formData.bibOverride > 0)
+    ? +formData.bibOverride
+    : getNextBibNumber();
+  const dibberNumber = (formData.dibberOverride && +formData.dibberOverride > 0)
+    ? +formData.dibberOverride
+    : (usingDibbers(course) ? getNextDibberNumber() : 0);
 
   addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry });
 
@@ -164,9 +169,20 @@ export async function updateEntry(bibNumber, formData) {
   if (formData.startTime!== undefined) e.startTime= formData.startTime;
   if (formData.retired  !== undefined) e.retired  = formData.retired;
   if (formData.status   !== undefined) e.status   = formData.status;
+  if (formData.dibberOverride !== undefined) {
+    e.dibberNumber = +formData.dibberOverride > 0 ? +formData.dibberOverride : 0;
+  }
 
   await saveEntries();
   return { error: '' };
+}
+
+/** Delete all entries with bib >= fromBib. Returns count removed. */
+export async function deleteEntriesFrom(fromBib) {
+  const before = state.entries.length;
+  state.entries = state.entries.filter(e => +e.bibNumber < +fromBib);
+  await saveEntries();
+  return before - state.entries.length;
 }
 
 /** Delete an entry by bib number */
@@ -202,7 +218,7 @@ export async function assignDibber(bibNumber, dibberShortCode) {
   if (idx < 0) return { error: `Bib ${bibNumber} not found` };
   const longCode = mapDibberNumber(dibberShortCode);
   if (longCode < 0) return { error: `Dibber ${dibberShortCode} not found in dibber list` };
-  state.entries[idx].dibberNumber = longCode;
+  state.entries[idx].dibberNumber = +dibberShortCode;
   await saveEntries();
   return { error: '' };
 }
@@ -256,12 +272,7 @@ export async function loadPreEntries() {
     } else {
       // New entry
       const bibNumber = getNextBibNumber();
-      let dibberNumber = 0;
-      if (usingDibbers(course)) {
-        const shortCode = getNextDibberNumber();
-        dibberNumber = mapDibberNumber(shortCode);
-        if (dibberNumber < 0) dibberNumber = 0;
-      }
+      const dibberNumber = usingDibbers(course) ? getNextDibberNumber() : 0;
       addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry: preNum });
       added++;
     }
@@ -288,34 +299,30 @@ export function getCategoryCount() {
 }
 
 /**
- * Export entries in SI (SportIdent) CSV format for timing boxes.
- * Returns an array of row objects with SI field names.
+ * Export entries in SI timing CSV format.
+ * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
+ * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  */
 export function buildSITimingExport() {
   const rows = [];
   for (const e of getSortedEntries()) {
     if (!e.bibNumber) continue;
+    const longCode = e.dibberNumber > 0 ? mapDibberNumber(e.dibberNumber) : 0;
+    const genderPrefix = e.gender === GENDER.FEMALE_PREFIX ? 'F' : 'M';
     rows.push({
-      'Stno':     e.bibNumber,
-      'XStno':    '',
-      'Chipno':   e.dibberNumber || '',
-      'Database Id': '',
-      'Surname':  e.name || '',
-      'First name': '',
-      'YB':       '',
-      'S':        e.gender === GENDER.FEMALE ? 'F' : 'M',
-      'NC':       '',
-      'Start':    e.startTime || '',
-      'Finish':   '',
-      'Time':     '',
-      'Classifier': '',
-      'club+city': e.club || '',
-      'Cl.':      e.category || '',
-      'short':    e.course || '',
-      'long':     e.course || '',
-      'num':      '',
-      'Start fee': '',
-      'Paid':     '',
+      'RaceNumber':         e.bibNumber,
+      'NumberCompetitors':  '',
+      'CardNumbers':        longCode > 0 ? longCode : '',
+      'MembershipNumbers':  e.fraNumber || '',
+      'Forenames':          '',
+      'Surnames':           e.name || '',
+      'Name (Free Format)': e.name || '',
+      'Category':           e.category || '',
+      'Club':               e.club || '',
+      'CourseClass':        e.course || '',
+      'Entry System IDs':   e.preEntry || '',
+      'Eligibility':        '',
+      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }
   return rows;

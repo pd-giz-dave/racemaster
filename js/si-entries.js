@@ -123,12 +123,24 @@ export async function importSIEntries(csvText) {
 
 /**
  * Verify pre-entries: return array of issues found.
- * Checks for missing dob, duplicate names, unknown clubs etc.
+ * Checks CSV format (required fields present), missing dob, duplicates.
  */
 export function verifySIEntries() {
   const issues = [];
-  const seen = new Map(); // key → index
 
+  if (!state.preEntries.length) return issues;
+
+  // Format check: if required fields are absent across all entries the CSV format is wrong
+  const missing = [];
+  if (state.preEntries.every(pe => !pe.participantNumber))           missing.push('participant number');
+  if (state.preEntries.every(pe => !pe.firstName && !pe.lastName))   missing.push('name');
+  if (state.preEntries.every(pe => !pe.dob))                         missing.push('date of birth');
+  if (missing.length) {
+    issues.push({ issue: `CSV format not recognised — required columns absent: ${missing.join(', ')}` });
+    return issues;
+  }
+
+  const seen = new Map(); // key → index
   for (let i = 0; i < state.preEntries.length; i++) {
     const pe = state.preEntries[i];
     const name = cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim());

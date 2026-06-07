@@ -195,22 +195,31 @@ export function calculateCourse(category, dob) {
   return COURSE.JUNIORS;
 }
 
-/** Apply FRA preset to state.categories */
+/** Apply FRA preset to state.categories (uses editable fraPreset if populated) */
 export function applyFRAPreset() {
-  state.categories = FRA_CATEGORIES.map((row, i) => {
-    const pair = DEFAULT_PAIR_CATEGORIES[i] || [999,'none','NOW',999];
-    return {
-      maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
-      femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-      pairMinAge: pair[0], pairCat: pair[1], pairRef: pair[2], pairMaxDist: pair[3],
-    };
-  });
+  const src = state.fraPreset && state.fraPreset.length > 0 ? state.fraPreset : null;
+  state.categories = src ? src.map(r => ({ ...r })) : _builtinRows(FRA_CATEGORIES);
 }
 
-/** Apply WFRA preset to state.categories */
+/** Apply WFRA preset to state.categories (uses editable wfraPreset if populated) */
 export function applyWFRAPreset() {
-  state.categories = WFRA_CATEGORIES.map((row, i) => {
-    const pair = DEFAULT_PAIR_CATEGORIES[i] || [999,'none','NOW',999];
+  const src = state.wfraPreset && state.wfraPreset.length > 0 ? state.wfraPreset : null;
+  state.categories = src ? src.map(r => ({ ...r })) : _builtinRows(WFRA_CATEGORIES);
+}
+
+/** Reset state.fraPreset to built-in hardcoded values */
+export function resetFRAPreset() {
+  state.fraPreset = _builtinRows(FRA_CATEGORIES);
+}
+
+/** Reset state.wfraPreset to built-in hardcoded values */
+export function resetWFRAPreset() {
+  state.wfraPreset = _builtinRows(WFRA_CATEGORIES);
+}
+
+function _builtinRows(preset) {
+  return preset.map((row, i) => {
+    const pair = DEFAULT_PAIR_CATEGORIES[i] || [999, 'none', 'NOW', 999];
     return {
       maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
       femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],

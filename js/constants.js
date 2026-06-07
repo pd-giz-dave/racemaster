@@ -23,6 +23,8 @@ export const FILE = {
   PRIZES:      'prizes.csv',
   SI_RESULTS:  'si_results.csv',
   SI_TIMING:   'si_timing.csv',
+  FRA_PRESET:  'fra_preset.csv',
+  WFRA_PRESET: 'wfra_preset.csv',
 };
 
 // Gender constants

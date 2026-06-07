@@ -11,7 +11,7 @@ export function normaliseTime(t) {
   if (!t || typeof t !== 'string') return '';
   t = t.trim();
   if (!t) return '';
-  // Accept HH:MM:SS, H:MM:SS, MM:SS, M:SS
+  // Accept HH:MM:SS, H:MM:SS, MM:SS, M:SS, SS
   const parts = t.split(':').map(Number);
   if (parts.some(isNaN)) return '';
   let h = 0, m = 0, s = 0;

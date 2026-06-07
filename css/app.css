@@ -231,42 +231,141 @@ input:focus, select:focus, textarea:focus {
   .split-layout { grid-template-columns: 1fr; }
 }
 
-/* ---- Finish recorder ---- */
-.finish-recorder {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.finish-recorder .recorder-panel {
+/* ---- Finisher keyboard recorder ---- */
+.finisher-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 14px;
+  margin-bottom: 14px;
 }
 
-.finish-recorder .recorder-panel h3 { font-size: 0.9rem; margin-bottom: 10px; }
+.fin-course-btns, .fin-pass-btns, .fin-action-btns { display: flex; gap: 4px; }
+.fin-action-btns { margin-left: auto; }
 
-.bib-input-row {
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-  margin-bottom: 8px;
+.pass-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.pass-btn:hover { background: var(--accent-light); }
+.pass-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.rapid-recorder {
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
 }
 
-.bib-input-row input[type="number"] {
-  width: 90px;
-  font-size: 1.2rem;
-  font-weight: 700;
-  text-align: center;
+.rapid-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 14px;
+  line-height: 1.6;
 }
 
-.time-input-row input[type="text"] {
+.rapid-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  font-size: 0.74rem;
+  background: #f5f5f5;
   font-family: var(--mono);
-  font-size: 1.1rem;
-  width: 120px;
 }
+
+.rapid-hint code {
+  background: #f0f0f0;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--mono);
+}
+
+.rapid-input-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rapid-input {
+  font-size: 2.4rem !important;
+  font-weight: 700 !important;
+  font-family: var(--mono) !important;
+  width: 200px !important;
+  padding: 6px 12px !important;
+  text-align: center;
+  border: 2px solid var(--border) !important;
+  border-radius: 4px;
+}
+
+.rapid-input:focus {
+  border-color: var(--accent) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(26,110,60,0.15);
+}
+
+.rapid-pos-label {
+  font-size: 1rem;
+  color: var(--muted);
+  min-width: 64px;
+}
+
+.rapid-pos-label strong { color: var(--text); font-size: 1.3rem; }
+
+.pass2-current {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pass2-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pass2-pos {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 48px;
+  font-family: var(--mono);
+}
+
+.pass2-bib {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-family: var(--mono);
+  min-width: 64px;
+}
+
+.pass2-name {
+  font-size: 1rem;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.pass2-inherit {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.row-current td { background: #fffbe6 !important; font-weight: 600; }
+.row-current td:first-child { border-left: 3px solid var(--warn); }
 
 /* ---- Modal ---- */
 .modal-backdrop {
@@ -384,5 +483,27 @@ input:focus, select:focus, textarea:focus {
 .mt-8  { margin-top: 8px; }
 .mb-8  { margin-bottom: 8px; }
 .gap-8 { gap: 8px; }
+
+/* ---- Entries view: inline status message ---- */
+.entry-status {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+.entry-status.status-ok    { background: #d5f5e3; color: #1e8449; }
+.entry-status.status-error { background: #fadbd8; color: #c0392b; }
+
+/* ---- Entries view: table scrolls, form stays put ---- */
+#view-entries .table-scroll {
+  overflow-y: auto;
+  max-height: calc(100vh - var(--header-h) - 100px);
+}
+
+#view-entries .card {
+  position: sticky;
+  top: 0;
+}
 
 @media print { .app-shell { display: block; } .app-sidebar, .app-header, #status-bar { display: none; } }
