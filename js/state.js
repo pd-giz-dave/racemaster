@@ -96,10 +96,9 @@ async function loadPreset(key, defaults) {
 }
 
 async function loadList(key, fields, filename) {
-  const fn = filename || FILE[key.toUpperCase()] || FILE[key.replace(/([A-Z])/g, '_$1').toUpperCase()];
   const actualFile = filename || guessFile(key);
-  const throughtrows = await readCSV(actualFile);
-  state[key] = rows;
+  const rows = await readCSV(actualFile);
+  state[key] = Array.isArray(rows) ? rows : [];
 }
 
 function guessFile(key) {

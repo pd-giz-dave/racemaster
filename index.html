@@ -173,11 +173,15 @@
         <h3>Juniors</h3>
         <div class="form-grid">
           <div class="form-field">
-            <label for="ev-junior-limit">Junior Age Limit Category</label>
-            <input type="text" id="ev-junior-limit" placeholder="e.g. U18 or None">
+            <label for="ev-junior-start-time">Start Time (HH:MM:SS)</label>
+            <input type="text" id="ev-junior-start-time" placeholder="11:00:00">
           </div>
           <div class="form-field">
-            <label for="ev-junior-timing">Junior Timing Method</label>
+            <label for="ev-junior-limit-n">Entry Limit</label>
+            <input type="number" id="ev-junior-limit-n" min="0" value="0">
+          </div>
+          <div class="form-field">
+            <label for="ev-junior-timing">Timing Method</label>
             <select id="ev-junior-timing">
               <option value="None">None (same as seniors)</option>
               <option value="Stopwatch">Stopwatch</option>
@@ -185,12 +189,8 @@
             </select>
           </div>
           <div class="form-field">
-            <label for="ev-junior-limit-n">Junior Entry Limit</label>
-            <input type="number" id="ev-junior-limit-n" min="0" value="0">
-          </div>
-          <div class="form-field">
-            <label for="ev-junior-start-time">Junior Start Time (HH:MM:SS)</label>
-            <input type="text" id="ev-junior-start-time" placeholder="11:00:00">
+            <label for="ev-junior-limit">Junior Age Limit Category</label>
+            <input type="text" id="ev-junior-limit" placeholder="e.g. U18 or None">
           </div>
         </div>
       </div>
@@ -304,10 +304,7 @@
             </div>
             <button class="btn" id="btn-submit-entry" style="width:100%;margin-top:8px">Register</button>
             <button class="btn btn-secondary" id="btn-cancel-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
-            <div style="display:flex;gap:4px;margin-top:4px">
-              <button class="btn btn-secondary" id="btn-reset-entry" style="flex:1">Reset</button>
-              <button class="btn btn-warn" id="btn-clear-from" style="flex:1">Clear from Bib</button>
-            </div>
+            <button class="btn btn-secondary" id="btn-reset-entry" style="width:100%;margin-top:4px">Reset</button>
           </div>
         </div>
 
@@ -522,7 +519,6 @@
           <button class="btn btn-secondary" id="btn-verify-si-results">Verify</button>
           <button class="btn btn-secondary" id="btn-format-si-results-senior">Merge Seniors</button>
           <button class="btn btn-secondary" id="btn-format-si-results-junior">Merge Juniors</button>
-          <button class="btn btn-secondary" id="btn-export-si-timing">Export SI Timing CSV</button>
         </div>
       </div>
 
@@ -594,10 +590,14 @@
         <span class="count-badge" id="people-count">0</span>
       </div>
 
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-add-person">Add Person</button>
+      </div>
+
       <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Count</th></tr>
+            <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Count</th><th>Actions</th></tr>
           </thead>
           <tbody id="people-tbody"></tbody>
         </table>
@@ -612,10 +612,13 @@
         <h2>Clubs</h2>
         <span class="count-badge" id="clubs-count">0</span>
       </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-add-club">Add Club</button>
+      </div>
       <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>Name</th><th>Last Seen</th><th>Count</th></tr>
+            <tr><th>Name</th><th>Last Seen</th><th>Count</th><th>Actions</th></tr>
           </thead>
           <tbody id="clubs-tbody"></tbody>
         </table>
@@ -746,63 +749,6 @@
   </main><!-- end .app-main -->
 </div><!-- end .app-shell -->
 
-<!-- ============================================================
-     Entry Edit Modal
-     ============================================================ -->
-<div class="modal-backdrop" id="entry-edit-modal" hidden>
-  <div class="modal-box">
-    <h2>Edit Entry</h2>
-    <div class="form-grid">
-      <div class="form-field" style="grid-column:1/-1">
-        <label for="entry-edit-name">Name</label>
-        <input type="text" id="entry-edit-name">
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-gender">Gender</label>
-        <select id="entry-edit-gender">
-          <option value="M">Male</option>
-          <option value="F">Female</option>
-          <option value="P">Pair</option>
-        </select>
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-dob">Date of Birth (DD/MM/YYYY)</label>
-        <input type="text" id="entry-edit-dob">
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-club">Club</label>
-        <input type="text" id="entry-edit-club">
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-fra">FRA Number</label>
-        <input type="text" id="entry-edit-fra">
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-category">Category</label>
-        <select id="entry-edit-category"><option value="">— select —</option></select>
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-course">Course</label>
-        <select id="entry-edit-course">
-          <option value="Seniors">Seniors</option>
-          <option value="Juniors">Juniors</option>
-        </select>
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-starttime">Individual Start Time</label>
-        <input type="text" id="entry-edit-starttime" placeholder="HH:MM:SS">
-      </div>
-      <div class="form-field">
-        <label for="entry-edit-dibber">Dibber Number</label>
-        <input type="text" id="entry-edit-dibber">
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" id="btn-close-entry-edit">Cancel</button>
-      <button class="btn" id="btn-save-entry-edit">Save Changes</button>
-    </div>
-  </div>
-</div>
 
 <!-- ============================================================
      Status bar

@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'racemaster-v1';
+const CACHE = 'racemaster-v2';
 
 const PRECACHE = [
   '/',
@@ -8,6 +8,7 @@ const PRECACHE = [
   '/css/app.css',
   '/css/print.css',
   '/js/app.js',
+  '/js/ui.js',
   '/js/constants.js',
   '/js/csv.js',
   '/js/storage.js',
@@ -23,6 +24,20 @@ const PRECACHE = [
   '/js/si-results.js',
   '/js/results.js',
   '/js/forms.js',
+  '/js/views/home.js',
+  '/js/views/event.js',
+  '/js/views/entries.js',
+  '/js/views/helpers.js',
+  '/js/views/finishers.js',
+  '/js/views/results.js',
+  '/js/views/pre-entries.js',
+  '/js/views/safety.js',
+  '/js/views/people.js',
+  '/js/views/clubs.js',
+  '/js/views/dibbers.js',
+  '/js/views/categories.js',
+  '/js/views/view-forms.js',
+  '/js/views/si-results.js',
 ];
 
 self.addEventListener('install', e => {

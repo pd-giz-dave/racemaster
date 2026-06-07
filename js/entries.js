@@ -159,19 +159,35 @@ export async function updateEntry(bibNumber, formData) {
   if (idx < 0) return { error: `Bib ${bibNumber} not found` };
 
   const e = state.entries[idx];
-  if (formData.name     !== undefined) e.name     = cleanName(formData.name);
-  if (formData.gender   !== undefined) e.gender   = formData.gender;
-  if (formData.dob      !== undefined) e.dob      = normaliseDate(formData.dob);
-  if (formData.club     !== undefined) e.club     = cleanName(formData.club);
-  if (formData.fraNumber!== undefined) e.fraNumber= formData.fraNumber;
-  if (formData.category !== undefined) e.category = formData.category;
-  if (formData.course   !== undefined) e.course   = formData.course;
-  if (formData.startTime!== undefined) e.startTime= formData.startTime;
-  if (formData.retired  !== undefined) e.retired  = formData.retired;
-  if (formData.status   !== undefined) e.status   = formData.status;
-  if (formData.dibberOverride !== undefined) {
-    e.dibberNumber = +formData.dibberOverride > 0 ? +formData.dibberOverride : 0;
+
+  // Bib change — clash-check against other entries
+  if (formData.bibOverride && +formData.bibOverride > 0 && +formData.bibOverride !== +bibNumber) {
+    const newBib = +formData.bibOverride;
+    if (findEntryByBib(newBib) >= 0) return { error: `Bib ${newBib} is already in use` };
+    e.bibNumber = newBib;
   }
+
+  // Dibber change — clash-check against other entries
+  if (formData.dibberOverride !== undefined) {
+    const newDibber = +formData.dibberOverride || 0;
+    if (newDibber > 0 && newDibber !== +e.dibberNumber) {
+      const clashIdx = findEntryByDibber(newDibber);
+      if (clashIdx >= 0 && clashIdx !== idx)
+        return { error: `Dibber ${newDibber} is already assigned to bib ${state.entries[clashIdx].bibNumber}` };
+    }
+    e.dibberNumber = newDibber;
+  }
+
+  if (formData.name      !== undefined) e.name      = cleanName(formData.name);
+  if (formData.gender    !== undefined) e.gender    = formData.gender;
+  if (formData.dob       !== undefined) e.dob       = normaliseDate(formData.dob);
+  if (formData.club      !== undefined) e.club      = cleanName(formData.club);
+  if (formData.fraNumber !== undefined) e.fraNumber = formData.fraNumber;
+  if (formData.category  !== undefined) e.category  = formData.category;
+  if (formData.course    !== undefined) e.course    = formData.course;
+  if (formData.startTime !== undefined) e.startTime = formData.startTime;
+  if (formData.retired   !== undefined) e.retired   = formData.retired;
+  if (formData.status    !== undefined) e.status    = formData.status;
 
   await saveEntries();
   return { error: '' };
