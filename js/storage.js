@@ -22,23 +22,6 @@ const CACHE_KEY  = 'racemaster-data';   // localStorage key for state
 const DIRTY_KEY  = 'racemaster-dirty';  // localStorage flag: unsynced changes exist
 const SYNC_DELAY = 2000;                // ms to wait before pushing to server
 
-const FILE_TO_TABLE = {
-  'event.csv':       'event',
-  'people.csv':      'people',
-  'clubs.csv':       'clubs',
-  'dibbers.csv':     'dibbers',
-  'categories.csv':  'categories',
-  'roles.csv':       'roles',
-  'pre_entries.csv': 'preEntries',
-  'entries.csv':     'entries',
-  'helpers.csv':     'helpers',
-  'finishers.csv':   'finishers',
-  'safety.csv':      'safety',
-  'results.csv':     'results',
-  'prizes.csv':      'prizes',
-  'si_results.csv':  'siResults',
-  'si_timing.csv':   'siTiming',
-};
 
 export const hasFSA = false;
 
@@ -110,33 +93,14 @@ export async function restoreDirectory() {
   return true;
 }
 
-/**
- * Push pending changes and reload fresh data from the server.
- * Wired to the "Open / Reload" button in the UI.
- */
-export async function openDirectory() {
-  return restoreDirectory();
-}
-
-export function getDirectory() { return true; }
-export function setDirectory() {}
-
-/** Read a table from the local cache. Returns [] if not found. */
-export async function readCSV(filename) {
-  const table = FILE_TO_TABLE[filename];
-  if (!table) return [];
+/** Read a table from the local cache by name. Returns [] if not found. */
+export async function readTable(table) {
   const data = cacheLoad()[table];
   return Array.isArray(data) ? data : [];
 }
 
-/**
- * Write a table to the local cache immediately, then schedule a server sync.
- * The `fields` argument is accepted for call-site compatibility but ignored —
- * data is stored as JSON, not CSV.
- */
-export async function writeCSV(filename, rows) {
-  const table = FILE_TO_TABLE[filename];
-  if (!table) return;
+/** Write a table to the local cache immediately, then schedule a server sync. */
+export async function writeTable(table, rows) {
   cacheSaveTable(table, rows);
   scheduleSyncToServer();
 }
@@ -144,6 +108,16 @@ export async function writeCSV(filename, rows) {
 /** Not used with server storage — kept for call-site compatibility */
 export async function readText()  { return null; }
 export async function writeText() {}
+
+/** Return the full cache as a plain object (all tables that exist). */
+export function dumpState() { return cacheLoad(); }
+
+/** Replace the full cache with the given object and push to server. */
+export async function restoreState(data) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  localStorage.setItem(DIRTY_KEY, 'true');
+  await syncToServer();
+}
 
 /** Download rows as a CSV file to the local filesystem */
 export function downloadCSV(filename, rows, fields) {

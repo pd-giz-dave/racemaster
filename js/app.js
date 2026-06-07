@@ -1,9 +1,9 @@
 'use strict';
 
 import { state, loadAll } from './state.js';
-import { openDirectory, restoreDirectory } from './storage.js';
+import { restoreDirectory, dumpState, restoreState } from './storage.js';
 import { showBusy } from './utils.js';
-import { on, showStatus, updateDatalistNames, updateDatalistClubs } from './ui.js';
+import { on, showStatus, updateDatalistNames, updateDatalistClubs, confirm, pickFile, downloadText, sanitise } from './ui.js';
 
 import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
@@ -35,7 +35,7 @@ export async function init() {
       await loadAll();
       showStatus('Data loaded from ' + (state.event.name || 'event'));
     } else {
-      showStatus('No data directory selected — click "Open Data Folder"');
+      showStatus('No saved data found — use Import to load a state file.');
     }
   } catch (e) {
     showStatus('Error loading data: ' + e.message, true);
@@ -105,25 +105,36 @@ function renderView(v) {
   }
 }
 
-// ---- Directory open ----
+// ---- State export / import ----
 
-async function openDir() {
-  showBusy('Opening folder…');
-  try {
-    await openDirectory();
-    await loadAll();
-    renderAll();
-    showStatus('Data loaded.');
-  } catch (e) {
-    if (e.name !== 'AbortError') showStatus('Error: ' + e.message, true);
-  }
+function exportState() {
+  const data = dumpState();
+  const name = sanitise(state.event.name || 'racemaster');
+  downloadText(JSON.stringify(data, null, 2), `${name}_state.json`);
+  showStatus('State exported.');
+}
+
+async function importState() {
+  const text = await pickFile('.json');
+  if (!text) return;
+  let data;
+  try { data = JSON.parse(text); }
+  catch { showStatus('Not a valid JSON file.', true); return; }
+  if (!confirm('Import will replace ALL current data. This cannot be undone. Continue?')) return;
+  showBusy('Importing…');
+  await restoreState(data);
+  await loadAll();
   showBusy('');
+  renderAll();
+  showView('home');
+  showStatus('State imported successfully.');
 }
 
 // ---- Event wiring (orchestration) ----
 
 function wireEvents() {
-  on('btn-open-dir', 'click', openDir);
+  on('btn-export-state', 'click', exportState);
+  on('btn-import-state', 'click', importState);
 
   wireEvent();
   wireEntries();

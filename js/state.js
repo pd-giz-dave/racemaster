@@ -1,10 +1,10 @@
 'use strict';
 
-import { readCSV, writeCSV } from './storage.js';
-import { FILE, FRA_CATEGORIES, WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES } from './constants.js';
+import { readTable, writeTable } from './storage.js';
+import { FRA_CATEGORIES, WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES } from './constants.js';
 
 // ============================================================
-// Global in-memory state, loaded from and saved to CSV files
+// Global in-memory state, loaded from and saved to JSON tables
 // ============================================================
 
 export const state = {
@@ -31,7 +31,7 @@ export const state = {
   safety:     [],  // {number, name, course, dob, category, status, reason}
   results:    [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}
   prizes:     [],  // {position, category, inCatPos, time, number, name, priority}
-  siResults:  [],  // dynamic - whatever comes from SI timing CSV
+  siResults:  [],  // dynamic - whatever comes from SI results CSV
   fraPreset:  [],  // editable FRA category preset (saved to fra_preset.csv)
   wfraPreset: [],  // editable WFRA category preset (saved to wfra_preset.csv)
 
@@ -45,19 +45,19 @@ export const state = {
 export async function loadAll() {
   await Promise.all([
     loadEvent(),
-    loadList('people',     PEOPLE_FIELDS),
-    loadList('clubs',      CLUBS_FIELDS),
-    loadList('dibbers',    DIBBERS_FIELDS),
-    loadList('categories', CAT_FIELDS),
-    loadList('roles',      ROLES_FIELDS),
-    loadList('preEntries', PRE_ENTRY_FIELDS, FILE.PRE_ENTRIES),
-    loadList('entries',    ENTRY_FIELDS),
-    loadList('helpers',    HELPER_FIELDS),
-    loadList('finishers',  FINISHER_FIELDS),
-    loadList('safety',     SAFETY_FIELDS),
-    loadList('results',    RESULT_FIELDS),
-    loadList('prizes',     PRIZE_FIELDS),
-    loadList('siResults',  null, FILE.SI_RESULTS),
+    loadList('people'),
+    loadList('clubs'),
+    loadList('dibbers'),
+    loadList('categories'),
+    loadList('roles'),
+    loadList('preEntries'),
+    loadList('entries'),
+    loadList('helpers'),
+    loadList('finishers'),
+    loadList('safety'),
+    loadList('results'),
+    loadList('prizes'),
+    loadList('siResults'),
     loadPreset('fraPreset',  FRA_CATEGORIES),
     loadPreset('wfraPreset', WFRA_CATEGORIES),
   ]);
@@ -65,7 +65,7 @@ export async function loadAll() {
 }
 
 async function loadEvent() {
-  const rows = await readCSV(FILE.EVENT);
+  const rows = await readTable('event');
   if (rows.length > 0) {
     Object.assign(state.event, rows[0]);
     state.event.distance          = +state.event.distance || 0;
@@ -79,8 +79,7 @@ async function loadEvent() {
 }
 
 async function loadPreset(key, defaults) {
-  const filename = key === 'fraPreset' ? FILE.FRA_PRESET : FILE.WFRA_PRESET;
-  const rows = await readCSV(filename);
+  const rows = await readTable(key);
   if (rows && rows.length > 0) {
     state[key] = rows;
   } else {
@@ -95,46 +94,29 @@ async function loadPreset(key, defaults) {
   }
 }
 
-async function loadList(key, fields, filename) {
-  const actualFile = filename || guessFile(key);
-  const rows = await readCSV(actualFile);
+async function loadList(key) {
+  const rows = await readTable(key);
   state[key] = Array.isArray(rows) ? rows : [];
-}
-
-function guessFile(key) {
-  const map = {
-    people: FILE.PEOPLE, clubs: FILE.CLUBS, dibbers: FILE.DIBBERS,
-    categories: FILE.CATEGORIES, roles: FILE.ROLES,
-    preEntries: FILE.PRE_ENTRIES, entries: FILE.ENTRIES,
-    helpers: FILE.HELPERS, finishers: FILE.FINISHERS,
-    safety: FILE.SAFETY, results: FILE.RESULTS, prizes: FILE.PRIZES,
-    siResults: FILE.SI_RESULTS,
-  };
-  return map[key];
 }
 
 // ---- Save individual tables ----
 
-export async function saveEvent() {
-  await writeCSV(FILE.EVENT, [state.event], EVENT_FIELDS);
-}
-
-export async function savePeople()     { await writeCSV(FILE.PEOPLE,      state.people,     PEOPLE_FIELDS); }
-export async function saveClubs()      { await writeCSV(FILE.CLUBS,       state.clubs,      CLUBS_FIELDS); }
-export async function saveDibbers()    { await writeCSV(FILE.DIBBERS,     state.dibbers,    DIBBERS_FIELDS); }
-export async function saveCategories() { await writeCSV(FILE.CATEGORIES,  state.categories, CAT_FIELDS); }
-export async function saveFraPreset()  { await writeCSV(FILE.FRA_PRESET,  state.fraPreset,  CAT_FIELDS); }
-export async function saveWfraPreset() { await writeCSV(FILE.WFRA_PRESET, state.wfraPreset, CAT_FIELDS); }
-export async function saveRoles()      { await writeCSV(FILE.ROLES,       state.roles,      ROLES_FIELDS); }
-export async function savePreEntries() { await writeCSV(FILE.PRE_ENTRIES, state.preEntries, PRE_ENTRY_FIELDS); }
-export async function saveEntries()    { await writeCSV(FILE.ENTRIES,     state.entries,    ENTRY_FIELDS); }
-export async function saveHelpers()    { await writeCSV(FILE.HELPERS,     state.helpers,    HELPER_FIELDS); }
-export async function saveFinishers()  { await writeCSV(FILE.FINISHERS,   state.finishers,  FINISHER_FIELDS); }
-export async function saveSafety()     { await writeCSV(FILE.SAFETY,      state.safety,     SAFETY_FIELDS); }
-export async function saveResults()    { await writeCSV(FILE.RESULTS,     state.results,    RESULT_FIELDS); }
-export async function savePrizes()     { await writeCSV(FILE.PRIZES,      state.prizes,     PRIZE_FIELDS); }
-export async function saveSIResults()  { await writeCSV(FILE.SI_RESULTS,  state.siResults); }
-export async function saveSITiming(rows) { await writeCSV(FILE.SI_TIMING, rows); }
+export async function saveEvent()        { await writeTable('event',      [state.event]); }
+export async function savePeople()       { await writeTable('people',     state.people); }
+export async function saveClubs()        { await writeTable('clubs',      state.clubs); }
+export async function saveDibbers()      { await writeTable('dibbers',    state.dibbers); }
+export async function saveCategories()   { await writeTable('categories', state.categories); }
+export async function saveFraPreset()    { await writeTable('fraPreset',  state.fraPreset); }
+export async function saveWfraPreset()   { await writeTable('wfraPreset', state.wfraPreset); }
+export async function saveRoles()        { await writeTable('roles',      state.roles); }
+export async function savePreEntries()   { await writeTable('preEntries', state.preEntries); }
+export async function saveEntries()      { await writeTable('entries',    state.entries); }
+export async function saveHelpers()      { await writeTable('helpers',    state.helpers); }
+export async function saveFinishers()    { await writeTable('finishers',  state.finishers); }
+export async function saveSafety()       { await writeTable('safety',     state.safety); }
+export async function saveResults()      { await writeTable('results',    state.results); }
+export async function savePrizes()       { await writeTable('prizes',     state.prizes); }
+export async function saveSIResults()    { await writeTable('siResults',  state.siResults); }
 
 /** Apply the FRA preset categories to state.categories */
 export function applyFRACategories() {
@@ -155,63 +137,3 @@ function _applyPreset(preset, pairs) {
     };
   });
 }
-
-// ---- Field definitions (used as CSV column headers) ----
-
-export const EVENT_FIELDS = [
-  'name','distance','date','startTime','firstBibNumber','categories',
-  'entryLimit','preEntryFormat','timingMethod','maleRecord','femaleRecord',
-  'prizeDepthOverall','prizeDepthPerCategory',
-  'juniorLimit','juniorStartTime','juniorEntryLimit','juniorTimingMethod',
-  'stopwatchOffsetTime','stopwatchLateStart','stopwatchStartOffset','juniorStopwatchStartOffset',
-];
-
-export const PEOPLE_FIELDS = [
-  'name','gender','dob','club','fraNumber','lastSeen','seenTotal','lastHelped','helpedTotal',
-];
-
-export const CLUBS_FIELDS = ['name','lastSeen','seenTotal'];
-
-export const DIBBERS_FIELDS = ['shortCode','longCode','availability','notes'];
-
-export const CAT_FIELDS = [
-  'maleMinAge','maleCat','maleRef','maleMaxDist',
-  'femaleMinAge','femaleCat','femaleRef','femaleMaxDist',
-  'pairMinAge','pairCat','pairRef','pairMaxDist',
-];
-
-export const ROLES_FIELDS = ['role','description'];
-
-export const PRE_ENTRY_FIELDS = [
-  'participantNumber','firstName','lastName','gender','dob','club','fraNumber',
-  'category','email','address1','address2','town','county','postcode','country',
-  'telephone','mobile','eligibility','contactName','contactTelephone','medical','carReg',
-  'participantId',
-];
-
-export const ENTRY_FIELDS = [
-  'bibNumber','dibberNumber','fraNumber','name','club','gender','dob',
-  'category','course','preEntry','startTime','retired','status',
-];
-
-export const HELPER_FIELDS = [
-  'number','name','club','gender','dob','category','role',
-];
-
-export const FINISHER_FIELDS = [
-  'position','action','number','time','name','club','category','course',
-  'error','adjustedTime','status','source',
-];
-
-export const SAFETY_FIELDS = [
-  'number','name','course','dob','category','status','reason',
-];
-
-export const RESULT_FIELDS = [
-  'course','bibNumber','position','inCatPos','name','club','category',
-  'time','behindPercent','behindTime','prize',
-];
-
-export const PRIZE_FIELDS = [
-  'position','category','inCatPos','time','number','name','priority',
-];
