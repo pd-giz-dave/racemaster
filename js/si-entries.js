@@ -17,11 +17,8 @@ import { parseSICSV } from './csv.js';
  */
 export function parseSIEntriesCSV(text) {
   if (!text) return [];
-  const { headers: rawHeaders, rows } = parseSICSV(text);
+  const { rows } = parseSICSV(text);
   if (!rows.length) return [];
-
-  // Detect format by header fields
-  const headers = rawHeaders.map(h => h.toUpperCase());
 
   return rows.map(r => parsePreEntryRow(r));
 }
@@ -30,8 +27,8 @@ function parsePreEntryRow(r) {
   // Pick all the fields we want from all those available.
   // Try field name variants for SI and EC (there is no overlap, so no ambiguity)
 
-  // local function to test what we've got
   const get = (...keys) => {
+    // local function to test what we've got
     for (const k of keys) {
       const found = Object.keys(r).find(rk => rk.trim().toUpperCase() === k.toUpperCase());
       if (found !== undefined) return (r[found] || '').trim();

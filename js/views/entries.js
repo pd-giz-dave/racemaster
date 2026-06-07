@@ -13,7 +13,7 @@ import { iequal, cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import { exportSITimingCSV } from '../si-results.js';
 import {
-  val, fillForm, clearForm, on, setHTML, escHtml, showStatus, confirm,
+  val, fillForm, clearForm, on, setHTML, showStatus, confirm,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
   downloadText, sanitise,
 } from '../ui.js';
