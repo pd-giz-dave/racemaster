@@ -1,6 +1,6 @@
 'use strict';
 
-import { GENDER, COURSE, LIST_SEP, SUFFIX_SEP } from './constants.js';
+import { GENDER, LIST_SEP, SUFFIX_SEP } from './constants.js';
 
 // ============================================================
 // Utility functions (translated from Utils.xml)

@@ -2,7 +2,7 @@
 
 import { formatResults, buildPrizes, getResultsForCourse } from '../results.js';
 import { COURSE } from '../constants.js';
-import { on, setHTML, showStatus } from '../ui.js';
+import { on, showStatus } from '../ui.js';
 import { showBusy } from '../utils.js';
 
 export function renderResults() {

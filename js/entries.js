@@ -2,11 +2,11 @@
 
 import { state } from './state.js';
 import { saveEntries, savePeople, saveClubs } from './state.js';
-import { GENDER, COURSE, TIMING } from './constants.js';
+import { GENDER, COURSE } from './constants.js';
 import { normaliseDate, cleanName, iequal } from './utils.js';
-import { calculateCategory, calculateCourse, seniorAllowed } from './categories.js';
+import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, addClub, sortPeople, sortClubs, getNextBibNumber, getNextDibberNumber, mapDibberNumber } from './data.js';
-import { getTimingMethod, usingDibbers } from './time-utils.js';
+import { usingDibbers } from './time-utils.js';
 
 // ============================================================
 // Entry registration logic (translated from Entries.xml)

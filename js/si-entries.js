@@ -2,8 +2,8 @@
 
 import { state } from './state.js';
 import { savePreEntries } from './state.js';
-import { GENDER, COURSE, FORMAT } from './constants.js';
-import { normaliseDate, normaliseTime, cleanName, iequal } from './utils.js';
+import { GENDER } from './constants.js';
+import { normaliseDate, cleanName } from './utils.js';
 import { parseSICSV } from './csv.js';
 
 // ============================================================

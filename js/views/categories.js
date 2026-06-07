@@ -2,7 +2,7 @@
 
 import { state, saveCategories, saveFraPreset, saveWfraPreset } from '../state.js';
 import { resetFRAPreset, resetWFRAPreset } from '../categories.js';
-import { on, escHtml, setHTML, showStatus, confirm } from '../ui.js';
+import { on, escHtml, showStatus, confirm } from '../ui.js';
 
 // ---- Constants ----
 

@@ -2,20 +2,20 @@
 
 import { state } from '../state.js';
 import {
-  getNumberOfEntries, findEntryByBib, findEntryByDibber, getEntry,
-  submitEntry, updateEntry, deleteEntry, deleteEntriesFrom, retireEntry,
+  findEntryByBib, findEntryByDibber, getEntry,
+  submitEntry, updateEntry, deleteEntriesFrom,
   getSortedEntries,
 } from '../entries.js';
-import { addPerson, getNextBibNumber, getNextDibberNumber } from '../data.js';
+import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
-import { iequal, normaliseDate, normaliseTime, cleanName, capitalise, showBusy } from '../utils.js';
+import { iequal, cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import { exportSITimingCSV } from '../si-results.js';
 import {
   val, fillForm, clearForm, on, setHTML, escHtml, showStatus, confirm,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
-  downloadText, sanitise, pickFile,
+  downloadText, sanitise,
 } from '../ui.js';
 import { renderHome } from './home.js';
 

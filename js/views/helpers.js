@@ -1,6 +1,5 @@
 'use strict';
 
-import { state } from '../state.js';
 import { submitHelper, deleteHelper, getSortedHelpers } from '../helpers.js';
 import { val, on, setHTML, confirm, showStatus, updateDatalistClubs, clearForm } from '../ui.js';
 import { showBusy } from '../utils.js';

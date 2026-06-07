@@ -1,12 +1,12 @@
 'use strict';
 
 import { state } from './state.js';
-import { saveSIResults, saveSITiming } from './state.js';
-import { COURSE, FINISHER, GENDER, SI_COL_NAMES, SI_RESULTS_COL_NAMES, SI_TIMING_COL_NAMES } from './constants.js';
-import { normaliseTime, normaliseDate, cleanName, iequal, timeToSeconds } from './utils.js';
+import { saveSIResults } from './state.js';
+import { COURSE, FINISHER } from './constants.js';
+import { normaliseTime, iequal, timeToSeconds } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { adjustedFinishTime } from './time-utils.js';
-import { findEntryByBib, getEntry } from './entries.js';
+import { getEntry } from './entries.js';
 import { buildFinishNumbersMap } from './finishers.js';
 
 // ============================================================
