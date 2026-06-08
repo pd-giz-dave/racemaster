@@ -66,6 +66,15 @@ function resetHelperForm() {
   clearForm('helper-form-fields');
   document.getElementById('btn-submit-helper').textContent = 'Add Helper';
   document.getElementById('btn-cancel-helper-edit').style.display = 'none';
+  const roleEl     = document.getElementById('helper-form-role');
+  const roleDescEl = document.getElementById('helper-form-role-desc');
+  if (roleEl) {
+    roleEl.value = 'HELPER';
+    if (roleDescEl) {
+      const found = state.roles.find(r => r.role.toLowerCase() === 'helper');
+      roleDescEl.value = found?.description || '';
+    }
+  }
 }
 
 // ---- Submit ----
@@ -108,11 +117,13 @@ export async function submitHelperForm() {
 
   if (result.error) {
     showStatus(result.error, true);
+    document.getElementById('helper-form-name')?.focus();
   } else {
     const num = isEdit ? editingNumber : result.number;
     showStatus(isEdit ? `Helper ${num} updated.` : `Helper ${num} added.`);
     resetHelperForm();
     renderHelpers();
+    document.getElementById('helper-form-name')?.focus();
   }
 }
 
@@ -121,8 +132,10 @@ export async function submitHelperForm() {
 export async function confirmDeleteHelper(num) {
   if (!confirm(`Delete helper ${num}?`)) return;
   const result = await deleteHelper(num);
-  if (result.error) showStatus(result.error, true);
-  else { showStatus(`Helper ${num} deleted.`); renderHelpers(); }
+  if (result.error) { showStatus(result.error, true); return; }
+  showStatus(`Helper ${num} deleted.`);
+  renderHelpers();
+  document.getElementById('helper-form-name')?.focus();
 }
 
 // ---- Wire ----
@@ -130,6 +143,7 @@ export async function confirmDeleteHelper(num) {
 export function wireHelpers() {
   on('btn-submit-helper',      'click', submitHelperForm);
   on('btn-cancel-helper-edit', 'click', resetHelperForm);
+  on('btn-reset-helper',       'click', () => { resetHelperForm(); document.getElementById('helper-form-name')?.focus(); });
 
   // ---- Name typeahead against people database ----
   const nameEl = document.getElementById('helper-form-name');
@@ -186,12 +200,17 @@ export function wireHelpers() {
       }
       const low = typed.toLowerCase();
       currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
-      if (currentMatches.length) {
+      if (currentMatches.length === 1) {
+        nameEl.value = currentMatches[0].name;
         fillFromPerson(currentMatches[0]);
+        closeDropdown();
+      } else if (currentMatches.length > 1) {
+        fillFromPerson(currentMatches[0]);
+        showDropdown();
       } else {
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
+        closeDropdown();
       }
-      showDropdown();
     });
 
     nameEl.addEventListener('keydown', e => {
@@ -275,6 +294,9 @@ export function wireHelpers() {
     });
   }
 
+  // Set initial form defaults
+  resetHelperForm();
+
   // ---- Enter submits, Tab wraps within the form ----
   const formContainer = document.getElementById('helper-form-fields');
   if (formContainer) {
@@ -285,7 +307,7 @@ export function wireHelpers() {
       } else if (e.key === 'Tab') {
         const focusable = [...formContainer.querySelectorAll(
           'input:not([disabled]), select:not([disabled]), button:not([disabled])'
-        )];
+        )].filter(el => el.offsetParent !== null);
         if (!focusable.length) return;
         const first = focusable[0];
         const last  = focusable[focusable.length - 1];

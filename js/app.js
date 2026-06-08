@@ -51,6 +51,13 @@ export async function init() {
 
 // ---- Navigation ----
 
+function focusSidebar() {
+  const sidebar = document.querySelector('.app-sidebar');
+  if (!sidebar) return;
+  const active = sidebar.querySelector('a[data-view].active') ?? sidebar.querySelector('a[data-view]');
+  active?.focus();
+}
+
 function wireNav() {
   document.querySelectorAll('[data-view]').forEach(el => {
     el.addEventListener('click', e => {
@@ -59,6 +66,34 @@ function wireNav() {
     });
   });
   window.addEventListener('rm:navigate', e => showView(e.detail));
+
+  // Arrow-key navigation within the sidebar
+  const sidebar = document.querySelector('.app-sidebar');
+  if (sidebar) {
+    sidebar.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const links = [...sidebar.querySelectorAll('a[data-view]')];
+      const idx = links.indexOf(document.activeElement);
+      if (idx < 0) return;
+      e.preventDefault();
+      const next = e.key === 'ArrowDown'
+        ? links[Math.min(idx + 1, links.length - 1)]
+        : links[Math.max(idx - 1, 0)];
+      next?.focus();
+    });
+  }
+
+  // Escape: navigate to home; confirm first if the current view contains input fields
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.querySelector('.name-typeahead:not([hidden])')) return;
+    e.preventDefault();
+    const viewEl = document.getElementById(`view-${currentView}`);
+    const hasInputs = !!viewEl?.querySelector('input');
+    if (hasInputs && !confirm('Leave this view and go to Home?')) return;
+    showView('home');
+    setTimeout(focusSidebar, 0);
+  });
 }
 
 export function showView(viewName) {
@@ -89,7 +124,10 @@ function renderView(v) {
       renderEntries();
       setTimeout(() => document.getElementById('entry-form-peno')?.focus(), 0);
       break;
-    case 'helpers':      renderHelpers();      break;
+    case 'helpers':
+      renderHelpers();
+      setTimeout(() => document.getElementById('helper-form-name')?.focus(), 0);
+      break;
     case 'finishers':
       if (finisherPass === 2) initPass2();
       renderFinishers();

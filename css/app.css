@@ -496,13 +496,15 @@ input:focus, select:focus, textarea:focus {
 .entry-status.status-ok    { background: #d5f5e3; color: #1e8449; }
 .entry-status.status-error { background: #fadbd8; color: #c0392b; }
 
-/* ---- Entries view: table scrolls, form stays put ---- */
-#view-entries .table-scroll {
+/* ---- Entries / Helpers view: table scrolls, form stays put ---- */
+#view-entries .table-scroll,
+#view-helpers .table-scroll {
   overflow-y: auto;
   max-height: calc(100vh - var(--header-h) - 100px);
 }
 
-#view-entries .card {
+#view-entries .card,
+#view-helpers .card {
   position: sticky;
   top: 0;
 }

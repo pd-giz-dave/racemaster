@@ -128,7 +128,7 @@ export function fillFormForEdit(bib) {
   document.getElementById('entry-form-dibber')?.removeAttribute('tabindex');
   document.getElementById('btn-submit-entry').textContent = 'Update';
   document.getElementById('btn-cancel-edit').style.display = '';
-  document.getElementById('entry-form-name')?.focus();
+  document.getElementById('entry-form-peno')?.focus();
 }
 
 export function resetEntryForm() {
@@ -156,6 +156,7 @@ async function deleteFromEntry(bib) {
   showStatus(`${removed} entr${removed === 1 ? 'y' : 'ies'} deleted.`);
   renderEntries();
   renderHome();
+  document.getElementById('entry-form-peno')?.focus();
 }
 
 // ---- Main submit ----
@@ -223,6 +224,7 @@ export async function submitEntryForm() {
   showBusy('');
   if (result.error) {
     showStatus(result.error, true);
+    focusEntryErrorField(result.error);
   } else {
     const bib = isEdit ? editingBib : result.bibNumber;
     showStatus(isEdit ? `Bib ${bib} updated.` : `Bib ${bib} registered.`);
@@ -242,6 +244,15 @@ async function runExportSITiming() {
   const csv  = formatCSV(rows, Object.values(SI_TIMING_COL_NAMES));
   downloadText(csv, `${sanitise(state.event.name)}_SI_Timing.csv`);
   showStatus('SI timing file downloaded.');
+}
+
+function focusEntryErrorField(error) {
+  let id = 'entry-form-name';
+  if      (/gender/i.test(error))    id = 'entry-form-gender';
+  else if (/birth|dob/i.test(error)) id = 'entry-form-dob';
+  else if (/\bbib\b/i.test(error))   id = 'entry-form-bib';
+  else if (/dibber/i.test(error))    id = 'entry-form-dibber';
+  document.getElementById(id)?.focus();
 }
 
 // ---- Wire ----
@@ -439,15 +450,10 @@ export function wireEntries() {
       if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
         e.preventDefault();
         await submitEntryForm();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        if (!isEntryFormDirty()) {
-          window.dispatchEvent(new CustomEvent('rm:navigate', { detail: 'home' }));
-        }
       } else if (e.key === 'Tab') {
         const focusable = [...formContainer.querySelectorAll(
           'input:not([disabled]), select:not([disabled]), button:not([disabled])'
-        )];
+        )].filter(el => el.offsetParent !== null);
         if (!focusable.length) return;
         const first = focusable[0];
         const last  = focusable[focusable.length - 1];
