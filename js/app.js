@@ -9,7 +9,7 @@ import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
 import { renderEntries, wireEntries }       from './views/entries.js';
 import { renderHelpers, wireHelpers }       from './views/helpers.js';
-import { renderFinishers, wireFinishers, finisherPass, initPass2 } from './views/finishers.js';
+import { renderFinishers, wireFinishers } from './views/finishers.js';
 import { renderResults, wireResults }       from './views/results.js';
 import { renderPreEntries, wirePreEntries } from './views/pre-entries.js';
 import { renderSafety, wireSafety }         from './views/safety.js';
@@ -47,6 +47,7 @@ export async function init() {
   renderAll();
   showBusy('');
   showView('home');
+  setTimeout(focusSidebar, 0);
 }
 
 // ---- Navigation ----
@@ -129,9 +130,8 @@ function renderView(v) {
       setTimeout(() => document.getElementById('helper-form-name')?.focus(), 0);
       break;
     case 'finishers':
-      if (finisherPass === 2) initPass2();
       renderFinishers();
-      setTimeout(() => document.getElementById(finisherPass === 1 ? 'finish-bib-rapid' : 'finish-time-rapid')?.focus(), 0);
+      setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
       break;
     case 'results':      renderResults();      break;
     case 'pre-entries':  renderPreEntries();   break;

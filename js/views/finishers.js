@@ -2,111 +2,160 @@
 
 import { state } from '../state.js';
 import {
-  recordFinisher, deleteLastFinisher, updateFinisher,
+  recordFinisher, updateFinisher, deleteLastFinisher, deleteFinishersFrom,
   scanFinishers, processFinishers, getSortedFinishers,
 } from '../finishers.js';
+import { getEntriesOnCourse, getSortedEntries } from '../entries.js';
 import { COURSE, FINISHER } from '../constants.js';
 import { iequal, normaliseTime, showBusy } from '../utils.js';
-import { on, setHTML, showStatus } from '../ui.js';
+import { on, setHTML, showStatus, escHtml, confirm } from '../ui.js';
 
 // ---- Module state ----
 
-export let finisherCourse = COURSE.SENIORS;
-export let finisherPass   = 1;
-export let pass2Idx       = 0;
+let editingIdx = -1;   // index into state.finishers; -1 = adding new
+
+const SPECIAL_BIBS = {
+  'seniors': FINISHER.SENIORS,
+  'juniors': FINISHER.JUNIORS,
+  'clock':   FINISHER.CLOCK,
+  'ignore':  FINISHER.IGNORE,
+  'nostart': FINISHER.NO_START,
+  'time':    FINISHER.TIME,
+  'offset':  FINISHER.OFFSET,
+};
+
+const SPECIAL_BIB_LABELS = [
+  ['Seniors',  'Record actual start time for seniors race'],
+  ['Juniors',  'Record actual start time for juniors race'],
+  ['Clock',    'Record clock start — subsequent times relative to this'],
+  ['Ignore',   'Mark accidental stopwatch trigger'],
+  ['NoStart',  'Times relative to 0, not time of day'],
+  ['Time',     'Like Clock but times are time of day'],
+  ['Offset',   'Clock started late — offset added to subsequent times'],
+];
+
+function updateDatalistFinisherBibs() {
+  const dl = document.getElementById('datalist-finisher-bibs');
+  if (!dl) return;
+  const specials = SPECIAL_BIB_LABELS.map(([v, label]) =>
+    `<option value="${v}">${escHtml(label)}</option>`).join('');
+  const entries = getSortedEntries().map(e => {
+    const label = [e.name, e.category, e.course].filter(Boolean).join(' · ');
+    return `<option value="${e.bibNumber}">${escHtml(label)}</option>`;
+  }).join('');
+  dl.innerHTML = specials + entries;
+}
 
 // ---- Render ----
 
 export function renderFinishers() {
+  const all     = getSortedFinishers();
   const seniors = getSortedFinishers(COURSE.SENIORS);
   const juniors = getSortedFinishers(COURSE.JUNIORS);
-  const current = iequal(finisherCourse, COURSE.JUNIORS) ? juniors : seniors;
 
-  setHTML('finisher-senior-count', seniors.length);
-  setHTML('finisher-junior-count', juniors.length);
-  setHTML('rapid-next-pos', current.length + 1);
+  const maxBib = Math.max(0, ...getSortedEntries().map(e => +e.bibNumber || 0));
+  const isValidFinisher = f => f.number >= 1 && f.number <= maxBib && f.action !== FINISHER.ACTION_START;
+
+  const seniorExpected = getEntriesOnCourse(COURSE.SENIORS);
+  const juniorExpected = getEntriesOnCourse(COURSE.JUNIORS);
+
+  setHTML('finisher-senior-count', `${seniors.filter(isValidFinisher).length} of ${seniorExpected}`);
+  setHTML('finisher-junior-count', `${juniors.filter(isValidFinisher).length} of ${juniorExpected}`);
+
+  updateDatalistFinisherBibs();
+
+  const lineEl = document.getElementById('finisher-line');
+  if (lineEl) lineEl.value = all.length;
+
+  updatePrevTime(all);
 
   const tbody = document.getElementById('finishers-tbody');
   if (!tbody) return;
-  tbody.innerHTML = current.map((f, i) => {
-    const hilite = finisherPass === 2 && i === pass2Idx ? ' row-current' : '';
-    return `<tr class="${f.error ? 'row-error' : ''}${hilite}">
-      <td>${f.position || i+1}</td>
+  const specialActionValues = new Set(Object.values(SPECIAL_BIBS));
+  const startFinishLabel = action => {
+    if (action === FINISHER.ACTION_START)  return 'Start';
+    if (action === FINISHER.ACTION_FINISH || action === FINISHER.NORMAL) return 'Finish';
+    if (specialActionValues.has(action))   return action;
+    return '';
+  };
+  tbody.innerHTML = all.map((f, i) => {
+    const sidx = state.finishers.indexOf(f);
+    const numDisplay = f.number > 0 ? f.number : '';
+    return `<tr class="${f.error ? 'row-error' : ''}">
+      <td>${f.line !== undefined ? f.line : i}</td>
+      <td>${startFinishLabel(f.action)}</td>
       <td>${f.time || ''}</td>
       <td>${f.adjustedTime || ''}</td>
-      <td>${f.number || ''}</td>
+      <td>${numDisplay}</td>
       <td>${f.name || ''}</td>
       <td>${f.category || ''}</td>
-      <td class="error-cell">${f.error || ''}</td>
+      <td>${f.number > 0 ? (f.course || '') : ''}</td>
+      <td>${f.source === 'manual' ? 'Manual' : f.source ? 'Auto' : ''}</td>
+      <td>
+        <button class="btn-sm btn-edit btn-edit-finisher" data-sidx="${sidx}">Edit</button>
+        <button class="btn-sm btn-delete-entry btn-del-finisher" data-sidx="${sidx}">Del from here</button>
+      </td>
     </tr>`;
   }).join('');
 
-  if (finisherPass === 2) renderPass2();
+  tbody.querySelectorAll('.btn-edit-finisher').forEach(b =>
+    b.addEventListener('click', () => {
+      const sidx = +b.dataset.sidx;
+      if (!confirm(`Edit finisher at line ${state.finishers[sidx]?.line ?? sidx}?`)) return;
+      fillFormForEdit(sidx);
+    }));
+
+  tbody.querySelectorAll('.btn-del-finisher').forEach(b =>
+    b.addEventListener('click', () => confirmDeleteFrom(+b.dataset.sidx)));
 }
 
-export function setFinisherCourse(course) {
-  finisherCourse = course;
-  const isSr = !iequal(course, COURSE.JUNIORS);
-  document.getElementById('fcourse-senior')?.classList.toggle('active', isSr);
-  document.getElementById('fcourse-junior')?.classList.toggle('active', !isSr);
-  if (finisherPass === 2) initPass2();
-  renderFinishers();
-  document.getElementById(finisherPass === 1 ? 'finish-bib-rapid' : 'finish-time-rapid')?.focus();
+function updatePrevTime(finishers) {
+  const last = finishers.length > 0 ? finishers[finishers.length - 1] : null;
+  const el = document.getElementById('finisher-prev-time');
+  if (el) el.value = last?.time || '';
 }
 
-export function setFinisherPass(pass) {
-  finisherPass = pass;
-  document.getElementById('finisher-pass1').hidden = pass !== 1;
-  document.getElementById('finisher-pass2').hidden = pass !== 2;
-  document.getElementById('fpass-1')?.classList.toggle('active', pass === 1);
-  document.getElementById('fpass-2')?.classList.toggle('active', pass === 2);
-  if (pass === 2) initPass2();
-  else document.getElementById('finish-bib-rapid')?.focus();
-  renderFinishers();
+// ---- Form helpers ----
+
+function fillFormForEdit(sidx) {
+  const f = state.finishers[sidx];
+  if (!f) return;
+  editingIdx = sidx;
+
+  const lineEl = document.getElementById('finisher-line');
+  const bibEl  = document.getElementById('finisher-bib');
+  const timeEl = document.getElementById('finisher-time');
+  if (lineEl) lineEl.value = f.line !== undefined ? f.line : '';
+  if (bibEl)  bibEl.value  = f.number || f.action || '';
+  if (timeEl) timeEl.value = f.time || '';
+
+  const isStart = f.action === FINISHER.ACTION_START;
+  const startRadio  = document.getElementById('finisher-is-start');
+  const finishRadio = document.getElementById('finisher-is-finish');
+  if (startRadio)  startRadio.checked  = isStart;
+  if (finishRadio) finishRadio.checked = !isStart;
+
+  document.getElementById('btn-submit-finisher').textContent = 'Update';
+  document.getElementById('btn-cancel-finisher-edit').style.display = '';
+
+  document.getElementById('finisher-bib')?.focus();
 }
 
-export function initPass2() {
-  const finishers = getSortedFinishers(finisherCourse);
-  pass2Idx = finishers.findIndex(f => !f.time);
-  if (pass2Idx < 0) pass2Idx = Math.max(0, finishers.length - 1);
-  renderPass2();
-  const timeEl = document.getElementById('finish-time-rapid');
-  if (timeEl) { timeEl.value = finishers[pass2Idx]?.time || ''; timeEl.focus(); timeEl.select(); }
-}
-
-export function renderPass2() {
-  const finishers = getSortedFinishers(finisherCourse);
-  const f    = finishers[pass2Idx];
-  const prev = pass2Idx > 0 ? finishers[pass2Idx - 1] : null;
-  setHTML('pass2-pos',     f ? (f.position || pass2Idx + 1) : '—');
-  setHTML('pass2-bib',     f ? (f.number || '?') : '—');
-  setHTML('pass2-name',    f ? (f.name || '') : '');
-  setHTML('pass2-inherit', prev?.time ? `prev: ${prev.time}` : '');
-}
-
-export async function pass2AdvanceFinisher(inputValue) {
-  const finishers = getSortedFinishers(finisherCourse);
-  if (!finishers.length || pass2Idx >= finishers.length) { showStatus('No finishers to time.', true); return; }
-
-  const f    = finishers[pass2Idx];
-  const prev = pass2Idx > 0 ? finishers[pass2Idx - 1] : null;
-
-  if (inputValue.trim()) {
-    const parsedTime = parseFinishTime(inputValue.trim(), prev?.time);
-    if (!parsedTime) { showStatus('Invalid time — use ss, mm:ss, or hh:mm:ss', true); return; }
-    const stateIdx = state.finishers.indexOf(f);
-    if (stateIdx >= 0) await updateFinisher(stateIdx, { time: parsedTime });
-    showStatus(`Pos ${f.position || pass2Idx + 1}: ${parsedTime}`);
-  }
-
-  if (pass2Idx < finishers.length - 1) pass2Idx++;
-  else showStatus('All finishers timed!');
-
-  const timeEl = document.getElementById('finish-time-rapid');
+function resetFinisherForm() {
+  editingIdx = -1;
+  const bibEl  = document.getElementById('finisher-bib');
+  const timeEl = document.getElementById('finisher-time');
+  if (bibEl)  bibEl.value  = '';
   if (timeEl) timeEl.value = '';
+  const finishRadio = document.getElementById('finisher-is-finish');
+  if (finishRadio) finishRadio.checked = true;
+  document.getElementById('btn-submit-finisher').textContent = 'Record';
+  document.getElementById('btn-cancel-finisher-edit').style.display = 'none';
   renderFinishers();
-  document.getElementById('finish-time-rapid')?.focus();
+  document.getElementById('finisher-bib')?.focus();
 }
+
+// ---- Time parsing ----
 
 export function parseFinishTime(input, prevTimeStr) {
   const parts = input.split(/\D+/).filter(Boolean);
@@ -122,20 +171,127 @@ export function parseFinishTime(input, prevTimeStr) {
   else if (nums.length === 2) { h = ih; m = nums[0]; s = nums[1]; }
   else                        { [h, m, s] = nums; }
   if (s > 59 || m > 59 || h > 23) return null;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export async function undoLastFinisher(course) {
-  const result = await deleteLastFinisher(course || finisherCourse);
-  if (result.error) showStatus(result.error, true);
-  else {
-    showStatus('Last finisher removed.');
-    if (finisherPass === 2) initPass2();
+// ---- Submit ----
+
+async function submitFinisherForm() {
+  const bibEl  = document.getElementById('finisher-bib');
+  const timeEl = document.getElementById('finisher-time');
+  const lineEl = document.getElementById('finisher-line');
+
+  const rawBib  = (bibEl?.value || '').trim();
+  const rawTime = (timeEl?.value || '').trim();
+  const isStart = document.querySelector('input[name="finisher-event-type"]:checked')?.value === 'start';
+  const lineVal = lineEl?.value !== '' ? +lineEl.value : undefined;
+
+  if (!rawBib) {
+    showStatus('Enter a race/bib number or special code.', true);
+    bibEl?.focus();
+    return;
   }
+
+  let parsedTime = '';
+  if (rawTime) {
+    const current = getSortedFinishers();
+    const prevTime = current.length > 0 ? current[current.length - 1].time : '';
+    parsedTime = parseFinishTime(rawTime, prevTime) || '';
+    if (!parsedTime) {
+      showStatus('Invalid time — use ss, mm:ss, or hh:mm:ss', true);
+      timeEl?.focus();
+      return;
+    }
+  }
+
+  // Edit mode
+  if (editingIdx >= 0) {
+    showBusy('Updating…');
+    const specialEdit = SPECIAL_BIBS[rawBib.toLowerCase()];
+    const bib    = specialEdit ? 0 : parseInt(rawBib, 10);
+    const action = specialEdit
+      ? specialEdit
+      : (isStart ? FINISHER.ACTION_START : FINISHER.NORMAL);
+    const result = await updateFinisher(editingIdx, {
+      number: isNaN(bib) ? 0 : bib,
+      time:   parsedTime,
+      action,
+      line:   lineVal,
+    });
+    showBusy('');
+    if (result.error) { showStatus(result.error, true); bibEl?.focus(); return; }
+    const editLabel = specialEdit ? rawBib : `${isStart ? 'Start' : 'Finish'} bib ${rawBib}`;
+    showStatus(`Line ${lineVal !== undefined ? lineVal : editingIdx}: ${editLabel} updated`);
+    resetFinisherForm();
+    return;
+  }
+
+  // Add mode
+  const specialAction = SPECIAL_BIBS[rawBib.toLowerCase()];
+  showBusy('Recording…');
+
+  let result;
+  if (specialAction) {
+    result = await recordFinisher(0, parsedTime, null, specialAction, lineVal);
+  } else {
+    const bib = parseInt(rawBib, 10);
+    if (isNaN(bib) || bib < 0) {
+      showBusy('');
+      showStatus('Invalid bib number.', true);
+      bibEl?.focus();
+      return;
+    }
+    const action = isStart ? FINISHER.ACTION_START : FINISHER.NORMAL;
+    result = await recordFinisher(bib, parsedTime, null, action, lineVal);
+  }
+
+  showBusy('');
+
+  if (result.error) {
+    showStatus(result.error, true);
+    bibEl?.focus();
+    return;
+  }
+
+  const sfLabel = specialAction ? rawBib : `${isStart ? 'Start' : 'Finish'} bib ${rawBib}`;
+  showStatus(`Line ${lineVal !== undefined ? lineVal : result.position - 1}: ${sfLabel}`);
+
+  bibEl.value  = '';
+  timeEl.value = '';
+  const finishRadio = document.getElementById('finisher-is-finish');
+  if (finishRadio) finishRadio.checked = true;
+
+  renderFinishers();
+  bibEl?.focus();
+}
+
+// ---- Delete from here ----
+
+async function confirmDeleteFrom(sidx) {
+  const f = state.finishers[sidx];
+  if (!f) return;
+  if (!confirm(`Delete from line ${f.line ?? sidx} onwards?`)) return;
+  showBusy('Deleting…');
+  const result = await deleteFinishersFrom(sidx);
+  showBusy('');
+  if (result.error) { showStatus(result.error, true); return; }
+  showStatus(`${result.deleted} finisher(s) removed.`);
+  renderFinishers();
+  document.getElementById('finisher-bib')?.focus();
+}
+
+// ---- Undo ----
+
+export async function undoLastFinisher() {
+  const result = await deleteLastFinisher();
+  if (result.error) showStatus(result.error, true);
+  else showStatus('Last finisher removed.');
   renderFinishers();
 }
 
-export async function runScanFinishers() {
+// ---- Scan / Process ----
+
+async function runScanFinishers() {
   showBusy('Scanning…');
   const errors = await scanFinishers();
   showBusy('');
@@ -143,7 +299,7 @@ export async function runScanFinishers() {
   renderFinishers();
 }
 
-export async function runProcessFinishers() {
+async function runProcessFinishers() {
   showBusy('Processing…');
   await processFinishers();
   showBusy('');
@@ -154,58 +310,48 @@ export async function runProcessFinishers() {
 // ---- Wire ----
 
 export function wireFinishers() {
-  on('fcourse-senior', 'click', () => setFinisherCourse(COURSE.SENIORS));
-  on('fcourse-junior', 'click', () => setFinisherCourse(COURSE.JUNIORS));
-  on('fpass-1', 'click', () => setFinisherPass(1));
-  on('fpass-2', 'click', () => setFinisherPass(2));
-  on('btn-undo-rapid',        'click', () => undoLastFinisher());
-  on('btn-scan-finishers',    'click', runScanFinishers);
-  on('btn-process-finishers', 'click', runProcessFinishers);
+  on('btn-submit-finisher',       'click', submitFinisherForm);
+  on('btn-cancel-finisher-edit',  'click', resetFinisherForm);
+  on('btn-undo-rapid',            'click', () => undoLastFinisher());
+  on('btn-scan-finishers',        'click', runScanFinishers);
+  on('btn-process-finishers',     'click', runProcessFinishers);
 
-  // Pass 1: bib entry keyboard handler
-  const bibInput = document.getElementById('finish-bib-rapid');
-  if (bibInput) {
-    bibInput.addEventListener('keydown', async e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const bib = parseInt(bibInput.value, 10);
-        if (bib > 0) {
-          const result = await recordFinisher(bib, '', finisherCourse, FINISHER.NORMAL);
-          if (result.error) showStatus(result.error, true);
-          else showStatus(`Pos ${result.position}: Bib ${bib}`);
-          bibInput.value = '';
-          renderFinishers();
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        await undoLastFinisher();
+  // Special code auto-fill: when typed text uniquely matches one special code, complete it
+  const bibEl = document.getElementById('finisher-bib');
+  if (bibEl) {
+    const specialNames = SPECIAL_BIB_LABELS.map(([v]) => v); // ['Seniors','Juniors',...]
+    bibEl.addEventListener('input', e => {
+      if (e.inputType?.startsWith('delete')) return;
+      const typed = bibEl.value;
+      if (!typed) return;
+      const low = typed.toLowerCase();
+      const matches = specialNames.filter(n => n.toLowerCase().startsWith(low));
+      if (matches.length === 1 && matches[0].toLowerCase() !== low) {
+        const pos = typed.length;
+        bibEl.value = matches[0];
+        bibEl.setSelectionRange(pos, matches[0].length);
       }
     });
   }
 
-  // Pass 2: time entry keyboard handler
-  const timeInput = document.getElementById('finish-time-rapid');
-  if (timeInput) {
-    timeInput.addEventListener('keydown', async e => {
-      if (e.key === 'Enter') {
+  // Tab cycling and Enter submit within form
+  const formContainer = document.getElementById('finisher-form-fields');
+  if (formContainer) {
+    formContainer.addEventListener('keydown', async e => {
+      if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
         e.preventDefault();
-        await pass2AdvanceFinisher(timeInput.value);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (pass2Idx > 0) {
-          pass2Idx--;
-          timeInput.value = getSortedFinishers(finisherCourse)[pass2Idx]?.time || '';
-          renderFinishers();
-          timeInput.focus();
-        }
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const fs = getSortedFinishers(finisherCourse);
-        if (pass2Idx < fs.length - 1) {
-          pass2Idx++;
-          timeInput.value = fs[pass2Idx]?.time || '';
-          renderFinishers();
-          timeInput.focus();
+        await submitFinisherForm();
+      } else if (e.key === 'Tab') {
+        const focusable = [...formContainer.querySelectorAll(
+          'input:not([disabled]), button:not([disabled])'
+        )].filter(el => el.offsetParent !== null && el.tabIndex !== -1);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last  = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
         }
       }
     });

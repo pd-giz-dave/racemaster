@@ -31,6 +31,9 @@
       <a href="#" data-view="home">Home</a>
       <a href="#" data-view="event">Event Settings</a>
 
+      <div class="nav-section">Print</div>
+      <a href="#" data-view="forms">Print Forms</a>
+
       <div class="nav-section">Registration</div>
       <a href="#" data-view="entries">Entries</a>
       <a href="#" data-view="helpers">Helpers</a>
@@ -50,9 +53,6 @@
       <a href="#" data-view="roles">Roles</a>
       <a href="#" data-view="dibbers">Dibbers</a>
       <a href="#" data-view="categories">Categories</a>
-
-      <div class="nav-section">Print</div>
-      <a href="#" data-view="forms">Print Forms</a>
     </nav>
   </aside>
 
@@ -224,6 +224,39 @@
 
       <div class="btn-row">
         <button class="btn" id="btn-save-event">Save Event Settings</button>
+      </div>
+    </div>
+
+    <!-- ======================================================
+         PRINT FORMS
+         ====================================================== -->
+    <div class="view" id="view-forms" hidden>
+      <div class="view-header"><h2>Print Forms</h2><span class="entry-status view-status-msg" hidden></span></div>
+
+      <div class="card">
+        <h3>Entry Forms</h3>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-print-entry-form">Entry Form (All)</button>
+          <button class="btn btn-secondary" id="btn-print-junior-form">Junior Entry Form</button>
+          <button class="btn btn-secondary" id="btn-print-number-matrix">Number Matrix</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Finish Sheets</h3>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-print-finish-senior">Senior Finish Sheet</button>
+          <button class="btn btn-secondary" id="btn-print-finish-junior">Junior Finish Sheet</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Results</h3>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-print-results-senior">Senior Results</button>
+          <button class="btn btn-secondary" id="btn-print-results-junior">Junior Results</button>
+          <button class="btn btn-secondary" id="btn-print-prizes">Prize List</button>
+        </div>
       </div>
     </div>
 
@@ -435,62 +468,68 @@
          FINISHERS
          ====================================================== -->
     <div class="view" id="view-finishers" hidden>
-      <div class="view-header"><h2>Finishers</h2><span class="entry-status view-status-msg" hidden></span></div>
-
-      <!-- Toolbar: course selector · pass selector · actions -->
-      <div class="finisher-toolbar">
-        <div class="fin-course-btns">
-          <button class="pass-btn active" id="fcourse-senior">Seniors <span class="count-badge" id="finisher-senior-count">0</span></button>
-          <button class="pass-btn" id="fcourse-junior">Juniors <span class="count-badge" id="finisher-junior-count">0</span></button>
-        </div>
-        <div class="fin-pass-btns">
-          <button class="pass-btn active" id="fpass-1">Pass 1 — Bibs</button>
-          <button class="pass-btn" id="fpass-2">Pass 2 — Times</button>
-        </div>
-        <div class="fin-action-btns">
-          <button class="btn btn-warn" id="btn-undo-rapid">Undo Last</button>
-          <button class="btn btn-secondary" id="btn-scan-finishers">Scan</button>
-          <button class="btn btn-secondary" id="btn-process-finishers">Process</button>
-        </div>
+      <div class="view-header">
+        <h2>Finishers</h2>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="finisher-senior-count">0 of 0</span></span>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="finisher-junior-count">0 of 0</span></span>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
-      <!-- Pass 1: rapid bib entry -->
-      <div id="finisher-pass1">
-        <div class="rapid-recorder">
-          <div class="rapid-hint">Type bib and press <kbd>Enter</kbd> &nbsp;&middot;&nbsp; <kbd>Esc</kbd> = undo last</div>
-          <div class="rapid-input-row">
-            <span class="rapid-pos-label">Pos&nbsp;<strong id="rapid-next-pos">1</strong></span>
-            <input type="number" id="finish-bib-rapid" min="1" placeholder="Bib"
-                   class="rapid-input" autocomplete="off" inputmode="numeric" aria-label="Finish time">
+      <div class="split-layout">
+        <!-- Record form -->
+        <div class="card">
+          <h3>Record Finisher</h3>
+          <div id="finisher-form-fields">
+            <div class="form-field mb-8">
+              <label for="finisher-line">Line / Split #</label>
+              <input type="number" id="finisher-line" min="0" tabindex="-1" style="font-weight:700">
+            </div>
+            <div class="form-field mb-8">
+              <label for="finisher-bib">Race / Bib No.</label>
+              <input type="text" id="finisher-bib" autocomplete="off" inputmode="numeric"
+                     list="datalist-finisher-bibs" placeholder="number or special code">
+            </div>
+            <div class="form-field mb-8">
+              <label for="finisher-prev-time">Previous Time</label>
+              <input type="text" id="finisher-prev-time" readonly tabindex="-1"
+                     style="background:#f0f0f0;color:var(--muted);cursor:default">
+            </div>
+            <div class="form-field mb-8">
+              <label for="finisher-time">Finish Time</label>
+              <input type="text" id="finisher-time" autocomplete="off" spellcheck="false"
+                     placeholder="ss, mm:ss or hh:mm:ss">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;font-size:0.85rem">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="finisher-event-type" id="finisher-is-finish" value="finish" checked>
+                This is a finish event
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="finisher-event-type" id="finisher-is-start" value="start">
+                This is a start event
+              </label>
+            </div>
+            <button class="btn" id="btn-submit-finisher" style="width:100%;margin-top:8px">Record</button>
+            <button class="btn btn-secondary" id="btn-cancel-finisher-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
           </div>
         </div>
-      </div>
 
-      <!-- Pass 2: sequential time entry -->
-      <div id="finisher-pass2" hidden>
-        <div class="rapid-recorder">
-          <div class="rapid-hint"><kbd>Enter</kbd> = next &nbsp;&middot;&nbsp; <kbd>&uarr;</kbd>/<kbd>&darr;</kbd> = navigate &nbsp;&middot;&nbsp; <code>ss</code> / <code>mm:ss</code> / <code>hh:mm:ss</code> (any separator) &nbsp;&middot;&nbsp; blank = skip</div>
-          <div class="pass2-current">
-            <span class="pass2-label">Pos</span><span class="pass2-pos" id="pass2-pos">1</span>
-            <span class="pass2-label">Bib</span><span class="pass2-bib" id="pass2-bib">—</span>
-            <span class="pass2-name" id="pass2-name"></span>
+        <!-- Finisher list -->
+        <div>
+          <div class="btn-row">
+            <button class="btn btn-warn" id="btn-undo-rapid">Undo Last</button>
+            <button class="btn btn-secondary" id="btn-scan-finishers">Scan</button>
+            <button class="btn btn-secondary" id="btn-process-finishers">Process</button>
           </div>
-          <div class="rapid-input-row">
-            <input type="text" id="finish-time-rapid" placeholder="time"
-                   class="rapid-input" autocomplete="off" spellcheck="false" aria-label="Finish time">
-            <span class="pass2-inherit" id="pass2-inherit"></span>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr><th>Line</th><th>S/F</th><th>Clock</th><th>Race Time</th><th>Bib</th><th>Name</th><th>Cat</th><th>Course</th><th>Src</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="finishers-tbody"></tbody>
+            </table>
           </div>
         </div>
-      </div>
-
-      <!-- Finisher table for current course -->
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr><th>Pos</th><th>Clock</th><th>Race Time</th><th>Bib</th><th>Name</th><th>Cat</th><th>Error</th></tr>
-          </thead>
-          <tbody id="finishers-tbody"></tbody>
-        </table>
       </div>
     </div>
 
@@ -750,43 +789,11 @@
       </div>
     </div>
 
-    <!-- ======================================================
-         PRINT FORMS
-         ====================================================== -->
-    <div class="view" id="view-forms" hidden>
-      <div class="view-header"><h2>Print Forms</h2><span class="entry-status view-status-msg" hidden></span></div>
-
-      <div class="card">
-        <h3>Entry Forms</h3>
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="btn-print-entry-form">Entry Form (All)</button>
-          <button class="btn btn-secondary" id="btn-print-junior-form">Junior Entry Form</button>
-          <button class="btn btn-secondary" id="btn-print-number-matrix">Number Matrix</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Finish Sheets</h3>
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="btn-print-finish-senior">Senior Finish Sheet</button>
-          <button class="btn btn-secondary" id="btn-print-finish-junior">Junior Finish Sheet</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Results</h3>
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="btn-print-results-senior">Senior Results</button>
-          <button class="btn btn-secondary" id="btn-print-results-junior">Junior Results</button>
-          <button class="btn btn-secondary" id="btn-print-prizes">Prize List</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Datalists for typeahead autocomplete -->
     <datalist id="datalist-names"></datalist>
     <datalist id="datalist-clubs"></datalist>
     <datalist id="datalist-roles"></datalist>
+    <datalist id="datalist-finisher-bibs"></datalist>
 
   </main><!-- end .app-main -->
 </div><!-- end .app-shell -->

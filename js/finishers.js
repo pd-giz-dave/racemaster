@@ -50,82 +50,78 @@ export function getFinisher(bibNumber, course) {
  * action: FINISHER.NORMAL, FINISHER.DNF, FINISHER.DSQ, etc.
  * Returns {position, error}
  */
-export async function recordFinisher(bibNumber, timeStr, course, action) {
-  course = course || COURSE.SENIORS;
+export async function recordFinisher(bibNumber, timeStr, course, action, line) {
   action = action || FINISHER.NORMAL;
   const bib = +bibNumber;
 
-  // Determine position: next in sequence for this course
-  const position = state.finishers.filter(f => iequal(f.course, course)).length + 1;
+  // Position is global across all finishers
+  const position = state.finishers.length + 1;
+  const lineNum  = line !== undefined ? +line : position - 1;
 
   const entry = bib > 0 ? getEntry(bib) : null;
-  const name     = entry ? entry.name     : '';
-  const club     = entry ? entry.club     : '';
-  const category = entry ? entry.category : '';
-  const entryObj = entry || { course, startTime: '' };
+  const name     = entry?.name     || '';
+  const club     = entry?.club     || '';
+  const category = entry?.category || '';
+  // Course comes from the entry; special codes carry no course
+  const finCourse = entry?.course || '';
 
-  // Compute adjusted time
-  let adjustedTime = '';
-  let timeToStore = timeStr || '';
-  if (action === FINISHER.NORMAL && timeStr) {
-    adjustedTime = adjustedFinishTime(entryObj, timeStr);
+  // Reject illegal bibs outright — bib must exist in entries
+  if (bib > 0 && !entry) {
+    return { position: 0, error: `Bib ${bib} not in entries` };
   }
 
-  // Error check: duplicate bib
-  let error = '';
-  if (bib > 0) {
-    const existing = getFinisherIndices(bib, course);
-    if (existing.length > 0 && action === FINISHER.NORMAL) {
-      error = `Bib ${bib} already recorded`;
-    } else if (!entry) {
-      error = `Bib ${bib} not in entries`;
+  // Reject duplicate bibs
+  if (bib > 0 && action === FINISHER.NORMAL) {
+    const existing = getFinisherIndices(bib, finCourse);
+    if (existing.length > 0) {
+      const dupLine = state.finishers[existing[0]]?.line;
+      return { position: 0, error: `Bib ${bib} already recorded${dupLine !== undefined ? ` at line ${dupLine}` : ''}` };
     }
   }
+
+  // Compute adjusted time
+  const entryObj = entry || { course: finCourse, startTime: '' };
+  const adjustedTime = action === FINISHER.NORMAL && timeStr
+    ? adjustedFinishTime(entryObj, timeStr)
+    : '';
 
   const idx = state.finishers.length;
   state.finishers.push({
     position:     position,
+    line:         lineNum,
     action:       action,
     number:       bib || '',
-    time:         timeToStore,
-    name:         name,
-    club:         club,
-    category:     category,
-    course:       course,
-    error:        error,
-    adjustedTime: adjustedTime,
+    time:         timeStr || '',
+    name,
+    club,
+    category,
+    course:       finCourse,
+    error:        '',
+    adjustedTime,
     status:       '',
     source:       'manual',
   });
 
-  // Update map
   if (bib > 0) {
-    const key = courseKey(course, bib);
+    const key = courseKey(finCourse, bib);
     if (!state.finishNumbersMap[key]) state.finishNumbersMap[key] = [];
     state.finishNumbersMap[key].push(idx);
   }
 
   await saveFinishers();
-  return { position, error };
+  return { position, error: '' };
 }
 
 /**
  * Delete the last recorded finisher for a course (undo last finish).
  * Returns {error}
  */
-export async function deleteLastFinisher(course) {
-  course = course || COURSE.SENIORS;
-  // Find last finisher for this course
-  for (let i = state.finishers.length - 1; i >= 0; i--) {
-    if (iequal(state.finishers[i].course, course)) {
-      const f = state.finishers[i];
-      state.finishers.splice(i, 1);
-      buildFinishNumbersMap();
-      await processFinishers();
-      return { error: '', deleted: f };
-    }
-  }
-  return { error: 'No finishers to delete' };
+export async function deleteLastFinisher() {
+  if (!state.finishers.length) return { error: 'No finishers to delete' };
+  const f = state.finishers.pop();
+  buildFinishNumbersMap();
+  await saveFinishers();
+  return { error: '', deleted: f };
 }
 
 /**
@@ -141,10 +137,19 @@ export async function updateFinisher(idx, updates) {
   if (updates.course   !== undefined) f.course       = updates.course;
   if (updates.error    !== undefined) f.error        = updates.error;
   if (updates.status   !== undefined) f.status       = updates.status;
+  if (updates.line     !== undefined) f.line         = updates.line;
 
   // Recompute adjusted time if time or course changed
+  if (updates.number !== undefined) {
+    const entry = f.number > 0 ? getEntry(+f.number) : null;
+    f.name     = entry?.name     || '';
+    f.club     = entry?.club     || '';
+    f.category = entry?.category || '';
+    if (entry?.course) f.course = entry.course;
+  }
+
   if (updates.time !== undefined || updates.number !== undefined) {
-    const entry = f.number > 0 ? getEntry(+f.number) : { course: f.course, startTime: '' };
+    const entry = f.number > 0 ? getEntry(+f.number) : null;
     f.adjustedTime = f.action === FINISHER.NORMAL && f.time
       ? adjustedFinishTime(entry || { course: f.course, startTime: '' }, f.time)
       : '';
@@ -153,6 +158,22 @@ export async function updateFinisher(idx, updates) {
   buildFinishNumbersMap();
   await saveFinishers();
   return { error: '' };
+}
+
+/**
+ * Delete a finisher and all subsequent finishers for that course (by sorted order).
+ * stateIdx is the index in state.finishers of the first record to delete.
+ */
+export async function deleteFinishersFrom(stateIdx) {
+  const sorted = getSortedFinishers();
+  const cutPos = sorted.findIndex(f => state.finishers.indexOf(f) === stateIdx);
+  if (cutPos < 0) return { error: 'Finisher not found', deleted: 0 };
+  const toRemove = new Set(sorted.slice(cutPos).map(f => state.finishers.indexOf(f)));
+  const deleted = toRemove.size;
+  state.finishers = state.finishers.filter((_, i) => !toRemove.has(i));
+  buildFinishNumbersMap();
+  await saveFinishers();
+  return { error: '', deleted };
 }
 
 /**

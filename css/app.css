@@ -496,17 +496,20 @@ input:focus, select:focus, textarea:focus {
 .entry-status.status-ok    { background: #d5f5e3; color: #1e8449; }
 .entry-status.status-error { background: #fadbd8; color: #c0392b; }
 
-/* ---- Entries / Helpers view: table scrolls, form stays put ---- */
+/* ---- Entries / Helpers / Finishers view: table scrolls, form stays put ---- */
 #view-entries .table-scroll,
-#view-helpers .table-scroll {
+#view-helpers .table-scroll,
+#view-finishers .table-scroll {
   overflow-y: auto;
   max-height: calc(100vh - var(--header-h) - 100px);
 }
 
 #view-entries .card,
-#view-helpers .card {
+#view-helpers .card,
+#view-finishers .card {
   position: sticky;
   top: 0;
+  background: var(--accent-light);
 }
 
 @media print { .app-shell { display: block; } .app-sidebar, .app-header, #status-bar { display: none; } }
