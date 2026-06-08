@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { savePeople, saveClubs } from './state.js';
 import { GENDER, UNATTACHED_CLUB } from './constants.js';
-import { normaliseDate, cleanName, findByField, sortBy, today, buildNameItem, iequal, similarity } from './utils.js';
+import { normaliseDate, cleanName, sortBy, today, similarity } from './utils.js';
 
 // ============================================================
 // People, clubs and dibbers management (from Data.xml)

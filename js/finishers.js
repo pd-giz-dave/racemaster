@@ -2,10 +2,10 @@
 
 import { state } from './state.js';
 import { saveFinishers, saveSafety } from './state.js';
-import { FINISHER, COURSE, GENDER } from './constants.js';
-import { normaliseTime, iequal, cleanName } from './utils.js';
+import { FINISHER, COURSE } from './constants.js';
+import { iequal } from './utils.js';
 import { adjustedFinishTime } from './time-utils.js';
-import { findEntryByBib, getEntry } from './entries.js';
+import { getEntry } from './entries.js';
 
 // ============================================================
 // Finish time recording logic (translated from Finishers.xml)

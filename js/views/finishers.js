@@ -7,7 +7,7 @@ import {
 } from '../finishers.js';
 import { getEntriesOnCourse, getSortedEntries } from '../entries.js';
 import { COURSE, FINISHER } from '../constants.js';
-import { iequal, normaliseTime, showBusy } from '../utils.js';
+import { normaliseTime, showBusy } from '../utils.js';
 import { on, setHTML, showStatus, escHtml, confirm } from '../ui.js';
 
 // ---- Module state ----
