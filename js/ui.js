@@ -64,8 +64,58 @@ export function showStatus(msg, isError = false) {
   }
 }
 
-export function confirm(msg) {
-  return window.confirm(msg);
+export function showConfirmDialog(message, confirmLabel = 'Confirm', danger = false) {
+  return showChoiceDialog(message, [{ label: confirmLabel, value: true, danger }])
+    .then(v => v === true);
+}
+
+export function showChoiceDialog(message, choices) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'choice-dialog-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'choice-dialog-box';
+
+    const msg = document.createElement('p');
+    msg.className = 'choice-dialog-msg';
+    msg.textContent = message;
+    box.appendChild(msg);
+
+    const btns = document.createElement('div');
+    btns.className = 'choice-dialog-btns';
+
+    const close = value => {
+      document.body.removeChild(overlay);
+      document.removeEventListener('keydown', onKey);
+      resolve(value);
+    };
+
+    for (const { label, value, danger } of choices) {
+      const btn = document.createElement('button');
+      btn.className = danger ? 'btn btn-delete' : 'btn';
+      btn.textContent = label;
+      btn.addEventListener('click', () => close(value));
+      btns.appendChild(btn);
+    }
+
+    const cancel = document.createElement('button');
+    cancel.className = 'btn btn-secondary';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => close(null));
+    btns.appendChild(cancel);
+
+    box.appendChild(btns);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+
+    const onKey = e => { if (e.key === 'Escape') close(null); };
+    document.addEventListener('keydown', onKey);
+
+    setTimeout(() => btns.querySelector('button')?.focus(), 0);
+  });
 }
 
 export async function pickFile(accept = '*') {

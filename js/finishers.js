@@ -50,13 +50,9 @@ export function getFinisher(bibNumber, course) {
  * action: FINISHER.NORMAL, FINISHER.DNF, FINISHER.DSQ, etc.
  * Returns {position, error}
  */
-export async function recordFinisher(bibNumber, timeStr, course, action, line) {
+export async function recordFinisher(bibNumber, timeStr, course, action) {
   action = action || FINISHER.NORMAL;
   const bib = +bibNumber;
-
-  // Position is global across all finishers
-  const position = state.finishers.length + 1;
-  const lineNum  = line !== undefined ? +line : position - 1;
 
   const entry = bib > 0 ? getEntry(bib) : null;
   const name     = entry?.name     || '';
@@ -67,28 +63,25 @@ export async function recordFinisher(bibNumber, timeStr, course, action, line) {
 
   // Reject illegal bibs outright — bib must exist in entries
   if (bib > 0 && !entry) {
-    return { position: 0, error: `Bib ${bib} not in entries` };
+    return { line: state.finishers.length, error: `Bib ${bib} not in entries` };
   }
 
   // Reject duplicate bibs
   if (bib > 0 && action === FINISHER.NORMAL) {
     const existing = getFinisherIndices(bib, finCourse);
     if (existing.length > 0) {
-      const dupLine = state.finishers[existing[0]]?.line;
-      return { position: 0, error: `Bib ${bib} already recorded${dupLine !== undefined ? ` at line ${dupLine}` : ''}` };
+      return { line: state.finishers.length, error: `Bib ${bib} already recorded at line ${existing[0]}` };
     }
   }
 
-  // Compute adjusted time
+  // Compute adjusted time ('-' is a skip marker, not a real time)
   const entryObj = entry || { course: finCourse, startTime: '' };
-  const adjustedTime = action === FINISHER.NORMAL && timeStr
+  const adjustedTime = action === FINISHER.NORMAL && timeStr && timeStr !== '-'
     ? adjustedFinishTime(entryObj, timeStr)
     : '';
 
   const idx = state.finishers.length;
   state.finishers.push({
-    position:     position,
-    line:         lineNum,
     action:       action,
     number:       bib || '',
     time:         timeStr || '',
@@ -109,7 +102,7 @@ export async function recordFinisher(bibNumber, timeStr, course, action, line) {
   }
 
   await saveFinishers();
-  return { position, error: '' };
+  return { line: idx, error: '' };
 }
 
 /**
@@ -137,7 +130,6 @@ export async function updateFinisher(idx, updates) {
   if (updates.course   !== undefined) f.course       = updates.course;
   if (updates.error    !== undefined) f.error        = updates.error;
   if (updates.status   !== undefined) f.status       = updates.status;
-  if (updates.line     !== undefined) f.line         = updates.line;
 
   // Recompute adjusted time if time or course changed
   if (updates.number !== undefined) {
@@ -150,7 +142,7 @@ export async function updateFinisher(idx, updates) {
 
   if (updates.time !== undefined || updates.number !== undefined) {
     const entry = f.number > 0 ? getEntry(+f.number) : null;
-    f.adjustedTime = f.action === FINISHER.NORMAL && f.time
+    f.adjustedTime = f.action === FINISHER.NORMAL && f.time && f.time !== '-'
       ? adjustedFinishTime(entry || { course: f.course, startTime: '' }, f.time)
       : '';
   }
@@ -160,17 +152,11 @@ export async function updateFinisher(idx, updates) {
   return { error: '' };
 }
 
-/**
- * Delete a finisher and all subsequent finishers for that course (by sorted order).
- * stateIdx is the index in state.finishers of the first record to delete.
- */
+/** Delete the finisher at stateIdx and all that follow it. */
 export async function deleteFinishersFrom(stateIdx) {
-  const sorted = getSortedFinishers();
-  const cutPos = sorted.findIndex(f => state.finishers.indexOf(f) === stateIdx);
-  if (cutPos < 0) return { error: 'Finisher not found', deleted: 0 };
-  const toRemove = new Set(sorted.slice(cutPos).map(f => state.finishers.indexOf(f)));
-  const deleted = toRemove.size;
-  state.finishers = state.finishers.filter((_, i) => !toRemove.has(i));
+  if (stateIdx < 0 || stateIdx >= state.finishers.length) return { error: 'Finisher not found', deleted: 0 };
+  const deleted = state.finishers.length - stateIdx;
+  state.finishers.splice(stateIdx);
   buildFinishNumbersMap();
   await saveFinishers();
   return { error: '', deleted };
@@ -310,9 +296,38 @@ export function getOutstandingSafetyCount() {
   return state.safety.filter(s => !s.status).length;
 }
 
-/** Get finishers sorted by position for a given course */
+/** Get finishers in recording order, optionally filtered by course. */
 export function getSortedFinishers(course) {
-  return state.finishers
-    .filter(f => !course || iequal(f.course, course))
-    .sort((a, b) => (+a.position || 9999) - (+b.position || 9999));
+  if (!course) return [...state.finishers];
+  return state.finishers.filter(f => iequal(f.course, course));
+}
+
+/** Delete a single finisher by index. */
+export async function deleteFinisher(stateIdx) {
+  if (stateIdx < 0 || stateIdx >= state.finishers.length) return { error: 'Invalid index' };
+  state.finishers.splice(stateIdx, 1);
+  buildFinishNumbersMap();
+  await saveFinishers();
+  return { error: '' };
+}
+
+/** Insert a blank finisher record above stateIdx. */
+export async function insertFinisherAbove(stateIdx) {
+  if (stateIdx < 0 || stateIdx > state.finishers.length) return { error: 'Invalid index', newIdx: -1 };
+  state.finishers.splice(stateIdx, 0, {
+    action:       FINISHER.NORMAL,
+    number:       '',
+    time:         '',
+    name:         '',
+    club:         '',
+    category:     '',
+    course:       '',
+    error:        '',
+    adjustedTime: '',
+    status:       '',
+    source:       'manual',
+  });
+  buildFinishNumbersMap();
+  await saveFinishers();
+  return { error: '', newIdx: stateIdx };
 }

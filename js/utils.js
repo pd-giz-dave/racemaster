@@ -201,16 +201,6 @@ export function sanitiseFileName(name) {
   return String(name || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '-');
 }
 
-/** Show a simple confirm dialog */
-export function confirm(msg) {
-  return window.confirm(msg);
-}
-
-/** Show a simple alert */
-export function alert(msg) {
-  window.alert(msg);
-}
-
 /** Find a row index in an array by field value (case-insensitive) */
 export function findByField(arr, field, value) {
   const v = String(value || '').toUpperCase();

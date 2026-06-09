@@ -3,7 +3,7 @@
 import { state, saveRoles } from '../state.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers } from '../helpers.js';
 import {
-  val, on, setHTML, confirm, showStatus, clearForm, fillForm, escHtml,
+  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
   updateDatalistClubs, updateDatalistRoles,
 } from '../ui.js';
 import { capitalise, iequal, showBusy } from '../utils.js';
@@ -30,8 +30,8 @@ export function renderHelpers() {
       </td>
     </tr>`).join('');
   tbody.querySelectorAll('.btn-edit-helper').forEach(b =>
-    b.addEventListener('click', () => {
-      if (!confirm(`Edit helper ${b.dataset.num}?`)) return;
+    b.addEventListener('click', async () => {
+      if (!await showConfirmDialog(`Edit helper ${b.dataset.num}?`, 'Edit')) return;
       fillFormForEdit(+b.dataset.num);
     }));
   tbody.querySelectorAll('.btn-del-helper').forEach(b =>
@@ -130,7 +130,7 @@ export async function submitHelperForm() {
 // ---- Delete ----
 
 export async function confirmDeleteHelper(num) {
-  if (!confirm(`Delete helper ${num}?`)) return;
+  if (!await showConfirmDialog(`Delete helper ${num}?`, 'Delete', true)) return;
   const result = await deleteHelper(num);
   if (result.error) { showStatus(result.error, true); return; }
   showStatus(`Helper ${num} deleted.`);

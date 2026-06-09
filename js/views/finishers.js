@@ -3,16 +3,18 @@
 import { state } from '../state.js';
 import {
   recordFinisher, updateFinisher, deleteLastFinisher, deleteFinishersFrom,
+  deleteFinisher, insertFinisherAbove,
   scanFinishers, processFinishers, getSortedFinishers,
 } from '../finishers.js';
 import { getEntriesOnCourse, getSortedEntries } from '../entries.js';
 import { COURSE, FINISHER } from '../constants.js';
 import { normaliseTime, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, escHtml, confirm } from '../ui.js';
+import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog } from '../ui.js';
 
 // ---- Module state ----
 
-let editingIdx = -1;   // index into state.finishers; -1 = adding new
+let editingIdx     = -1;   // index into state.finishers; -1 = adding new
+let timeTargetSidx = -1;   // index into state.finishers of the current time-mode target
 
 const SPECIAL_BIBS = {
   'seniors': FINISHER.SENIORS,
@@ -46,6 +48,74 @@ function updateDatalistFinisherBibs() {
   dl.innerHTML = specials + entries;
 }
 
+// ---- Mode management ----
+
+function getCurrentMode() {
+  return document.getElementById('finisher-mode')?.value || 'bibs';
+}
+
+function findNextTimeTarget() {
+  const sorted = getSortedFinishers();
+  const f = sorted.find(f => !f.time);
+  return f ? state.finishers.indexOf(f) : -1;
+}
+
+// Update line/bib/prev-time fields to reflect the current time-mode target.
+// Also refreshes timeTargetSidx. No side effects (no status messages, no mode switching).
+function refreshTimeModeDisplay() {
+  timeTargetSidx = findNextTimeTarget();
+  if (timeTargetSidx < 0) return;
+  const f = state.finishers[timeTargetSidx];
+  const lineEl = document.getElementById('finisher-line');
+  const bibEl  = document.getElementById('finisher-bib');
+  const prevEl = document.getElementById('finisher-prev-time');
+  if (lineEl) lineEl.value = String(timeTargetSidx);
+  if (bibEl)  bibEl.value  = String(f.number || '');
+  let prevTime = '';
+  for (let i = timeTargetSidx - 1; i >= 0; i--) {
+    if (state.finishers[i].time && state.finishers[i].time !== '-') { prevTime = state.finishers[i].time; break; }
+  }
+  if (prevEl) prevEl.value = prevTime;
+}
+
+export function applyMode(mode) {
+  const isTime = mode === 'time';
+  const bibEl      = document.getElementById('finisher-bib');
+  const prevField  = document.getElementById('finisher-prev-time')?.closest('.form-field');
+  const timeField  = document.getElementById('finisher-time')?.closest('.form-field');
+  const radioGroup = document.getElementById('finisher-radio-group');
+  const submitBtn  = document.getElementById('btn-submit-finisher');
+
+  // Bib: visible always; read-only and non-focusable in time mode (it shows the target)
+  if (bibEl) { bibEl.readOnly = isTime; bibEl.tabIndex = isTime ? -1 : 0; }
+
+  // Prev time and finish time: only visible in time mode
+  if (prevField)  prevField.style.display  = isTime ? '' : 'none';
+  if (timeField)  timeField.style.display  = isTime ? '' : 'none';
+
+  // Radios: only in bibs mode
+  if (radioGroup) radioGroup.style.display = isTime ? 'none' : '';
+
+  if (submitBtn) submitBtn.textContent = isTime ? 'Set Time' : 'Record';
+
+  if (isTime) {
+    refreshTimeModeDisplay();
+    if (timeTargetSidx < 0) {
+      // Nothing to time — revert immediately
+      const modeEl = document.getElementById('finisher-mode');
+      if (modeEl) modeEl.value = 'bibs';
+      applyMode('bibs');
+      showStatus('No untimed finishers to assign times to.', true);
+    } else {
+      setTimeout(() => document.getElementById('finisher-time')?.focus(), 0);
+    }
+  } else {
+    timeTargetSidx = -1;
+    if (bibEl) { bibEl.value = ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
+    setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
+  }
+}
+
 // ---- Render ----
 
 export function renderFinishers() {
@@ -64,10 +134,11 @@ export function renderFinishers() {
 
   updateDatalistFinisherBibs();
 
+  // In bibs mode, line field shows next line number; in time mode it shows the target line
   const lineEl = document.getElementById('finisher-line');
-  if (lineEl) lineEl.value = all.length;
+  if (lineEl && getCurrentMode() !== 'time') lineEl.value = String(state.finishers.length);
 
-  updatePrevTime(all);
+  if (getCurrentMode() !== 'time') updatePrevTime(all);
 
   const tbody = document.getElementById('finishers-tbody');
   if (!tbody) return;
@@ -82,7 +153,7 @@ export function renderFinishers() {
     const sidx = state.finishers.indexOf(f);
     const numDisplay = f.number > 0 ? f.number : '';
     return `<tr class="${f.error ? 'row-error' : ''}">
-      <td>${f.line !== undefined ? f.line : i}</td>
+      <td>${sidx}</td>
       <td>${startFinishLabel(f.action)}</td>
       <td>${f.time || ''}</td>
       <td>${f.adjustedTime || ''}</td>
@@ -93,24 +164,31 @@ export function renderFinishers() {
       <td>${f.source === 'manual' ? 'Manual' : f.source ? 'Auto' : ''}</td>
       <td>
         <button class="btn-sm btn-edit btn-edit-finisher" data-sidx="${sidx}">Edit</button>
-        <button class="btn-sm btn-delete-entry btn-del-finisher" data-sidx="${sidx}">Del from here</button>
+        <button class="btn-sm btn-insert-above-finisher" data-sidx="${sidx}">Ins ↑</button>
+        <button class="btn-sm btn-delete-entry btn-del-finisher" data-sidx="${sidx}">Del</button>
       </td>
     </tr>`;
   }).join('');
 
   tbody.querySelectorAll('.btn-edit-finisher').forEach(b =>
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       const sidx = +b.dataset.sidx;
-      if (!confirm(`Edit finisher at line ${state.finishers[sidx]?.line ?? sidx}?`)) return;
+      if (!await showConfirmDialog(`Edit finisher at line ${sidx}?`, 'Edit')) return;
       fillFormForEdit(sidx);
     }));
 
+  tbody.querySelectorAll('.btn-insert-above-finisher').forEach(b =>
+    b.addEventListener('click', () => confirmInsertAbove(+b.dataset.sidx)));
+
   tbody.querySelectorAll('.btn-del-finisher').forEach(b =>
-    b.addEventListener('click', () => confirmDeleteFrom(+b.dataset.sidx)));
+    b.addEventListener('click', () => confirmDeleteFinisher(+b.dataset.sidx)));
+
+  // Keep time-mode display in sync after any render
+  if (getCurrentMode() === 'time') refreshTimeModeDisplay();
 }
 
 function updatePrevTime(finishers) {
-  const last = finishers.length > 0 ? finishers[finishers.length - 1] : null;
+  const last = [...finishers].reverse().find(f => f.time && f.time !== '-') ?? null;
   const el = document.getElementById('finisher-prev-time');
   if (el) el.value = last?.time || '';
 }
@@ -118,6 +196,13 @@ function updatePrevTime(finishers) {
 // ---- Form helpers ----
 
 function fillFormForEdit(sidx) {
+  // Edit always happens in bibs mode
+  const modeEl = document.getElementById('finisher-mode');
+  if (modeEl && modeEl.value !== 'bibs') {
+    modeEl.value = 'bibs';
+    applyMode('bibs');
+  }
+
   const f = state.finishers[sidx];
   if (!f) return;
   editingIdx = sidx;
@@ -125,9 +210,15 @@ function fillFormForEdit(sidx) {
   const lineEl = document.getElementById('finisher-line');
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
-  if (lineEl) lineEl.value = f.line !== undefined ? f.line : '';
+  if (lineEl) lineEl.value = String(sidx);
   if (bibEl)  bibEl.value  = f.number || f.action || '';
   if (timeEl) timeEl.value = f.time || '';
+
+  // Show time field in edit mode so the time can be corrected
+  const timeField = timeEl?.closest('.form-field');
+  if (timeField) timeField.style.display = '';
+  const prevField = document.getElementById('finisher-prev-time')?.closest('.form-field');
+  if (prevField) prevField.style.display = '';
 
   const isStart = f.action === FINISHER.ACTION_START;
   const startRadio  = document.getElementById('finisher-is-start');
@@ -151,8 +242,9 @@ function resetFinisherForm() {
   if (finishRadio) finishRadio.checked = true;
   document.getElementById('btn-submit-finisher').textContent = 'Record';
   document.getElementById('btn-cancel-finisher-edit').style.display = 'none';
+  // Re-apply bibs mode appearance (hides time field, restores bib focus)
+  applyMode('bibs');
   renderFinishers();
-  document.getElementById('finisher-bib')?.focus();
 }
 
 // ---- Time parsing ----
@@ -184,8 +276,45 @@ async function submitFinisherForm() {
   const rawBib  = (bibEl?.value || '').trim();
   const rawTime = (timeEl?.value || '').trim();
   const isStart = document.querySelector('input[name="finisher-event-type"]:checked')?.value === 'start';
-  const lineVal = lineEl?.value !== '' ? +lineEl.value : undefined;
 
+  // ---- Time mode ----
+  if (getCurrentMode() === 'time') {
+    if (timeTargetSidx < 0) { showStatus('No untimed finishers.', true); return; }
+    if (!rawTime) { showStatus('Enter a finish time or - to skip.', true); timeEl?.focus(); return; }
+    const tf = state.finishers[timeTargetSidx];
+    const tfLabel = tf?.number > 0 ? `bib ${tf.number}` : (tf?.action || 'line');
+    let parsedTime;
+    if (rawTime === '-') {
+      parsedTime = '-';
+    } else {
+      const prevEl = document.getElementById('finisher-prev-time');
+      parsedTime = parseFinishTime(rawTime, prevEl?.value || '');
+      if (!parsedTime) {
+        showStatus('Invalid time — use ss, mm:ss, hh:mm:ss, or - to skip', true);
+        timeEl?.focus();
+        return;
+      }
+    }
+    showBusy('Setting time…');
+    const result = await updateFinisher(timeTargetSidx, { time: parsedTime });
+    showBusy('');
+    if (result.error) { showStatus(result.error, true); return; }
+    showStatus(parsedTime === '-'
+      ? `Line ${timeTargetSidx}: ${tfLabel} skipped`
+      : `Line ${timeTargetSidx}: ${tfLabel} → ${parsedTime}`);
+    renderFinishers(); // also refreshes timeTargetSidx via refreshTimeModeDisplay
+    if (timeTargetSidx < 0) {
+      document.getElementById('finisher-mode').value = 'bibs';
+      applyMode('bibs');
+      showStatus('All finishers timed — switched to Bibs mode.');
+    } else {
+      timeEl.value = '';
+      timeEl.focus();
+    }
+    return;
+  }
+
+  // ---- Bibs mode ----
   if (!rawBib) {
     showStatus('Enter a race/bib number or special code.', true);
     bibEl?.focus();
@@ -194,8 +323,8 @@ async function submitFinisherForm() {
 
   let parsedTime = '';
   if (rawTime) {
-    const current = getSortedFinishers();
-    const prevTime = current.length > 0 ? current[current.length - 1].time : '';
+    const all = state.finishers;
+    const prevTime = all.length > 0 ? all[all.length - 1].time : '';
     parsedTime = parseFinishTime(rawTime, prevTime) || '';
     if (!parsedTime) {
       showStatus('Invalid time — use ss, mm:ss, or hh:mm:ss', true);
@@ -216,12 +345,11 @@ async function submitFinisherForm() {
       number: isNaN(bib) ? 0 : bib,
       time:   parsedTime,
       action,
-      line:   lineVal,
     });
     showBusy('');
     if (result.error) { showStatus(result.error, true); bibEl?.focus(); return; }
     const editLabel = specialEdit ? rawBib : `${isStart ? 'Start' : 'Finish'} bib ${rawBib}`;
-    showStatus(`Line ${lineVal !== undefined ? lineVal : editingIdx}: ${editLabel} updated`);
+    showStatus(`Line ${editingIdx}: ${editLabel} updated`);
     resetFinisherForm();
     return;
   }
@@ -232,7 +360,7 @@ async function submitFinisherForm() {
 
   let result;
   if (specialAction) {
-    result = await recordFinisher(0, parsedTime, null, specialAction, lineVal);
+    result = await recordFinisher(0, parsedTime, null, specialAction);
   } else {
     const bib = parseInt(rawBib, 10);
     if (isNaN(bib) || bib < 0) {
@@ -242,7 +370,7 @@ async function submitFinisherForm() {
       return;
     }
     const action = isStart ? FINISHER.ACTION_START : FINISHER.NORMAL;
-    result = await recordFinisher(bib, parsedTime, null, action, lineVal);
+    result = await recordFinisher(bib, parsedTime, null, action);
   }
 
   showBusy('');
@@ -254,7 +382,7 @@ async function submitFinisherForm() {
   }
 
   const sfLabel = specialAction ? rawBib : `${isStart ? 'Start' : 'Finish'} bib ${rawBib}`;
-  showStatus(`Line ${lineVal !== undefined ? lineVal : result.position - 1}: ${sfLabel}`);
+  showStatus(`Line ${result.line}: ${sfLabel}`);
 
   bibEl.value  = '';
   timeEl.value = '';
@@ -265,19 +393,40 @@ async function submitFinisherForm() {
   bibEl?.focus();
 }
 
-// ---- Delete from here ----
+// ---- Delete / Insert ----
 
-async function confirmDeleteFrom(sidx) {
+async function confirmDeleteFinisher(sidx) {
   const f = state.finishers[sidx];
   if (!f) return;
-  if (!confirm(`Delete from line ${f.line ?? sidx} onwards?`)) return;
+  const choice = await showChoiceDialog(`Delete line ${sidx}?`, [
+    { label: 'This line only',       value: 'one', danger: true },
+    { label: 'This and all below',   value: 'all', danger: true },
+  ]);
+  if (!choice) return;
   showBusy('Deleting…');
-  const result = await deleteFinishersFrom(sidx);
+  let result;
+  if (choice === 'one') {
+    result = await deleteFinisher(sidx);
+    if (!result.error) showStatus(`Line ${sidx} deleted.`);
+  } else {
+    result = await deleteFinishersFrom(sidx);
+    if (!result.error) showStatus(`${result.deleted} finisher(s) removed.`);
+  }
   showBusy('');
   if (result.error) { showStatus(result.error, true); return; }
-  showStatus(`${result.deleted} finisher(s) removed.`);
   renderFinishers();
   document.getElementById('finisher-bib')?.focus();
+}
+
+async function confirmInsertAbove(sidx) {
+  if (sidx < 0 || sidx >= state.finishers.length) return;
+  if (!await showConfirmDialog(`Insert blank line above line ${sidx}?`, 'Insert')) return;
+  showBusy('Inserting…');
+  const result = await insertFinisherAbove(sidx);
+  showBusy('');
+  if (result.error) { showStatus(result.error, true); return; }
+  renderFinishers();
+  if (result.newIdx >= 0) fillFormForEdit(result.newIdx);
 }
 
 // ---- Undo ----
@@ -316,6 +465,10 @@ export function wireFinishers() {
   on('btn-scan-finishers',        'click', runScanFinishers);
   on('btn-process-finishers',     'click', runProcessFinishers);
 
+  // Mode dropdown
+  const modeEl = document.getElementById('finisher-mode');
+  if (modeEl) modeEl.addEventListener('change', () => applyMode(modeEl.value));
+
   // Special code auto-fill: when typed text uniquely matches one special code, complete it
   const bibEl = document.getElementById('finisher-bib');
   if (bibEl) {
@@ -343,7 +496,7 @@ export function wireFinishers() {
         await submitFinisherForm();
       } else if (e.key === 'Tab') {
         const focusable = [...formContainer.querySelectorAll(
-          'input:not([disabled]), button:not([disabled])'
+          'input:not([disabled]), select:not([disabled]), button:not([disabled])'
         )].filter(el => el.offsetParent !== null && el.tabIndex !== -1);
         if (!focusable.length) return;
         const first = focusable[0];
@@ -356,4 +509,7 @@ export function wireFinishers() {
       }
     });
   }
+
+  // Initialize to bibs mode
+  applyMode('bibs');
 }

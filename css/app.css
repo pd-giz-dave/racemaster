@@ -540,3 +540,33 @@ input:focus, select:focus, textarea:focus {
 }
 .name-typeahead li:hover,
 .name-typeahead li:focus { background: var(--accent-light); outline: none; }
+
+/* Choice dialog */
+.choice-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.choice-dialog-box {
+  background: #fff;
+  border-radius: 6px;
+  padding: 20px 24px;
+  max-width: 340px;
+  width: 90%;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.choice-dialog-msg {
+  margin: 0 0 16px;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.choice-dialog-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}

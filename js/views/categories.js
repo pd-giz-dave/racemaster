@@ -2,7 +2,7 @@
 
 import { state, saveCategories, saveFraPreset, saveWfraPreset } from '../state.js';
 import { resetFRAPreset, resetWFRAPreset } from '../categories.js';
-import { on, escHtml, showStatus, confirm } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog } from '../ui.js';
 
 // ---- Constants ----
 
@@ -84,7 +84,7 @@ export async function deleteCategoryRow(key, idx) {
   const cfg = CAT_TABLE[key];
   if (!cfg) return;
   const arr = cfg.getArr();
-  if (!confirm(`Delete ${cfg.label} row ${idx + 1} (${arr[idx]?.maleCat || ''})?`)) return;
+  if (!await showConfirmDialog(`Delete ${cfg.label} row ${idx + 1} (${arr[idx]?.maleCat || ''})?`, 'Delete', true)) return;
   arr.splice(idx, 1);
   await cfg.saveFn();
   showStatus(`${cfg.label} row deleted.`);
@@ -132,14 +132,14 @@ export function wireCategories() {
   on('btn-add-wfra-row',  'click', () => showAddCategoryRow('wfra'));
 
   on('btn-reset-fra', 'click', async () => {
-    if (!confirm('Reset FRA preset to built-in defaults? Any customisations will be lost.')) return;
+    if (!await showConfirmDialog('Reset FRA preset to built-in defaults? Any customisations will be lost.', 'Reset', true)) return;
     resetFRAPreset();
     await saveFraPreset();
     showStatus('FRA preset reset to built-in defaults.');
     renderCategoryTable('fra');
   });
   on('btn-reset-wfra', 'click', async () => {
-    if (!confirm('Reset WFRA preset to built-in defaults? Any customisations will be lost.')) return;
+    if (!await showConfirmDialog('Reset WFRA preset to built-in defaults? Any customisations will be lost.', 'Reset', true)) return;
     resetWFRAPreset();
     await saveWfraPreset();
     showStatus('WFRA preset reset to built-in defaults.');

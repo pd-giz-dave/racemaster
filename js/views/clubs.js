@@ -1,7 +1,7 @@
 'use strict';
 
 import { state, saveClubs } from '../state.js';
-import { on, escHtml, setHTML, showStatus, confirm, updateDatalistClubs } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs } from '../ui.js';
 
 export function renderClubs() {
   const tbody = document.getElementById('clubs-tbody');
@@ -103,7 +103,7 @@ export async function saveNewClubRow() {
 
 export async function deleteClubRow(idx) {
   const c = state.clubs[idx];
-  if (!c || !confirm(`Delete club "${c.name}"?`)) return;
+  if (!c || !await showConfirmDialog(`Delete club "${c.name}"?`, 'Delete', true)) return;
   state.clubs.splice(idx, 1);
   await saveClubs();
   showStatus(`${c.name} deleted.`);

@@ -1,7 +1,7 @@
 'use strict';
 
 import { state, saveDibbers } from '../state.js';
-import { on, escHtml, setHTML, showStatus, confirm, pickFile } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile } from '../ui.js';
 
 export function renderDibbers() {
   const tbody = document.getElementById('dibbers-tbody');
@@ -117,7 +117,7 @@ export async function deleteDibbersFrom(idx) {
   const from = state.dibbers[idx];
   if (!from) return;
   const count = state.dibbers.length - idx;
-  if (!confirm(`Delete ${count} dibber${count === 1 ? '' : 's'} from short code ${from.shortCode} onwards?`)) return;
+  if (!await showConfirmDialog(`Delete ${count} dibber${count === 1 ? '' : 's'} from short code ${from.shortCode} onwards?`, 'Delete', true)) return;
   state.dibbers.splice(idx);
   await saveDibbers();
   showStatus(`${count} dibber${count === 1 ? '' : 's'} deleted.`);

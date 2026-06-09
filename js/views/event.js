@@ -3,7 +3,7 @@
 import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults, savePrizes, saveCategories, saveSafety, saveSIResults } from '../state.js';
 import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
 import { clearSIEntries } from '../si-entries.js';
-import { val, fillForm, confirm, showStatus, on } from '../ui.js';
+import { val, fillForm, showConfirmDialog, showStatus, on } from '../ui.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
 import { renderCategories } from './categories.js';
@@ -63,7 +63,7 @@ export async function saveEventForm() {
     }
   }
 
-  if (!confirm(lines.join('\n'))) return;
+  if (!await showConfirmDialog(lines.join('\n'), 'Save', doClear)) return;
 
   // Apply fields
   ev.name                       = newName;

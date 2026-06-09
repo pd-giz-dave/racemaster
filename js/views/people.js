@@ -1,7 +1,7 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { on, escHtml, showStatus, confirm, setHTML } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, setHTML } from '../ui.js';
 
 export function renderPeople() {
   const tbody = document.getElementById('people-tbody');
@@ -122,7 +122,7 @@ export async function saveNewPersonRow() {
 
 export async function deletePersonRow(idx) {
   const p = state.people[idx];
-  if (!p || !confirm(`Delete ${p.name}?`)) return;
+  if (!p || !await showConfirmDialog(`Delete ${p.name}?`, 'Delete', true)) return;
   state.people.splice(idx, 1);
   await savePeople();
   showStatus(`${p.name} deleted.`);

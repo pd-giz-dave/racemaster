@@ -3,7 +3,7 @@
 import { state, loadAll } from './state.js';
 import { restoreDirectory, dumpState, restoreState } from './storage.js';
 import { showBusy } from './utils.js';
-import { on, showStatus, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, confirm, pickFile, downloadText, sanitise } from './ui.js';
+import { on, showStatus, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, pickFile, downloadText, sanitise } from './ui.js';
 
 import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
@@ -85,13 +85,13 @@ function wireNav() {
   }
 
   // Escape: navigate to home; confirm first if the current view contains input fields
-  document.addEventListener('keydown', e => {
+  document.addEventListener('keydown', async e => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.name-typeahead:not([hidden])')) return;
     e.preventDefault();
     const viewEl = document.getElementById(`view-${currentView}`);
     const hasInputs = !!viewEl?.querySelector('input');
-    if (hasInputs && !confirm('Leave this view and go to Home?')) return;
+    if (hasInputs && !await showConfirmDialog('Leave this view and go to Home?', 'Leave')) return;
     showView('home');
     setTimeout(focusSidebar, 0);
   });
@@ -161,7 +161,7 @@ async function importState() {
   let data;
   try { data = JSON.parse(text); }
   catch { showStatus('Not a valid JSON file.', true); return; }
-  if (!confirm('Import will replace ALL current data. This cannot be undone. Continue?')) return;
+  if (!await showConfirmDialog('Import will replace ALL current data. This cannot be undone. Continue?', 'Import', true)) return;
   showBusy('Importing…');
   await restoreState(data);
   await loadAll();

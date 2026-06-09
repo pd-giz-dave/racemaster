@@ -1,10 +1,11 @@
 'use strict';
 
-const CACHE = 'racemaster-v2';
+const CACHE = 'racemaster-v3';
 
 const PRECACHE = [
   '/',
   '/index.html',
+  '/favicon.ico',
   '/css/app.css',
   '/css/print.css',
   '/js/app.js',
@@ -56,11 +57,29 @@ self.addEventListener('activate', e => {
   );
 });
 
+const DEV_MODE = false; // set false for production cache-first behaviour
+
 self.addEventListener('fetch', e => {
   // Only cache GET requests for same origin
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
+
+  // In dev mode: network-first (always fetch fresh, fall back to cache)
+  if (DEV_MODE) {
+    e.respondWith(
+      fetch(e.request).then(response => {
+        if (!response || response.status !== 200 || response.type !== 'basic') return response;
+        const clone = response.clone();
+        caches.open(CACHE).then(cache => cache.put(e.request, clone));
+        return response;
+      }).catch(() => caches.match(e.request).then(cached => {
+        if (cached) return cached;
+        if (e.request.mode === 'navigate') return caches.match('/index.html');
+      }))
+    );
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request).then(cached => {

@@ -13,7 +13,7 @@ import { iequal, cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import { exportSITimingCSV } from '../si-results.js';
 import {
-  val, fillForm, clearForm, on, setHTML, showStatus, confirm,
+  val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
   downloadText, sanitise, escHtml,
 } from '../ui.js';
@@ -52,10 +52,10 @@ export function renderEntries() {
 
   // Wire row action buttons
   tbody.querySelectorAll('.btn-edit').forEach(b =>
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       const bib = +b.dataset.bib;
       const e = getEntry(bib);
-      if (!e || !confirm(`Edit bib ${bib} (${e.name})?`)) return;
+      if (!e || !await showConfirmDialog(`Edit bib ${bib} (${e.name})?`, 'Edit')) return;
       fillFormForEdit(bib);
     }));
   tbody.querySelectorAll('.btn-delete-entry').forEach(b =>
@@ -149,7 +149,7 @@ export function resetEntryForm() {
 async function deleteFromEntry(bib) {
   const entries = getSortedEntries();
   const count = entries.filter(e => +e.bibNumber >= bib).length;
-  if (!confirm(`Delete ${count} entr${count === 1 ? 'y' : 'ies'} from bib ${bib} onwards?`)) return;
+  if (!await showConfirmDialog(`Delete ${count} entr${count === 1 ? 'y' : 'ies'} from bib ${bib} onwards?`, 'Delete', true)) return;
   showBusy('Deleting…');
   const removed = await deleteEntriesFrom(bib);
   showBusy('');
@@ -166,7 +166,7 @@ export async function submitEntryForm() {
   if (!editingBib) {
     const typedBib = +val('entry-form-bib') || 0;
     if (typedBib > 0 && findEntryByBib(typedBib) >= 0) {
-      if (confirm(`Bib ${typedBib} is already registered. Edit that entry?`)) {
+      if (await showConfirmDialog(`Bib ${typedBib} is already registered. Edit that entry?`, 'Edit')) {
         fillFormForEdit(typedBib);
       } else {
         document.getElementById('entry-form-bib').value = getNextBibNumber();
@@ -178,7 +178,7 @@ export async function submitEntryForm() {
       const dibberEntryIdx = findEntryByDibber(typedDibber);
       if (dibberEntryIdx >= 0) {
         const clashBib = state.entries[dibberEntryIdx].bibNumber;
-        if (confirm(`Dibber ${typedDibber} is already assigned to bib ${clashBib}. Edit that entry?`)) {
+        if (await showConfirmDialog(`Dibber ${typedDibber} is already assigned to bib ${clashBib}. Edit that entry?`, 'Edit')) {
           fillFormForEdit(clashBib);
         } else {
           document.getElementById('entry-form-dibber').value = getNextDibberNumber() || '';
@@ -198,7 +198,7 @@ export async function submitEntryForm() {
   if (!editingBib) {
     const typedBib = +val('entry-form-bib') || 0;
     const next = getNextBibNumber();
-    if (typedBib > next && !confirm(`Bib ${typedBib} skips ${typedBib - next} number(s). Confirm?`)) {
+    if (typedBib > next && !await showConfirmDialog(`Bib ${typedBib} skips ${typedBib - next} number(s). Confirm?`, 'Confirm')) {
       document.getElementById('entry-form-bib').value = next;
       return;
     }

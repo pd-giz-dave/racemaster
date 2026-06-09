@@ -4,7 +4,7 @@ import { importSIEntries, verifySIEntries, clearSIEntries, getSortedPreEntries }
 import { loadPreEntries } from '../entries.js';
 import { mergeSIEntries } from '../data.js';
 import { cleanName, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, confirm, pickFile } from '../ui.js';
+import { on, setHTML, showStatus, showConfirmDialog, pickFile } from '../ui.js';
 import { renderPeople } from './people.js';
 import { renderEntries } from './entries.js';
 import { renderHome } from './home.js';
@@ -74,7 +74,7 @@ export async function runLoadPreEntries() {
 }
 
 export async function runClearPreEntries() {
-  if (!confirm('Clear all pre-entries?')) return;
+  if (!await showConfirmDialog('Clear all pre-entries?', 'Clear', true)) return;
   await clearSIEntries();
   showStatus('Pre-entries cleared.');
   renderPreEntries();
