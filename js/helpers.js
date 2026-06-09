@@ -133,6 +133,13 @@ export async function deleteHelper(number) {
   return { error: '' };
 }
 
+/** Delete all helpers. */
+export async function clearAllHelpers() {
+  state.helpers = [];
+  await saveHelpers();
+  return { error: '' };
+}
+
 /** Get helpers sorted by number */
 export function getSortedHelpers() {
   return [...state.helpers].sort((a, b) => (+a.number || 0) - (+b.number || 0));

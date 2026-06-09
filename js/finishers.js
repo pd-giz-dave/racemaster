@@ -153,6 +153,13 @@ export async function updateFinisher(idx, updates) {
 }
 
 /** Delete the finisher at stateIdx and all that follow it. */
+/** Delete all finishers. */
+export async function clearAllFinishers() {
+  state.finishers = [];
+  buildFinishNumbersMap();
+  await saveFinishers();
+}
+
 export async function deleteFinishersFrom(stateIdx) {
   if (stateIdx < 0 || stateIdx >= state.finishers.length) return { error: 'Finisher not found', deleted: 0 };
   const deleted = state.finishers.length - stateIdx;

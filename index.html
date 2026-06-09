@@ -65,13 +65,13 @@
          ====================================================== -->
     <div class="view" id="view-home">
       <div class="view-header">
-        <h2>RaceMaster</h2>
+        <h2>Event Summary</h2>
       </div>
 
       <div class="home-grid">
         <div class="stat-card">
-          <div class="stat-value" id="home-entry-count">0</div>
-          <div class="stat-label">Total Entries</div>
+          <div class="stat-value" id="home-helper-count">0</div>
+          <div class="stat-label">Helpers Registered</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="home-senior-count">0</div>
@@ -82,8 +82,16 @@
           <div class="stat-label">Junior Entries</div>
         </div>
         <div class="stat-card">
+          <div class="stat-value" id="home-senior-finishers">0</div>
+          <div class="stat-label">Senior Finishers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="home-junior-finishers">0</div>
+          <div class="stat-label">Junior Finishers</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-value" id="home-safety-count">0</div>
-          <div class="stat-label">Safety Outstanding</div>
+          <div class="stat-label">Outstanding finishes</div>
         </div>
       </div>
 
@@ -96,7 +104,7 @@
       <div class="card">
         <h3>Getting Started</h3>
         <ol style="margin-left:1.2em;line-height:2">
-          <li>Click <strong>Open Data Folder</strong> to select your race data directory.</li>
+          <li>Click <strong>Open Data File</strong> to select your club's data file.</li>
           <li>Set up the event details in <strong>Event Settings</strong>.</li>
           <li>Optionally, import pre-entries via <strong>Pre-Entries (SI)</strong>.</li>
           <li>Register competitors on the <strong>Entries</strong> page.</li>
@@ -270,6 +278,7 @@
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="entry-senior-count">0</span></span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="entry-junior-count">0</span></span>
         <button class="btn btn-secondary" id="btn-export-entries-si" style="margin-left:auto">Export to SI</button>
+        <button class="btn btn-delete" id="btn-clear-all-entries">Clear All</button>
         <span id="entry-status-msg" class="entry-status view-status-msg" hidden></span>
       </div>
 
@@ -373,6 +382,7 @@
       <div class="view-header">
         <h2>Helpers</h2>
         <span class="count-badge" id="helper-count-display">0</span>
+        <button class="btn btn-delete" id="btn-clear-all-helpers" style="margin-left:auto">Clear All</button>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
 
@@ -478,6 +488,7 @@
         <h2>Finishers</h2>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="finisher-senior-count">0 of 0</span></span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="finisher-junior-count">0 of 0</span></span>
+        <button class="btn btn-delete" id="btn-clear-all-finishers" style="margin-left:auto">Clear All</button>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
 

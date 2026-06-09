@@ -1,7 +1,7 @@
 'use strict';
 
 import { state, saveRoles } from '../state.js';
-import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers } from '../helpers.js';
+import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers } from '../helpers.js';
 import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
   updateDatalistClubs, updateDatalistRoles,
@@ -153,6 +153,17 @@ export function wireHelpers() {
   on('btn-submit-helper',      'click', submitHelperForm);
   on('btn-cancel-helper-edit', 'click', resetHelperForm);
   on('btn-reset-helper',       'click', () => { resetHelperForm(); document.getElementById('helper-form-name')?.focus(); });
+
+  on('btn-clear-all-helpers', 'click', async () => {
+    const n = getSortedHelpers().length;
+    if (!n) return;
+    if (!await showConfirmDialog(`Clear all ${n} helpers? This cannot be undone.`, 'Clear All', true)) return;
+    if (!await showConfirmDialog(`Delete all ${n} helpers permanently?`, 'Yes, delete all', true, true)) return;
+    await clearAllHelpers();
+    resetHelperForm();
+    renderHelpers();
+    showStatus('All helpers cleared.');
+  });
 
   // ---- Name typeahead against people database ----
   const nameEl = document.getElementById('helper-form-name');

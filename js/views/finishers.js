@@ -2,7 +2,7 @@
 
 import { state } from '../state.js';
 import {
-  recordFinisher, updateFinisher, deleteLastFinisher, deleteFinishersFrom,
+  recordFinisher, updateFinisher, deleteLastFinisher, deleteFinishersFrom, clearAllFinishers,
   deleteFinisher, insertFinisherAbove,
   scanFinishers, processFinishers, getSortedFinishers,
 } from '../finishers.js';
@@ -485,6 +485,17 @@ export function wireFinishers() {
   on('btn-undo-rapid',            'click', () => undoLastFinisher());
   on('btn-scan-finishers',        'click', runScanFinishers);
   on('btn-process-finishers',     'click', runProcessFinishers);
+
+  on('btn-clear-all-finishers', 'click', async () => {
+    const n = state.finishers.length;
+    if (!n) return;
+    if (!await showConfirmDialog(`Clear all ${n} finishers? This cannot be undone.`, 'Clear All', true)) return;
+    if (!await showConfirmDialog(`Delete all ${n} finishers permanently?`, 'Yes, delete all', true, true)) return;
+    await clearAllFinishers();
+    resetFinisherForm();
+    renderFinishers();
+    showStatus('All finishers cleared.');
+  });
 
   // Mode dropdown
   const modeEl = document.getElementById('finisher-mode');

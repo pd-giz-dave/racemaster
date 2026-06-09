@@ -64,12 +64,12 @@ export function showStatus(msg, isError = false) {
   }
 }
 
-export function showConfirmDialog(message, confirmLabel = 'Confirm', danger = false) {
-  return showChoiceDialog(message, [{ label: confirmLabel, value: true, danger }])
+export function showConfirmDialog(message, confirmLabel = 'Confirm', danger = false, focusCancel = false) {
+  return showChoiceDialog(message, [{ label: confirmLabel, value: true, danger }], { focusCancel })
     .then(v => v === true);
 }
 
-export function showChoiceDialog(message, choices) {
+export function showChoiceDialog(message, choices, { focusCancel = false } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'choice-dialog-overlay';
@@ -103,7 +103,7 @@ export function showChoiceDialog(message, choices) {
     cancel.className = 'btn btn-secondary';
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', () => close(null));
-    btns.appendChild(cancel);
+    if (focusCancel) btns.prepend(cancel); else btns.appendChild(cancel);
 
     box.appendChild(btns);
     overlay.appendChild(box);
@@ -114,7 +114,7 @@ export function showChoiceDialog(message, choices) {
     const onKey = e => { if (e.key === 'Escape') close(null); };
     document.addEventListener('keydown', onKey);
 
-    setTimeout(() => btns.querySelector('button')?.focus(), 0);
+    setTimeout(() => (focusCancel ? cancel : btns.querySelector('button'))?.focus(), 0);
   });
 }
 

@@ -3,15 +3,14 @@
 import { state } from '../state.js';
 import {
   findEntryByBib, findEntryByDibber, getEntry,
-  submitEntry, updateEntry, deleteEntriesFrom, deleteEntryAndRenumber, insertEntryAndRenumber,
-  getSortedEntries,
+  submitEntry, updateEntry, clearAllEntries, deleteEntryAndRenumber, insertEntryAndRenumber,
+  getSortedEntries, exportSITimingCSV,
 } from '../entries.js';
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
 import { iequal, cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
-import { exportSITimingCSV } from '../si-results.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
@@ -320,6 +319,18 @@ export function wireEntries() {
 
   // SI Timing export
   on('btn-export-entries-si', 'click', runExportSITiming);
+
+  on('btn-clear-all-entries', 'click', async () => {
+    const n = getSortedEntries().length;
+    if (!n) return;
+    if (!await showConfirmDialog(`Clear all ${n} entries? This cannot be undone.`, 'Clear All', true)) return;
+    if (!await showConfirmDialog(`Delete all ${n} entries permanently?`, 'Yes, delete all', true, true)) return;
+    await clearAllEntries();
+    resetEntryForm();
+    renderEntries();
+    renderHome();
+    showStatus('All entries cleared.');
+  });
 
   // Pre-entry number field: redirect to name on first letter, else lookup pre-entry
   const penoEl = document.getElementById('entry-form-peno');

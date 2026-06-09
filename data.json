@@ -28,6 +28,14 @@
     {
       "seenTotal": 1,
       "helpedTotal": 0,
+      "name": "A Junior",
+      "gender": "Male",
+      "dob": "01/01/2018",
+      "lastSeen": "3/6/26"
+    },
+    {
+      "seenTotal": 1,
+      "helpedTotal": 0,
       "name": "A Runner",
       "gender": "Male",
       "dob": "02/01/2003",
@@ -3474,28 +3482,24 @@
       "startTime": "",
       "retired": "",
       "status": ""
-    }
-  ],
-  "helpers": [
-    {
-      "number": 1,
-      "name": "Danny Beeson",
-      "club": "Maldwyn Harriers",
-      "gender": "M",
-      "dob": "17/01/1996",
-      "category": "MSEN",
-      "role": "Marshall"
     },
     {
-      "number": 2,
-      "name": "Dave Nichols",
-      "club": "Mercia Fell Runners",
+      "bibNumber": 115,
+      "dibberNumber": 0,
+      "fraNumber": "",
+      "name": "A Junior",
+      "club": "",
       "gender": "M",
-      "dob": "20/01/1951",
-      "category": "M75",
-      "role": "HELPER"
+      "dob": "01/01/2018",
+      "category": "U10B",
+      "course": "Juniors",
+      "preEntry": "",
+      "startTime": "",
+      "retired": "",
+      "status": ""
     }
   ],
+  "helpers": [],
   "finishers": [
     {
       "action": "NoStart",

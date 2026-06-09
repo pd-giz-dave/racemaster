@@ -193,14 +193,6 @@ export async function updateEntry(bibNumber, formData) {
   return { error: '' };
 }
 
-/** Delete all entries with bib >= fromBib. Returns count removed. */
-export async function deleteEntriesFrom(fromBib) {
-  const before = state.entries.length;
-  state.entries = state.entries.filter(e => +e.bibNumber < +fromBib);
-  await saveEntries();
-  return before - state.entries.length;
-}
-
 /**
  * Insert a new entry at atBib, shifting all existing entries from atBib upward
  * (bib +1 each, dibber slots shift forward by one), as if this entry had always been there.
@@ -304,6 +296,12 @@ export async function deleteEntryAndRenumber(bibNumber) {
 
   await saveEntries();
   return { error: '' };
+}
+
+/** Delete all entries. */
+export async function clearAllEntries() {
+  state.entries = [];
+  await saveEntries();
 }
 
 /** Delete an entry by bib number */
@@ -434,6 +432,34 @@ export function buildSITimingExport() {
       'RaceNumber':         e.bibNumber,
       'NumberCompetitors':  '',
       'CardNumbers':        longCode > 0 ? longCode : '',
+      'MembershipNumbers':  e.fraNumber || '',
+      'Forenames':          '',
+      'Surnames':           e.name || '',
+      'Name (Free Format)': e.name || '',
+      'Category':           e.category || '',
+      'Club':               e.club || '',
+      'CourseClass':        e.course || '',
+      'Entry System IDs':   e.preEntry || '',
+      'Eligibility':        '',
+      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
+    });
+  }
+  return rows;
+}
+
+/** Export entries as SI Timing CSV rows. */
+export function exportSITimingCSV(entries) {
+  const rows = [];
+  for (const e of entries) {
+    if (!e.bibNumber) continue;
+    const dibberLong = e.dibberNumber > 0
+      ? (state.dibbers.find(d => +d.shortCode === +e.dibberNumber)?.longCode || '')
+      : '';
+    const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
+    rows.push({
+      'RaceNumber':         e.bibNumber,
+      'NumberCompetitors':  '',
+      'CardNumbers':        dibberLong,
       'MembershipNumbers':  e.fraNumber || '',
       'Forenames':          '',
       'Surnames':           e.name || '',

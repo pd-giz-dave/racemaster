@@ -130,33 +130,6 @@ export async function formatSIResults(course) {
  * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
  */
-export function exportSITimingCSV(entries) {
-  const rows = [];
-  for (const e of entries) {
-    if (!e.bibNumber) continue;
-    const dibberLong = e.dibberNumber > 0
-      ? (state.dibbers.find(d => +d.shortCode === +e.dibberNumber)?.longCode || '')
-      : '';
-    const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
-    rows.push({
-      'RaceNumber':         e.bibNumber,
-      'NumberCompetitors':  '',
-      'CardNumbers':        dibberLong,
-      'MembershipNumbers':  e.fraNumber || '',
-      'Forenames':          '',
-      'Surnames':           e.name || '',
-      'Name (Free Format)': e.name || '',
-      'Category':           e.category || '',
-      'Club':               e.club || '',
-      'CourseClass':        e.course || '',
-      'Entry System IDs':   e.preEntry || '',
-      'Eligibility':        '',
-      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
-    });
-  }
-  return rows;
-}
-
 // ---- Field accessor helpers for SI result rows ----
 
 function getField(row, ...keys) {
