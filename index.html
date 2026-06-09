@@ -267,7 +267,8 @@
     <div class="view" id="view-entries" hidden>
       <div class="view-header">
         <h2>Entries</h2>
-        <span class="count-badge" id="entry-count-display">0</span>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="entry-senior-count">0</span></span>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="entry-junior-count">0</span></span>
         <button class="btn btn-secondary" id="btn-export-entries-si" style="margin-left:auto">Export to SI</button>
         <span id="entry-status-msg" class="entry-status view-status-msg" hidden></span>
       </div>
@@ -338,9 +339,11 @@
               <input type="checkbox" id="entry-form-confirm">
               <label for="entry-form-confirm" style="font-size:0.85rem;color:var(--text);cursor:pointer">Confirm entry details are correct</label>
             </div>
-            <button class="btn" id="btn-submit-entry" style="width:100%;margin-top:8px">Register</button>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn" id="btn-submit-entry" style="flex:1">Register</button>
+              <button class="btn btn-secondary" id="btn-reset-entry" style="flex:1">Reset</button>
+            </div>
             <button class="btn btn-secondary" id="btn-cancel-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
-            <button class="btn btn-secondary" id="btn-reset-entry" style="width:100%;margin-top:4px">Reset</button>
           </div>
         </div>
 
@@ -411,9 +414,11 @@
               <input type="checkbox" id="helper-form-confirm">
               <label for="helper-form-confirm" style="font-size:0.85rem;color:var(--text);cursor:pointer">Confirm helper details are correct</label>
             </div>
-            <button class="btn" id="btn-submit-helper" style="width:100%;margin-top:8px">Add Helper</button>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn" id="btn-submit-helper" style="flex:1">Add Helper</button>
+              <button class="btn btn-secondary" id="btn-reset-helper" style="flex:1">Reset</button>
+            </div>
             <button class="btn btn-secondary" id="btn-cancel-helper-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
-            <button class="btn btn-secondary" id="btn-reset-helper" style="width:100%;margin-top:4px">Reset</button>
           </div>
         </div>
 

@@ -220,6 +220,7 @@ input:focus, select:focus, textarea:focus {
 .row-prize td  { background: #fef9e7; font-weight: 600; }
 .row-safe td   { color: var(--muted); }
 .row-timing-target td { background: #fff3cd !important; }
+.row-editing td       { background: #cfe2ff !important; }
 .row-outstanding td { font-weight: 600; }
 
 /* ---- Two-column form+table layout ---- */
@@ -512,6 +513,13 @@ input:focus, select:focus, textarea:focus {
 #view-helpers .view-header,
 #view-finishers .view-header {
   flex-shrink: 0;
+}
+
+/* form card accent background */
+#view-entries .card,
+#view-helpers .card,
+#view-finishers .card {
+  background: var(--accent-light);
 }
 
 /* split-layout fills remaining flex space and gives the grid a bounded height */

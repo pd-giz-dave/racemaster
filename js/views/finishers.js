@@ -197,6 +197,10 @@ export function renderFinishers() {
 
   // Keep time-mode display in sync after any render
   if (getCurrentMode() === 'time') refreshTimeModeDisplay();
+
+  if (editingIdx >= 0) {
+    document.querySelector(`#finishers-tbody tr[data-sidx="${editingIdx}"]`)?.classList.add('row-editing');
+  }
 }
 
 function updatePrevTime(finishers) {
@@ -242,7 +246,9 @@ function fillFormForEdit(sidx) {
   document.getElementById('btn-cancel-finisher-edit').style.display = '';
 
   document.getElementById('finisher-bib')?.focus();
-  document.querySelector(`#finishers-tbody tr[data-sidx="${sidx}"]`)?.scrollIntoView({ block: 'nearest' });
+  const editRow = document.querySelector(`#finishers-tbody tr[data-sidx="${sidx}"]`);
+  editRow?.classList.add('row-editing');
+  editRow?.scrollIntoView({ block: 'nearest' });
 }
 
 function resetFinisherForm() {

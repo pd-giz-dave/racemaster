@@ -201,6 +201,111 @@ export async function deleteEntriesFrom(fromBib) {
   return before - state.entries.length;
 }
 
+/**
+ * Insert a new entry at atBib, shifting all existing entries from atBib upward
+ * (bib +1 each, dibber slots shift forward by one), as if this entry had always been there.
+ * Returns {bibNumber, dibberNumber, error}.
+ */
+export async function insertEntryAndRenumber(atBib, formData) {
+  const name     = cleanName(formData.name || '');
+  const gender   = (formData.gender || '').charAt(0).toUpperCase();
+  const dob      = normaliseDate(formData.dob || '');
+  const club     = cleanName(formData.club || '');
+  const fra      = formData.fraNumber || '';
+  const preEntry = formData.preEntry || '';
+
+  if (!name)   return { error: 'Name is required' };
+  if (!gender) return { error: 'Gender is required' };
+  if (!dob && gender !== GENDER.PAIR_PREFIX) return { error: 'Date of birth is required' };
+
+  let category = formData.category || '';
+  if (!category && dob) category = calculateCategory(dob, gender);
+  let course = formData.course || '';
+  if (!course) course = calculateCourse(category, dob);
+
+  const normName = name.toUpperCase();
+  const duplicate = state.entries.find(e => {
+    if (cleanName(e.name || '').toUpperCase() !== normName) return false;
+    return dob ? normaliseDate(e.dob || '') === dob : true;
+  });
+  if (duplicate) return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
+
+  const idx = findEntryByBib(atBib);
+  if (idx < 0) return { error: `Bib ${atBib} not found` };
+
+  // The entry currently at atBib holds the dibber slot the new entry should occupy
+  const freeDibber = +state.entries[idx].dibberNumber || 0;
+  let nextDibberIdx = freeDibber > 0
+    ? state.dibbers.findIndex(d => +d.shortCode === freeDibber)
+    : -1;
+
+  // Shift all entries from atBib upward
+  for (let i = idx; i < state.entries.length; i++) {
+    const e = state.entries[i];
+    e.bibNumber = +e.bibNumber + 1;
+    if (nextDibberIdx >= 0 && +e.dibberNumber > 0) {
+      const shiftIdx = nextDibberIdx + 1;
+      e.dibberNumber = shiftIdx < state.dibbers.length ? +state.dibbers[shiftIdx].shortCode : 0;
+      nextDibberIdx++;
+    }
+  }
+
+  const dibberNumber = (formData.dibberOverride && +formData.dibberOverride > 0)
+    ? +formData.dibberOverride
+    : (usingDibbers(course) ? freeDibber : 0);
+
+  state.entries.splice(idx, 0, {
+    bibNumber: atBib, dibberNumber, fraNumber: fra,
+    name, club, gender, dob, category, course, preEntry,
+    retired: '', startTime: '',
+  });
+
+  addPerson(name, null, gender, dob, club, fra, category, false);
+  if (club) addClub(club);
+  sortPeople();
+  sortClubs();
+  await saveEntries();
+  await savePeople();
+  await saveClubs();
+
+  return { bibNumber: atBib, dibberNumber, error: '' };
+}
+
+/**
+ * Delete a single entry and renumber all subsequent entries as if it was never registered.
+ * Bib numbers above the deleted one are each decremented by 1.
+ * Dibber numbers are similarly shifted: each subsequent entry that uses a dibber
+ * takes the dibber slot freed by the deletion.
+ */
+export async function deleteEntryAndRenumber(bibNumber) {
+  const idx = findEntryByBib(bibNumber);
+  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
+
+  const deleted = state.entries[idx];
+
+  // Track where to resume dibber allocation (the slot freed by the deleted entry)
+  let nextDibberIdx = -1;
+  if (+deleted.dibberNumber > 0) {
+    nextDibberIdx = state.dibbers.findIndex(d => +d.shortCode === +deleted.dibberNumber);
+  }
+
+  state.entries.splice(idx, 1);
+
+  for (let i = idx; i < state.entries.length; i++) {
+    const e = state.entries[i];
+    e.bibNumber = +e.bibNumber - 1;
+    if (nextDibberIdx >= 0 && +e.dibberNumber > 0) {
+      if (nextDibberIdx < state.dibbers.length) {
+        e.dibberNumber = +state.dibbers[nextDibberIdx].shortCode;
+        nextDibberIdx++;
+      }
+    }
+  }
+
+  await saveEntries();
+  return { error: '' };
+}
+
 /** Delete an entry by bib number */
 export async function deleteEntry(bibNumber) {
   const idx = findEntryByBib(bibNumber);

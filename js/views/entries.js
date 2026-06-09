@@ -3,7 +3,7 @@
 import { state } from '../state.js';
 import {
   findEntryByBib, findEntryByDibber, getEntry,
-  submitEntry, updateEntry, deleteEntriesFrom,
+  submitEntry, updateEntry, deleteEntriesFrom, deleteEntryAndRenumber, insertEntryAndRenumber,
   getSortedEntries,
 } from '../entries.js';
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
@@ -21,7 +21,8 @@ import { renderHome } from './home.js';
 
 // ---- Module state ----
 
-export let editingBib = 0;
+export let editingBib  = 0;
+let insertingAtBib = 0;
 
 // ---- Render ----
 
@@ -45,8 +46,9 @@ export function renderEntries() {
       <td>${e.startTime || ''}</td>
       <td>${e.retired === 'Y' ? 'DNF' : ''}</td>
       <td>
-        <button class="btn-sm btn-edit"         data-bib="${e.bibNumber}">Edit</button>
-        <button class="btn-sm btn-delete-entry" data-bib="${e.bibNumber}">Del from here</button>
+        <button class="btn-sm btn-edit"                 data-bib="${e.bibNumber}">Edit</button>
+        <button class="btn-sm btn-insert-above-entry"  data-bib="${e.bibNumber}">Ins ↑</button>
+        <button class="btn-sm btn-delete-entry"        data-bib="${e.bibNumber}">Del</button>
       </td>
     </tr>`).join('');
 
@@ -58,15 +60,15 @@ export function renderEntries() {
       if (!e || !await showConfirmDialog(`Edit bib ${bib} (${e.name})?`, 'Edit')) return;
       fillFormForEdit(bib);
     }));
+  tbody.querySelectorAll('.btn-insert-above-entry').forEach(b =>
+    b.addEventListener('click', () => confirmInsertBefore(+b.dataset.bib)));
   tbody.querySelectorAll('.btn-delete-entry').forEach(b =>
-    b.addEventListener('click', () => deleteFromEntry(+b.dataset.bib)));
+    b.addEventListener('click', () => deleteEntryAndRenumberHandler(+b.dataset.bib)));
 
   const juniorCount  = entries.filter(e => e.course === COURSE.JUNIORS).length;
   const seniorCount  = entries.length - juniorCount;
-  setHTML('entry-count-display',
-    juniorCount > 0
-      ? `${seniorCount} seniors · ${juniorCount} juniors`
-      : `${entries.length} entries`);
+  setHTML('entry-senior-count', seniorCount);
+  setHTML('entry-junior-count', juniorCount);
   populateCategoryDropdown('entry-form-category', '');
   populateCategoryDropdown('entry-edit-category', '');
   updateDatalistNames();
@@ -76,6 +78,11 @@ export function renderEntries() {
   if (bibEl && document.activeElement !== bibEl && !editingBib) bibEl.value = getNextBibNumber();
   const dibEl = document.getElementById('entry-form-dibber');
   if (dibEl && document.activeElement !== dibEl && !editingBib) updateDibberField();
+
+  const activeBib = editingBib || insertingAtBib;
+  if (activeBib) {
+    document.querySelector(`#entries-tbody tr[data-bib="${activeBib}"]`)?.classList.add('row-editing');
+  }
 }
 
 // ---- Entry form helpers ----
@@ -129,11 +136,16 @@ export function fillFormForEdit(bib) {
   document.getElementById('btn-submit-entry').textContent = 'Update';
   document.getElementById('btn-cancel-edit').style.display = '';
   document.getElementById('entry-form-peno')?.focus();
-  document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.scrollIntoView({ block: 'nearest' });
+  const editRow = document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`);
+  editRow?.classList.add('row-editing');
+  editRow?.scrollIntoView({ block: 'nearest' });
 }
 
 export function resetEntryForm() {
   editingBib = 0;
+  insertingAtBib = 0;
+  document.querySelectorAll('#entries-tbody .row-editing')
+    .forEach(r => r.classList.remove('row-editing'));
   clearForm('entry-form-fields');
   const bibEl = document.getElementById('entry-form-bib');
   if (bibEl) { bibEl.value = getNextBibNumber(); bibEl.setAttribute('tabindex', '-1'); }
@@ -141,20 +153,51 @@ export function resetEntryForm() {
   if (dibEl) dibEl.setAttribute('tabindex', '-1');
   updateDibberField();
   document.getElementById('btn-submit-entry').textContent = 'Register';
-  document.getElementById('btn-cancel-edit').style.display = 'none';
+  const cancelBtn = document.getElementById('btn-cancel-edit');
+  if (cancelBtn) { cancelBtn.style.display = 'none'; cancelBtn.textContent = 'Cancel Edit'; }
 }
 
 
+// ---- Insert before row ----
+
+function fillFormForInsert(bib) {
+  const freeDibber = state.entries.find(e => +e.bibNumber === bib)?.dibberNumber || '';
+  insertingAtBib = bib;
+  clearForm('entry-form-fields');
+  const bibEl = document.getElementById('entry-form-bib');
+  if (bibEl) { bibEl.value = bib; bibEl.setAttribute('tabindex', '-1'); }
+  const dibEl = document.getElementById('entry-form-dibber');
+  if (dibEl) { dibEl.value = freeDibber; dibEl.setAttribute('tabindex', '-1'); }
+  document.getElementById('btn-submit-entry').textContent = 'Insert';
+  const cancelBtn = document.getElementById('btn-cancel-edit');
+  if (cancelBtn) { cancelBtn.style.display = ''; cancelBtn.textContent = 'Cancel Insert'; }
+  document.getElementById('entry-form-peno')?.focus();
+  document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.classList.add('row-editing');
+}
+
+async function confirmInsertBefore(bib) {
+  const count = getSortedEntries().filter(e => +e.bibNumber >= bib).length;
+  if (!await showConfirmDialog(
+    `Insert a new entry before bib ${bib}?\n${count} entr${count === 1 ? 'y' : 'ies'} will be renumbered.`,
+    'Insert & Renumber')) return;
+  renderEntries();
+  fillFormForInsert(bib);
+  showStatus(`Fill in the form for bib ${bib} and submit to confirm.`);
+}
+
 // ---- Delete from row ----
 
-async function deleteFromEntry(bib) {
-  const entries = getSortedEntries();
-  const count = entries.filter(e => +e.bibNumber >= bib).length;
-  if (!await showConfirmDialog(`Delete ${count} entr${count === 1 ? 'y' : 'ies'} from bib ${bib} onwards?`, 'Delete', true)) return;
+async function deleteEntryAndRenumberHandler(bib) {
+  const e = getEntry(bib);
+  if (!e) return;
+  if (!await showConfirmDialog(
+    `Delete bib ${bib} (${e.name}) and renumber all subsequent entries?`,
+    'Delete & Renumber', true)) return;
   showBusy('Deleting…');
-  const removed = await deleteEntriesFrom(bib);
+  const result = await deleteEntryAndRenumber(bib);
   showBusy('');
-  showStatus(`${removed} entr${removed === 1 ? 'y' : 'ies'} deleted.`);
+  if (result.error) { showStatus(result.error, true); return; }
+  showStatus(`Bib ${bib} deleted; subsequent entries renumbered.`);
   renderEntries();
   renderHome();
   document.getElementById('entry-form-peno')?.focus();
@@ -164,7 +207,7 @@ async function deleteFromEntry(bib) {
 
 export async function submitEntryForm() {
   // Existing-bib / existing-dibber checks — may redirect to edit mode before anything else
-  if (!editingBib) {
+  if (!editingBib && !insertingAtBib) {
     const typedBib = +val('entry-form-bib') || 0;
     if (typedBib > 0 && findEntryByBib(typedBib) >= 0) {
       if (await showConfirmDialog(`Bib ${typedBib} is already registered. Edit that entry?`, 'Edit')) {
@@ -196,7 +239,7 @@ export async function submitEntryForm() {
   }
 
   // Skip-bib confirmation after checkbox (new entries only)
-  if (!editingBib) {
+  if (!editingBib && !insertingAtBib) {
     const typedBib = +val('entry-form-bib') || 0;
     const next = getNextBibNumber();
     if (typedBib > next && !await showConfirmDialog(`Bib ${typedBib} skips ${typedBib - next} number(s). Confirm?`, 'Confirm')) {
@@ -217,18 +260,21 @@ export async function submitEntryForm() {
     bibOverride:    +val('entry-form-bib')    || 0,
     dibberOverride: +val('entry-form-dibber') || 0,
   };
-  const isEdit = editingBib > 0;
-  showBusy(isEdit ? 'Updating…' : 'Registering…');
+  const isEdit   = editingBib > 0;
+  const isInsert = insertingAtBib > 0;
+  showBusy(isEdit ? 'Updating…' : isInsert ? 'Inserting…' : 'Registering…');
   const result = isEdit
     ? await updateEntry(editingBib, formData)
-    : await submitEntry(formData);
+    : isInsert
+      ? await insertEntryAndRenumber(insertingAtBib, formData)
+      : await submitEntry(formData);
   showBusy('');
   if (result.error) {
     showStatus(result.error, true);
     focusEntryErrorField(result.error);
   } else {
     const bib = isEdit ? editingBib : result.bibNumber;
-    showStatus(isEdit ? `Bib ${bib} updated.` : `Bib ${bib} registered.`);
+    showStatus(isEdit ? `Bib ${bib} updated.` : isInsert ? `Bib ${bib} inserted; subsequent entries renumbered.` : `Bib ${bib} registered.`);
     resetEntryForm();
     document.getElementById('entry-form-peno')?.focus();
     renderEntries();

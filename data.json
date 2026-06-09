@@ -291,7 +291,7 @@
       "club": "Mercia Fell Runners",
       "fraNumber": "26872",
       "lastSeen": "3/6/26",
-      "seenTotal": 1,
+      "seenTotal": 5,
       "lastHelped": "",
       "helpedTotal": 0
     },
@@ -661,8 +661,8 @@
     },
     {
       "name": "Mercia Fell Runners",
-      "lastSeen": "08/06/2026",
-      "seenTotal": 11
+      "lastSeen": "09/06/2026",
+      "seenTotal": 15
     },
     {
       "name": "Ranton Wobblers",
@@ -3268,22 +3268,21 @@
   "entries": [
     {
       "bibNumber": 101,
-      "dibberNumber": 0,
+      "dibberNumber": 1,
       "fraNumber": "26872",
       "name": "John Atyeo",
       "club": "Mercia Fell Runners",
       "gender": "M",
       "dob": "01/10/1966",
-      "category": "M50",
+      "category": "M55",
       "course": "Seniors",
       "preEntry": "1",
-      "startTime": "",
       "retired": "",
-      "status": ""
+      "startTime": ""
     },
     {
       "bibNumber": 102,
-      "dibberNumber": 0,
+      "dibberNumber": 2,
       "fraNumber": "",
       "name": "Robert McNally",
       "club": "",
@@ -3298,7 +3297,7 @@
     },
     {
       "bibNumber": 103,
-      "dibberNumber": 0,
+      "dibberNumber": 3,
       "fraNumber": "",
       "name": "Amy Fulford",
       "club": "Ludlow Runners",
@@ -3534,6 +3533,19 @@
       "club": "Mercia Fell Runners",
       "category": "M50",
       "course": "Seniors",
+      "error": "",
+      "adjustedTime": "",
+      "status": "",
+      "source": "manual"
+    },
+    {
+      "action": "F",
+      "number": "",
+      "time": "",
+      "name": "",
+      "club": "",
+      "category": "",
+      "course": "",
       "error": "",
       "adjustedTime": "",
       "status": "",

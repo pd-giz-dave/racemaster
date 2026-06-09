@@ -39,6 +39,9 @@ export function renderHelpers() {
   setHTML('helper-count-display', `${helpers.length} helpers`);
   updateDatalistClubs();
   updateDatalistRoles();
+  if (editingNumber > 0) {
+    document.querySelector(`#helpers-tbody tr[data-num="${editingNumber}"]`)?.classList.add('row-editing');
+  }
 }
 
 // ---- Form helpers ----
@@ -59,11 +62,15 @@ function fillFormForEdit(num) {
   document.getElementById('btn-submit-helper').textContent = 'Update';
   document.getElementById('btn-cancel-helper-edit').style.display = '';
   document.getElementById('helper-form-name')?.focus();
-  document.querySelector(`#helpers-tbody tr[data-num="${num}"]`)?.scrollIntoView({ block: 'nearest' });
+  const editRow = document.querySelector(`#helpers-tbody tr[data-num="${num}"]`);
+  editRow?.classList.add('row-editing');
+  editRow?.scrollIntoView({ block: 'nearest' });
 }
 
 function resetHelperForm() {
   editingNumber = 0;
+  document.querySelectorAll('#helpers-tbody .row-editing')
+    .forEach(r => r.classList.remove('row-editing'));
   clearForm('helper-form-fields');
   document.getElementById('btn-submit-helper').textContent = 'Add Helper';
   document.getElementById('btn-cancel-helper-edit').style.display = 'none';
