@@ -129,6 +129,7 @@ export function fillFormForEdit(bib) {
   document.getElementById('btn-submit-entry').textContent = 'Update';
   document.getElementById('btn-cancel-edit').style.display = '';
   document.getElementById('entry-form-peno')?.focus();
+  document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 export function resetEntryForm() {
@@ -231,6 +232,7 @@ export async function submitEntryForm() {
     resetEntryForm();
     document.getElementById('entry-form-peno')?.focus();
     renderEntries();
+    document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.scrollIntoView({ block: 'nearest' });
     renderHome();
   }
 }

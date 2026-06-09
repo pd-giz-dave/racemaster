@@ -19,7 +19,7 @@ export function renderHelpers() {
   const tbody = document.getElementById('helpers-tbody');
   if (!tbody) return;
   tbody.innerHTML = helpers.map(h => `
-    <tr>
+    <tr data-num="${h.number}">
       <td>${h.number}</td>
       <td>${h.name || ''}</td>
       <td>${h.club || ''}</td>
@@ -59,6 +59,7 @@ function fillFormForEdit(num) {
   document.getElementById('btn-submit-helper').textContent = 'Update';
   document.getElementById('btn-cancel-helper-edit').style.display = '';
   document.getElementById('helper-form-name')?.focus();
+  document.querySelector(`#helpers-tbody tr[data-num="${num}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 function resetHelperForm() {
@@ -123,6 +124,7 @@ export async function submitHelperForm() {
     showStatus(isEdit ? `Helper ${num} updated.` : `Helper ${num} added.`);
     resetHelperForm();
     renderHelpers();
+    document.querySelector(`#helpers-tbody tr[data-num="${num}"]`)?.scrollIntoView({ block: 'nearest' });
     document.getElementById('helper-form-name')?.focus();
   }
 }

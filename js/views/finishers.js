@@ -63,6 +63,9 @@ function findNextTimeTarget() {
 // Update line/bib/prev-time fields to reflect the current time-mode target.
 // Also refreshes timeTargetSidx. No side effects (no status messages, no mode switching).
 function refreshTimeModeDisplay() {
+  document.querySelectorAll('#finishers-tbody .row-timing-target')
+    .forEach(r => r.classList.remove('row-timing-target'));
+
   timeTargetSidx = findNextTimeTarget();
   if (timeTargetSidx < 0) return;
   const f = state.finishers[timeTargetSidx];
@@ -76,6 +79,12 @@ function refreshTimeModeDisplay() {
     if (state.finishers[i].time && state.finishers[i].time !== '-') { prevTime = state.finishers[i].time; break; }
   }
   if (prevEl) prevEl.value = prevTime;
+
+  const targetRow = document.querySelector(`#finishers-tbody tr[data-sidx="${timeTargetSidx}"]`);
+  if (targetRow) {
+    targetRow.classList.add('row-timing-target');
+    targetRow.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 export function applyMode(mode) {
@@ -111,6 +120,9 @@ export function applyMode(mode) {
     }
   } else {
     timeTargetSidx = -1;
+    document.querySelectorAll('#finishers-tbody .row-timing-target')
+      .forEach(r => r.classList.remove('row-timing-target'));
+    document.querySelector('#finishers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
     if (bibEl) { bibEl.value = ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
     setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
   }
@@ -149,10 +161,10 @@ export function renderFinishers() {
     if (specialActionValues.has(action))   return action;
     return '';
   };
-  tbody.innerHTML = all.map((f, i) => {
+  tbody.innerHTML = all.map((f) => {
     const sidx = state.finishers.indexOf(f);
     const numDisplay = f.number > 0 ? f.number : '';
-    return `<tr class="${f.error ? 'row-error' : ''}">
+    return `<tr class="${f.error ? 'row-error' : ''}" data-sidx="${sidx}">
       <td>${sidx}</td>
       <td>${startFinishLabel(f.action)}</td>
       <td>${f.time || ''}</td>
@@ -230,6 +242,7 @@ function fillFormForEdit(sidx) {
   document.getElementById('btn-cancel-finisher-edit').style.display = '';
 
   document.getElementById('finisher-bib')?.focus();
+  document.querySelector(`#finishers-tbody tr[data-sidx="${sidx}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 function resetFinisherForm() {
@@ -271,7 +284,6 @@ export function parseFinishTime(input, prevTimeStr) {
 async function submitFinisherForm() {
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
-  const lineEl = document.getElementById('finisher-line');
 
   const rawBib  = (bibEl?.value || '').trim();
   const rawTime = (timeEl?.value || '').trim();
@@ -350,7 +362,9 @@ async function submitFinisherForm() {
     if (result.error) { showStatus(result.error, true); bibEl?.focus(); return; }
     const editLabel = specialEdit ? rawBib : `${isStart ? 'Start' : 'Finish'} bib ${rawBib}`;
     showStatus(`Line ${editingIdx}: ${editLabel} updated`);
+    const updatedIdx = editingIdx;
     resetFinisherForm();
+    document.querySelector(`#finishers-tbody tr[data-sidx="${updatedIdx}"]`)?.scrollIntoView({ block: 'nearest' });
     return;
   }
 
@@ -390,6 +404,7 @@ async function submitFinisherForm() {
   if (finishRadio) finishRadio.checked = true;
 
   renderFinishers();
+  document.querySelector(`#finishers-tbody tr[data-sidx="${result.line}"]`)?.scrollIntoView({ block: 'nearest' });
   bibEl?.focus();
 }
 

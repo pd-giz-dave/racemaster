@@ -123,15 +123,26 @@ function renderView(v) {
     case 'event':        renderEvent();        break;
     case 'entries':
       renderEntries();
-      setTimeout(() => document.getElementById('entry-form-peno')?.focus(), 0);
+      setTimeout(() => {
+        document.querySelector('#entries-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
+        document.getElementById('entry-form-peno')?.focus();
+      }, 0);
       break;
     case 'helpers':
       renderHelpers();
-      setTimeout(() => document.getElementById('helper-form-name')?.focus(), 0);
+      setTimeout(() => {
+        document.querySelector('#helpers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
+        document.getElementById('helper-form-name')?.focus();
+      }, 0);
       break;
     case 'finishers':
       renderFinishers();
-      setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
+      setTimeout(() => {
+        if (document.getElementById('finisher-mode')?.value !== 'time') {
+          document.querySelector('#finishers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
+        }
+        document.getElementById('finisher-bib')?.focus();
+      }, 0);
       break;
     case 'results':      renderResults();      break;
     case 'pre-entries':  renderPreEntries();   break;
