@@ -1,7 +1,8 @@
 'use strict';
 
-import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults, savePrizes, saveCategories, saveSafety, saveSIResults } from '../state.js';
+import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults, savePrizes, saveCategories, saveSIResults } from '../state.js';
 import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
+import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, showConfirmDialog, showStatus, on } from '../ui.js';
 import { showBusy } from '../utils.js';
@@ -42,7 +43,7 @@ export async function saveEventForm() {
   const lines = [`Save settings for "${newName || '(unnamed event)'}"?`];
 
   if (newCategories !== oldCategories) {
-    lines.push(`\nCategories will change from ${oldCategories} to ${newCategories} — active categories will be updated.`);
+    lines.push(`\nCategories will change from ${oldCategories} to ${newCategories} — active categories will be updated and all existing entry categories will be recalculated.`);
   }
 
   if (doClear) {
@@ -53,7 +54,6 @@ export async function saveEventForm() {
       ['Results',     state.results.length],
       ['Prizes',      state.prizes.length],
       ['Helpers',     state.helpers.length],
-      ['Safety',      state.safety.length],
       ['SI Results',  state.siResults.length],
     ].filter(([, n]) => n > 0);
     if (counts.length) {
@@ -85,11 +85,12 @@ export async function saveEventForm() {
 
   showBusy('Saving…');
 
-  // Apply category preset if changed
+  // Apply category preset if changed, then re-evaluate all entry categories
   if (newCategories !== oldCategories) {
     if (newCategories === 'WFRA') applyWFRAPreset();
     else applyFRAPreset();
     await saveCategories();
+    await reapplyEntryCategories();
   }
 
   // Clear previous race data if requested
@@ -97,11 +98,11 @@ export async function saveEventForm() {
     state.entries   = [];  state.finishers = [];
     state.results   = [];  state.prizes    = [];
     state.helpers   = [];  state.finishNumbersMap = {};
-    state.safety    = [];  state.siResults = [];
+    state.siResults = [];
     await Promise.all([
       saveEntries(), saveHelpers(), saveFinishers(),
       saveResults(), savePrizes(), clearSIEntries(),
-      saveSafety(), saveSIResults(),
+      saveSIResults(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
   }

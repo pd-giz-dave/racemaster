@@ -401,6 +401,16 @@ export async function loadPreEntries() {
   return { added, updated, errors };
 }
 
+/** Re-evaluate category and course for every entry that has a DOB, using current category tables. */
+export async function reapplyEntryCategories() {
+  for (const e of state.entries) {
+    if (!e.dob) continue;
+    e.category = calculateCategory(e.dob, e.gender);
+    e.course   = calculateCourse(e.category, e.dob);
+  }
+  await saveEntries();
+}
+
 /** Get entries sorted by bib number */
 export function getSortedEntries() {
   return [...state.entries].sort((a, b) => (+a.bibNumber || 0) - (+b.bibNumber || 0));

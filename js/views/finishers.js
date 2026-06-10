@@ -6,7 +6,7 @@ import {
   deleteFinisher, insertFinisherAbove,
   getSortedFinishers, buildSplitNumbers,
 } from '../finishers.js';
-import { getEntriesOnCourse, getSortedEntries } from '../entries.js';
+import { getEntry, getEntriesOnCourse, getSortedEntries } from '../entries.js';
 import { COURSE } from '../constants.js';
 import { normaliseTime, showBusy } from '../utils.js';
 import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog } from '../ui.js';
@@ -162,14 +162,16 @@ export function renderFinishers() {
     const sidx = state.finishers.indexOf(f);
     const numDisplay = f.number > 0 ? f.number : '';
     const lineDisplay = f.splitNumber !== null ? f.splitNumber : `[${sidx}]`;
-    return `<tr class="${f.error ? 'row-error' : ''}" data-sidx="${sidx}">
+    const entry = f.number > 0 ? getEntry(+f.number) : null;
+    const hasError = f.number > 0 && !entry;
+    return `<tr class="${hasError ? 'row-error' : ''}" data-sidx="${sidx}">
       <td>${lineDisplay}</td>
       <td>${startFinishLabel(f.action)}</td>
       <td>${f.time || ''}</td>
       <td>${numDisplay}</td>
-      <td>${f.name || ''}</td>
-      <td>${f.category || ''}</td>
-      <td>${f.number > 0 ? (f.course || '') : ''}</td>
+      <td>${entry?.name || ''}</td>
+      <td>${entry?.category || ''}</td>
+      <td>${f.number > 0 ? (entry?.course || '') : ''}</td>
       <td>
         <button class="btn-sm btn-edit btn-edit-finisher" data-sidx="${sidx}">Edit</button>
         <button class="btn-sm btn-insert-above-finisher" data-sidx="${sidx}">Ins ↑</button>

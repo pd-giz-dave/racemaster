@@ -2,10 +2,11 @@
 
 import { state } from './state.js';
 import { saveResults, savePrizes } from './state.js';
-import { COURSE, GENDER, PRIZE_PRIORITY, RESULTS } from './constants.js';
+import { COURSE, GENDER, PRIZE_PRIORITY } from './constants.js';
 import { iequal, timeToSeconds, secondsToTime, pad3, isValidRaceTime } from './utils.js';
-import { getCategoryPriority, genderFromCategory, seniorAllowed, maxAgeFromCategory, calculateCourse } from './categories.js';
+import { getCategoryPriority, genderFromCategory } from './categories.js';
 import { getEntry, getSortedEntries } from './entries.js';
+import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
 
 // ============================================================
@@ -23,9 +24,12 @@ export async function formatResults() {
   const courses = [COURSE.SENIORS, COURSE.JUNIORS];
 
   for (const course of courses) {
-    const finishers = getSortedFinishers(course).filter(
-      f => f.action === 'Finish' && isValidRaceTime(f.adjustedTime || f.time)
-    );
+    const allCourseFinishers = getSortedFinishers(course).filter(f => f.action === 'Finish');
+    const finishers = allCourseFinishers.map(f => {
+      const entry = +f.number > 0 ? getEntry(+f.number) : null;
+      const adjTime = entry && f.time && f.time !== '-' ? adjustedFinishTime(entry, f.time) : f.time;
+      return { f, entry, adjTime };
+    }).filter(({ adjTime }) => isValidRaceTime(adjTime));
 
     if (!finishers.length) continue;
 
@@ -34,14 +38,12 @@ export async function formatResults() {
     let position = 0;
 
     // Winner time for percent calculations
-    const winnerSecs = timeToSeconds(finishers[0].adjustedTime || finishers[0].time);
+    const winnerSecs = timeToSeconds(finishers[0].adjTime);
 
-    for (const f of finishers) {
+    for (const { f, entry, adjTime } of finishers) {
       position++;
       const bib = +f.number;
-      const entry = getEntry(bib);
-      const time = f.adjustedTime || f.time;
-      const secs = timeToSeconds(time);
+      const secs = timeToSeconds(adjTime);
       const behindSecs = secs - winnerSecs;
       const behindPercent = winnerSecs > 0 ? ((secs - winnerSecs) / winnerSecs * 100).toFixed(1) : '';
       const behindTime   = behindSecs > 0 ? secondsToTime(behindSecs) : '';
@@ -51,10 +53,10 @@ export async function formatResults() {
         bibNumber:     bib || '',
         position,
         inCatPos:      0,
-        name:          f.name     || (entry ? entry.name     : ''),
-        club:          f.club     || (entry ? entry.club     : ''),
-        category:      f.category || (entry ? entry.category : ''),
-        time,
+        name:          entry?.name     || '',
+        club:          entry?.club     || '',
+        category:      entry?.category || '',
+        time:          adjTime,
         behindPercent,
         behindTime,
         prize:         '',

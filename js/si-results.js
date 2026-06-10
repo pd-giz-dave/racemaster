@@ -5,7 +5,6 @@ import { saveSIResults } from './state.js';
 import { COURSE } from './constants.js';
 import { normaliseTime, iequal, timeToSeconds } from './utils.js';
 import { parseSICSV } from './csv.js';
-import { adjustedFinishTime } from './time-utils.js';
 import { getEntry } from './entries.js';
 import { buildFinishNumbersMap } from './finishers.js';
 
@@ -66,16 +65,17 @@ export async function formatSIResults(course) {
   const errors = [];
 
   // Remove previously imported SI finishers for this course
-  state.finishers = state.finishers.filter(
-    f => !(iequal(f.course, course) && f.source === 'si')
-  );
+  state.finishers = state.finishers.filter(f => {
+    if (f.source !== 'si') return true;
+    const e = +f.number > 0 ? getEntry(+f.number) : null;
+    return !iequal(e?.course || '', course);
+  });
 
   // Sort SI results by finish time / position
   const sorted = [...state.siResults]
     .filter(r => getSIBib(r) > 0 && getSIFinishTime(r))
     .sort((a, b) => timeToSeconds(getSIFinishTime(a)) - timeToSeconds(getSIFinishTime(b)));
 
-  let position = state.finishers.filter(f => iequal(f.course, course)).length + 1;
   let added = 0;
 
   for (const r of sorted) {
@@ -83,41 +83,15 @@ export async function formatSIResults(course) {
     const rawTime = getSIFinishTime(r);
     const entry = getEntry(bib);
 
-    const name     = entry ? entry.name     : getSIName(r);
-    const club     = entry ? entry.club     : getSIClub(r);
-    const category = entry ? entry.category : getSICategory(r);
-    let error = '';
+    if (!entry) { errors.push(`Bib ${bib} not in entries`); }
 
-    if (!entry) error = `Bib ${bib} not in entries`;
-
-    const adjustedTime = entry && rawTime
-      ? adjustedFinishTime(entry, rawTime)
-      : rawTime;
-
-    // Check for existing finisher
-    const existing = state.finishers.find(
-      f => iequal(f.course, course) && +f.number === bib && f.source !== 'si'
-    );
+    // Check for existing manual finisher
+    const existing = state.finishers.find(f => +f.number === bib && f.source !== 'si');
     if (existing) {
-      error = `Bib ${bib} already has a manual finish`;
-      errors.push(error);
+      errors.push(`Bib ${bib} already has a manual finish`);
     }
 
-    state.finishers.push({
-      position,
-      action:       'Finish',
-      number:       bib,
-      time:         rawTime,
-      name,
-      club,
-      category,
-      course,
-      error,
-      adjustedTime,
-      status:       '',
-      source:       'si',
-    });
-    position++;
+    state.finishers.push({ action: 'Finish', number: bib, time: rawTime, source: 'si' });
     added++;
   }
 

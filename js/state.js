@@ -27,8 +27,7 @@ export const state = {
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
   entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, startTime, retired, status}
   helpers:    [],  // {number, name, club, gender, dob, category, role}
-  finishers:  [],  // {position, action, number, time, name, club, category, course, error, adjustedTime, status, source}
-  safety:     [],  // {number, name, course, dob, category, status, reason}
+  finishers:  [],  // {action, number, time} — all other fields derived from entries
   results:    [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}
   prizes:     [],  // {position, category, inCatPos, time, number, name, priority}
   siResults:  [],  // dynamic - whatever comes from SI results CSV
@@ -54,7 +53,6 @@ export async function loadAll() {
     loadList('entries'),
     loadList('helpers'),
     loadList('finishers'),
-    loadList('safety'),
     loadList('results'),
     loadList('prizes'),
     loadList('siResults'),
@@ -113,7 +111,6 @@ export async function savePreEntries()   { await writeTable('preEntries', state.
 export async function saveEntries()      { await writeTable('entries',    state.entries); }
 export async function saveHelpers()      { await writeTable('helpers',    state.helpers); }
 export async function saveFinishers()    { await writeTable('finishers',  state.finishers); }
-export async function saveSafety()       { await writeTable('safety',     state.safety); }
 export async function saveResults()      { await writeTable('results',    state.results); }
 export async function savePrizes()       { await writeTable('prizes',     state.prizes); }
 export async function saveSIResults()    { await writeTable('siResults',  state.siResults); }

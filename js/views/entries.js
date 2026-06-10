@@ -42,8 +42,6 @@ export function renderEntries() {
       <td>${e.dibberNumber || ''}</td>
       <td>${e.fraNumber || ''}</td>
       <td>${e.preEntry || ''}</td>
-      <td>${e.startTime || ''}</td>
-      <td>${e.retired === 'Y' ? 'DNF' : ''}</td>
       <td>
         <button class="btn-sm btn-edit"                 data-bib="${e.bibNumber}">Edit</button>
         <button class="btn-sm btn-insert-above-entry"  data-bib="${e.bibNumber}">Ins ↑</button>

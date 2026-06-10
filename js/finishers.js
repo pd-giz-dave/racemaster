@@ -1,10 +1,9 @@
 'use strict';
 
 import { state } from './state.js';
-import { saveFinishers, saveSafety } from './state.js';
+import { saveFinishers } from './state.js';
 import { COURSE } from './constants.js';
 import { iequal } from './utils.js';
-import { adjustedFinishTime } from './time-utils.js';
 import { getEntry } from './entries.js';
 
 // ============================================================
@@ -19,8 +18,11 @@ export function buildFinishNumbersMap() {
   state.finishNumbersMap = {};
   for (let i = 0; i < state.finishers.length; i++) {
     const f = state.finishers[i];
-    if (!f.number || !f.course) continue;
-    const key = courseKey(f.course, f.number);
+    const bib = +f.number;
+    if (!bib) continue;
+    const entry = getEntry(bib);
+    if (!entry?.course) continue;
+    const key = courseKey(entry.course, bib);
     if (!state.finishNumbersMap[key]) state.finishNumbersMap[key] = [];
     state.finishNumbersMap[key].push(i);
   }
@@ -64,13 +66,7 @@ export function getFinisher(bibNumber, course) {
 export async function recordFinisher(bibNumber, timeStr, course, action) {
   action = action || 'Finish';
   const bib = +bibNumber;
-
   const entry = bib > 0 ? getEntry(bib) : null;
-  const name     = entry?.name     || '';
-  const club     = entry?.club     || '';
-  const category = entry?.category || '';
-  // Course comes from the entry; special codes carry no course
-  const finCourse = entry?.course || '';
 
   // Reject illegal bibs outright — bib must exist in entries
   if (bib > 0 && !entry) {
@@ -93,29 +89,11 @@ export async function recordFinisher(bibNumber, timeStr, course, action) {
     }
   }
 
-  // Compute adjusted time ('-' is a skip marker, not a real time)
-  const entryObj = entry || { course: finCourse, startTime: '' };
-  const adjustedTime = action === 'Finish' && timeStr && timeStr !== '-'
-    ? adjustedFinishTime(entryObj, timeStr)
-    : '';
-
   const idx = state.finishers.length;
-  state.finishers.push({
-    action:       action,
-    number:       bib || '',
-    time:         timeStr || '',
-    name,
-    club,
-    category,
-    course:       finCourse,
-    error:        '',
-    adjustedTime,
-    status:       '',
-    source:       'manual',
-  });
+  state.finishers.push({ action, number: bib || '', time: timeStr || '' });
 
-  if (bib > 0) {
-    const key = courseKey(finCourse, bib);
+  if (bib > 0 && entry?.course) {
+    const key = courseKey(entry.course, bib);
     if (!state.finishNumbersMap[key]) state.finishNumbersMap[key] = [];
     state.finishNumbersMap[key].push(idx);
   }
@@ -144,29 +122,9 @@ export async function deleteLastFinisher() {
 export async function updateFinisher(idx, updates) {
   if (idx < 0 || idx >= state.finishers.length) return { error: 'Invalid index' };
   const f = state.finishers[idx];
-  if (updates.number   !== undefined) f.number       = updates.number;
-  if (updates.time     !== undefined) f.time         = updates.time;
-  if (updates.action   !== undefined) f.action       = updates.action;
-  if (updates.course   !== undefined) f.course       = updates.course;
-  if (updates.error    !== undefined) f.error        = updates.error;
-  if (updates.status   !== undefined) f.status       = updates.status;
-
-  // Recompute adjusted time if time or course changed
-  if (updates.number !== undefined) {
-    const entry = f.number > 0 ? getEntry(+f.number) : null;
-    f.name     = entry?.name     || '';
-    f.club     = entry?.club     || '';
-    f.category = entry?.category || '';
-    if (entry?.course) f.course = entry.course;
-  }
-
-  if (updates.time !== undefined || updates.number !== undefined) {
-    const entry = f.number > 0 ? getEntry(+f.number) : null;
-    f.adjustedTime = f.action === 'Finish' && f.time && f.time !== '-'
-      ? adjustedFinishTime(entry || { course: f.course, startTime: '' }, f.time)
-      : '';
-  }
-
+  if (updates.number !== undefined) f.number = updates.number;
+  if (updates.time   !== undefined) f.time   = updates.time;
+  if (updates.action !== undefined) f.action = updates.action;
   buildFinishNumbersMap();
   await saveFinishers();
   return { error: '' };
@@ -196,132 +154,17 @@ export async function deleteFinishersFrom(stateIdx) {
  */
 export async function scanFinishers() {
   const errors = [];
-  buildFinishNumbersMap();
-
   for (let i = 0; i < state.finishers.length; i++) {
     const f = state.finishers[i];
-    f.error = '';
-
-    if (!f.number || +f.number <= 0) continue;
     const bib = +f.number;
+    if (!bib) continue;
     const entry = getEntry(bib);
-
-    if (!entry) {
-      f.error = `Bib ${bib} not in entries`;
-      errors.push(f.error);
-      continue;
-    }
-
-    // Fill in details
-    f.name     = entry.name;
-    f.club     = entry.club;
-    f.category = entry.category;
-
-    // Check course mismatch
-    if (entry.course && f.course && !iequal(entry.course, f.course)) {
-      f.error = `Bib ${bib} entered on ${entry.course} but recorded on ${f.course}`;
-      errors.push(f.error);
-    }
-
-    // Check retired
-    if (entry.retired === 'Y' && f.action === 'Finish') {
-      f.error = `Bib ${bib} (${entry.name}) marked as retired`;
-      errors.push(f.error);
-    }
-
-    // Check duplicate in same course
-    const sameCourseDups = getFinisherIndices(bib, f.course).filter(idx2 => idx2 !== i);
-    if (sameCourseDups.length > 0 && f.action === 'Finish') {
-      f.error = `Bib ${bib} duplicate finish`;
-      errors.push(f.error);
-    }
+    if (!entry) { errors.push(`Bib ${bib} not in entries`); continue; }
+    if (entry.retired === 'Y' && f.action === 'Finish') errors.push(`Bib ${bib} (${entry.name}) marked as retired`);
   }
-
-  await saveFinishers();
   return errors;
 }
 
-/**
- * Process finishers: compute adjusted times and re-sequence positions.
- * Should be called before generating results.
- */
-export async function processFinishers() {
-  let seniorPos = 0, juniorPos = 0;
-
-  for (const f of state.finishers) {
-    if (f.action !== 'Finish') continue;
-    const course = f.course || COURSE.SENIORS;
-    const isJunior = course.toUpperCase().startsWith(COURSE.JUNIORS_PREFIX.toUpperCase());
-
-    if (isJunior) {
-      juniorPos++;
-      f.position = juniorPos;
-    } else {
-      seniorPos++;
-      f.position = seniorPos;
-    }
-
-    const entry = f.number > 0 ? getEntry(+f.number) : null;
-    f.adjustedTime = f.time
-      ? adjustedFinishTime(entry || { course, startTime: '' }, f.time)
-      : '';
-  }
-
-  await saveFinishers();
-}
-
-/**
- * Build the safety check list.
- * Returns array of {number, name, course, dob, category, status, reason}
- * for all entries that have not finished or been marked DNF/retired.
- */
-export async function buildSafetyList() {
-  const finishedBibs = new Set();
-  for (const f of state.finishers) {
-    if (f.number && (f.action === 'Finish' || f.action === 'DNF')) {
-      finishedBibs.add(+f.number);
-    }
-  }
-
-  state.safety = [];
-  for (const e of state.entries) {
-    const bib = +e.bibNumber;
-    if (!bib) continue;
-    if (finishedBibs.has(bib)) continue;
-    if (e.retired === 'Y') continue;
-
-    state.safety.push({
-      number:   bib,
-      name:     e.name,
-      course:   e.course,
-      dob:      e.dob,
-      category: e.category,
-      status:   '',
-      reason:   '',
-    });
-  }
-
-  await saveSafety();
-  return state.safety;
-}
-
-/**
- * Update a safety record status.
- * Returns {error}
- */
-export async function updateSafetyStatus(bibNumber, status, reason) {
-  const idx = state.safety.findIndex(s => +s.number === +bibNumber);
-  if (idx < 0) return { error: `Bib ${bibNumber} not in safety list` };
-  state.safety[idx].status = status || '';
-  state.safety[idx].reason = reason || '';
-  await saveSafety();
-  return { error: '' };
-}
-
-/** Get count of outstanding (no status) safety records */
-export function getOutstandingSafetyCount() {
-  return state.safety.filter(s => !s.status).length;
-}
 
 /** Count entries on a course that have not finished (NORMAL) or retired (DNF) in the finishers list. */
 export function getOutstandingCount(course) {
@@ -339,10 +182,13 @@ export function getOutstandingCount(course) {
   }).length;
 }
 
-/** Get finishers in recording order, optionally filtered by course. */
+/** Get finishers in recording order, optionally filtered by course (derived from entries). */
 export function getSortedFinishers(course) {
   if (!course) return [...state.finishers];
-  return state.finishers.filter(f => iequal(f.course, course));
+  return state.finishers.filter(f => {
+    const entry = +f.number > 0 ? getEntry(+f.number) : null;
+    return iequal(entry?.course || '', course);
+  });
 }
 
 /** Delete a single finisher by index. */
@@ -357,19 +203,7 @@ export async function deleteFinisher(stateIdx) {
 /** Insert a blank finisher record above stateIdx. */
 export async function insertFinisherAbove(stateIdx) {
   if (stateIdx < 0 || stateIdx > state.finishers.length) return { error: 'Invalid index', newIdx: -1 };
-  state.finishers.splice(stateIdx, 0, {
-    action:       'Finish',
-    number:       '',
-    time:         '',
-    name:         '',
-    club:         '',
-    category:     '',
-    course:       '',
-    error:        '',
-    adjustedTime: '',
-    status:       '',
-    source:       'manual',
-  });
+  state.finishers.splice(stateIdx, 0, { action: 'Finish', number: '', time: '' });
   buildFinishNumbersMap();
   await saveFinishers();
   return { error: '', newIdx: stateIdx };
