@@ -90,8 +90,12 @@
           <div class="stat-label">Junior Finishers</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" id="home-safety-count">0</div>
-          <div class="stat-label">Outstanding finishes</div>
+          <div class="stat-value" id="home-senior-outstanding">0</div>
+          <div class="stat-label">Seniors Outstanding</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="home-junior-outstanding">0</div>
+          <div class="stat-label">Juniors Outstanding</div>
         </div>
       </div>
 
@@ -533,6 +537,10 @@
                 <input type="radio" name="finisher-event-type" id="finisher-is-start" value="start">
                 This is a start event
               </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="finisher-event-type" id="finisher-is-retire" value="retire">
+                This is a retiree
+              </label>
             </div>
             <button class="btn" id="btn-submit-finisher" style="width:100%;margin-top:8px">Record</button>
             <button class="btn btn-secondary" id="btn-cancel-finisher-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
@@ -541,15 +549,10 @@
 
         <!-- Finisher list -->
         <div class="table-panel">
-          <div class="btn-row">
-            <button class="btn btn-warn" id="btn-undo-rapid">Undo Last</button>
-            <button class="btn btn-secondary" id="btn-scan-finishers">Scan</button>
-            <button class="btn btn-secondary" id="btn-process-finishers">Process</button>
-          </div>
           <div class="table-scroll">
             <table class="data-table">
               <thead>
-                <tr><th>Line</th><th>S/F</th><th>Clock</th><th>Race Time</th><th>Bib</th><th>Name</th><th>Cat</th><th>Course</th><th>Src</th><th>Actions</th></tr>
+                <tr><th>Line</th><th>S/F</th><th>Clock</th><th>Bib</th><th>Name</th><th>Cat</th><th>Course</th><th>Actions</th></tr>
               </thead>
               <tbody id="finishers-tbody"></tbody>
             </table>
@@ -563,19 +566,16 @@
          ====================================================== -->
     <div class="view" id="view-safety" hidden>
       <div class="view-header">
-        <h2>Safety Check</h2>
-        <span class="count-badge" id="safety-outstanding">0</span>
+        <h2>Outstanding</h2>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="safety-senior-outstanding">0 of 0</span></span>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="safety-junior-outstanding">0 of 0</span></span>
         <span class="entry-status view-status-msg" hidden></span>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn" id="btn-build-safety">Build / Refresh Safety List</button>
       </div>
 
       <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Status</th><th>Reason</th><th>Actions</th></tr>
+            <tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Actions</th></tr>
           </thead>
           <tbody id="safety-tbody"></tbody>
         </table>

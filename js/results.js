@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { saveResults, savePrizes } from './state.js';
-import { COURSE, FINISHER, GENDER, PRIZE_PRIORITY, RESULTS } from './constants.js';
+import { COURSE, GENDER, PRIZE_PRIORITY, RESULTS } from './constants.js';
 import { iequal, timeToSeconds, secondsToTime, pad3, isValidRaceTime } from './utils.js';
 import { getCategoryPriority, genderFromCategory, seniorAllowed, maxAgeFromCategory, calculateCourse } from './categories.js';
 import { getEntry, getSortedEntries } from './entries.js';
@@ -24,7 +24,7 @@ export async function formatResults() {
 
   for (const course of courses) {
     const finishers = getSortedFinishers(course).filter(
-      f => f.action === FINISHER.NORMAL && isValidRaceTime(f.adjustedTime || f.time)
+      f => f.action === 'Finish' && isValidRaceTime(f.adjustedTime || f.time)
     );
 
     if (!finishers.length) continue;
@@ -75,7 +75,7 @@ export async function formatResults() {
         name:      e.name,
         club:      e.club,
         category:  e.category,
-        time:      FINISHER.DNF,
+        time:      'DNF',
         behindPercent: '',
         behindTime:    '',
         prize:         '',

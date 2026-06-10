@@ -6,7 +6,7 @@
       "date": "3/6/26",
       "startTime": "00:19:30",
       "firstBibNumber": 101,
-      "categories": "WFRA",
+      "categories": "FRA",
       "entryLimit": 200,
       "preEntryFormat": "None",
       "timingMethod": "Stopwatch",
@@ -117,6 +117,14 @@
       "seenTotal": 0,
       "lastHelped": "",
       "helpedTotal": 0
+    },
+    {
+      "seenTotal": 1,
+      "helpedTotal": 0,
+      "name": "Another Junior",
+      "gender": "Female",
+      "dob": "01/01/2020",
+      "lastSeen": "3/6/26"
     },
     {
       "name": "Cris Oxley",
@@ -3497,14 +3505,29 @@
       "startTime": "",
       "retired": "",
       "status": ""
+    },
+    {
+      "bibNumber": 116,
+      "dibberNumber": 0,
+      "fraNumber": "",
+      "name": "Another Junior",
+      "club": "",
+      "gender": "F",
+      "dob": "01/01/2020",
+      "category": "U10G",
+      "course": "Juniors",
+      "preEntry": "",
+      "startTime": "",
+      "retired": "",
+      "status": ""
     }
   ],
   "helpers": [],
   "finishers": [
     {
-      "action": "NoStart",
+      "action": "Clock",
       "number": 0,
-      "time": "-",
+      "time": "00:00:00",
       "name": "",
       "club": "",
       "category": "",
@@ -3512,7 +3535,8 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": null
     },
     {
       "action": "Offset",
@@ -3525,40 +3549,13 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
-    },
-    {
-      "position": 2,
-      "line": 3,
-      "action": "Start",
-      "number": 101,
-      "time": "00:00:30",
-      "name": "John Atyeo",
-      "club": "Mercia Fell Runners",
-      "category": "M50",
-      "course": "Seniors",
-      "error": "",
-      "adjustedTime": "",
-      "status": "",
-      "source": "manual"
-    },
-    {
-      "action": "F",
-      "number": "",
-      "time": "",
-      "name": "",
-      "club": "",
-      "category": "",
-      "course": "",
-      "error": "",
-      "adjustedTime": "",
-      "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": null
     },
     {
       "position": 3,
       "line": 4,
-      "action": "F",
+      "action": "Finish",
       "number": 102,
       "time": "00:26:51",
       "name": "Robert McNally",
@@ -3568,12 +3565,13 @@
       "error": "",
       "adjustedTime": "00:26:51",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 1
     },
     {
       "position": 4,
       "line": 5,
-      "action": "F",
+      "action": "Finish",
       "number": 105,
       "time": "00:27:21",
       "name": "Tim Kieniewicz",
@@ -3583,12 +3581,13 @@
       "error": "",
       "adjustedTime": "00:27:21",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 2
     },
     {
       "position": 5,
       "line": 6,
-      "action": "F",
+      "action": "Finish",
       "number": 106,
       "time": "",
       "name": "Philip Ainsley",
@@ -3598,52 +3597,24 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
-    },
-    {
-      "position": 6,
-      "line": 7,
-      "action": "F",
-      "number": 105,
-      "time": "",
-      "name": "Tim Kieniewicz",
-      "club": "Mercia Fell Runners",
-      "category": "M40",
-      "course": "Seniors",
-      "error": "",
-      "adjustedTime": "",
-      "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 3
     },
     {
       "position": 7,
       "line": 8,
-      "action": "F",
+      "action": "Finish",
       "number": 104,
       "time": "",
       "name": "Mervyn Lewis",
       "club": "Ludlow Runners",
       "category": "M70",
       "course": "Seniors",
-      "error": "Bib 105 already recorded",
-      "adjustedTime": "",
-      "status": "",
-      "source": "manual"
-    },
-    {
-      "position": 8,
-      "line": 9,
-      "action": "F",
-      "number": 106,
-      "time": "",
-      "name": "Philip Ainsley",
-      "club": "",
-      "category": "MSEN",
-      "course": "Seniors",
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 4
     },
     {
       "position": 9,
@@ -3658,27 +3629,29 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 5
     },
     {
       "position": 11,
       "line": 12,
-      "action": "F",
+      "action": "Finish",
       "number": 101,
       "time": "",
       "name": "John Atyeo",
       "club": "Mercia Fell Runners",
-      "category": "M50",
+      "category": "M55",
       "course": "Seniors",
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 6
     },
     {
       "position": 12,
       "line": 13,
-      "action": "F",
+      "action": "Finish",
       "number": 109,
       "time": "",
       "name": "Paul Beeson",
@@ -3688,12 +3661,13 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 7
     },
     {
       "position": 13,
       "line": 14,
-      "action": "F",
+      "action": "Finish",
       "number": 103,
       "time": "",
       "name": "Amy Fulford",
@@ -3703,7 +3677,8 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 8
     },
     {
       "position": 14,
@@ -3718,7 +3693,8 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 9
     },
     {
       "position": 15,
@@ -3733,7 +3709,8 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 10
     },
     {
       "position": 16,
@@ -3748,7 +3725,8 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 11
     },
     {
       "position": 17,
@@ -3763,10 +3741,11 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 12
     },
     {
-      "action": "F",
+      "action": "Finish",
       "number": 110,
       "time": "",
       "name": "Justin Bernard",
@@ -3776,10 +3755,11 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 13
     },
     {
-      "action": "F",
+      "action": "Finish",
       "number": 111,
       "time": "",
       "name": "Ian Simmonds",
@@ -3789,7 +3769,8 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 14
     },
     {
       "action": "Ignore",
@@ -3802,12 +3783,161 @@
       "error": "",
       "adjustedTime": "",
       "status": "",
-      "source": "manual"
+      "source": "manual",
+      "splitNumber": 15
+    },
+    {
+      "action": "Finish",
+      "number": 114,
+      "time": "",
+      "name": "A Runner",
+      "club": "",
+      "category": "M45",
+      "course": "Seniors",
+      "error": "",
+      "adjustedTime": "",
+      "status": "",
+      "source": "manual",
+      "splitNumber": 16
+    },
+    {
+      "action": "Finish",
+      "number": 112,
+      "time": "",
+      "name": "Jonathan Richardson",
+      "club": "",
+      "category": "M40",
+      "course": "Seniors",
+      "error": "",
+      "adjustedTime": "",
+      "status": "",
+      "source": "manual",
+      "splitNumber": 17
+    },
+    {
+      "action": "Finish",
+      "number": 107,
+      "time": "",
+      "name": "Steve Morgan",
+      "club": "",
+      "category": "MSEN",
+      "course": "Seniors",
+      "error": "",
+      "adjustedTime": "",
+      "status": "",
+      "source": "manual",
+      "splitNumber": 18
+    },
+    {
+      "action": "Finish",
+      "number": 116,
+      "time": "",
+      "name": "Another Junior",
+      "club": "",
+      "category": "U10G",
+      "course": "Juniors",
+      "error": "",
+      "adjustedTime": "",
+      "status": "",
+      "source": "manual",
+      "splitNumber": 19
     }
   ],
-  "safety": [],
-  "results": [],
-  "prizes": [],
+  "safety": [
+    {
+      "number": 108,
+      "name": "Jude Dowdall",
+      "course": "Seniors",
+      "dob": "03/05/1975",
+      "category": "W50",
+      "status": "",
+      "reason": ""
+    },
+    {
+      "number": 113,
+      "name": "John Hall",
+      "course": "Seniors",
+      "dob": "16/06/1949",
+      "category": "M75",
+      "status": "",
+      "reason": ""
+    },
+    {
+      "number": 115,
+      "name": "A Junior",
+      "course": "Juniors",
+      "dob": "01/01/2018",
+      "category": "U10B",
+      "status": "",
+      "reason": ""
+    }
+  ],
+  "results": [
+    {
+      "course": "Seniors",
+      "bibNumber": 102,
+      "position": 1,
+      "inCatPos": 1,
+      "name": "Robert McNally",
+      "club": "",
+      "category": "M50",
+      "time": "00:26:51",
+      "behindPercent": "0.0",
+      "behindTime": "",
+      "prize": "Y"
+    },
+    {
+      "course": "Seniors",
+      "bibNumber": 105,
+      "position": 2,
+      "inCatPos": 1,
+      "name": "Tim Kieniewicz",
+      "club": "Mercia Fell Runners",
+      "category": "M40",
+      "time": "00:27:21",
+      "behindPercent": "1.9",
+      "behindTime": "00:00:30",
+      "prize": "Y"
+    }
+  ],
+  "prizes": [
+    {
+      "position": 1,
+      "category": "Overall",
+      "inCatPos": 1,
+      "time": "00:26:51",
+      "number": 102,
+      "name": "Robert McNally",
+      "priority": "1001"
+    },
+    {
+      "position": 2,
+      "category": "Overall",
+      "inCatPos": 2,
+      "time": "00:27:21",
+      "number": 105,
+      "name": "Tim Kieniewicz",
+      "priority": "1002"
+    },
+    {
+      "position": 2,
+      "category": "M40",
+      "inCatPos": 1,
+      "time": "00:27:21",
+      "number": 105,
+      "name": "Tim Kieniewicz",
+      "priority": "2029001"
+    },
+    {
+      "position": 1,
+      "category": "M50",
+      "inCatPos": 1,
+      "time": "00:26:51",
+      "number": 102,
+      "name": "Robert McNally",
+      "priority": "2031001"
+    }
+  ],
   "siResults": [],
   "siTiming": []
 }

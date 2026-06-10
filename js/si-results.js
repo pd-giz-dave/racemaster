@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { saveSIResults } from './state.js';
-import { COURSE, FINISHER } from './constants.js';
+import { COURSE } from './constants.js';
 import { normaliseTime, iequal, timeToSeconds } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { adjustedFinishTime } from './time-utils.js';
@@ -105,7 +105,7 @@ export async function formatSIResults(course) {
 
     state.finishers.push({
       position,
-      action:       FINISHER.NORMAL,
+      action:       'Finish',
       number:       bib,
       time:         rawTime,
       name,

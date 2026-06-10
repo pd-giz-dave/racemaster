@@ -12,7 +12,8 @@ import { renderHelpers, wireHelpers }       from './views/helpers.js';
 import { renderFinishers, wireFinishers } from './views/finishers.js';
 import { renderResults, wireResults }       from './views/results.js';
 import { renderPreEntries, wirePreEntries } from './views/pre-entries.js';
-import { renderSafety, wireSafety }         from './views/safety.js';
+import { renderSafety }                      from './views/safety.js';
+import { buildSafetyList }                   from './finishers.js';
 import { renderPeople, wirePeople }         from './views/people.js';
 import { renderClubs, wireClubs }           from './views/clubs.js';
 import { renderRoles, wireRoles }           from './views/roles.js';
@@ -112,6 +113,7 @@ export function showView(viewName) {
 
 function renderAll() {
   renderHome();
+  renderSafety();
   updateDatalistNames();
   updateDatalistClubs();
   updateDatalistRoles();
@@ -146,7 +148,9 @@ function renderView(v) {
       break;
     case 'results':      renderResults();      break;
     case 'pre-entries':  renderPreEntries();   break;
-    case 'safety':       renderSafety();       break;
+    case 'safety':
+      buildSafetyList().then(() => renderSafety());
+      break;
     case 'people':       renderPeople();       break;
     case 'clubs':        renderClubs();        break;
     case 'roles':        renderRoles();        break;
@@ -193,7 +197,7 @@ function wireEvents() {
   wireHelpers();
   wireFinishers();
   wireResults();
-  wireSafety();
+
   wirePreEntries();
   wirePeople();
   wireClubs();

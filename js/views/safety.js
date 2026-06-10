@@ -1,8 +1,10 @@
 'use strict';
 
 import { state } from '../state.js';
-import { buildSafetyList, updateSafetyStatus, getOutstandingSafetyCount } from '../finishers.js';
-import { on, setHTML, showStatus } from '../ui.js';
+import { buildSafetyList, recordFinisher, getOutstandingCount } from '../finishers.js';
+import { getEntriesOnCourse } from '../entries.js';
+import { setHTML, showStatus, showConfirmDialog } from '../ui.js';
+import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
 
@@ -10,39 +12,34 @@ export function renderSafety() {
   const tbody = document.getElementById('safety-tbody');
   if (!tbody) return;
   tbody.innerHTML = state.safety.map(s => `
-    <tr class="${s.status ? 'row-safe' : 'row-outstanding'}">
+    <tr>
       <td>${s.number}</td>
       <td>${s.name || ''}</td>
       <td>${s.course || ''}</td>
       <td>${s.category || ''}</td>
-      <td>${s.status || ''}</td>
-      <td>${s.reason || ''}</td>
       <td>
-        <button class="btn-sm btn-save" data-bib="${s.number}">Safe</button>
-        <button class="btn-sm btn-withdraw" data-bib="${s.number}">Withdrew</button>
+        <button class="btn-sm btn-delete btn-retire-safety" data-bib="${s.number}">Retire</button>
       </td>
     </tr>`).join('');
-  tbody.querySelectorAll('.btn-save').forEach(b =>
-    b.addEventListener('click', () => markSafe(+b.dataset.bib, 'Safe')));
-  tbody.querySelectorAll('.btn-withdraw').forEach(b =>
-    b.addEventListener('click', () => markSafe(+b.dataset.bib, 'Withdrew')));
-  setHTML('safety-outstanding', getOutstandingSafetyCount() + ' outstanding');
+  tbody.querySelectorAll('.btn-retire-safety').forEach(b =>
+    b.addEventListener('click', () => retireFromSafety(+b.dataset.bib)));
+  setHTML('safety-senior-outstanding', `${getOutstandingCount(COURSE.SENIORS)} of ${getEntriesOnCourse(COURSE.SENIORS)}`);
+  setHTML('safety-junior-outstanding', `${getOutstandingCount(COURSE.JUNIORS)} of ${getEntriesOnCourse(COURSE.JUNIORS)}`);
 }
 
-export async function runBuildSafety() {
-  showBusy('Building safety list…');
-  const list = await buildSafetyList();
+
+async function retireFromSafety(bib) {
+  if (!await showConfirmDialog(`Record bib ${bib} as retired?`, 'Retire', true)) return;
+  showBusy('Recording retirement…');
+  const result = await recordFinisher(bib, '', null, 'DNF');
+  if (result.error) {
+    showBusy('');
+    showStatus(result.error, true);
+    return;
+  }
+  await buildSafetyList();
   showBusy('');
-  showStatus(`${list.length} outstanding on safety list.`);
-  renderSafety();
-}
-
-export async function markSafe(bib, status) {
-  await updateSafetyStatus(bib, status, '');
+  showStatus(`Bib ${bib} recorded as retired.`);
   renderSafety();
   renderHome();
-}
-
-export function wireSafety() {
-  on('btn-build-safety', 'click', runBuildSafety);
 }

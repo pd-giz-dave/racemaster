@@ -207,6 +207,9 @@ input:focus, select:focus, textarea:focus {
   border-bottom: 2px solid var(--border);
   font-weight: 600;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .data-table td {
@@ -465,6 +468,7 @@ input:focus, select:focus, textarea:focus {
 /* ---- Scrollable table containers ---- */
 .table-scroll {
   overflow-x: auto;
+  overflow-y: auto;
   margin-bottom: 12px;
 }
 

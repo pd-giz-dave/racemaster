@@ -1,31 +1,6 @@
-'use strict';
-
-// ============================================================
-// All constants translated from LibreOffice Basic Main.xml
-// ============================================================
-
-export const LOGGING = false;
-
-// Sheet / file names (used as CSV filenames)
-export const FILE = {
-  EVENT:       'event.csv',
-  PEOPLE:      'people.csv',
-  CLUBS:       'clubs.csv',
-  DIBBERS:     'dibbers.csv',
-  CATEGORIES:  'categories.csv',
-  ROLES:       'roles.csv',
-  PRE_ENTRIES: 'pre_entries.csv',
-  ENTRIES:     'entries.csv',
-  HELPERS:     'helpers.csv',
-  FINISHERS:   'finishers.csv',
-  SAFETY:      'safety.csv',
-  RESULTS:     'results.csv',
-  PRIZES:      'prizes.csv',
-  SI_RESULTS:  'si_results.csv',
-  SI_TIMING:   'si_timing.csv',
-  FRA_PRESET:  'fra_preset.csv',
-  WFRA_PRESET: 'wfra_preset.csv',
-};
+// ====================================================
+// Constants translated from LibreOffice Basic Main.xml
+// ====================================================
 
 // Gender constants
 export const GENDER = {
@@ -58,35 +33,6 @@ export const TIMING = {
   NONE_PREFIX:      'N',
 };
 
-// Entry format constants
-export const FORMAT = {
-  SI_ENTRIES:           'SI Entries',
-  ENTRY_CENTRAL:        'Entry Central',
-  NONE:                 'None',
-  SI_ENTRIES_PREFIX:    'S',
-  ENTRY_CENTRAL_PREFIX: 'E',
-  NONE_PREFIX:          'N',
-};
-
-// Finisher action constants
-export const FINISHER = {
-  NORMAL:        'F',   // normal finish
-  DNF:           'N',   // did not finish
-  DSQ:           'D',   // disqualified
-  IMPORTED:      'Imported',
-  MANUAL:        'Manual',
-  ACTION_START:  'Start',
-  ACTION_FINISH: 'Finish',
-  ACTION_IGNORE: 'Ignore',
-  SENIORS:       'Seniors',
-  JUNIORS:       'Juniors',
-  CLOCK:         'Clock',
-  IGNORE:        'Ignore',
-  NO_START:      'NoStart',
-  TIME:          'Time',
-  OFFSET:        'Offset',
-};
-
 // Results prefix constants
 export const RESULTS = {
   NO_TIME_PREFIX: '?@P',
@@ -115,57 +61,6 @@ export const PRIZE_PRIORITY = {
 export const UNATTACHED_CLUB = 'Unattached';
 export const LIST_SEP        = ' | ';
 export const SUFFIX_SEP      = ' @ ';
-
-// SI Entries expected column names (SI Entries format)
-// leading '*' means its optional, space means its compulsory
-export const SI_COL_NAMES = {
-  PARTICIPANT_NUMBER: ' Participant - Participant No',
-  PARTICIPANT_ID:     '*Participant - SiEntries ID',
-  FIRST_NAME:         ' Participant - First Name',
-  LAST_NAME:          ' Participant - Last Name',
-  GENDER1:            ' Participant - Gender',
-  GENDER2:            ' Participant - Class Sex at Birth',
-  GENDER3:            ' Participant - Sex',
-  DOB:                ' Participant - Date of Birth',
-  CATEGORY:           '*Participant - Class',
-  EMAIL:              '*Participant - Email Address',
-  ADDRESS1:           '*Participant - Address Line 1',
-  ADDRESS2:           '*Participant - Address Line 2',
-  TOWN:               '*Participant - Postal Town',
-  COUNTY:             '*Participant - County',
-  POSTCODE:           '*Participant - Post Code',
-  COUNTRY:            '*Participant - Country',
-  TELEPHONE:          '*Participant - Telephone No',
-  MOBILE:             ' Participant - Mobile No',
-  ELIGIBILITY:        '*English Championships Eligibility - I am eligible for English Champs',
-  CLUB:               '*Entry Details - Club',
-  FRA_NUMBER:         '*Entry Details - FRA Membership Number',
-  CONTACT_NAME:       '*Emergency Details - Emergency Contact Name',
-  CONTACT_TELEPHONE:  '*Emergency Details - Emergency Contact Telephone',
-  MEDICAL:            '*Emergency Details - Medical Conditions',
-  CAR_REG:            '*Emergency Details - Car Registration',
-};
-
-// Entry Central expected column names
-// leading '*' means its optional, space means its compulsory
-export const EC_COL_NAMES = {
-  PARTICIPANT_NUMBER: ' RaceNumber',
-  FIRST_NAME:         ' Forename',
-  LAST_NAME:          ' Surname',
-  GENDER:             ' Gender',
-  DOB:                ' DOB',
-  CATEGORY:           '*AgeGroup',
-  EMAIL:              '*email',
-  ADDRESS1:           '*Address1',
-  ADDRESS2:           '*Address2',
-  TOWN:               '*Town/City',
-  COUNTY:             '*Region',
-  POSTCODE:           '*Postcode',
-  COUNTRY:            '*Country',
-  TELEPHONE:          '*phone',
-  CLUB:               '*Club',
-  FRA_NUMBER:         '*MembershipId',
-};
 
 // SI Results expected column names
 export const SI_RESULTS_COL_NAMES = {
