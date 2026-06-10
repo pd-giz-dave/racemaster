@@ -3785,6 +3785,12 @@
       "status": "",
       "source": "manual",
       "splitNumber": 19
+    },
+    {
+      "action": "Finish",
+      "number": 108,
+      "time": "",
+      "splitNumber": 20
     }
   ],
   "safety": [

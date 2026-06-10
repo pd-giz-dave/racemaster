@@ -63,7 +63,7 @@ export function getFinisher(bibNumber, course) {
  * action: FINISHER.NORMAL, FINISHER.DNF, FINISHER.DSQ, etc.
  * Returns {position, error}
  */
-export async function recordFinisher(bibNumber, timeStr, course, action) {
+export async function recordFinisher(bibNumber, timeStr, action) {
   action = action || 'Finish';
   const bib = +bibNumber;
   const entry = bib > 0 ? getEntry(bib) : null;
@@ -104,18 +104,6 @@ export async function recordFinisher(bibNumber, timeStr, course, action) {
 }
 
 /**
- * Delete the last recorded finisher for a course (undo last finish).
- * Returns {error}
- */
-export async function deleteLastFinisher() {
-  if (!state.finishers.length) return { error: 'No finishers to delete' };
-  const f = state.finishers.pop();
-  buildFinishNumbersMap();
-  await saveFinishers();
-  return { error: '', deleted: f };
-}
-
-/**
  * Update a finisher record (e.g. correct bib number or time).
  * Returns {error}
  */
@@ -146,25 +134,6 @@ export async function deleteFinishersFrom(stateIdx) {
   await saveFinishers();
   return { error: '', deleted };
 }
-
-/**
- * Scan finishers: match bib numbers to entries, fill in name/club/category,
- * flag errors (unknown bib, duplicate, retired, wrong course).
- * Returns array of error descriptions.
- */
-export async function scanFinishers() {
-  const errors = [];
-  for (let i = 0; i < state.finishers.length; i++) {
-    const f = state.finishers[i];
-    const bib = +f.number;
-    if (!bib) continue;
-    const entry = getEntry(bib);
-    if (!entry) { errors.push(`Bib ${bib} not in entries`); continue; }
-    if (entry.retired === 'Y' && f.action === 'Finish') errors.push(`Bib ${bib} (${entry.name}) marked as retired`);
-  }
-  return errors;
-}
-
 
 /** Count entries on a course that have not finished (NORMAL) or retired (DNF) in the finishers list. */
 export function getOutstandingCount(course) {

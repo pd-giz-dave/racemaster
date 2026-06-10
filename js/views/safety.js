@@ -43,7 +43,7 @@ export function renderSafety() {
 async function retireFromSafety(bib) {
   if (!await showConfirmDialog(`Record bib ${bib} as retired?`, 'Retire', true)) return;
   showBusy('Recording retirement…');
-  const result = await recordFinisher(bib, '', null, 'DNF');
+  const result = await recordFinisher(bib, '', 'DNF');
   if (result.error) { showBusy(''); showStatus(result.error, true); return; }
   showBusy('');
   showStatus(`Bib ${bib} recorded as retired.`);

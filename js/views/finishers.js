@@ -2,7 +2,7 @@
 
 import { state } from '../state.js';
 import {
-  recordFinisher, updateFinisher, deleteLastFinisher, deleteFinishersFrom, clearAllFinishers,
+  recordFinisher, updateFinisher, deleteFinishersFrom, clearAllFinishers,
   deleteFinisher, insertFinisherAbove,
   getSortedFinishers, buildSplitNumbers,
 } from '../finishers.js';
@@ -397,7 +397,7 @@ async function submitFinisherForm() {
 
   let result;
   if (specialAction) {
-    result = await recordFinisher(0, parsedTime, null, specialAction);
+    result = await recordFinisher(0, parsedTime, specialAction);
   } else {
     const bib = parseInt(rawBib, 10);
     if (isNaN(bib) || bib < 0) {
@@ -409,7 +409,7 @@ async function submitFinisherForm() {
     const action = isStart  ? 'Start'
                  : isRetire ? 'DNF'
                  : 'Finish';
-    result = await recordFinisher(bib, parsedTime, null, action);
+    result = await recordFinisher(bib, parsedTime, action);
   }
 
   showBusy('');
@@ -470,15 +470,6 @@ async function confirmInsertAbove(sidx) {
   if (result.error) { showStatus(result.error, true); return; }
   renderFinishers();
   if (result.newIdx >= 0) fillFormForEdit(result.newIdx);
-}
-
-// ---- Undo ----
-
-export async function undoLastFinisher() {
-  const result = await deleteLastFinisher();
-  if (result.error) showStatus(result.error, true);
-  else showStatus('Last finisher removed.');
-  renderFinishers();
 }
 
 // ---- Wire ----
