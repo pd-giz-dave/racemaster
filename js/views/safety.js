@@ -2,7 +2,7 @@
 
 import { state } from '../state.js';
 import { recordFinisher, getOutstandingCount } from '../finishers.js';
-import { getEntriesOnCourse } from '../entries.js';
+import { getEntriesOnCourse, isEntryBanned } from '../entries.js';
 import { setHTML, showStatus, showConfirmDialog } from '../ui.js';
 import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
@@ -27,7 +27,7 @@ export function renderSafety() {
   tbody.innerHTML = getOutstandingEntries().map(e => `
     <tr>
       <td>${e.bibNumber}</td>
-      <td>${e.name || ''}</td>
+      <td>${(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '')}</td>
       <td>${e.course || ''}</td>
       <td>${e.category || ''}</td>
       <td>

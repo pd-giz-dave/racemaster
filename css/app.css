@@ -220,6 +220,7 @@ input:focus, select:focus, textarea:focus {
 
 .data-table tr:hover td { background: #f8f9fa; }
 .row-error td  { background: #fde8e8 !important; }
+.row-banned td { background: #fde8e8 !important; color: #a93226 !important; }
 .row-prize td  { background: #fef9e7; font-weight: 600; }
 .row-safe td   { color: var(--muted); }
 .row-timing-target td { background: #fff3cd !important; }

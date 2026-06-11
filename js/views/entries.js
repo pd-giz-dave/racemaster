@@ -4,8 +4,9 @@ import { state } from '../state.js';
 import {
   findEntryByBib, findEntryByDibber, getEntry,
   submitEntry, updateEntry, clearAllEntries, deleteEntryAndRenumber, insertEntryAndRenumber,
-  getSortedEntries, exportSITimingCSV,
+  getSortedEntries, exportSITimingCSV, isEntryBanned,
 } from '../entries.js';
+
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
@@ -22,6 +23,7 @@ import { renderHome } from './home.js';
 
 export let editingBib  = 0;
 let insertingAtBib = 0;
+let overrideBan    = false;
 
 // ---- Render ----
 
@@ -31,9 +33,9 @@ export function renderEntries() {
   if (!tbody) return;
 
   tbody.innerHTML = entries.map(e => `
-    <tr data-bib="${e.bibNumber}">
+    <tr data-bib="${e.bibNumber}"${isEntryBanned(e) ? ' class="row-banned"' : ''}>
       <td>${e.bibNumber}</td>
-      <td>${e.name || ''}</td>
+      <td>${(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '')}</td>
       <td>${e.club || ''}</td>
       <td>${e.gender || ''}</td>
       <td>${e.dob || ''}</td>
@@ -256,7 +258,9 @@ export async function submitEntryForm() {
     preEntry:    val('entry-form-peno'),
     bibOverride:    +val('entry-form-bib')    || 0,
     dibberOverride: +val('entry-form-dibber') || 0,
+    overrideBan,
   };
+  overrideBan = false;
   const isEdit   = editingBib > 0;
   const isInsert = insertingAtBib > 0;
   showBusy(isEdit ? 'Updating…' : isInsert ? 'Inserting…' : 'Registering…');
@@ -266,6 +270,17 @@ export async function submitEntryForm() {
       ? await insertEntryAndRenumber(insertingAtBib, formData)
       : await submitEntry(formData);
   showBusy('');
+  if (result.bannedWarning) {
+    const name = formData.name || '';
+    const ok = await showConfirmDialog(
+      `${name} is banned until ${result.bannedWarning}.\n\nThey may enter but will be excluded from results and the Race Organiser must be informed.\n\nContinue?`,
+      'Enter anyway',
+      true,
+    );
+    if (!ok) return;
+    overrideBan = true;
+    return submitEntryForm();
+  }
   if (result.error) {
     showStatus(result.error, true);
     focusEntryErrorField(result.error);

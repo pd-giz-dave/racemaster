@@ -7,6 +7,7 @@ import {
   updateDatalistClubs, updateDatalistRoles,
 } from '../ui.js';
 import { capitalise, iequal, showBusy } from '../utils.js';
+import { isBanned } from '../entries.js';
 
 // ---- Module state ----
 
@@ -21,7 +22,7 @@ export function renderHelpers() {
   tbody.innerHTML = helpers.map(h => `
     <tr data-num="${h.number}">
       <td>${h.number}</td>
-      <td>${h.name || ''}</td>
+      <td>${(h.name || '') + (isBanned(state.people.find(p => iequal(p.name, h.name || ''))) ? ' (banned)' : '')}</td>
       <td>${h.club || ''}</td>
       <td>${h.role || ''}</td>
       <td>

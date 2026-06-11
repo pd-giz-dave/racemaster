@@ -3,7 +3,7 @@
     {
       "name": "Pontesbury",
       "distance": 6,
-      "date": "3/6/26",
+      "date": "03/06/2026",
       "startTime": "00:19:30",
       "firstBibNumber": 101,
       "categories": "WFRA",
@@ -9172,10 +9172,11 @@
       "dob": "20/01/1951",
       "club": "Mercia",
       "fraNumber": "13602",
-      "lastSeen": "04/06/2025",
-      "seenTotal": 24,
+      "lastSeen": "03/06/2026",
+      "seenTotal": 25,
       "lastHelped": "03/06/2026",
-      "helpedTotal": 20
+      "helpedTotal": 20,
+      "banned": "12/06/2026"
     },
     {
       "name": "Dave Page",
@@ -36955,17 +36956,6 @@
     {
       "name": "Tim Jones",
       "gender": "Male",
-      "dob": "08/03/1970",
-      "club": "",
-      "fraNumber": "",
-      "lastSeen": "25/11/2022",
-      "seenTotal": 1,
-      "lastHelped": "",
-      "helpedTotal": 0
-    },
-    {
-      "name": "Tim Jones",
-      "gender": "Male",
       "dob": "17/07/1975",
       "club": "Croft Ambrey",
       "fraNumber": "",
@@ -36975,26 +36965,16 @@
       "helpedTotal": 0
     },
     {
-      "name": "Tim Jones",
-      "gender": "Male",
-      "dob": "21/09/1961",
-      "club": "Shropshire Shufflers",
-      "fraNumber": "",
-      "lastSeen": "13/07/2022",
-      "seenTotal": 2,
-      "lastHelped": "",
-      "helpedTotal": 0
-    },
-    {
       "name": "Tim Kieniewicz",
-      "gender": "Male",
+      "gender": "M",
       "dob": "09/02/1983",
       "club": "Mercia Fell Runners",
       "fraNumber": "28927",
       "lastSeen": "03/06/2026",
       "seenTotal": 35,
       "lastHelped": "21/12/2025",
-      "helpedTotal": 3
+      "helpedTotal": 3,
+      "banned": "12/06/2026"
     },
     {
       "name": "Tim Lamont",
@@ -44710,43 +44690,13 @@
     {
       "bibNumber": 114,
       "dibberNumber": 0,
-      "fraNumber": "",
-      "name": "A Runner",
-      "club": "",
+      "fraNumber": "13602",
+      "name": "Dave Nichols",
+      "club": "Mercia",
       "gender": "M",
-      "dob": "02/01/2003",
-      "category": "MU23",
+      "dob": "20/01/1951",
+      "category": "M70",
       "course": "Seniors",
-      "preEntry": "127",
-      "startTime": "",
-      "retired": "",
-      "status": ""
-    },
-    {
-      "bibNumber": 115,
-      "dibberNumber": 0,
-      "fraNumber": "",
-      "name": "A Junior",
-      "club": "",
-      "gender": "M",
-      "dob": "01/01/2018",
-      "category": "U10B",
-      "course": "Juniors",
-      "preEntry": "",
-      "startTime": "",
-      "retired": "",
-      "status": ""
-    },
-    {
-      "bibNumber": 116,
-      "dibberNumber": 0,
-      "fraNumber": "",
-      "name": "Another Junior",
-      "club": "",
-      "gender": "F",
-      "dob": "01/01/2020",
-      "category": "U10G",
-      "course": "Juniors",
       "preEntry": "",
       "startTime": "",
       "retired": "",
@@ -45019,20 +44969,6 @@
     },
     {
       "action": "Finish",
-      "number": 114,
-      "time": "",
-      "name": "A Runner",
-      "club": "",
-      "category": "M45",
-      "course": "Seniors",
-      "error": "",
-      "adjustedTime": "",
-      "status": "",
-      "source": "manual",
-      "splitNumber": 16
-    },
-    {
-      "action": "Finish",
       "number": 112,
       "time": "",
       "name": "Jonathan Richardson",
@@ -45043,7 +44979,7 @@
       "adjustedTime": "",
       "status": "",
       "source": "manual",
-      "splitNumber": 17
+      "splitNumber": 16
     },
     {
       "action": "Finish",
@@ -45057,27 +44993,13 @@
       "adjustedTime": "",
       "status": "",
       "source": "manual",
-      "splitNumber": 18
-    },
-    {
-      "action": "Finish",
-      "number": 116,
-      "time": "",
-      "name": "Another Junior",
-      "club": "",
-      "category": "U10G",
-      "course": "Juniors",
-      "error": "",
-      "adjustedTime": "",
-      "status": "",
-      "source": "manual",
-      "splitNumber": 19
+      "splitNumber": 17
     },
     {
       "action": "Finish",
       "number": 108,
       "time": "",
-      "splitNumber": 20
+      "splitNumber": 18
     }
   ],
   "safety": [
@@ -45163,7 +45085,7 @@
       "time": "00:27:21",
       "number": 105,
       "name": "Tim Kieniewicz",
-      "priority": "2029001"
+      "priority": "2025001"
     },
     {
       "position": 1,
@@ -45172,7 +45094,7 @@
       "time": "00:26:51",
       "number": 102,
       "name": "Robert McNally",
-      "priority": "2031001"
+      "priority": "2026001"
     }
   ],
   "siResults": [],

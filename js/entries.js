@@ -8,6 +8,19 @@ import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber, mapDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
+export function isBanned(p) {
+  if (!p?.banned) return false;
+  const [d, m, y] = p.banned.split('/').map(Number);
+  if (!y) return false;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return today <= new Date(y, m - 1, d);
+}
+
+export function isEntryBanned(entry) {
+  const p = state.people.find(p => iequal(p.name, entry.name || '') && p.dob === (entry.dob || ''));
+  return isBanned(p);
+}
+
 // ============================================================
 // Entry registration logic (translated from Entries.xml)
 // ============================================================
@@ -108,6 +121,9 @@ export async function submitEntry(formData) {
   if (!gender) return { error: 'Gender is required' };
   if (!dob && gender !== GENDER.PAIR_PREFIX) return { error: 'Date of birth is required' };
 
+  const person = state.people.find(p => iequal(p.name, name) && p.dob === dob);
+  if (isBanned(person) && !formData.overrideBan) return { bannedWarning: person.banned };
+
   let category = formData.category || '';
   if (!category && dob) category = calculateCategory(dob, gender);
 
@@ -206,6 +222,9 @@ export async function insertEntryAndRenumber(atBib, formData) {
   if (!name)   return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
   if (!dob && gender !== GENDER.PAIR_PREFIX) return { error: 'Date of birth is required' };
+
+  const person2 = state.people.find(p => iequal(p.name, name) && p.dob === dob);
+  if (isBanned(person2) && !formData.overrideBan) return { bannedWarning: person2.banned };
 
   let category = formData.category || '';
   if (!category && dob) category = calculateCategory(dob, gender);

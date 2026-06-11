@@ -6,7 +6,7 @@ import {
   deleteFinisher, insertFinisherAbove,
   getSortedFinishers, buildSplitNumbers,
 } from '../finishers.js';
-import { getEntry, getEntriesOnCourse, getSortedEntries } from '../entries.js';
+import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned } from '../entries.js';
 import { COURSE } from '../constants.js';
 import { normaliseTime, showBusy } from '../utils.js';
 import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog } from '../ui.js';
@@ -164,12 +164,13 @@ export function renderFinishers() {
     const lineDisplay = f.splitNumber !== null ? f.splitNumber : `[${sidx}]`;
     const entry = f.number > 0 ? getEntry(+f.number) : null;
     const hasError = f.number > 0 && !entry;
-    return `<tr class="${hasError ? 'row-error' : ''}" data-sidx="${sidx}">
+    const banned   = !hasError && entry && isEntryBanned(entry);
+    return `<tr class="${hasError ? 'row-error' : banned ? 'row-banned' : ''}" data-sidx="${sidx}">
       <td>${lineDisplay}</td>
       <td>${startFinishLabel(f.action)}</td>
       <td>${f.time || ''}</td>
       <td>${numDisplay}</td>
-      <td>${entry?.name || ''}</td>
+      <td>${(entry?.name || '') + (banned ? ' (banned)' : '')}</td>
       <td>${entry?.category || ''}</td>
       <td>${f.number > 0 ? (entry?.course || '') : ''}</td>
       <td>

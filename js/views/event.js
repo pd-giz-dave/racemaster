@@ -5,7 +5,7 @@ import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../catego
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, showConfirmDialog, showStatus, on } from '../ui.js';
-import { showBusy } from '../utils.js';
+import { showBusy, toISODate, fromISODate } from '../utils.js';
 import { renderHome } from './home.js';
 import { renderCategories } from './categories.js';
 
@@ -13,7 +13,7 @@ export function renderEvent() {
   const ev = state.event;
   fillForm('event-form', {
     'ev-name':               ev.name,
-    'ev-date':               ev.date,
+    'ev-date':               toISODate(ev.date),
     'ev-distance':           ev.distance,
     'ev-start-time':         ev.startTime,
     'ev-categories':         ev.categories || 'FRA',
@@ -68,7 +68,7 @@ export async function saveEventForm() {
   // Apply fields
   ev.name                       = newName;
   ev.categories                 = newCategories;
-  ev.date                       = val('ev-date');
+  ev.date                       = fromISODate(val('ev-date'));
   ev.distance                   = +val('ev-distance') || 0;
   ev.startTime                  = val('ev-start-time');
   ev.juniorStartTime            = val('ev-junior-start-time');

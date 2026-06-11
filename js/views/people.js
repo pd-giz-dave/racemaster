@@ -1,29 +1,37 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, updateDatalistClubs } from '../ui.js';
 import { formatCSV, parseCSV } from '../csv.js';
+import { toISODate, fromISODate } from '../utils.js';
+import { isBanned } from '../entries.js';
 
-let peopleFilter = '';
+let peopleFilter    = '';
+let showBannedOnly  = false;
 
 export function renderPeople() {
   const tbody = document.getElementById('people-tbody');
   if (!tbody) return;
   const filterEl = document.getElementById('people-filter');
   if (filterEl) filterEl.value = peopleFilter;
+  const bannedEl = document.getElementById('people-show-banned');
+  if (bannedEl) bannedEl.checked = showBannedOnly;
   const total = state.people.length;
-  if (!peopleFilter) {
+  const low = peopleFilter.trim().toLowerCase();
+  if (!low && !showBannedOnly) {
     tbody.innerHTML = '';
     setHTML('people-count', `${total} people`);
     return;
   }
-  const low = peopleFilter.toLowerCase();
-  const visible = state.people.map((p, i) => ({ p, i })).filter(({ p }) =>
-    (p.name || '').toLowerCase().includes(low) ||
-    (p.club || '').toLowerCase().includes(low));
+  const visible = state.people.map((p, i) => ({ p, i })).filter(({ p }) => {
+    if (showBannedOnly && !isBanned(p)) return false;
+    if (!low) return true;
+    return (p.name || '').toLowerCase().includes(low) ||
+           (p.club || '').toLowerCase().includes(low);
+  });
   tbody.innerHTML = visible.map(({ p, i }) => `
-    <tr id="person-row-${i}">
-      <td>${escHtml(p.name || '')}</td>
+    <tr id="person-row-${i}"${isBanned(p) ? ' class="row-banned"' : ''}>
+      <td>${escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '')}</td>
       <td>${p.gender || ''}</td>
       <td>${p.dob || ''}</td>
       <td>${escHtml(p.club || '')}</td>
@@ -32,6 +40,7 @@ export function renderPeople() {
       <td>${p.seenTotal || 0}</td>
       <td>${p.lastHelped || ''}</td>
       <td>${p.helpedTotal || 0}</td>
+      <td>${p.banned || ''}</td>
       <td>
         <button class="btn-sm btn-edit"   data-idx="${i}">Edit</button>
         <button class="btn-sm btn-delete" data-idx="${i}">Del</button>
@@ -42,31 +51,33 @@ export function renderPeople() {
 
 export function personEditCells(prefix, p) {
   return `
-    <td><input id="${prefix}-name"     type="text" value="${escHtml(p.name || '')}"      style="width:130px"></td>
+    <td><input id="${prefix}-name"        type="text"   value="${escHtml(p.name || '')}"           style="width:130px"></td>
     <td><select id="${prefix}-gender">
       <option value="M"${p.gender==='M'?' selected':''}>M</option>
       <option value="F"${p.gender==='F'?' selected':''}>F</option>
       <option value="P"${p.gender==='P'?' selected':''}>P</option>
     </select></td>
-    <td><input id="${prefix}-dob"      type="text" value="${escHtml(p.dob || '')}"        style="width:95px" data-normalise="date"></td>
-    <td><input id="${prefix}-club"     type="text" value="${escHtml(p.club || '')}"       style="width:110px"></td>
-    <td><input id="${prefix}-fra"      type="text" value="${escHtml(p.fraNumber || '')}"  style="width:70px"></td>
-    <td><input id="${prefix}-lastseen"    type="text"   value="${escHtml(p.lastSeen || '')}"    style="width:75px" data-normalise="date"></td>
-    <td><input id="${prefix}-count"       type="number" value="${p.seenTotal || 0}"            style="width:50px" min="0"></td>
-    <td><input id="${prefix}-lasthelped"  type="text"   value="${escHtml(p.lastHelped || '')}" style="width:75px" data-normalise="date"></td>
-    <td><input id="${prefix}-helpedcount" type="number" value="${p.helpedTotal || 0}"           style="width:50px" min="0"></td>`;
+    <td><input id="${prefix}-dob"         type="date"   value="${toISODate(p.dob || '')}"></td>
+    <td><input id="${prefix}-club"        type="text"   value="${escHtml(p.club || '')}"           style="width:110px" list="datalist-clubs" autocomplete="off"></td>
+    <td><input id="${prefix}-fra"         type="text"   value="${escHtml(p.fraNumber || '')}"      style="width:70px"></td>
+    <td><input id="${prefix}-lastseen"    type="date"   value="${toISODate(p.lastSeen || '')}"></td>
+    <td><input id="${prefix}-count"       type="number" value="${p.seenTotal || 0}"                style="width:50px" min="0"></td>
+    <td><input id="${prefix}-lasthelped"  type="date"   value="${toISODate(p.lastHelped || '')}"></td>
+    <td><input id="${prefix}-helpedcount" type="number" value="${p.helpedTotal || 0}"              style="width:50px" min="0"></td>
+    <td><input id="${prefix}-banned"      type="date"   value="${toISODate(p.banned || '')}"></td>`;
 }
 
 export function readPersonCells(prefix, p) {
-  p.name      = document.getElementById(`${prefix}-name`)?.value.trim()     || p.name;
-  p.gender    = document.getElementById(`${prefix}-gender`)?.value           || p.gender;
-  p.dob       = document.getElementById(`${prefix}-dob`)?.value.trim()      || p.dob;
-  p.club      = document.getElementById(`${prefix}-club`)?.value.trim()     || '';
-  p.fraNumber = document.getElementById(`${prefix}-fra`)?.value.trim()      || '';
-  p.lastSeen    = document.getElementById(`${prefix}-lastseen`)?.value.trim()    || '';
-  p.seenTotal   = parseInt(document.getElementById(`${prefix}-count`)?.value, 10)        || 0;
-  p.lastHelped  = document.getElementById(`${prefix}-lasthelped`)?.value.trim()  || '';
-  p.helpedTotal = parseInt(document.getElementById(`${prefix}-helpedcount`)?.value, 10)  || 0;
+  p.name        = document.getElementById(`${prefix}-name`)?.value.trim()                     || p.name;
+  p.gender      = document.getElementById(`${prefix}-gender`)?.value                          || p.gender;
+  p.dob         = fromISODate(document.getElementById(`${prefix}-dob`)?.value)                || p.dob;
+  p.club        = document.getElementById(`${prefix}-club`)?.value.trim()                     || '';
+  p.fraNumber   = document.getElementById(`${prefix}-fra`)?.value.trim()                      || '';
+  p.lastSeen    = fromISODate(document.getElementById(`${prefix}-lastseen`)?.value)           || '';
+  p.seenTotal   = parseInt(document.getElementById(`${prefix}-count`)?.value, 10)             || 0;
+  p.lastHelped  = fromISODate(document.getElementById(`${prefix}-lasthelped`)?.value)         || '';
+  p.helpedTotal = parseInt(document.getElementById(`${prefix}-helpedcount`)?.value, 10)       || 0;
+  p.banned      = fromISODate(document.getElementById(`${prefix}-banned`)?.value)             || '';
 }
 
 export function editPersonRow(idx) {
@@ -74,6 +85,7 @@ export function editPersonRow(idx) {
   if (!p) return;
   const row = document.getElementById(`person-row-${idx}`);
   if (!row) return;
+  updateDatalistClubs();
   const prefix = `per-${idx}`;
   row.innerHTML = `${personEditCells(prefix, p)}
     <td>
@@ -104,7 +116,7 @@ export async function deletePersonRow(idx) {
   renderPeople();
 }
 
-const PEOPLE_FIELDS = ['name','gender','dob','club','fraNumber','lastSeen','seenTotal','lastHelped','helpedTotal'];
+const PEOPLE_FIELDS = ['name','gender','dob','club','fraNumber','lastSeen','seenTotal','lastHelped','helpedTotal','banned'];
 
 function exportPeople() {
   const csv = formatCSV(state.people, PEOPLE_FIELDS);
@@ -121,6 +133,7 @@ const PEOPLE_COL_ALIASES = {
   seenTotal:   ['seenTotal', 'Seen Total'],
   lastHelped:  ['lastHelped', 'Last Helped'],
   helpedTotal: ['helpedTotal', 'Helped Total'],
+  banned:      ['banned',      'Banned Until', 'Banned'],
 };
 
 function normalisePeopleRows(rows) {
@@ -158,6 +171,7 @@ async function importPeople() {
         seenTotal:   +row.seenTotal  || existing.seenTotal,
         lastHelped:  row.lastHelped  || existing.lastHelped,
         helpedTotal: +row.helpedTotal || existing.helpedTotal,
+        banned:      row.banned      || existing.banned,
       });
       updated++;
     } else {
@@ -171,6 +185,7 @@ async function importPeople() {
         seenTotal:   +row.seenTotal  || 0,
         lastHelped:  row.lastHelped  || '',
         helpedTotal: +row.helpedTotal || 0,
+        banned:      row.banned      || '',
       });
       added++;
     }
@@ -194,7 +209,12 @@ export function wirePeople() {
   on('btn-clear-people',  'click', clearPeople);
 
   document.getElementById('people-filter')?.addEventListener('input', e => {
-    peopleFilter = e.target.value.trim();
+    peopleFilter = e.target.value;
+    renderPeople();
+  });
+
+  document.getElementById('people-show-banned')?.addEventListener('change', e => {
+    showBannedOnly = e.target.checked;
     renderPeople();
   });
 

@@ -231,6 +231,20 @@ export function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
 /** Format a number as three zero-padded digits (for prize position sorting) */
 export function pad3(n) { return String(+n || 0).padStart(3, '0'); }
 
+/** Convert DD/MM/YYYY to YYYY-MM-DD for <input type="date"> */
+export function toISODate(ddmmyyyy) {
+  if (!ddmmyyyy) return '';
+  const [d, m, y] = ddmmyyyy.split('/');
+  return y && m && d ? `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` : '';
+}
+
+/** Convert YYYY-MM-DD from <input type="date"> back to DD/MM/YYYY */
+export function fromISODate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}/${m}/${y}` : '';
+}
+
 /** Show the busy/progress indicator */
 export function showBusy(msg = '') {
   const el = document.getElementById('busy-message');

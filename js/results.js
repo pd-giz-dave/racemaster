@@ -5,7 +5,7 @@ import { saveResults, savePrizes } from './state.js';
 import { COURSE, GENDER, PRIZE_PRIORITY } from './constants.js';
 import { iequal, timeToSeconds, secondsToTime, pad3, isValidRaceTime } from './utils.js';
 import { getCategoryPriority, genderFromCategory } from './categories.js';
-import { getEntry, getSortedEntries } from './entries.js';
+import { getEntry, getSortedEntries, isEntryBanned } from './entries.js';
 import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
 
@@ -29,7 +29,7 @@ export async function formatResults() {
       const entry = +f.number > 0 ? getEntry(+f.number) : null;
       const adjTime = entry && f.time && f.time !== '-' ? adjustedFinishTime(entry, f.time) : f.time;
       return { f, entry, adjTime };
-    }).filter(({ adjTime }) => isValidRaceTime(adjTime));
+    }).filter(({ adjTime, entry }) => isValidRaceTime(adjTime) && !isEntryBanned(entry));
 
     if (!finishers.length) continue;
 
@@ -69,6 +69,7 @@ export async function formatResults() {
       if (!iequal(e.course, course)) continue;
       if (e.retired !== 'Y') continue;
       if (addedBibs.has(+e.bibNumber)) continue;
+      if (isEntryBanned(e)) continue;
       courseResults.push({
         course,
         bibNumber: e.bibNumber,
