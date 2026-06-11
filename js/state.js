@@ -20,7 +20,7 @@ export const state = {
     stopwatchStartOffset: '', juniorStopwatchStartOffset: '',
   },
   people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal}
-  clubs:      [],  // {name, lastSeen, seenTotal}
+  // clubs derived from people — not persisted
   dibbers:    [],  // {shortCode, longCode, owner, notes}
   categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist, pairMinAge, pairCat, pairRef, pairMaxDist}
   roles:      [],  // {role, description}
@@ -45,7 +45,6 @@ export async function loadAll() {
   await Promise.all([
     loadEvent(),
     loadList('people'),
-    loadList('clubs'),
     loadList('dibbers'),
     loadList('categories'),
     loadList('roles'),
@@ -101,7 +100,6 @@ async function loadList(key) {
 
 export async function saveEvent()        { await writeTable('event',      [state.event]); }
 export async function savePeople()       { await writeTable('people',     state.people); }
-export async function saveClubs()        { await writeTable('clubs',      state.clubs); }
 export async function saveDibbers()      { await writeTable('dibbers',    state.dibbers); }
 export async function saveCategories()   { await writeTable('categories', state.categories); }
 export async function saveFraPreset()    { await writeTable('fraPreset',  state.fraPreset); }

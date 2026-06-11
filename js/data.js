@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
-import { savePeople, saveClubs } from './state.js';
+import { savePeople } from './state.js';
 import { GENDER, UNATTACHED_CLUB } from './constants.js';
 import { normaliseDate, cleanName, sortBy, today, similarity } from './utils.js';
 
@@ -66,35 +66,6 @@ export function sortPeople() {
   state.people = sortBy(state.people, 'name', 'dob');
 }
 
-/** Sort clubs by name */
-export function sortClubs() {
-  state.clubs = sortBy(state.clubs, 'name');
-}
-
-/**
- * Add or update a club. Returns index if new, null if existing.
- * clubEntry may contain '@ rowid' suffix (list box format).
- */
-export function addClub(clubEntryIn) {
-  const clubEntry = cleanName((clubEntryIn || '').split(' | ')[0].split(' @ ')[0].trim());
-  if (!clubEntry) return null;
-
-  const existing = state.clubs.findIndex(c => cleanName(c.name).toUpperCase() === clubEntry.toUpperCase());
-  let idx;
-  let isNew = false;
-  if (existing >= 0) {
-    idx = existing;
-  } else {
-    idx = state.clubs.length;
-    state.clubs.push({ seenTotal: 0 });
-    isNew = true;
-  }
-  const c = state.clubs[idx];
-  c.name     = clubEntry;
-  c.lastSeen = today();
-  c.seenTotal = (+c.seenTotal || 0) + 1;
-  return isNew ? idx : null;
-}
 
 /** Map a dibber short code to long code. Returns 0 for no-dibber, -1 if not found. */
 export function mapDibberNumber(shortCode) {
@@ -159,14 +130,13 @@ export function checkPeopleDuplicates(threshold = 2) {
   return result;
 }
 
-/** Merge pre-entries into people and clubs lists */
+/** Merge pre-entries into people list */
 export async function mergeSIEntries() {
   const preEntries = state.preEntries;
-  if (!preEntries.length) return { peopleAdded: 0, clubsAdded: 0 };
+  if (!preEntries.length) return { peopleAdded: 0 };
 
-  let peopleAdded = 0, clubsAdded = 0;
+  let peopleAdded = 0;
 
-  // Build set of existing people keys
   const existingKeys = new Set(state.people.map(p => makePersonKey(p.name, p.gender, p.dob)));
 
   for (const pe of preEntries) {
@@ -185,27 +155,17 @@ export async function mergeSIEntries() {
       existingKeys.add(key);
       peopleAdded++;
     } else {
-      // Update club and FRA number
       const idx = state.people.findIndex(p => makePersonKey(p.name, p.gender, p.dob) === key);
       if (idx >= 0) {
         if (club && club !== UNATTACHED_CLUB) state.people[idx].club = club;
         if (fra) state.people[idx].fraNumber = fra;
       }
     }
-
-    // Clubs
-    const existingClub = state.clubs.findIndex(c => (c.name || '').toUpperCase() === club.toUpperCase());
-    if (existingClub < 0 && club) {
-      state.clubs.push({ name: club, lastSeen: today(), seenTotal: 1 });
-      clubsAdded++;
-    }
   }
 
   sortPeople();
-  sortClubs();
   await savePeople();
-  await saveClubs();
-  return { peopleAdded, clubsAdded };
+  return { peopleAdded };
 }
 
 function normaliseGender(g) {

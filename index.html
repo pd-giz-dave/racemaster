@@ -671,7 +671,7 @@
       </div>
 
       <div class="btn-row">
-        <button class="btn" id="btn-add-person">Add Person</button>
+        <input type="search" id="people-filter" placeholder="Filter by name or club…" style="padding:4px 8px;width:220px">
         <button class="btn btn-secondary" id="btn-export-people">Export CSV</button>
         <button class="btn btn-secondary" id="btn-import-people">Import CSV</button>
         <button class="btn btn-delete" id="btn-clear-people">Clear All</button>
@@ -696,16 +696,11 @@
         <span class="count-badge" id="clubs-count">0</span>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
-      <div class="btn-row">
-        <button class="btn" id="btn-add-club">Add Club</button>
-        <button class="btn btn-secondary" id="btn-export-clubs">Export CSV</button>
-        <button class="btn btn-secondary" id="btn-import-clubs">Import CSV</button>
-        <button class="btn btn-delete" id="btn-clear-clubs">Clear All</button>
-      </div>
+
       <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>Name</th><th>Last Seen</th><th>Count</th><th>Actions</th></tr>
+            <tr><th>Name</th><th>People</th><th>Last Seen</th></tr>
           </thead>
           <tbody id="clubs-tbody"></tbody>
         </table>
@@ -723,7 +718,10 @@
       </div>
       <div class="btn-row">
         <button class="btn" id="btn-add-role">Add Role</button>
+        <button class="btn btn-secondary" id="btn-export-roles">Export CSV</button>
+        <button class="btn btn-secondary" id="btn-import-roles">Import CSV</button>
         <button class="btn btn-secondary" id="btn-reset-roles">Reset to Built-in</button>
+        <button class="btn btn-delete" id="btn-clear-roles">Clear All</button>
       </div>
       <div class="table-scroll">
         <table class="data-table">

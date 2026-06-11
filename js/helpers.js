@@ -1,11 +1,11 @@
 'use strict';
 
 import { state } from './state.js';
-import { saveHelpers, savePeople, saveClubs } from './state.js';
+import { saveHelpers, savePeople } from './state.js';
 import { GENDER } from './constants.js';
 import { normaliseDate, cleanName, iequal } from './utils.js';
 import { calculateCategory } from './categories.js';
-import { addPerson, addClub, sortPeople, sortClubs } from './data.js';
+import { addPerson, sortPeople } from './data.js';
 
 // ============================================================
 // Helper registration logic (translated from Helpers.xml)
@@ -93,13 +93,10 @@ export async function submitHelper(formData) {
 
   // Update people list (as helper)
   addPerson(name, null, gender, dob, club, '', category, true);
-  if (club) addClub(club);
 
   sortPeople();
-  sortClubs();
   await saveHelpers();
   await savePeople();
-  await saveClubs();
 
   return { number, error: '' };
 }

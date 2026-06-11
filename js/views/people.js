@@ -4,10 +4,24 @@ import { state, savePeople } from '../state.js';
 import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise } from '../ui.js';
 import { formatCSV, parseCSV } from '../csv.js';
 
+let peopleFilter = '';
+
 export function renderPeople() {
   const tbody = document.getElementById('people-tbody');
   if (!tbody) return;
-  tbody.innerHTML = state.people.map((p, i) => `
+  const filterEl = document.getElementById('people-filter');
+  if (filterEl) filterEl.value = peopleFilter;
+  const total = state.people.length;
+  if (!peopleFilter) {
+    tbody.innerHTML = '';
+    setHTML('people-count', `${total} people`);
+    return;
+  }
+  const low = peopleFilter.toLowerCase();
+  const visible = state.people.map((p, i) => ({ p, i })).filter(({ p }) =>
+    (p.name || '').toLowerCase().includes(low) ||
+    (p.club || '').toLowerCase().includes(low));
+  tbody.innerHTML = visible.map(({ p, i }) => `
     <tr id="person-row-${i}">
       <td>${escHtml(p.name || '')}</td>
       <td>${p.gender || ''}</td>
@@ -23,11 +37,7 @@ export function renderPeople() {
         <button class="btn-sm btn-delete" data-idx="${i}">Del</button>
       </td>
     </tr>`).join('');
-  setHTML('people-count', `${state.people.length} people`);
-  tbody.querySelectorAll('.btn-edit').forEach(b =>
-    b.addEventListener('click', () => editPersonRow(+b.dataset.idx)));
-  tbody.querySelectorAll('.btn-delete').forEach(b =>
-    b.addEventListener('click', () => deletePersonRow(+b.dataset.idx)));
+  setHTML('people-count', `${visible.length} of ${total} people`);
 }
 
 export function personEditCells(prefix, p) {
@@ -84,42 +94,6 @@ export async function savePersonRow(idx) {
   renderPeople();
 }
 
-export function showAddPersonRow() {
-  const tbody = document.getElementById('people-tbody');
-  if (!tbody || document.getElementById('person-row-new')) return;
-  const tr = document.createElement('tr');
-  tr.id = 'person-row-new';
-  const prefix = 'per-new';
-  tr.innerHTML = `${personEditCells(prefix, {})}
-    <td>
-      <button class="btn-sm btn-save">Save</button>
-      <button class="btn-sm btn-secondary">Cancel</button>
-    </td>`;
-  tbody.appendChild(tr);
-  tr.querySelector('.btn-save').addEventListener('click', saveNewPersonRow);
-  tr.querySelector('.btn-secondary').addEventListener('click', () => tr.remove());
-  setTimeout(() => {
-    const first = tr.querySelector('input');
-    first?.scrollIntoView({ block: 'center' });
-    first?.focus();
-  }, 50);
-}
-
-export async function saveNewPersonRow() {
-  const prefix = 'per-new';
-  const name = document.getElementById(`${prefix}-name`)?.value.trim();
-  if (!name) { showStatus('Name is required.', true); return; }
-  const dob = document.getElementById(`${prefix}-dob`)?.value.trim();
-  const dup = state.people.find(p =>
-    p.name.toLowerCase() === name.toLowerCase() && (p.dob || '') === (dob || ''));
-  if (dup) { showStatus(`${name}${dob ? ' ('+dob+')' : ''} already exists.`, true); return; }
-  const p = { seenTotal: 0, helpedTotal: 0 };
-  readPersonCells(prefix, p);
-  state.people.push(p);
-  await savePeople();
-  showStatus(`${p.name} added.`);
-  renderPeople();
-}
 
 export async function deletePersonRow(idx) {
   const p = state.people[idx];
@@ -215,8 +189,42 @@ async function clearPeople() {
 }
 
 export function wirePeople() {
-  on('btn-add-person',    'click', showAddPersonRow);
   on('btn-export-people', 'click', exportPeople);
   on('btn-import-people', 'click', importPeople);
   on('btn-clear-people',  'click', clearPeople);
+
+  document.getElementById('people-filter')?.addEventListener('input', e => {
+    peopleFilter = e.target.value.trim();
+    renderPeople();
+  });
+
+  document.getElementById('people-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-idx]');
+    if (!btn) return;
+    const idx = +btn.dataset.idx;
+    if (btn.classList.contains('btn-edit'))        editPersonRow(idx);
+    else if (btn.classList.contains('btn-delete')) deletePersonRow(idx);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'f' && e.ctrlKey && !document.getElementById('view-people')?.hidden) {
+      e.preventDefault();
+      document.getElementById('people-filter')?.focus();
+    }
+  });
+
+  document.getElementById('view-people')?.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const view = document.getElementById('view-people');
+    const focusable = [...view.querySelectorAll(
+      'input:not([disabled]), button:not([disabled])'
+    )].filter(el => el.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  });
 }

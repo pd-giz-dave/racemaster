@@ -52,12 +52,11 @@ export async function importSIEntriesFromFile() {
     return;
   }
 
-  // Verify passed — auto-merge into people/clubs
   showBusy('Merging…');
   const merged = await mergeSIEntries();
   showBusy('');
   showStatus(
-    `${result.added} added, ${result.updated} updated — merged: +${merged.peopleAdded} people, +${merged.clubsAdded} clubs.`
+    `${result.added} added, ${result.updated} updated — merged: +${merged.peopleAdded} people.`
   );
   renderPreEntries();
   renderPeople();

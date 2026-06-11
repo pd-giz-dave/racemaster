@@ -554,6 +554,22 @@ input:focus, select:focus, textarea:focus {
   min-height: 0;
 }
 
+/* ---- People view: flex column, table fills remaining space ---- */
+#view-people:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+#view-people .view-header,
+#view-people .btn-row {
+  flex-shrink: 0;
+}
+#view-people .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* narrow: form takes natural height, table fills the rest */
 @media (max-width: 900px) {
   #view-entries .split-layout,

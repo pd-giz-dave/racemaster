@@ -221,16 +221,14 @@ export function wireHelpers() {
       const low = typed.toLowerCase();
       currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
       if (currentMatches.length === 1) {
+        const s = nameEl.selectionStart;
         nameEl.value = currentMatches[0].name;
+        nameEl.setSelectionRange(s, currentMatches[0].name.length);
         fillFromPerson(currentMatches[0]);
-        closeDropdown();
-      } else if (currentMatches.length > 1) {
-        fillFromPerson(currentMatches[0]);
-        showDropdown();
-      } else {
+      } else if (!currentMatches.length) {
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
-        closeDropdown();
       }
+      showDropdown();
     });
 
     nameEl.addEventListener('keydown', e => {
@@ -270,7 +268,7 @@ export function wireHelpers() {
       if (!typed) {
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
         currentMatches = [];
-      } else if (currentMatches.length > 0) {
+      } else if (currentMatches.length === 1) {
         nameEl.value = currentMatches[0].name;
         fillFromPerson(currentMatches[0]);
       }
@@ -286,6 +284,23 @@ export function wireHelpers() {
       const s = el.selectionStart, e = el.selectionEnd;
       el.value = capitalise(el.value);
       el.setSelectionRange(s, e);
+    });
+  }
+
+  // Club field: autofill when typed text becomes unambiguous
+  const clubEl = document.getElementById('helper-form-club');
+  if (clubEl) {
+    clubEl.addEventListener('input', () => {
+      const typed = clubEl.value.trim();
+      if (!typed) return;
+      const low = typed.toLowerCase();
+      const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))];
+      const matches = clubs.filter(c => c.toLowerCase().startsWith(low));
+      if (matches.length === 1) {
+        const s = clubEl.selectionStart;
+        clubEl.value = matches[0];
+        clubEl.setSelectionRange(s, matches[0].length);
+      }
     });
   }
 

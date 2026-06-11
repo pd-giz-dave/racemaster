@@ -1,7 +1,8 @@
 'use strict';
 
 import { state, saveRoles } from '../state.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise } from '../ui.js';
+import { formatCSV, parseCSV } from '../csv.js';
 
 const BUILTIN_ROLES = [
   { role: 'HELPER',     description: 'General helper' },
@@ -129,6 +130,44 @@ async function deleteRoleRow(idx) {
   updateDatalistRoles();
 }
 
+function exportRoles() {
+  downloadText(formatCSV(state.roles, ['role', 'description']),
+    `${sanitise(state.event?.name || 'roles')}_roles.csv`);
+}
+
+async function importRoles() {
+  const text = await pickFile('.csv');
+  if (!text) return;
+  const rows = parseCSV(text);
+  if (!rows[0] || !('role' in rows[0])) { showStatus('Roles CSV missing required column: role', true); return; }
+  let added = 0, updated = 0;
+  for (const row of rows) {
+    const role = (row.role || '').trim();
+    if (!role) continue;
+    const existing = state.roles.find(r => r.role.toLowerCase() === role.toLowerCase());
+    if (existing) {
+      existing.description = row.description || existing.description;
+      updated++;
+    } else {
+      state.roles.push({ role, description: row.description || '' });
+      added++;
+    }
+  }
+  await saveRoles();
+  updateDatalistRoles();
+  showStatus(`Roles import: ${added} added, ${updated} updated.`);
+  renderRoles();
+}
+
+async function clearRoles() {
+  if (!await showConfirmDialog(`Clear all ${state.roles.length} roles?`, 'Clear All', true)) return;
+  state.roles.length = 0;
+  await saveRoles();
+  updateDatalistRoles();
+  showStatus('Roles list cleared.');
+  renderRoles();
+}
+
 async function resetToBuiltin() {
   if (!await showConfirmDialog('Replace all current roles with the built-in defaults?', 'Replace', true)) return;
   state.roles = BUILTIN_ROLES.map(r => ({ ...r }));
@@ -139,6 +178,9 @@ async function resetToBuiltin() {
 }
 
 export function wireRoles() {
-  on('btn-add-role',    'click', showAddRoleRow);
-  on('btn-reset-roles', 'click', resetToBuiltin);
+  on('btn-add-role',     'click', showAddRoleRow);
+  on('btn-export-roles', 'click', exportRoles);
+  on('btn-import-roles', 'click', importRoles);
+  on('btn-reset-roles',  'click', resetToBuiltin);
+  on('btn-clear-roles',  'click', clearRoles);
 }

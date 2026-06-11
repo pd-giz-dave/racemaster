@@ -154,7 +154,7 @@ export function updateDatalistNames() {
 export function updateDatalistClubs() {
   const dl = document.getElementById('datalist-clubs');
   if (!dl) return;
-  const clubs = [...new Set(state.clubs.map(c => c.name).filter(Boolean))].sort();
+  const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))].sort();
   dl.innerHTML = clubs.map(c => `<option value="${escHtml(c)}">`).join('');
 }
 

@@ -14,7 +14,7 @@ import { renderResults, wireResults }       from './views/results.js';
 import { renderPreEntries, wirePreEntries } from './views/pre-entries.js';
 import { renderSafety }                      from './views/safety.js';
 import { renderPeople, wirePeople }         from './views/people.js';
-import { renderClubs, wireClubs }           from './views/clubs.js';
+import { renderClubs, wireClubs }         from './views/clubs.js';
 import { renderRoles, wireRoles }           from './views/roles.js';
 import { renderDibbers, wireDibbers }       from './views/dibbers.js';
 import { renderCategories, wireCategories } from './views/categories.js';
@@ -148,7 +148,10 @@ function renderView(v) {
     case 'results':      renderResults();      break;
     case 'pre-entries':  renderPreEntries();   break;
     case 'safety':       renderSafety();       break;
-    case 'people':       renderPeople();       break;
+    case 'people':
+      renderPeople();
+      setTimeout(() => document.getElementById('people-filter')?.focus(), 0);
+      break;
     case 'clubs':        renderClubs();        break;
     case 'roles':        renderRoles();        break;
     case 'dibbers':      renderDibbers();      break;

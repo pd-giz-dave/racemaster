@@ -1,11 +1,11 @@
 'use strict';
 
 import { state } from './state.js';
-import { saveEntries, savePeople, saveClubs } from './state.js';
+import { saveEntries, savePeople } from './state.js';
 import { GENDER, COURSE } from './constants.js';
 import { normaliseDate, cleanName, iequal } from './utils.js';
 import { calculateCategory, calculateCourse } from './categories.js';
-import { addPerson, addClub, sortPeople, sortClubs, getNextBibNumber, getNextDibberNumber, mapDibberNumber } from './data.js';
+import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber, mapDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
 // ============================================================
@@ -139,13 +139,10 @@ export async function submitEntry(formData) {
   // Update people and clubs lists
   const nameId = null;
   addPerson(name, nameId, gender, dob, club, fra, category, false);
-  if (club) addClub(club);
 
   sortPeople();
-  sortClubs();
   await saveEntries();
   await savePeople();
-  await saveClubs();
 
   return { bibNumber, dibberNumber, error: '' };
 }
@@ -253,12 +250,9 @@ export async function insertEntryAndRenumber(atBib, formData) {
   });
 
   addPerson(name, null, gender, dob, club, fra, category, false);
-  if (club) addClub(club);
   sortPeople();
-  sortClubs();
   await saveEntries();
   await savePeople();
-  await saveClubs();
 
   return { bibNumber: atBib, dibberNumber, error: '' };
 }
