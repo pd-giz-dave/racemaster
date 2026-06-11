@@ -1,7 +1,8 @@
 'use strict';
 
 import { state, saveClubs } from '../state.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs, downloadText, pickFile, sanitise } from '../ui.js';
+import { formatCSV, parseCSV } from '../csv.js';
 
 export function renderClubs() {
   const tbody = document.getElementById('clubs-tbody');
@@ -111,6 +112,65 @@ export async function deleteClubRow(idx) {
   updateDatalistClubs();
 }
 
+const CLUBS_FIELDS = ['name', 'lastSeen', 'seenTotal'];
+
+function exportClubs() {
+  const csv = formatCSV(state.clubs, CLUBS_FIELDS);
+  downloadText(csv, `${sanitise(state.event?.name || 'clubs')}_clubs.csv`);
+}
+
+function normaliseClubRows(rows) {
+  if (!rows.length) return rows;
+  const keys = Object.keys(rows[0]);
+  const nameKey     = ['name', 'Club'].find(k => keys.includes(k));
+  const lastSeenKey = ['lastSeen', 'Last Seen'].find(k => keys.includes(k));
+  const seenTotalKey = ['seenTotal', 'Seen Total'].find(k => keys.includes(k));
+  if (!nameKey) return null;
+  return rows.map(r => ({
+    name:      r[nameKey]      || '',
+    lastSeen:  lastSeenKey  ? r[lastSeenKey]  : '',
+    seenTotal: seenTotalKey ? r[seenTotalKey] : 0,
+  }));
+}
+
+async function importClubs() {
+  const text = await pickFile('.csv');
+  if (!text) return;
+  const raw = parseCSV(text);
+  const rows = normaliseClubRows(raw);
+  if (!rows) { showStatus('Clubs CSV missing required column: name (or Club)', true); return; }
+  let added = 0, updated = 0;
+  for (const row of rows) {
+    const name = (row.name || '').trim();
+    if (!name) continue;
+    const existing = state.clubs.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      existing.lastSeen  = row.lastSeen  || existing.lastSeen;
+      existing.seenTotal = +row.seenTotal || existing.seenTotal;
+      updated++;
+    } else {
+      state.clubs.push({ name, lastSeen: row.lastSeen || '', seenTotal: +row.seenTotal || 0 });
+      added++;
+    }
+  }
+  await saveClubs();
+  updateDatalistClubs();
+  showStatus(`Clubs import: ${added} added, ${updated} updated.`);
+  renderClubs();
+}
+
+async function clearClubs() {
+  if (!await showConfirmDialog(`Clear all ${state.clubs.length} clubs?`, 'Clear All', true)) return;
+  state.clubs.length = 0;
+  await saveClubs();
+  updateDatalistClubs();
+  showStatus('Clubs list cleared.');
+  renderClubs();
+}
+
 export function wireClubs() {
-  on('btn-add-club', 'click', showAddClubRow);
+  on('btn-add-club',    'click', showAddClubRow);
+  on('btn-export-clubs','click', exportClubs);
+  on('btn-import-clubs','click', importClubs);
+  on('btn-clear-clubs', 'click', clearClubs);
 }

@@ -1,7 +1,8 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { on, escHtml, showStatus, showConfirmDialog, setHTML } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise } from '../ui.js';
+import { formatCSV, parseCSV } from '../csv.js';
 
 export function renderPeople() {
   const tbody = document.getElementById('people-tbody');
@@ -129,6 +130,93 @@ export async function deletePersonRow(idx) {
   renderPeople();
 }
 
+const PEOPLE_FIELDS = ['name','gender','dob','club','fraNumber','lastSeen','seenTotal','lastHelped','helpedTotal'];
+
+function exportPeople() {
+  const csv = formatCSV(state.people, PEOPLE_FIELDS);
+  downloadText(csv, `${sanitise(state.event?.name || 'people')}_people.csv`);
+}
+
+const PEOPLE_COL_ALIASES = {
+  name:        ['name', 'Name'],
+  gender:      ['gender', 'Gender'],
+  dob:         ['dob', 'Date of Birth', 'DOB'],
+  club:        ['club', 'Club'],
+  fraNumber:   ['fraNumber', 'FRA Number', 'FRANumber'],
+  lastSeen:    ['lastSeen', 'Last Seen'],
+  seenTotal:   ['seenTotal', 'Seen Total'],
+  lastHelped:  ['lastHelped', 'Last Helped'],
+  helpedTotal: ['helpedTotal', 'Helped Total'],
+};
+
+function normalisePeopleRows(rows) {
+  if (!rows.length) return rows;
+  const keys = Object.keys(rows[0]);
+  const map = {};
+  for (const [field, aliases] of Object.entries(PEOPLE_COL_ALIASES)) {
+    const found = aliases.find(a => keys.includes(a));
+    if (found) map[field] = found;
+  }
+  if (!map.name || !map.gender || !map.dob) return null;
+  return rows.map(r => Object.fromEntries(
+    Object.entries(map).map(([field, src]) => [field, r[src] ?? ''])
+  ));
+}
+
+async function importPeople() {
+  const text = await pickFile('.csv');
+  if (!text) return;
+  const rows = normalisePeopleRows(parseCSV(text));
+  if (!rows) { showStatus('People CSV missing required columns: name, gender, dob (or Date of Birth)', true); return; }
+  let added = 0, updated = 0;
+  for (const row of rows) {
+    const name = (row.name || '').trim();
+    if (!name) continue;
+    const existing = state.people.find(p =>
+      p.name.toLowerCase() === name.toLowerCase() && (p.dob || '') === (row.dob || ''));
+    if (existing) {
+      Object.assign(existing, {
+        gender:      row.gender      || existing.gender,
+        dob:         row.dob         || existing.dob,
+        club:        row.club        || existing.club,
+        fraNumber:   row.fraNumber   || existing.fraNumber,
+        lastSeen:    row.lastSeen    || existing.lastSeen,
+        seenTotal:   +row.seenTotal  || existing.seenTotal,
+        lastHelped:  row.lastHelped  || existing.lastHelped,
+        helpedTotal: +row.helpedTotal || existing.helpedTotal,
+      });
+      updated++;
+    } else {
+      state.people.push({
+        name,
+        gender:      row.gender     || '',
+        dob:         row.dob        || '',
+        club:        row.club       || '',
+        fraNumber:   row.fraNumber  || '',
+        lastSeen:    row.lastSeen   || '',
+        seenTotal:   +row.seenTotal  || 0,
+        lastHelped:  row.lastHelped  || '',
+        helpedTotal: +row.helpedTotal || 0,
+      });
+      added++;
+    }
+  }
+  await savePeople();
+  showStatus(`People import: ${added} added, ${updated} updated.`);
+  renderPeople();
+}
+
+async function clearPeople() {
+  if (!await showConfirmDialog(`Clear all ${state.people.length} people?`, 'Clear All', true)) return;
+  state.people.length = 0;
+  await savePeople();
+  showStatus('People list cleared.');
+  renderPeople();
+}
+
 export function wirePeople() {
-  on('btn-add-person', 'click', showAddPersonRow);
+  on('btn-add-person',    'click', showAddPersonRow);
+  on('btn-export-people', 'click', exportPeople);
+  on('btn-import-people', 'click', importPeople);
+  on('btn-clear-people',  'click', clearPeople);
 }

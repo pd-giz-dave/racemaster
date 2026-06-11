@@ -51,9 +51,9 @@
       <div class="nav-section">Data</div>
       <a href="#" data-view="people">People</a>
       <a href="#" data-view="clubs">Clubs</a>
-      <a href="#" data-view="roles">Roles</a>
       <a href="#" data-view="dibbers">Dibbers</a>
       <a href="#" data-view="categories">Categories</a>
+      <a href="#" data-view="roles">Roles</a>
     </nav>
   </aside>
 
@@ -661,7 +661,7 @@
     </div>
 
     <!-- ======================================================
-         PEOPLE / CLUBS
+         PEOPLE
          ====================================================== -->
     <div class="view" id="view-people" hidden>
       <div class="view-header">
@@ -671,7 +671,10 @@
       </div>
 
       <div class="btn-row">
-        <button class="btn btn-secondary" id="btn-add-person">Add Person</button>
+        <button class="btn" id="btn-add-person">Add Person</button>
+        <button class="btn btn-secondary" id="btn-export-people">Export CSV</button>
+        <button class="btn btn-secondary" id="btn-import-people">Import CSV</button>
+        <button class="btn btn-delete" id="btn-clear-people">Clear All</button>
       </div>
 
       <div class="table-scroll">
@@ -694,7 +697,10 @@
         <span class="entry-status view-status-msg" hidden></span>
       </div>
       <div class="btn-row">
-        <button class="btn btn-secondary" id="btn-add-club">Add Club</button>
+        <button class="btn" id="btn-add-club">Add Club</button>
+        <button class="btn btn-secondary" id="btn-export-clubs">Export CSV</button>
+        <button class="btn btn-secondary" id="btn-import-clubs">Import CSV</button>
+        <button class="btn btn-delete" id="btn-clear-clubs">Clear All</button>
       </div>
       <div class="table-scroll">
         <table class="data-table">
@@ -716,7 +722,7 @@
         <span class="entry-status view-status-msg" hidden></span>
       </div>
       <div class="btn-row">
-        <button class="btn btn-secondary" id="btn-add-role">Add Role</button>
+        <button class="btn" id="btn-add-role">Add Role</button>
         <button class="btn btn-secondary" id="btn-reset-roles">Reset to Built-in</button>
       </div>
       <div class="table-scroll">
@@ -739,13 +745,15 @@
         <span class="entry-status view-status-msg" hidden></span>
       </div>
       <div class="btn-row">
-        <button class="btn" id="btn-import-dibbers">Import Dibber CSV</button>
-        <button class="btn btn-secondary" id="btn-add-dibber">Add Dibber</button>
+        <button class="btn" id="btn-add-dibber">Add Dibber</button>
+        <button class="btn btn-secondary" id="btn-import-dibbers">Import CSV</button>
+        <button class="btn btn-secondary" id="btn-export-dibbers">Export CSV</button>
+        <button class="btn btn-delete" id="btn-clear-dibbers">Clear All</button>
       </div>
       <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>Short Code</th><th>Long Code</th><th>Availability</th><th>Notes</th><th>Actions</th></tr>
+            <tr><th>Short Code</th><th>Long Code</th><th>Owner</th><th>Notes</th><th>Actions</th></tr>
           </thead>
           <tbody id="dibbers-tbody"></tbody>
         </table>
@@ -767,9 +775,9 @@
       <!-- Active categories (per-race, ad-hoc) -->
       <div class="tab-panel active" id="cat-tab-active">
         <div class="btn-row">
+          <button class="btn" id="btn-add-category">Add Row</button>
           <button class="btn btn-secondary" id="btn-apply-fra">Apply FRA Preset</button>
           <button class="btn btn-secondary" id="btn-apply-wfra">Apply WFRA Preset</button>
-          <button class="btn" id="btn-add-category">Add Row</button>
         </div>
         <div class="table-scroll">
           <table class="data-table"><thead><tr>

@@ -1,7 +1,8 @@
 'use strict';
 
 import { state, saveDibbers } from '../state.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise } from '../ui.js';
+import { parseCSV } from '../csv.js';
 
 export function renderDibbers() {
   const tbody = document.getElementById('dibbers-tbody');
@@ -10,7 +11,7 @@ export function renderDibbers() {
     <tr id="dibber-row-${i}">
       <td>${d.shortCode || ''}</td>
       <td>${d.longCode  || ''}</td>
-      <td>${d.availability || ''}</td>
+      <td>${d.owner || ''}</td>
       <td>${escHtml(d.notes || '')}</td>
       <td>
         <button class="btn-sm btn-edit"         data-idx="${i}">Edit</button>
@@ -32,7 +33,7 @@ export function editDibberRow(idx) {
   row.innerHTML = `
     <td>${d.shortCode || ''}</td>
     <td><input id="dib-long-${idx}"  type="text" value="${escHtml(String(d.longCode || ''))}"    style="width:90px"></td>
-    <td><input id="dib-avail-${idx}" type="text" value="${escHtml(d.availability || '')}"        style="width:80px"></td>
+    <td><input id="dib-avail-${idx}" type="text" value="${escHtml(d.owner || '')}"        style="width:80px"></td>
     <td><input id="dib-notes-${idx}" type="text" value="${escHtml(d.notes || '')}"               style="width:160px"></td>
     <td>
       <button class="btn-sm btn-save"      data-idx="${idx}">Save</button>
@@ -55,7 +56,7 @@ export async function saveDibberRow(idx) {
     }
     d.longCode = +longVal;
   }
-  d.availability = document.getElementById(`dib-avail-${idx}`)?.value.trim() || '';
+  d.owner = document.getElementById(`dib-avail-${idx}`)?.value.trim() || '';
   d.notes        = document.getElementById(`dib-notes-${idx}`)?.value.trim() || '';
   await saveDibbers();
   showStatus(`Dibber ${d.shortCode} updated.`);
@@ -106,7 +107,7 @@ export async function saveNewDibberRow() {
   }
   const avail = document.getElementById('dib-new-avail')?.value.trim() || '';
   const notes = document.getElementById('dib-new-notes')?.value.trim() || '';
-  state.dibbers.push({ shortCode: +short, longCode: +long, availability: avail, notes });
+  state.dibbers.push({ shortCode: +short, longCode: +long, owner: avail, notes });
   state.dibbers.sort((a, b) => +a.shortCode - +b.shortCode);
   await saveDibbers();
   showStatus(`Dibber ${short} added.`);
@@ -124,22 +125,50 @@ export async function deleteDibbersFrom(idx) {
   renderDibbers();
 }
 
+const SHORT_ALIASES = ['shortCode', 'Short Code', 'Number'];
+const LONG_ALIASES  = ['longCode',  'Long Code',  'Code'];
+const OWNER_ALIASES = ['owner',     'Owner'];
+const NOTES_ALIASES = ['notes',     'Notes'];
+
+function findAlias(keys, aliases) { return aliases.find(a => keys.includes(a)); }
+
+function normaliseDibberRows(rows) {
+  if (!rows.length) return rows;
+  const keys = Object.keys(rows[0]);
+  const shortKey = findAlias(keys, SHORT_ALIASES);
+  const longKey  = findAlias(keys, LONG_ALIASES);
+  if (!shortKey || !longKey) return null;
+  const ownerKey = findAlias(keys, OWNER_ALIASES);
+  const notesKey = findAlias(keys, NOTES_ALIASES);
+  return rows.map(r => ({
+    shortCode: r[shortKey],
+    longCode:  r[longKey],
+    owner:     ownerKey ? r[ownerKey] : '',
+    notes:     notesKey ? r[notesKey] : '',
+  }));
+}
+
 export async function importDibbersFromFile() {
   const text = await pickFile('.csv,.txt');
   if (!text) return;
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (!lines.length) { showStatus('Empty file.', true); return; }
-  const dataLines = lines[0].toLowerCase().includes('number') ? lines.slice(1) : lines;
+  const raw = parseCSV(text);
+  const rows = normaliseDibberRows(raw);
+  if (!rows) {
+    showStatus(`Dibber CSV must have a short code column (${SHORT_ALIASES.join(' / ')}) and a long code column (${LONG_ALIASES.join(' / ')})`, true);
+    return;
+  }
   let added = 0, updated = 0;
-  for (const line of dataLines) {
-    const [short, long] = line.split(',').map(s => s.trim());
-    if (!short || !long || isNaN(+short) || isNaN(+long)) continue;
-    const existing = state.dibbers.findIndex(d => +d.shortCode === +short);
+  for (const row of rows) {
+    const short = +row.shortCode, long = +row.longCode;
+    if (!short || !long || isNaN(short) || isNaN(long)) continue;
+    const existing = state.dibbers.findIndex(d => +d.shortCode === short);
     if (existing >= 0) {
-      state.dibbers[existing].longCode = +long;
+      state.dibbers[existing].longCode     = long;
+      state.dibbers[existing].owner = row.owner || state.dibbers[existing].owner;
+      state.dibbers[existing].notes        = row.notes        || state.dibbers[existing].notes;
       updated++;
     } else {
-      state.dibbers.push({ shortCode: +short, longCode: +long, availability: '', notes: '' });
+      state.dibbers.push({ shortCode: short, longCode: long, owner: row.owner || '', notes: row.notes || '' });
       added++;
     }
   }
@@ -150,7 +179,23 @@ export async function importDibbersFromFile() {
   renderDibbers();
 }
 
+function exportDibbers() {
+  const lines = ['shortCode,longCode,owner,notes',
+    ...state.dibbers.map(d => `${d.shortCode},${d.longCode},${d.owner || ''},${d.notes || ''}`)];
+  downloadText(lines.join('\n'), `${sanitise(state.event?.name || 'dibbers')}_dibbers.csv`);
+}
+
+async function clearDibbers() {
+  if (!await showConfirmDialog(`Clear all ${state.dibbers.length} dibbers?`, 'Clear All', true)) return;
+  state.dibbers.length = 0;
+  await saveDibbers();
+  showStatus('Dibbers list cleared.');
+  renderDibbers();
+}
+
 export function wireDibbers() {
   on('btn-import-dibbers', 'click', importDibbersFromFile);
+  on('btn-export-dibbers', 'click', exportDibbers);
   on('btn-add-dibber',     'click', showAddDibberRow);
+  on('btn-clear-dibbers',  'click', clearDibbers);
 }

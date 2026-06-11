@@ -21,7 +21,7 @@ export const state = {
   },
   people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal}
   clubs:      [],  // {name, lastSeen, seenTotal}
-  dibbers:    [],  // {shortCode, longCode, availability}
+  dibbers:    [],  // {shortCode, longCode, owner, notes}
   categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist, pairMinAge, pairCat, pairRef, pairMaxDist}
   roles:      [],  // {role, description}
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
