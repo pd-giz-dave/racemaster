@@ -10,17 +10,19 @@ import {
 // ---- Header button label ----
 
 export function updateDataFileButton() {
-  const btn = document.getElementById('btn-select-datafile');
+  const btn      = document.getElementById('btn-select-datafile');
+  const userSpan = document.getElementById('header-username');
   if (!btn) return;
   const session = getSession();
   if (!session) {
     btn.textContent = isStandalone() ? 'Standalone' : 'Select Data File';
+    if (userSpan) userSpan.textContent = '';
     return;
   }
   // session.dataset = 'owner/name-visibility'
-  const fullName = session.dataset.split('/')[1] || session.dataset;
-  const name = fullName.replace(/-(?:private|public)$/, '');
-  btn.textContent = name;
+  const [owner, fullName] = session.dataset.split('/');
+  btn.textContent = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
+  if (userSpan) userSpan.textContent = owner || '';
 }
 
 // ---- Helpers ----

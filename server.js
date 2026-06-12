@@ -13,11 +13,6 @@ const USERS_FILE = path.join(ROOT, 'users.txt');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
-const TABLES = [
-  'event', 'people', 'clubs', 'dibbers', 'categories', 'roles',
-  'preEntries', 'entries', 'helpers', 'finishers', 'safety',
-  'results', 'prizes', 'siResults', 'siTiming',
-];
 
 const MIME = {
   '.html':        'text/html; charset=utf-8',
@@ -79,9 +74,9 @@ function ownerDir(owner) {
 
 function readDataset(owner, fullName) {
   const fp = dataFilePath(owner, fullName);
-  if (!fs.existsSync(fp)) return Object.fromEntries(TABLES.map(t => [t, []]));
+  if (!fs.existsSync(fp)) return {};
   try { return JSON.parse(fs.readFileSync(fp, 'utf8')); }
-  catch { return Object.fromEntries(TABLES.map(t => [t, []])); }
+  catch { return {}; }
 }
 
 function writeDataset(owner, fullName, data) {
@@ -91,7 +86,7 @@ function writeDataset(owner, fullName, data) {
 }
 
 function emptyDataset() {
-  return Object.fromEntries(TABLES.map(t => [t, []]));
+  return {};
 }
 
 // Returns array of { owner, name, fullName, visibility } visible to username
