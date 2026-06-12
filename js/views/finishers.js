@@ -46,6 +46,20 @@ function updateDatalistFinisherBibs() {
   dl.innerHTML = specials + entries;
 }
 
+function lineLabel(sidx) {
+  const f = state.finishers[sidx];
+  if (!f) return `[${sidx}]`;
+  return f.splitNumber !== null ? String(f.splitNumber) : `[${sidx}]`;
+}
+
+function nextLineLabel() {
+  const sidx = state.finishers.length;
+  const isRetire = document.querySelector('input[name="finisher-event-type"]:checked')?.value === 'retire';
+  if (isRetire) return `[${sidx}]`;
+  const nextSplit = state.finishers.filter(f => f.splitNumber !== null).length + 1;
+  return String(nextSplit);
+}
+
 // ---- Mode management ----
 
 function getCurrentMode() {
@@ -70,8 +84,8 @@ function refreshTimeModeDisplay() {
   const lineEl = document.getElementById('finisher-line');
   const bibEl  = document.getElementById('finisher-bib');
   const prevEl = document.getElementById('finisher-prev-time');
-  if (lineEl) lineEl.value = String(timeTargetSidx);
-  if (bibEl)  bibEl.value  = String(f.number || '');
+  if (lineEl) lineEl.value = lineLabel(timeTargetSidx);
+  if (bibEl)  bibEl.value  = f.number > 0 ? String(f.number) : (f.action || '');
   if (prevEl) prevEl.value = getPrevTime(timeTargetSidx);
 
   const targetRow = document.querySelector(`#finishers-tbody tr[data-sidx="${timeTargetSidx}"]`);
@@ -144,7 +158,7 @@ export function renderFinishers() {
 
   // In bibs mode, line field shows next line number; in time mode it shows the target line
   const lineEl = document.getElementById('finisher-line');
-  if (lineEl && getCurrentMode() !== 'time') lineEl.value = String(state.finishers.length);
+  if (lineEl && getCurrentMode() !== 'time') lineEl.value = nextLineLabel();
 
   if (getCurrentMode() !== 'time') updatePrevTime();
 
@@ -204,9 +218,16 @@ export function renderFinishers() {
 
 function getPrevTime(beforeIdx) {
   for (let i = beforeIdx - 1; i >= 0; i--) {
+    if (state.finishers[i].action === 'NoStart') return '00:00:00';
     if (state.finishers[i].time && state.finishers[i].time !== '-') return state.finishers[i].time;
   }
   return '';
+}
+
+function timeToSeconds(t) {
+  if (!t) return 0;
+  const [h, m, s] = t.split(':').map(Number);
+  return h * 3600 + m * 60 + (s || 0);
 }
 
 function updatePrevTime() {
@@ -231,7 +252,7 @@ function fillFormForEdit(sidx) {
   const lineEl = document.getElementById('finisher-line');
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
-  if (lineEl) lineEl.value = String(sidx);
+  if (lineEl) lineEl.value = lineLabel(sidx);
   if (bibEl)  bibEl.value  = f.number || f.action || '';
   if (timeEl) timeEl.value = f.time || '';
 
@@ -326,6 +347,12 @@ async function submitFinisherForm() {
         timeEl?.focus();
         return;
       }
+      const prevTime = getPrevTime(timeTargetSidx);
+      if (prevTime && timeToSeconds(parsedTime) < timeToSeconds(prevTime)) {
+        showStatus(`Time cannot go backwards (previous: ${prevTime})`, true);
+        timeEl?.focus();
+        return;
+      }
     }
     showBusy('Setting time…');
     const result = await updateFinisher(timeTargetSidx, { time: parsedTime });
@@ -355,12 +382,21 @@ async function submitFinisherForm() {
 
   let parsedTime = '';
   if (rawTime) {
-    const prevTime = getPrevTime(editingIdx >= 0 ? editingIdx : state.finishers.length);
-    parsedTime = parseFinishTime(rawTime, prevTime) || '';
-    if (!parsedTime) {
-      showStatus('Invalid time — use ss, mm:ss, or hh:mm:ss', true);
-      timeEl?.focus();
-      return;
+    if (rawTime === '-') {
+      parsedTime = '-';
+    } else {
+      const prevTime = getPrevTime(editingIdx >= 0 ? editingIdx : state.finishers.length);
+      parsedTime = parseFinishTime(rawTime, prevTime) || '';
+      if (!parsedTime) {
+        showStatus('Invalid time — use ss, mm:ss, or hh:mm:ss', true);
+        timeEl?.focus();
+        return;
+      }
+      if (prevTime && timeToSeconds(parsedTime) < timeToSeconds(prevTime)) {
+        showStatus(`Time cannot go backwards (previous: ${prevTime})`, true);
+        timeEl?.focus();
+        return;
+      }
     }
   }
 
@@ -534,6 +570,15 @@ export function wireFinishers() {
       }
     });
   }
+
+  // Keep line field in sync with action radio selection when in add mode
+  document.querySelectorAll('input[name="finisher-event-type"]').forEach(r => {
+    r.addEventListener('change', () => {
+      if (editingIdx >= 0 || getCurrentMode() === 'time') return;
+      const lineEl = document.getElementById('finisher-line');
+      if (lineEl) lineEl.value = nextLineLabel();
+    });
+  });
 
   // Initialize to bibs mode
   applyMode('bibs');

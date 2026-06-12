@@ -53,15 +53,17 @@ function eventStatistics() {
   const juniorOut      = getOutstandingCount(COURSE.JUNIORS);
 
   const rows = [];
-  const row = (label, value) =>
-    rows.push(`<tr><td class="home-ev-label">${label}</td><td>${value}</td></tr>`);
+  const row = (label, value, color) => {
+    const s = color ? ` style="color:${color};font-weight:600"` : '';
+    rows.push(`<tr><td class="home-ev-label"${s}>${label}</td><td${s}>${value}</td></tr>`);
+  };
 
   row('Senior entries', seniorEntries);
   if (juniorEntries > 0) row('Junior entries', juniorEntries);
   row('Senior finishers', seniorFinish);
   if (juniorEntries > 0) row('Junior finishers', juniorFinish);
-  row('Seniors outstanding', seniorOut);
-  if (juniorEntries > 0) row('Juniors outstanding', juniorOut);
+  row('Seniors outstanding', seniorOut, seniorOut > 0 ? 'var(--danger)' : 'var(--accent)');
+  if (juniorEntries > 0) row('Juniors outstanding', juniorOut, juniorOut > 0 ? 'var(--danger)' : 'var(--accent)');
   row('Helpers registered', helpers);
   if (preImported > 0) {
     row('Pre-entries imported', preImported);
