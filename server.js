@@ -120,7 +120,10 @@ function getDatasetsForUser(username) {
 
       if (visibility === 'private' && owner !== username) continue;
 
-      results.push({ owner, name, fullName: base, visibility });
+      const data = readDataset(owner, base);
+      const ev   = Array.isArray(data.event) ? data.event[0] : null;
+      results.push({ owner, name, fullName: base, visibility,
+        eventName: ev?.name || '', eventDate: ev?.date || '' });
     }
   }
 
@@ -260,6 +263,30 @@ const server = http.createServer(async (req, res) => {
       writeDataset(username, fullName, emptyDataset());
       console.log(`Dataset created: ${username}/${fullName}`);
       return jsonReply(res, 200, { ok: true, name, fullName, owner: username, visibility });
+    }
+
+    // PATCH /api/datasets/:owner/:fullName  —  change dataset visibility
+    if (/^\/api\/datasets\/[^/]+\/[^/]+$/.test(pathname) && req.method === 'PATCH') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      const [, , , owner, fullName] = pathname.split('/');
+      if (owner !== username) return jsonReply(res, 403, { error: 'Cannot modify another user\'s dataset' });
+      const body = JSON.parse(await readBody(req));
+      const newVisibility = body.visibility === 'public' ? 'public' : 'private';
+      let name;
+      if (fullName.endsWith('-private'))     name = fullName.slice(0, -8);
+      else if (fullName.endsWith('-public')) name = fullName.slice(0, -7);
+      else return jsonReply(res, 400, { error: 'Invalid dataset name format' });
+      const newFullName = `${name}-${newVisibility}`;
+      if (newFullName === fullName) return jsonReply(res, 200, { ok: true, name, fullName, owner, visibility: newVisibility });
+      if (!fs.existsSync(dataFilePath(owner, fullName))) return jsonReply(res, 404, { error: 'Dataset not found' });
+      if (fs.existsSync(dataFilePath(owner, newFullName))) {
+        return jsonReply(res, 409, { error: `A dataset "${name}" (${newVisibility}) already exists` });
+      }
+      writeDataset(owner, newFullName, readDataset(owner, fullName));
+      fs.unlinkSync(dataFilePath(owner, fullName));
+      console.log(`Dataset visibility changed: ${owner}/${fullName} → ${owner}/${newFullName}`);
+      return jsonReply(res, 200, { ok: true, name, fullName: newFullName, owner, visibility: newVisibility });
     }
 
     // GET /api/data/:owner/:fullName  —  read a dataset

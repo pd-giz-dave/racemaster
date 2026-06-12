@@ -2,8 +2,8 @@
 
 import {
   getSession, setSession, clearSession,
-  isStandalone, setStandalone, isDirty,
-  apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset,
+  isStandalone, setStandalone, isDirty, hasCachedData,
+  apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset, apiChangeVisibility,
   switchDataset,
 } from './storage.js';
 
@@ -47,8 +47,8 @@ function radioValue(name) {
 
 export function openDataFileModal() {
   return new Promise(resolve => {
-    const backdrop = getEl('modal-datafile');
-    backdrop.hidden = false;
+    const view = getEl('view-datafile');
+    document.querySelectorAll('.view').forEach(v => { v.hidden = v !== view; });
 
     let activeToken    = getSession()?.token || null;
     let activeUsername = null;
@@ -120,35 +120,66 @@ export function openDataFileModal() {
     function renderDatasetList(datasets) {
       const list = getEl('df-dataset-list');
       if (!datasets.length) {
-        list.innerHTML = '<p style="color:var(--muted,#888);margin:0 0 4px;font-size:0.875rem">No datasets yet — create one below.</p>';
+        list.innerHTML = '<p style="color:var(--muted);margin:0 0 4px;font-size:0.875rem">No datasets yet — create one below.</p>';
         return;
       }
-      list.innerHTML = datasets.map(d => {
+      const rows = datasets.map(d => {
         const isOwn = d.owner === activeUsername;
-        const visBadge = `<span class="df-badge df-badge-${d.visibility}">${d.visibility}</span>`;
-        const ownerBadge = isOwn ? '' : `<span class="df-badge df-badge-owner">${d.owner}</span>`;
+        const newVis = d.visibility === 'private' ? 'public' : 'private';
         const connectBtn = isOwn
           ? `<button class="btn btn-sm btn-primary df-ds-connect" data-owner="${d.owner}" data-fullname="${d.fullName}">Connect</button>`
           : '';
+        const visBtn = isOwn
+          ? `<button class="btn btn-sm btn-secondary df-ds-vis" data-owner="${d.owner}" data-fullname="${d.fullName}" data-newvis="${newVis}">→ ${newVis}</button>`
+          : '';
         const copyBtn = `<button class="btn btn-sm btn-secondary df-ds-copy" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Copy</button>`;
-        return `<div class="df-ds-row">
-          <span class="df-ds-name">${d.name}</span>
-          ${ownerBadge}${visBadge}
-          <span class="df-ds-actions">${connectBtn}${copyBtn}</span>
-        </div>`;
+        const muted = '<span style="color:var(--muted)">—</span>';
+        return `<tr>
+          <td>${d.name}</td>
+          <td>${d.eventName || muted}</td>
+          <td>${d.eventDate || muted}</td>
+          <td>${d.owner}</td>
+          <td><span class="df-badge df-badge-${d.visibility}">${d.visibility}</span></td>
+          <td style="white-space:nowrap">${connectBtn}${visBtn}${copyBtn}</td>
+        </tr>`;
       }).join('');
+      list.innerHTML = `<table class="data-table">
+        <thead><tr>
+          <th>Dataset</th><th>Event</th><th>Date</th><th>Owner</th><th>Visibility</th><th>Actions</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
 
       list.querySelectorAll('.df-ds-connect').forEach(btn => {
         btn.onclick = () => connectDataset(btn.dataset.owner, btn.dataset.fullname);
+      });
+      list.querySelectorAll('.df-ds-vis').forEach(btn => {
+        btn.onclick = () => changeVisibility(btn.dataset.owner, btn.dataset.fullname, btn.dataset.newvis);
       });
       list.querySelectorAll('.df-ds-copy').forEach(btn => {
         btn.onclick = () => showCopyForm(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
       });
     }
 
+    function changeVisibility(owner, fullName, newVisibility) {
+      setStatus('df-dataset-status', `Changing to ${newVisibility}…`);
+      apiChangeVisibility(activeToken, owner, fullName, newVisibility).then(result => {
+        if (result.error) { setStatus('df-dataset-status', result.error, true); return; }
+        // If the active dataset was just renamed, update the session
+        const session = getSession();
+        if (session && session.dataset === `${owner}/${fullName}`) {
+          setSession(activeToken, `${owner}/${result.fullName}`);
+        }
+        setStatus('df-dataset-status', '');
+        loadDatasets();
+      }).catch(() => {
+        setStatus('df-dataset-status', 'Server unreachable.', true);
+      });
+    }
+
     function connectDataset(owner, fullName) {
       const name = fullName.replace(/-(?:private|public)$/, '');
-      if (isDirty()) {
+      if (isDirty() && hasCachedData()) {
         showConnectConfirm(
           `You have unsaved local data. Push it to "${name}" before connecting, or discard it?`,
           true,
@@ -276,20 +307,18 @@ export function openDataFileModal() {
 
     // ---- Dismiss ----
 
-    const canDismiss = () => !!getSession() || isStandalone();
-
-    backdrop.onclick = e => {
-      if (e.target !== backdrop) return;
-      if (canDismiss()) { closeModal(); resolve(false); }
-    };
-
-    getEl('df-btn-close').onclick = () => {
-      if (canDismiss()) { closeModal(); resolve(false); }
-    };
-
     function closeModal() {
-      backdrop.hidden = true;
+      document.removeEventListener('keydown', onEsc);
+      view.hidden = true;
       updateDataFileButton();
     }
+
+    function onEsc(e) {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      closeModal();
+      resolve(false);
+    }
+    document.addEventListener('keydown', onEsc);
   });
 }

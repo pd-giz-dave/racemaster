@@ -54,6 +54,11 @@ export function isDirty() {
   return localStorage.getItem(DIRTY_KEY) === 'true';
 }
 
+export function hasCachedData() {
+  const data = cacheLoad();
+  return Object.values(data).some(v => Array.isArray(v) && v.length > 0);
+}
+
 export function isStandalone() {
   return localStorage.getItem(STANDALONE_KEY) === 'true';
 }
@@ -99,6 +104,18 @@ export async function apiCreateDataset(token, name, visibility) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ name, visibility }),
+  });
+  return res.json();
+}
+
+export async function apiChangeVisibility(token, owner, fullName, visibility) {
+  const res = await fetch(`/api/datasets/${owner}/${fullName}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ visibility }),
   });
   return res.json();
 }

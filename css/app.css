@@ -11,6 +11,7 @@
   --warn: #e67e22;
   --bg: #f5f5f5;
   --panel: #ffffff;
+  --panel-alt: #f0f0f0;
   --border: #ccc;
   --text: #222;
   --muted: #666;
@@ -125,6 +126,7 @@ body { font-family: var(--font); font-size: 14px; color: var(--text); background
 .stat-card .stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
 
 /* ---- Buttons ---- */
+.btn[hidden] { display: none; }
 .btn {
   display: inline-flex;
   align-items: center;
@@ -406,17 +408,7 @@ input:focus, select:focus, textarea:focus {
 .modal-box h2 { font-size: 1rem; margin-bottom: 16px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
-/* ---- Data-file modal dataset list ---- */
-.df-ds-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border, #eee);
-}
-.df-ds-row:last-child { border-bottom: none; }
-.df-ds-name { flex: 1; font-size: 0.9rem; font-weight: 500; }
-.df-ds-actions { display: flex; gap: 4px; }
+/* ---- Data-file dataset list ---- */
 .df-badge {
   font-size: 0.7rem;
   font-weight: 600;
