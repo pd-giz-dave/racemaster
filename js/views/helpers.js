@@ -177,6 +177,7 @@ export function wireHelpers() {
     nameWrapper.appendChild(dropdown);
 
     let currentMatches = [];
+    let deletingText   = false;
 
     const normGender = g => {
       const u = (g || '').toUpperCase().trim();
@@ -215,24 +216,29 @@ export function wireHelpers() {
       const typed = nameEl.value.trim();
       if (!typed) {
         currentMatches = [];
+        deletingText   = false;
         closeDropdown();
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
         return;
       }
       const low = typed.toLowerCase();
       currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
-      if (currentMatches.length === 1) {
+      if (currentMatches.length === 1 && !deletingText && typed.length < currentMatches[0].name.length) {
         const s = nameEl.selectionStart;
         nameEl.value = currentMatches[0].name;
         nameEl.setSelectionRange(s, currentMatches[0].name.length);
         fillFromPerson(currentMatches[0]);
+      } else if (currentMatches.length === 1) {
+        fillFromPerson(currentMatches[0]);
       } else if (!currentMatches.length) {
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
       }
+      deletingText = false;
       showDropdown();
     });
 
     nameEl.addEventListener('keydown', e => {
+      deletingText = (e.key === 'Backspace' || e.key === 'Delete');
       if (e.key === 'ArrowDown' && currentMatches.length > 1) {
         e.preventDefault();
         showDropdown();
@@ -291,17 +297,20 @@ export function wireHelpers() {
   // Club field: autofill when typed text becomes unambiguous
   const clubEl = document.getElementById('helper-form-club');
   if (clubEl) {
+    let clubDeleting = false;
+    clubEl.addEventListener('keydown', e => { clubDeleting = (e.key === 'Backspace' || e.key === 'Delete'); });
     clubEl.addEventListener('input', () => {
       const typed = clubEl.value.trim();
-      if (!typed) return;
+      if (!typed) { clubDeleting = false; return; }
       const low = typed.toLowerCase();
       const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))];
       const matches = clubs.filter(c => c.toLowerCase().startsWith(low));
-      if (matches.length === 1) {
+      if (matches.length === 1 && !clubDeleting && typed.length < matches[0].length) {
         const s = clubEl.selectionStart;
         clubEl.value = matches[0];
         clubEl.setSelectionRange(s, matches[0].length);
       }
+      clubDeleting = false;
     });
   }
 

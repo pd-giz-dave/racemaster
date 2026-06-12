@@ -1,9 +1,10 @@
 'use strict';
 
 import { state, loadAll } from './state.js';
-import { restoreDirectory, dumpState, restoreState } from './storage.js';
+import { restoreDirectory, dumpState, restoreState, getSession, isStandalone } from './storage.js';
+import { openDataFileModal, updateDataFileButton } from './auth.js';
 import { showBusy } from './utils.js';
-import { on, showStatus, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, pickFile, downloadText, sanitise } from './ui.js';
+import { on, showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, pickFile, downloadText, sanitise } from './ui.js';
 
 import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
@@ -29,19 +30,28 @@ let currentView = 'home';
 
 export async function init() {
   showBusy('Loading…');
+
+  if (!getSession() && !isStandalone()) {
+    showBusy('');
+    await openDataFileModal();
+    showBusy('Loading…');
+  }
+
   try {
-    // Try to restore persisted directory handle
-    const restored = await restoreDirectory();
-    if (restored) {
-      await loadAll();
-      showStatus('Data loaded from ' + (state.event.name || 'event'));
+    await restoreDirectory();
+    await loadAll();
+    updateBannerEventName(state.event.name);
+    const session = getSession();
+    if (session) {
+      showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
     } else {
-      showStatus('No saved data found — use Import to load a state file.');
+      showStatus(state.event.name ? `Standalone: ${state.event.name}` : 'Standalone mode — no server sync');
     }
   } catch (e) {
     showStatus('Error loading data: ' + e.message, true);
   }
 
+  updateDataFileButton();
   wireNav();
   wireEvents();
   renderAll();
@@ -189,6 +199,22 @@ async function importState() {
 // ---- Event wiring (orchestration) ----
 
 function wireEvents() {
+  on('btn-select-datafile', 'click', async () => {
+    await openDataFileModal();
+    const session = getSession();
+    showBusy('Loading…');
+    await restoreDirectory();
+    await loadAll();
+    updateBannerEventName(state.event.name);
+    showBusy('');
+    renderAll();
+    showView('home');
+    if (session) {
+      showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
+    } else {
+      showStatus(state.event.name ? `Standalone: ${state.event.name}` : 'Standalone mode — no server sync');
+    }
+  });
   on('btn-export-state', 'click', exportState);
   on('btn-import-state', 'click', importState);
 

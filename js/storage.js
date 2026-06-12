@@ -13,19 +13,107 @@ import { formatCSV } from './csv.js';
 //            2 s after the last write, whenever it is reachable.
 //
 // Server endpoints (server.js):
-//   GET  /api/data  → full JSON state
-//   PUT  /api/data  → replace full JSON state
+//   POST /api/auth/login         { username, password } → { token, username }
+//   POST /api/auth/create        { username, password } → { token, username }
+//   GET  /api/datasets           → string[]
+//   POST /api/datasets           { name } → { ok, name }
+//   GET  /api/data/:dataset      → full JSON state
+//   PUT  /api/data/:dataset      → replace full JSON state → { ok }
 // ============================================================
 
-const API        = '/api/data';
-const CACHE_KEY  = 'racemaster-data';   // localStorage key for state
-const DIRTY_KEY  = 'racemaster-dirty';  // localStorage flag: unsynced changes exist
-const SYNC_DELAY = 2000;                // ms to wait before pushing to server
-
+const CACHE_KEY      = 'racemaster-data';       // localStorage: full state object
+const DIRTY_KEY      = 'racemaster-dirty';      // localStorage: unsynced changes flag
+const TOKEN_KEY      = 'racemaster-token';      // localStorage: auth token
+const DATASET_KEY    = 'racemaster-dataset';    // localStorage: current dataset name
+const STANDALONE_KEY = 'racemaster-standalone'; // localStorage: standalone mode flag
 
 export const hasFSA = false;
 
 let _syncTimer = null;
+
+// ---- Session management ----
+
+export function getSession() {
+  const token   = localStorage.getItem(TOKEN_KEY);
+  const dataset = localStorage.getItem(DATASET_KEY);
+  if (!token || !dataset) return null;
+  return { token, dataset };
+}
+
+export function setSession(token, dataset) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(DATASET_KEY, dataset);
+}
+
+export function clearSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(DATASET_KEY);
+}
+
+export function isDirty() {
+  return localStorage.getItem(DIRTY_KEY) === 'true';
+}
+
+export function isStandalone() {
+  return localStorage.getItem(STANDALONE_KEY) === 'true';
+}
+
+export function setStandalone(value) {
+  if (value) localStorage.setItem(STANDALONE_KEY, 'true');
+  else        localStorage.removeItem(STANDALONE_KEY);
+}
+
+// ---- Auth API calls ----
+
+export async function apiLogin(username, password) {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  return res.json();
+}
+
+export async function apiCreateAccount(username, password) {
+  const res = await fetch('/api/auth/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  return res.json();
+}
+
+export async function apiListDatasets(token) {
+  const res = await fetch('/api/datasets', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function apiCreateDataset(token, name, visibility) {
+  const res = await fetch('/api/datasets', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ name, visibility }),
+  });
+  return res.json();
+}
+
+export async function apiCopyDataset(token, fromOwner, fromFullName, toName, visibility) {
+  const res = await fetch('/api/datasets/copy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ fromOwner, fromFullName, toName, visibility }),
+  });
+  return res.json();
+}
 
 // ---- Local cache ----
 
@@ -51,10 +139,15 @@ function cacheSaveTable(table, rows) {
 
 async function syncToServer() {
   if (localStorage.getItem(DIRTY_KEY) !== 'true') return;
+  const session = getSession();
+  if (!session) return;
   try {
-    const res = await fetch(API, {
+    const res = await fetch(`/api/data/${session.dataset}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.token}`,
+      },
       body: localStorage.getItem(CACHE_KEY) || '{}',
     });
     if (res.ok) localStorage.removeItem(DIRTY_KEY);
@@ -65,32 +158,55 @@ async function syncToServer() {
 
 function scheduleSyncToServer() {
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(syncToServer, SYNC_DELAY);
+  _syncTimer = setTimeout(syncToServer, 2000);
 }
 
 // ---- Public API ----
 
 /**
  * On startup: push any pending local changes, then pull fresh state from server.
- * Falls back to the localStorage cache if the server is offline.
- * Always returns truthy so loadAll() proceeds regardless.
+ * Always returns true — the app always proceeds using whatever data is available.
+ * Standalone mode (no session): uses localStorage cache as-is.
+ * On 401 (token expired / server restarted): clears session, uses cache.
+ * On network error: falls back to cache.
  */
 export async function restoreDirectory() {
-  // Push local changes before pulling, so offline edits aren't overwritten
+  const session = getSession();
+  if (!session) return true; // standalone — use localStorage cache
+
   if (localStorage.getItem(DIRTY_KEY) === 'true') {
     await syncToServer();
   }
   try {
-    const res = await fetch(API);
-    if (res.ok) {
+    const res = await fetch(`/api/data/${session.dataset}`, {
+      headers: { 'Authorization': `Bearer ${session.token}` },
+    });
+    if (res.status === 401) {
+      clearSession(); // token expired (server restarted) — fall through to cache
+    } else if (res.ok) {
       const serverData = await res.json();
       localStorage.setItem(CACHE_KEY, JSON.stringify(serverData));
       localStorage.removeItem(DIRTY_KEY);
     }
   } catch {
-    // Use existing localStorage cache as-is
+    // Server unreachable — use localStorage cache as-is
   }
   return true;
+}
+
+/**
+ * Switch to a different dataset.
+ * pushFirst=true: push any dirty local state to the target dataset before fetching.
+ * pushFirst=false (default): discard local cache and fetch fresh from server.
+ * dataset is stored as 'owner/fullName' where fullName = 'name-private' | 'name-public'.
+ */
+export async function switchDataset(token, owner, fullName, { pushFirst = false } = {}) {
+  setSession(token, `${owner}/${fullName}`);
+  if (!pushFirst) {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(DIRTY_KEY);
+  }
+  return restoreDirectory();
 }
 
 /** Read a table from the local cache by name. Returns [] if not found. */

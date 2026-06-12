@@ -1,14 +1,17 @@
 'use strict';
 
-const CACHE = 'racemaster-v3';
+const CACHE = 'racemaster-v4';
 
 const PRECACHE = [
   '/',
   '/index.html',
   '/favicon.ico',
+  '/icon-192.png',
+  '/icon-512.png',
   '/css/app.css',
   '/css/print.css',
   '/js/app.js',
+  '/js/auth.js',
   '/js/ui.js',
   '/js/constants.js',
   '/js/csv.js',
@@ -64,6 +67,9 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
+  // Never cache API requests — auth headers are added by the client and
+  // responses must always be fresh from the server
+  if (url.pathname.startsWith('/api/')) return;
 
   // In dev mode: network-first (always fetch fresh, fall back to cache)
   if (DEV_MODE) {

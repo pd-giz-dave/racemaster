@@ -4,7 +4,7 @@ import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults,
 import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
-import { val, fillForm, showConfirmDialog, showStatus, on } from '../ui.js';
+import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
 import { showBusy, toISODate, fromISODate } from '../utils.js';
 import { renderHome } from './home.js';
 import { renderCategories } from './categories.js';
@@ -108,6 +108,7 @@ export async function saveEventForm() {
   }
 
   await saveEvent();
+  updateBannerEventName(state.event.name);
   showBusy('');
   showStatus('Event saved' + (doClear ? ' — race data cleared.' : '.'));
   renderHome();

@@ -7,10 +7,31 @@ import { getSortedFinishers, getOutstandingCount } from '../finishers.js';
 import { setHTML } from '../ui.js';
 import { COURSE } from '../constants.js';
 
+function eventDetails(ev) {
+  const rows = [];
+  const row = (label, value) => rows.push(`<tr><td class="home-ev-label">${label}</td><td>${value}</td></tr>`);
+
+  if (ev.date)          row('Date',             ev.date);
+  if (ev.distance)      row('Distance',        `${ev.distance} km`);
+  if (ev.categories)    row('Categories',       ev.categories);
+  if (ev.timingMethod && ev.timingMethod !== 'None')
+                        row('Senior timing',    ev.timingMethod);
+
+  const hasJuniors = ev.juniorLimit && ev.juniorLimit !== 'None';
+  if (hasJuniors) {
+    row('Junior limit',   ev.juniorLimit);
+    if (ev.juniorTimingMethod && ev.juniorTimingMethod !== 'None')
+                        row('Junior timing',    ev.juniorTimingMethod);
+  }
+
+  if (!rows.length) return '';
+  return `<table class="home-ev-table"><tbody>${rows.join('')}</tbody></table>`;
+}
+
 export function renderHome() {
   const ev = state.event;
-  setHTML('home-event-name',       ev.name || '(no event loaded)');
-  setHTML('home-event-date',       ev.date || '');
+  setHTML('home-view-title',       ev.name ? `${ev.name} Summary` : 'Event Summary');
+  setHTML('home-event-details',    eventDetails(ev));
   setHTML('home-helper-count',     getNumberOfHelpers());
   setHTML('home-senior-count',     getEntriesOnCourse(COURSE.SENIORS));
   setHTML('home-junior-count',     getEntriesOnCourse(COURSE.JUNIORS));

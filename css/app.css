@@ -44,6 +44,7 @@ body { font-family: var(--font); font-size: 14px; color: var(--text); background
 
 .app-header h1 { font-size: 1.1rem; font-weight: 600; }
 .app-header .event-name { font-size: 0.9rem; opacity: 0.85; }
+.app-header .app-icon { width: 28px; height: 28px; flex-shrink: 0; }
 
 .app-sidebar {
   background: #2c3e50;
@@ -102,6 +103,9 @@ body { font-family: var(--font); font-size: 14px; color: var(--text); background
 .card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; }
 
 /* ---- Home summary grid ---- */
+.home-ev-table { border-collapse: collapse; margin-top: 2px; font-size: 0.85rem; }
+.home-ev-label { color: var(--muted, #666); padding-right: 12px; white-space: nowrap; vertical-align: top; }
+
 .home-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -401,6 +405,29 @@ input:focus, select:focus, textarea:focus {
 
 .modal-box h2 { font-size: 1rem; margin-bottom: 16px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* ---- Data-file modal dataset list ---- */
+.df-ds-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border, #eee);
+}
+.df-ds-row:last-child { border-bottom: none; }
+.df-ds-name { flex: 1; font-size: 0.9rem; font-weight: 500; }
+.df-ds-actions { display: flex; gap: 4px; }
+.df-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.df-badge-private { background: #e8e8e8; color: #555; }
+.df-badge-public  { background: #d4edda; color: #1a6e3c; }
+.df-badge-owner   { background: #d0e4f7; color: #1a4a7a; }
 
 /* ---- Status bar ---- */
 #status-bar {

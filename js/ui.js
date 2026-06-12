@@ -45,6 +45,11 @@ export function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+export function updateBannerEventName(name) {
+  const el = document.getElementById('home-event-name-header');
+  if (el) el.textContent = name || '';
+}
+
 export function showStatus(msg, isError = false) {
   const cls = isError ? 'status-error' : 'status-ok';
 
