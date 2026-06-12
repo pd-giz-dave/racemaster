@@ -9,8 +9,27 @@ import { showBusy, toISODate, fromISODate } from '../utils.js';
 import { renderHome } from './home.js';
 import { renderCategories } from './categories.js';
 
+function populateJuniorLimitDropdown() {
+  const el = document.getElementById('ev-junior-limit');
+  if (!el) return;
+  const catSel = (document.getElementById('ev-categories')?.value || 'FRA').toUpperCase();
+  const preset = catSel === 'WFRA' ? state.wfraPreset : state.fraPreset;
+  const current = el.value;
+  const seen = new Set();
+  const opts = preset
+    .map(r => r.maleCat || '')
+    .filter(c => /^U\d+[BG]?$/i.test(c))
+    .map(c => /[BG]$/i.test(c) ? c.slice(0, -1) : c)
+    .filter(c => { const k = c.toUpperCase(); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+  el.innerHTML = `<option value="None">None</option>` +
+    opts.map(c => `<option value="${c}">${c}</option>`).join('');
+  el.value = opts.includes(current) ? current : 'None';
+}
+
 export function renderEvent() {
   const ev = state.event;
+  populateJuniorLimitDropdown();
   fillForm('event-form', {
     'ev-name':               ev.name,
     'ev-date':               toISODate(ev.date),
@@ -128,6 +147,7 @@ export function wireEvent() {
   on('btn-save-event',  'click', saveEventForm);
   on('btn-apply-fra',   'click', applyCatPreset('FRA'));
   on('btn-apply-wfra',  'click', applyCatPreset('WFRA'));
+  on('ev-categories',   'change', populateJuniorLimitDropdown);
 
   const distEl = document.getElementById('ev-distance');
   if (distEl) {

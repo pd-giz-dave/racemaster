@@ -37,7 +37,7 @@
       <a href="#" data-view="event">Event Settings</a>
 
       <div class="nav-section">Print</div>
-      <a href="#" data-view="forms">Print Forms</a>
+      <a href="#" data-view="forms">Paperwork</a>
 
       <div class="nav-section">Registration</div>
       <a href="#" data-view="entries">Entries</a>
@@ -50,7 +50,7 @@
 
       <div class="nav-section">Results</div>
       <a href="#" data-view="si-results">SI Results</a>
-      <a href="#" data-view="results">Results &amp; Prizes</a>
+      <a href="#" data-view="results">Results &amp; Prize List</a>
 
       <div class="nav-section">Data</div>
       <a href="#" data-view="people">People</a>
@@ -72,52 +72,27 @@
         <h2 id="home-view-title">Event Summary</h2>
       </div>
 
-      <div class="home-grid">
-        <div class="stat-card">
-          <div class="stat-value" id="home-helper-count">0</div>
-          <div class="stat-label">Helpers Registered</div>
+      <div class="home-info-row">
+        <div class="card home-stats-card">
+          <h3>Statistics</h3>
+          <div id="home-statistics"></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="home-senior-count">0</div>
-          <div class="stat-label">Senior Entries</div>
+        <div class="card home-event-card">
+          <h3>Event Details</h3>
+          <div id="home-event-details"></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="home-junior-count">0</div>
-          <div class="stat-label">Junior Entries</div>
+        <div class="card home-getting-started">
+          <h3>Getting Started</h3>
+          <ol style="margin-left:1.2em;line-height:2">
+            <li>Click <strong>Select Data File</strong> to select your data file.</li>
+            <li>Set up the event details in <strong>Event Settings</strong>.</li>
+            <li>Optionally, import pre-entries via <strong>Pre-Entries (SI)</strong>.</li>
+            <li>Prepare pre-race paperwork from <strong>Paperwork</strong>.</li>
+            <li>Register competitors on the <strong>Entries</strong> page.</li>
+            <li>Record finish times on the <strong>Finishers</strong> page.</li>
+            <li>Generate <strong>Results &amp; Prize List</strong> when racing is done.</li>
+          </ol>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="home-senior-finishers">0</div>
-          <div class="stat-label">Senior Finishers</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="home-junior-finishers">0</div>
-          <div class="stat-label">Junior Finishers</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="home-senior-outstanding">0</div>
-          <div class="stat-label">Seniors Outstanding</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="home-junior-outstanding">0</div>
-          <div class="stat-label">Juniors Outstanding</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div id="home-event-details"></div>
-      </div>
-
-      <div class="card">
-        <h3>Getting Started</h3>
-        <ol style="margin-left:1.2em;line-height:2">
-          <li>Click <strong>Select Data File</strong> to select your data file.</li>
-          <li>Set up the event details in <strong>Event Settings</strong>.</li>
-          <li>Optionally, import pre-entries via <strong>Pre-Entries (SI)</strong>.</li>
-          <li>Register competitors on the <strong>Entries</strong> page.</li>
-          <li>Record finish times on the <strong>Finishers</strong> page.</li>
-          <li>Generate <strong>Results &amp; Prize List</strong> when racing is done.</li>
-          <li>Print forms and results from <strong>Print Forms</strong>.</li>
-        </ol>
       </div>
     </div>
 
@@ -207,7 +182,7 @@
           </div>
           <div class="form-field">
             <label for="ev-junior-limit">Junior Age Limit Category</label>
-            <input type="text" id="ev-junior-limit" placeholder="e.g. U18 or None">
+            <select id="ev-junior-limit"></select>
           </div>
         </div>
       </div>
@@ -243,10 +218,10 @@
     </div>
 
     <!-- ======================================================
-         PRINT FORMS
+         PAPERWORK
          ====================================================== -->
     <div class="view" id="view-forms" hidden>
-      <div class="view-header"><h2>Print Forms</h2><span class="entry-status view-status-msg" hidden></span></div>
+      <div class="view-header"><h2>Paperwork</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="card">
         <h3>Entry Forms</h3>
@@ -612,10 +587,10 @@
     </div>
 
     <!-- ======================================================
-         RESULTS & PRIZES
+         RESULTS & PRIZE LIST
          ====================================================== -->
     <div class="view" id="view-results" hidden>
-      <div class="view-header"><h2>Results &amp; Prizes</h2><span class="entry-status view-status-msg" hidden></span></div>
+      <div class="view-header"><h2>Results &amp; Prize List</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="btn-row">
         <button class="btn" id="btn-format-results">Generate Results</button>

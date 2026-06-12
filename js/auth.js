@@ -63,6 +63,7 @@ export function openDataFileModal() {
       loadDatasets();
     } else {
       showPanel('auth');
+      setTimeout(() => getEl('df-username').focus(), 0);
     }
 
     // ---- Auth panel ----
@@ -184,33 +185,40 @@ export function openDataFileModal() {
       if (isDirty() && hasCachedData()) {
         showConnectConfirm(
           `You have unsaved local data. Push it to "${name}" before connecting, or discard it?`,
+          name,
           true,
           pushFirst => doConnectDataset(owner, fullName, pushFirst)
         );
       } else {
         showConnectConfirm(
           `Connecting will replace local data with "${name}" from the server.`,
+          name,
           false,
           () => doConnectDataset(owner, fullName, false)
         );
       }
     }
 
-    function showConnectConfirm(msg, hasPushOption, onConfirm) {
+    function showConnectConfirm(msg, name, hasPushOption, onConfirm) {
       getEl('df-connect-confirm-msg').textContent = msg;
       const pushBtn    = getEl('df-btn-connect-push');
       const discardBtn = getEl('df-btn-connect-discard');
+      let focusBtn;
       if (hasPushOption) {
         pushBtn.hidden = false;
+        pushBtn.textContent = `Push & Connect: ${name}`;
         pushBtn.onclick = () => { hideConnectConfirm(); onConfirm(true); };
         discardBtn.textContent = 'Discard & Connect';
         discardBtn.onclick = () => { hideConnectConfirm(); onConfirm(false); };
+        focusBtn = pushBtn;
       } else {
         pushBtn.hidden = true;
-        discardBtn.textContent = 'Connect';
+        discardBtn.textContent = `Connect: ${name}`;
         discardBtn.onclick = () => { hideConnectConfirm(); onConfirm(false); };
+        focusBtn = discardBtn;
       }
       getEl('df-connect-confirm').hidden = false;
+      setTimeout(() => focusBtn.focus(), 0);
     }
 
     function hideConnectConfirm() {
@@ -297,14 +305,11 @@ export function openDataFileModal() {
 
     getEl('df-btn-logout').onclick = () => {
       clearSession();
-      activeToken = null;
-      activeUsername = null;
+      setStandalone(true);
       getEl('df-username').value = '';
       getEl('df-password').value = '';
-      setStatus('df-auth-status', '');
-      setStatus('df-dataset-status', '');
-      hideCopyForm();
-      showPanel('auth');
+      closeModal();
+      resolve(true);
     };
 
     // ---- Dismiss ----

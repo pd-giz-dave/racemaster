@@ -11,13 +11,10 @@ export const state = {
   event: {
     name: '', distance: 0, date: '', startTime: '11:00:00',
     firstBibNumber: 1, categories: 'FRA', entryLimit: 200,
-    preEntryFormat: 'None', timingMethod: 'Stopwatch',
-    maleRecord: '', femaleRecord: '',
+    timingMethod: 'Stopwatch', maleRecord: '', femaleRecord: '',
     prizeDepthOverall: 3, prizeDepthPerCategory: 3,
     juniorLimit: 'None', juniorStartTime: '', juniorEntryLimit: 0,
     juniorTimingMethod: 'None',
-    stopwatchOffsetTime: '', stopwatchLateStart: false,
-    stopwatchStartOffset: '', juniorStopwatchStartOffset: '',
   },
   people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal}
   // clubs derived from people — not persisted
@@ -71,7 +68,6 @@ async function loadEvent() {
     state.event.juniorEntryLimit  = +state.event.juniorEntryLimit || 0;
     state.event.prizeDepthOverall     = +state.event.prizeDepthOverall || 3;
     state.event.prizeDepthPerCategory = +state.event.prizeDepthPerCategory || 3;
-    state.event.stopwatchLateStart    = state.event.stopwatchLateStart === 'true';
   }
 }
 
