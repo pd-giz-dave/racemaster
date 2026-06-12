@@ -141,12 +141,17 @@ function cacheLoad() {
   } catch { return {}; }
 }
 
+function notifyDirty() {
+  window.dispatchEvent(new CustomEvent('racemaster-dirty-change'));
+}
+
 function cacheSaveTable(table, rows) {
   try {
     const cache = cacheLoad();
     cache[table] = rows;
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
     localStorage.setItem(DIRTY_KEY, 'true');
+    notifyDirty();
   } catch (e) {
     console.warn('localStorage write failed:', e.message);
   }
@@ -167,7 +172,7 @@ async function syncToServer() {
       },
       body: localStorage.getItem(CACHE_KEY) || '{}',
     });
-    if (res.ok) localStorage.removeItem(DIRTY_KEY);
+    if (res.ok) { localStorage.removeItem(DIRTY_KEY); notifyDirty(); }
   } catch {
     // Server unreachable — dirty flag persists; will retry on next write
   }
@@ -249,6 +254,7 @@ export function dumpState() { return cacheLoad(); }
 export async function restoreState(data) {
   localStorage.setItem(CACHE_KEY, JSON.stringify(data));
   localStorage.setItem(DIRTY_KEY, 'true');
+  notifyDirty();
   await syncToServer();
 }
 

@@ -38,6 +38,7 @@ function parsePreEntryRow(r) {
 
   // get each field of interest (case insensitive)
   const participantNumber = get('Participant - Participant No','RaceNumber');
+  const siEntriesId      = get('Participant - SiEntries ID');
   const firstName  = get('Participant - First Name','Forename');
   const lastName   = get('Participant - Last Name','Surname');
   const genderRaw  = get('Participant - Gender','Participant - Class Sex at Birth','Participant - Sex','Gender');
@@ -65,7 +66,7 @@ function parsePreEntryRow(r) {
   const gender = genderFirst === 'F' ? GENDER.FEMALE : GENDER.MALE;
 
   return {
-    participantNumber, firstName, lastName, gender, dob,
+    participantNumber, siEntriesId, firstName, lastName, gender, dob,
     club, fraNumber, category, email,
     address1, address2, town, county, postcode, country,
     telephone, mobile, eligibility,

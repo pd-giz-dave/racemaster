@@ -9,11 +9,13 @@ import { renderFinishers } from './finishers.js';
 
 export function renderSIResults() {
   const tbody = document.getElementById('si-results-tbody');
+  const thead = document.getElementById('si-results-head');
   if (!tbody) return;
-  tbody.innerHTML = state.siResults.map(r => {
-    const keys = Object.keys(r);
-    return `<tr>${keys.map(k => `<td>${r[k] || ''}</td>`).join('')}</tr>`;
-  }).join('');
+  const keys = state.siResults.length ? Object.keys(state.siResults[0]) : [];
+  if (thead) thead.innerHTML = keys.map(k => `<th>${k}</th>`).join('');
+  tbody.innerHTML = state.siResults.map(r =>
+    `<tr>${keys.map(k => `<td>${r[k] || ''}</td>`).join('')}</tr>`
+  ).join('');
   setHTML('si-results-count', `${state.siResults.length} SI results`);
 }
 

@@ -21,15 +21,6 @@ export function isEntryBanned(entry) {
   return isBanned(p);
 }
 
-// ============================================================
-// Entry registration logic (translated from Entries.xml)
-// ============================================================
-
-/** Get total registered entries */
-export function getNumberOfEntries() {
-  return state.entries.length;
-}
-
 /** Count entries on a given course */
 export function getEntriesOnCourse(course) {
   return state.entries.filter(e => iequal(e.course, course)).length;
@@ -317,44 +308,6 @@ export async function clearAllEntries() {
   await saveEntries();
 }
 
-/** Delete an entry by bib number */
-export async function deleteEntry(bibNumber) {
-  const idx = findEntryByBib(bibNumber);
-  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
-  state.entries.splice(idx, 1);
-  await saveEntries();
-  return { error: '' };
-}
-
-/** Mark an entry as retired (DNF) */
-export async function retireEntry(bibNumber) {
-  const idx = findEntryByBib(bibNumber);
-  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
-  state.entries[idx].retired = 'Y';
-  await saveEntries();
-  return { error: '' };
-}
-
-/** Clear the retired flag on an entry */
-export async function unretireEntry(bibNumber) {
-  const idx = findEntryByBib(bibNumber);
-  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
-  state.entries[idx].retired = '';
-  await saveEntries();
-  return { error: '' };
-}
-
-/** Assign a dibber to an entry (short code → long code) */
-export async function assignDibber(bibNumber, dibberShortCode) {
-  const idx = findEntryByBib(bibNumber);
-  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
-  const longCode = mapDibberNumber(dibberShortCode);
-  if (longCode < 0) return { error: `Dibber ${dibberShortCode} not found in dibber list` };
-  state.entries[idx].dibberNumber = +dibberShortCode;
-  await saveEntries();
-  return { error: '' };
-}
-
 /** Set individual start time for an entry */
 export async function setEntryStartTime(bibNumber, timeStr) {
   const idx = findEntryByBib(bibNumber);
@@ -434,40 +387,29 @@ export function getEntriesForCourse(course) {
   return state.entries.filter(e => iequal(e.course, course));
 }
 
-/** Count unique categories in entries */
-export function getCategoryCount() {
-  const cats = new Set(state.entries.map(e => e.category).filter(Boolean));
-  return cats.size;
-}
-
 /**
  * Export entries in SI timing CSV format.
  * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
  * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  */
-export function buildSITimingExport() {
-  const rows = [];
-  for (const e of getSortedEntries()) {
-    if (!e.bibNumber) continue;
-    const longCode = e.dibberNumber > 0 ? mapDibberNumber(e.dibberNumber) : 0;
-    const genderPrefix = e.gender === GENDER.FEMALE_PREFIX ? 'F' : 'M';
-    rows.push({
-      'RaceNumber':         e.bibNumber,
-      'NumberCompetitors':  '',
-      'CardNumbers':        longCode > 0 ? longCode : '',
-      'MembershipNumbers':  e.fraNumber || '',
-      'Forenames':          '',
-      'Surnames':           e.name || '',
-      'Name (Free Format)': e.name || '',
-      'Category':           e.category || '',
-      'Club':               e.club || '',
-      'CourseClass':        e.course || '',
-      'Entry System IDs':   e.preEntry || '',
-      'Eligibility':        '',
-      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
-    });
-  }
-  return rows;
+function siMembershipNumbers(e) {
+  const pe = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
+  return `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`;
+}
+
+function siEligibility(e) {
+  const pe = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
+  return pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : '';
+}
+
+function siParticipantId(e) {
+  const pe = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
+  return pe?.siEntriesId || '';
+}
+
+function siNameParts(e) {
+  const parts = (e.name || '').trim().split(/\s+/);
+  return { forenames: parts[0] || '', surnames: parts.slice(1).join(' ') };
 }
 
 /** Export entries as SI Timing CSV rows. */
@@ -479,19 +421,20 @@ export function exportSITimingCSV(entries) {
       ? (state.dibbers.find(d => +d.shortCode === +e.dibberNumber)?.longCode || '')
       : '';
     const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
+    const { forenames, surnames } = siNameParts(e);
     rows.push({
       'RaceNumber':         e.bibNumber,
       'NumberCompetitors':  '',
       'CardNumbers':        dibberLong,
-      'MembershipNumbers':  e.fraNumber || '',
-      'Forenames':          '',
-      'Surnames':           e.name || '',
+      'MembershipNumbers':  siMembershipNumbers(e),
+      'Forenames':          forenames,
+      'Surnames':           surnames,
       'Name (Free Format)': e.name || '',
       'Category':           e.category || '',
       'Club':               e.club || '',
       'CourseClass':        e.course || '',
-      'Entry System IDs':   e.preEntry || '',
-      'Eligibility':        '',
+      'Participant ID':     siParticipantId(e),
+      'Eligibility':        siEligibility(e),
       'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }

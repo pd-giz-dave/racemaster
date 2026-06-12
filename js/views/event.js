@@ -58,6 +58,19 @@ export async function saveEventForm() {
   const doClear       = document.getElementById('ev-clear-previous')?.checked || false;
   const oldCategories = ev.categories || 'FRA';
 
+  // Validate: dibbers requires a non-empty dibber list
+  if (state.dibbers.length === 0) {
+    const seniorDibbers = val('ev-timing-method') === 'Dibbers';
+    const juniorDibbers = val('ev-junior-timing') === 'Dibbers';
+    if (seniorDibbers || juniorDibbers) {
+      const which = seniorDibbers && juniorDibbers ? 'Senior and Junior timing are both set to Dibbers'
+                  : seniorDibbers ? 'Senior timing is set to Dibbers'
+                  : 'Junior timing is set to Dibbers';
+      showStatus(`${which} but no dibber list has been imported. Either change the timing method or import a dibber list via the Dibbers page.`, true);
+      return;
+    }
+  }
+
   // Build confirmation message
   const lines = [`Save settings for "${newName || '(unnamed event)'}"?`];
 

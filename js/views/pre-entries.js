@@ -23,6 +23,8 @@ export function renderPreEntries() {
       <td>${pe.club || ''}</td>
       <td>${pe.category || ''}</td>
       <td>${pe.fraNumber || ''}</td>
+      <td>${pe.siEntriesId || ''}</td>
+      <td>${pe.eligibility || ''}</td>
     </tr>`;
   }).join('');
   setHTML('pre-entry-count', `${preEntries.length} pre-entries`);

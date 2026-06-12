@@ -24,9 +24,9 @@
     <span class="event-name" id="home-event-name-header"></span>
     <div style="flex:1"></div>
     <span id="header-username" style="color:rgba(255,255,255,0.75);font-size:0.8rem"></span>
-    <button class="btn btn-outline" id="btn-select-datafile" style="color:#fff;border-color:#fff">Select Data File</button>
-    <button class="btn btn-outline" id="btn-export-state" style="color:#fff;border-color:#fff">Export</button>
-    <button class="btn btn-outline" id="btn-import-state" style="color:#fff;border-color:#fff">Import</button>
+    <button class="btn btn-outline" id="btn-select-datafile">Select Data File</button>
+    <button class="btn btn-outline" id="btn-export-state">Export</button>
+    <button class="btn btn-outline" id="btn-import-state">Import</button>
   </header>
 
   <!-- Sidebar navigation -->
@@ -36,15 +36,15 @@
       <a href="#" data-view="home">Home</a>
       <a href="#" data-view="event">Event Settings</a>
 
-      <div class="nav-section">Print</div>
+      <div class="nav-section">Prepare</div>
+      <a href="#" data-view="pre-entries">Pre-Entries (SI)</a>
       <a href="#" data-view="forms">Paperwork</a>
 
       <div class="nav-section">Registration</div>
       <a href="#" data-view="entries">Entries</a>
       <a href="#" data-view="helpers">Helpers</a>
-      <a href="#" data-view="pre-entries">Pre-Entries (SI)</a>
 
-      <div class="nav-section">Race Day</div>
+      <div class="nav-section">Finishers</div>
       <a href="#" data-view="finishers">Finishers</a>
       <a href="#" data-view="safety">Safety Check</a>
 
@@ -326,10 +326,6 @@
                 </select>
               </div>
             </div>
-            <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:10px">
-              <input type="checkbox" id="entry-form-confirm">
-              <label for="entry-form-confirm" style="font-size:0.85rem;color:var(--text);cursor:pointer">Confirm entry details are correct</label>
-            </div>
             <div class="btn-row" style="margin-top:8px">
               <button class="btn" id="btn-submit-entry" style="flex:1">Register</button>
               <button class="btn btn-secondary" id="btn-reset-entry" style="flex:1">Reset</button>
@@ -402,10 +398,6 @@
               <label for="helper-form-role-desc">Role Description</label>
               <input type="text" id="helper-form-role-desc" placeholder="Auto-filled for known roles; enter for new roles">
             </div>
-            <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:10px">
-              <input type="checkbox" id="helper-form-confirm">
-              <label for="helper-form-confirm" style="font-size:0.85rem;color:var(--text);cursor:pointer">Confirm helper details are correct</label>
-            </div>
             <div class="btn-row" style="margin-top:8px">
               <button class="btn" id="btn-submit-helper" style="flex:1">Add Helper</button>
               <button class="btn btn-secondary" id="btn-reset-helper" style="flex:1">Reset</button>
@@ -440,7 +432,7 @@
       <div class="card">
         <h3>Import</h3>
         <p class="text-muted text-sm mb-8">
-          Import a CSV file from Sportident Entry or EntryCentral.
+          Import a CSV file from Sportident or EntryCentral.
         </p>
         <div class="btn-row">
           <button class="btn" id="btn-import-si-entries">Import CSV File</button>
@@ -454,7 +446,7 @@
           <thead>
             <tr>
               <th>Ref</th><th>Name</th><th>G</th><th>DoB</th>
-              <th>Club</th><th>Cat</th><th>FRA</th>
+              <th>Club</th><th>Cat</th><th>FRA#</th><th>SI ID</th><th>Eligibility</th>
             </tr>
           </thead>
           <tbody id="pre-entries-tbody"></tbody>

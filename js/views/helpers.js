@@ -58,7 +58,6 @@ function fillFormForEdit(num) {
     'helper-form-club':      h.club   || '',
     'helper-form-role':      h.role   || '',
     'helper-form-role-desc': state.roles.find(r => r.role === h.role)?.description || '',
-    'helper-form-confirm':   false,
   });
   document.getElementById('btn-submit-helper').textContent = 'Update';
   document.getElementById('btn-cancel-helper-edit').style.display = '';
@@ -91,11 +90,7 @@ function resetHelperForm() {
 export async function submitHelperForm() {
   const isEdit = editingNumber > 0;
 
-  if (!document.getElementById('helper-form-confirm')?.checked) {
-    showStatus(`Check the confirmation box before ${isEdit ? 'updating' : 'adding'} helper.`, true);
-    document.getElementById('helper-form-confirm')?.focus();
-    return;
-  }
+
 
   const role     = val('helper-form-role').trim();
   const roleDesc = val('helper-form-role-desc').trim();
@@ -213,7 +208,8 @@ export function wireHelpers() {
     };
 
     nameEl.addEventListener('input', () => {
-      const typed = nameEl.value.trim();
+      const raw   = nameEl.value;
+      const typed = raw.trim();
       if (!typed) {
         currentMatches = [];
         deletingText   = false;
@@ -221,14 +217,15 @@ export function wireHelpers() {
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
         return;
       }
+      const hasTrailingSpace = raw.endsWith(' ');
       const low = typed.toLowerCase();
       currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
-      if (currentMatches.length === 1 && !deletingText && typed.length < currentMatches[0].name.length) {
+      if (currentMatches.length === 1 && !deletingText && !hasTrailingSpace && typed.length < currentMatches[0].name.length) {
         const s = nameEl.selectionStart;
         nameEl.value = currentMatches[0].name;
         nameEl.setSelectionRange(s, currentMatches[0].name.length);
         fillFromPerson(currentMatches[0]);
-      } else if (currentMatches.length === 1) {
+      } else if (currentMatches.length === 1 && !hasTrailingSpace) {
         fillFromPerson(currentMatches[0]);
       } else if (!currentMatches.length) {
         fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
@@ -300,12 +297,13 @@ export function wireHelpers() {
     let clubDeleting = false;
     clubEl.addEventListener('keydown', e => { clubDeleting = (e.key === 'Backspace' || e.key === 'Delete'); });
     clubEl.addEventListener('input', () => {
-      const typed = clubEl.value.trim();
+      const raw   = clubEl.value;
+      const typed = raw.trim();
       if (!typed) { clubDeleting = false; return; }
       const low = typed.toLowerCase();
       const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))];
       const matches = clubs.filter(c => c.toLowerCase().startsWith(low));
-      if (matches.length === 1 && !clubDeleting && typed.length < matches[0].length) {
+      if (matches.length === 1 && !clubDeleting && !raw.endsWith(' ') && typed.length < matches[0].length) {
         const s = clubEl.selectionStart;
         clubEl.value = matches[0];
         clubEl.setSelectionRange(s, matches[0].length);

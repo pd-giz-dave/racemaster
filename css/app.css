@@ -17,6 +17,7 @@
   --muted: #666;
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'Courier New', monospace;
+  --header-fg: #fff;
 }
 
 /* ---- Reset ---- */
@@ -46,6 +47,7 @@ body { font-family: var(--font); font-size: 14px; color: var(--text); background
 .app-header h1 { font-size: 1.1rem; font-weight: 600; }
 .app-header .event-name { font-size: 0.9rem; opacity: 0.85; }
 .app-header .app-icon { width: 28px; height: 28px; flex-shrink: 0; }
+.app-header .btn { color: var(--header-fg); border-color: var(--header-fg); }
 
 .app-sidebar {
   background: #2c3e50;
@@ -574,6 +576,27 @@ input:focus, select:focus, textarea:focus {
   flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
+}
+
+/* ---- SI Results view: flex column, table fills remaining space ---- */
+#view-si-results:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+#view-si-results .view-header,
+#view-si-results .card {
+  flex-shrink: 0;
+}
+#view-si-results .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+#view-si-results .data-table {
+  width: max-content;
+  min-width: 100%;
 }
 
 /* ---- People view: flex column, table fills remaining space ---- */

@@ -52,6 +52,7 @@ export async function init() {
   }
 
   updateDataFileButton();
+  window.addEventListener('racemaster-dirty-change', updateDataFileButton);
   wireNav();
   wireEvents();
   renderAll();

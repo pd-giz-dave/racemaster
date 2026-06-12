@@ -128,7 +128,6 @@ export function fillFormForEdit(bib) {
     'entry-form-fra':      e.fraNumber || '',
     'entry-form-category': e.category  || '',
     'entry-form-course':   e.course    || '',
-    'entry-form-confirm':  false,
   });
   document.getElementById('entry-form-bib')?.removeAttribute('tabindex');
   document.getElementById('entry-form-dibber')?.removeAttribute('tabindex');
@@ -231,13 +230,7 @@ export async function submitEntryForm() {
     }
   }
 
-  if (!document.getElementById('entry-form-confirm')?.checked) {
-    showStatus('Check the confirmation box before registering.', true);
-    document.getElementById('entry-form-confirm')?.focus();
-    return;
-  }
-
-  // Skip-bib confirmation after checkbox (new entries only)
+  // Skip-bib confirmation (new entries only)
   if (!editingBib && !insertingAtBib) {
     const typedBib = +val('entry-form-bib') || 0;
     const next = getNextBibNumber();
@@ -302,7 +295,7 @@ async function runExportSITiming() {
   const { SI_TIMING_COL_NAMES } = await import('../constants.js');
   const rows = exportSITimingCSV(getSortedEntries());
   const csv  = formatCSV(rows, Object.values(SI_TIMING_COL_NAMES));
-  downloadText(csv, `${sanitise(state.event.name)}_SI_Timing.csv`);
+  downloadText(csv, `${sanitise(state.event.name)}_registrations.csv`);
   showStatus('SI timing file downloaded.');
 }
 
@@ -438,7 +431,8 @@ export function wireEntries() {
     };
 
     nameEl.addEventListener('input', () => {
-      const typed = nameEl.value.trim();
+      const raw   = nameEl.value;
+      const typed = raw.trim();
       if (!typed) {
         currentMatches = [];
         deletingText   = false;
@@ -446,15 +440,16 @@ export function wireEntries() {
         fillForm('', { 'entry-form-gender': '', 'entry-form-dob': '', 'entry-form-club': '', 'entry-form-fra': '' });
         return;
       }
+      const hasTrailingSpace = raw.endsWith(' ');
       const low = typed.toLowerCase();
       currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
-      if (currentMatches.length === 1 && !deletingText && typed.length < currentMatches[0].name.length) {
+      if (currentMatches.length === 1 && !deletingText && !hasTrailingSpace && typed.length < currentMatches[0].name.length) {
         // Inline completion: suggest the rest of the only match
         const s = nameEl.selectionStart;
         nameEl.value = currentMatches[0].name;
         nameEl.setSelectionRange(s, currentMatches[0].name.length);
         fillFromPerson(currentMatches[0]);
-      } else if (currentMatches.length === 1) {
+      } else if (currentMatches.length === 1 && !hasTrailingSpace) {
         fillFromPerson(currentMatches[0]);
       } else if (!currentMatches.length) {
         fillForm('', { 'entry-form-gender': '', 'entry-form-dob': '', 'entry-form-club': '', 'entry-form-fra': '' });
@@ -526,12 +521,13 @@ export function wireEntries() {
     let clubDeleting = false;
     clubEl.addEventListener('keydown', e => { clubDeleting = (e.key === 'Backspace' || e.key === 'Delete'); });
     clubEl.addEventListener('input', () => {
-      const typed = clubEl.value.trim();
+      const raw   = clubEl.value;
+      const typed = raw.trim();
       if (!typed) { clubDeleting = false; return; }
       const low = typed.toLowerCase();
       const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))];
       const matches = clubs.filter(c => c.toLowerCase().startsWith(low));
-      if (matches.length === 1 && !clubDeleting && typed.length < matches[0].length) {
+      if (matches.length === 1 && !clubDeleting && !raw.endsWith(' ') && typed.length < matches[0].length) {
         const s = clubEl.selectionStart;
         clubEl.value = matches[0];
         clubEl.setSelectionRange(s, matches[0].length);

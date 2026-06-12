@@ -88,7 +88,7 @@ export const SI_TIMING_COL_NAMES = {
   CATEGORY:      'Category',
   CLUB:          'Club',
   COURSE:        'CourseClass',
-  ENTRIES_ID:    'Entry System IDs',
+  ENTRIES_ID:    'Participant ID',
   ELIGIBILITY:   'Eligibility',
   GENDER_DOB:    'GenderDOB',
 };

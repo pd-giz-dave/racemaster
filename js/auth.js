@@ -16,6 +16,7 @@ export function updateDataFileButton() {
   const session = getSession();
   if (!session) {
     btn.textContent = isStandalone() ? 'Standalone' : 'Select Data File';
+    btn.style.color = 'var(--header-fg)';
     if (userSpan) userSpan.textContent = '';
     return;
   }
@@ -23,6 +24,7 @@ export function updateDataFileButton() {
   const [owner, fullName] = session.dataset.split('/');
   btn.textContent = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
   if (userSpan) userSpan.textContent = owner || '';
+  btn.style.color = isDirty() ? 'var(--danger)' : 'var(--header-fg)';
 }
 
 // ---- Helpers ----
