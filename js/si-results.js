@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { saveSIResults } from './state.js';
-import { COURSE } from './constants.js';
+import { COURSE, SI_RESULTS_COL_NAMES } from './constants.js';
 import { normaliseTime, iequal, timeToSeconds } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { getEntry } from './entries.js';
@@ -19,8 +19,14 @@ import { buildFinishNumbersMap } from './finishers.js';
 export async function importSIResults(csvText) {
   if (!csvText) return { imported: 0, errors: ['Empty file'] };
 
-  const { rows } = parseSICSV(csvText);
+  const { headers, rows } = parseSICSV(csvText);
   if (!rows.length) return { imported: 0, errors: ['No data in file'] };
+
+  const required = Object.values(SI_RESULTS_COL_NAMES);
+  const missing = required.filter(col => !headers.includes(col));
+  if (missing.length) {
+    return { imported: 0, errors: [`Missing required columns: ${missing.join(', ')}`] };
+  }
 
   state.siResults = rows;
   await saveSIResults();

@@ -5,7 +5,7 @@ import { saveEntries, savePeople } from './state.js';
 import { GENDER, COURSE } from './constants.js';
 import { normaliseDate, cleanName, iequal } from './utils.js';
 import { calculateCategory, calculateCourse } from './categories.js';
-import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber, mapDibberNumber } from './data.js';
+import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
 export function isBanned(p) {

@@ -21,8 +21,7 @@ export const GENDER = {
 export const COURSE = {
   JUNIORS:        'Juniors',
   SENIORS:        'Seniors',
-  SENIORS_PREFIX: 'S',
-  JUNIORS_PREFIX: 'J',
+  JUNIORS_PREFIX: 'J',  // ToDo: dro pthis
 };
 
 // Timing method constants
@@ -30,9 +29,7 @@ export const TIMING = {
   STOPWATCH:        'Stopwatch',
   DIBBERS:          'Dibbers',
   NONE:             'None',
-  STOPWATCH_PREFIX: 'S',
-  DIBBERS_PREFIX:   'D',
-  NONE_PREFIX:      'N',
+  DIBBERS_PREFIX:   'D', // ToDo: drop this
 };
 
 // Results prefix constants
@@ -64,7 +61,7 @@ export const UNATTACHED_CLUB = 'Unattached';
 export const LIST_SEP        = ' | ';
 export const SUFFIX_SEP      = ' @ ';
 
-// SI Results expected column names
+// SI Results minimum expected column names
 export const SI_RESULTS_COL_NAMES = {
   RACE_NUMBER: 'RaceNumber',
   NAME:        'Name (Free Format)',

@@ -96,7 +96,14 @@ export function parseSICSV(text) {
   const lines = splitCSVLines(text.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
   const rawHeaders = parseCSVRow(lines[0]);
-  const headers = rawHeaders.map(h => h.trim().replace(/^\*/, ''));
+  // Deduplicate headers: second occurrence becomes Name_2, third Name_3, etc.
+  const seen = {};
+  const headers = rawHeaders.map(h => {
+    const base = h.trim().replace(/^\*/, '');
+    if (!base) return base;
+    seen[base] = (seen[base] || 0) + 1;
+    return seen[base] > 1 ? `${base}_${seen[base]}` : base;
+  });
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
