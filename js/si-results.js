@@ -120,10 +120,8 @@ function getField(row, ...keys) {
   return '';
 }
 
-function getSIBib(r)        { return +getField(r, 'Stno', 'BibNo', 'Bib', 'Number', 'bibNumber') || 0; }
+function getSIBib(r)        { return +getField(r, 'BibNo', 'Bib', 'Number', 'bibNumber') || 0; }
 function getSIName(r)       { return getField(r, 'Surname', 'Name', 'Last name', 'Lastname'); }
-function getSIClub(r)       { return getField(r, 'club+city', 'Club', 'Team', 'Organisation'); }
-function getSICategory(r)   { return getField(r, 'Cl.', 'Class', 'Category', 'Cat'); }
 function getSIFinishTime(r) {
   const t = getField(r, 'Time', 'FinishTime', 'Finish time', 'RaceTime', 'Race time');
   return normaliseTime(t) || '';
