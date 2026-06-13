@@ -4,7 +4,7 @@ import {
   getSession, setSession, clearSession,
   isStandalone, setStandalone, isDirty, hasCachedData,
   apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset, apiChangeVisibility,
-  switchDataset,
+  apiDeleteDataset, switchDataset, saveAsDataset,
 } from './storage.js';
 
 // ---- Header button label ----
@@ -112,6 +112,9 @@ export function openDataFileModal() {
       showPanel('datasets');
       hideCopyForm();
       hideConnectConfirm();
+      if (getEl('df-save-as-form')) getEl('df-save-as-form').hidden = true;
+      const userEl = getEl('df-logged-in-user');
+      if (userEl) userEl.textContent = activeUsername ? `Signed in as ${activeUsername}` : '';
       setStatus('df-dataset-status', 'Loading…');
       getEl('df-dataset-list').innerHTML = '';
       apiListDatasets(activeToken).then(datasets => {
@@ -138,14 +141,17 @@ export function openDataFileModal() {
           ? `<button class="btn btn-sm btn-secondary df-ds-vis" data-owner="${d.owner}" data-fullname="${d.fullName}" data-newvis="${newVis}">→ ${newVis}</button>`
           : '';
         const copyBtn = `<button class="btn btn-sm btn-secondary df-ds-copy" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Copy</button>`;
+        const deleteBtn = isOwn
+          ? `<button class="btn btn-sm btn-danger df-ds-delete" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Delete</button>`
+          : '';
         const muted = '<span style="color:var(--muted)">—</span>';
-        return `<tr>
+        return `<tr class="${isOwn ? 'df-row-own' : 'df-row-other'}">
           <td>${d.name}</td>
           <td>${d.eventName || muted}</td>
           <td>${d.eventDate || muted}</td>
           <td>${d.owner}</td>
           <td><span class="df-badge df-badge-${d.visibility}">${d.visibility}</span></td>
-          <td style="white-space:nowrap">${connectBtn}${visBtn}${copyBtn}</td>
+          <td style="white-space:nowrap">${connectBtn}${visBtn}${copyBtn}${deleteBtn}</td>
         </tr>`;
       }).join('');
       list.innerHTML = `<table class="data-table">
@@ -163,6 +169,28 @@ export function openDataFileModal() {
       });
       list.querySelectorAll('.df-ds-copy').forEach(btn => {
         btn.onclick = () => showCopyForm(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
+      });
+      list.querySelectorAll('.df-ds-delete').forEach(btn => {
+        btn.onclick = () => deleteDataset(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
+      });
+    }
+
+    function deleteDataset(owner, fullName, name) {
+      const msg = `Permanently delete "${name}"?\n\nThis cannot be undone — all data in this dataset will be lost.`;
+      if (!window.confirm(msg)) return;
+      setStatus('df-dataset-status', 'Deleting…');
+      apiDeleteDataset(activeToken, owner, fullName).then(result => {
+        if (result.error) { setStatus('df-dataset-status', result.error, true); return; }
+        // If the deleted dataset was the active one, revert to standalone
+        const session = getSession();
+        if (session && session.dataset === `${owner}/${fullName}`) {
+          clearSession();
+          setStandalone(true);
+        }
+        setStatus('df-dataset-status', `"${name}" deleted.`);
+        loadDatasets();
+      }).catch(() => {
+        setStatus('df-dataset-status', 'Server unreachable.', true);
       });
     }
 
@@ -276,6 +304,44 @@ export function openDataFileModal() {
     };
 
     getEl('df-copy-name').onkeydown = e => { if (e.key === 'Enter') getEl('df-btn-do-copy').click(); };
+
+    // ---- Save As form ----
+
+    function showSaveAsForm() {
+      getEl('df-save-as-name').value = '';
+      const privateRadio = document.querySelector('input[name="df-save-as-vis"][value="private"]');
+      if (privateRadio) privateRadio.checked = true;
+      getEl('df-save-as-form').hidden = false;
+      getEl('df-save-as-name').focus();
+    }
+
+    function hideSaveAsForm() {
+      getEl('df-save-as-form').hidden = true;
+    }
+
+    getEl('df-btn-save-as').onclick = showSaveAsForm;
+    getEl('df-btn-cancel-save-as').onclick = hideSaveAsForm;
+
+    getEl('df-btn-do-save-as').onclick = () => {
+      const name = getEl('df-save-as-name').value.trim();
+      if (!name) { setStatus('df-dataset-status', 'Enter a name for the new dataset.', true); return; }
+      if (/public|private/i.test(name)) {
+        setStatus('df-dataset-status', 'Name must not contain "public" or "private".', true); return;
+      }
+      const visibility = radioValue('df-save-as-vis');
+      setStatus('df-dataset-status', 'Saving…');
+      saveAsDataset(activeToken, activeUsername, name, visibility)
+        .then(result => {
+          if (result.error) { setStatus('df-dataset-status', result.error, true); return; }
+          hideSaveAsForm();
+          setStatus('df-dataset-status', `Saved as "${name}".`);
+          loadDatasets();
+        }).catch(() => {
+          setStatus('df-dataset-status', 'Server unreachable.', true);
+        });
+    };
+
+    getEl('df-save-as-name').onkeydown = e => { if (e.key === 'Enter') getEl('df-btn-do-save-as').click(); };
 
     // ---- Create form ----
 

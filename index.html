@@ -565,9 +565,6 @@
       <div class="card">
         <div class="btn-row">
           <button class="btn" id="btn-import-si-results">Import SI Results CSV</button>
-          <button class="btn btn-secondary" id="btn-verify-si-results">Verify</button>
-          <button class="btn btn-secondary" id="btn-format-si-results-senior">Merge Seniors</button>
-          <button class="btn btn-secondary" id="btn-format-si-results-junior">Merge Juniors</button>
         </div>
       </div>
 
@@ -587,7 +584,6 @@
 
       <div class="btn-row">
         <button class="btn" id="btn-format-results">Generate Results</button>
-        <button class="btn btn-secondary" id="btn-build-prizes">Build Prize List</button>
       </div>
 
       <div class="tab-bar">
@@ -597,10 +593,11 @@
       </div>
 
       <div class="tab-panel active" id="tab-results-senior">
+        <p id="results-senior-summary" style="margin:6px 0;font-size:0.875rem;color:var(--muted)"></p>
         <div class="table-scroll">
           <table class="data-table">
             <thead>
-              <tr><th>Pos</th><th>Time</th><th>Name</th><th>Club</th><th>Cat</th><th>Cat Pos</th><th>Behind</th><th>Prize</th></tr>
+              <tr><th>Course</th><th>Bib</th><th>Pos</th><th>Cat Pos</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th style="text-align:right">%Ldrs</th><th>Behind</th></tr>
             </thead>
             <tbody id="results-senior-tbody"></tbody>
           </table>
@@ -611,7 +608,7 @@
         <div class="table-scroll">
           <table class="data-table">
             <thead>
-              <tr><th>Pos</th><th>Time</th><th>Name</th><th>Club</th><th>Cat</th><th>Cat Pos</th><th>Behind</th><th>Prize</th></tr>
+              <tr><th>Course</th><th>Bib</th><th>Cat Pos</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th></tr>
             </thead>
             <tbody id="results-junior-tbody"></tbody>
           </table>
@@ -619,10 +616,11 @@
       </div>
 
       <div class="tab-panel" id="tab-results-prizes">
+        <p id="prizes-hint"></p>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table" id="prizes-table">
             <thead>
-              <tr><th>Category</th><th>Position</th><th>Name</th><th>Time</th></tr>
+              <tr><th>Pos</th><th>Cat</th><th>Cat Pos</th><th>Time</th><th>Name</th></tr>
             </thead>
             <tbody id="prizes-tbody"></tbody>
           </table>
@@ -797,6 +795,7 @@
     <div class="view" id="view-datafile" hidden>
       <div class="view-header">
         <h2>Pick/Create Data File</h2>
+        <span id="df-logged-in-user" style="font-size:0.875rem;color:var(--muted)"></span>
       </div>
 
       <!-- Auth panel -->
@@ -847,6 +846,20 @@
           </div>
         </div>
 
+        <!-- Save As form (copy current local data to a new dataset) -->
+        <div id="df-save-as-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
+          <p style="margin:0 0 6px;font-size:0.875rem">Save current data as new dataset:</p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input id="df-save-as-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
+            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="private" checked> Private</label>
+            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="public"> Public</label>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button id="df-btn-do-save-as" class="btn btn-primary">Save As</button>
+            <button id="df-btn-cancel-save-as" class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+
         <!-- Create form -->
         <div style="border-top:1px solid var(--border,#ddd);padding-top:10px;margin-bottom:4px">
           <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">New dataset:</p>
@@ -859,7 +872,8 @@
         </div>
 
         <p id="df-dataset-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
-        <div style="margin-top:10px">
+        <div class="btn-row" style="margin-top:10px">
+          <button id="df-btn-save-as" class="btn btn-secondary">Save As…</button>
           <button id="df-btn-logout" class="btn btn-secondary">Log out</button>
         </div>
       </div>

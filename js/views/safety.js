@@ -3,6 +3,7 @@
 import { state } from '../state.js';
 import { recordFinisher, getOutstandingCount } from '../finishers.js';
 import { getEntriesOnCourse, isEntryBanned } from '../entries.js';
+import { getSIAccountedBibs } from '../si-results.js';
 import { setHTML, showStatus, showConfirmDialog } from '../ui.js';
 import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
@@ -15,9 +16,10 @@ function getOutstandingEntries() {
       .map(f => +f.number)
       .filter(n => n > 0)
   );
+  for (const bib of getSIAccountedBibs()) finishedBibs.add(bib);
   return state.entries.filter(e => {
     const bib = +e.bibNumber;
-    return bib > 0 && !finishedBibs.has(bib) && e.retired !== 'Y';
+    return bib > 0 && !finishedBibs.has(bib);
   });
 }
 

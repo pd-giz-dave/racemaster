@@ -21,7 +21,7 @@ export const GENDER = {
 export const COURSE = {
   JUNIORS:        'Juniors',
   SENIORS:        'Seniors',
-  JUNIORS_PREFIX: 'J',  // ToDo: dro pthis
+  JUNIORS_PREFIX: 'J',  // ToDo: drop this
 };
 
 // Timing method constants

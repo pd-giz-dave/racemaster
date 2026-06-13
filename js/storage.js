@@ -132,6 +132,33 @@ export async function apiCopyDataset(token, fromOwner, fromFullName, toName, vis
   return res.json();
 }
 
+export async function apiDeleteDataset(token, owner, fullName) {
+  const res = await fetch(`/api/datasets/${owner}/${fullName}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+/** Create a new dataset and push the current local cache into it without switching. */
+export async function saveAsDataset(token, owner, name, visibility) {
+  const createRes = await fetch('/api/datasets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ name, visibility }),
+  });
+  const created = await createRes.json();
+  if (created.error) return created;
+
+  const pushRes = await fetch(`/api/data/${owner}/${created.fullName}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: localStorage.getItem(CACHE_KEY) || '{}',
+  });
+  if (!pushRes.ok) return { error: 'Dataset created but push failed' };
+  return created;
+}
+
 // ---- Local cache ----
 
 function cacheLoad() {

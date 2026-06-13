@@ -65,7 +65,7 @@ export function getEntry(bibNumber) {
  */
 export function addEntry({
   bibNumber, dibberNumber, fraNumber, name, club,
-  gender, dob, category, course, preEntry, startTime, retired, status
+  gender, dob, category, course, preEntry, startTime, status
 }) {
   if (!bibNumber || +bibNumber <= 0) return -1;
   const bib = +bibNumber;
@@ -88,7 +88,6 @@ export function addEntry({
   e.course       = course        !== undefined ? course      : (e.course       || COURSE.SENIORS);
   e.preEntry     = preEntry      !== undefined ? preEntry    : (e.preEntry     || '');
   e.startTime    = startTime     !== undefined ? startTime   : (e.startTime    || '');
-  e.retired      = retired       !== undefined ? retired     : (e.retired      || '');
   e.status       = status        !== undefined ? status      : (e.status       || '');
 
   return idx;
@@ -190,7 +189,6 @@ export async function updateEntry(bibNumber, formData) {
   if (formData.category  !== undefined) e.category  = formData.category;
   if (formData.course    !== undefined) e.course    = formData.course;
   if (formData.startTime !== undefined) e.startTime = formData.startTime;
-  if (formData.retired   !== undefined) e.retired   = formData.retired;
   if (formData.status    !== undefined) e.status    = formData.status;
 
   await saveEntries();
@@ -256,7 +254,7 @@ export async function insertEntryAndRenumber(atBib, formData) {
   state.entries.splice(idx, 0, {
     bibNumber: atBib, dibberNumber, fraNumber: fra,
     name, club, gender, dob, category, course, preEntry,
-    retired: '', startTime: '',
+    startTime: '',
   });
 
   addPerson(name, null, gender, dob, club, fra, category, false);

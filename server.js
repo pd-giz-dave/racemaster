@@ -284,6 +284,19 @@ const server = http.createServer(async (req, res) => {
       return jsonReply(res, 200, { ok: true, name, fullName: newFullName, owner, visibility: newVisibility });
     }
 
+    // DELETE /api/datasets/:owner/:fullName  —  permanently delete a dataset (owner only)
+    if (/^\/api\/datasets\/[^/]+\/[^/]+$/.test(pathname) && req.method === 'DELETE') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      const [, , , owner, fullName] = pathname.split('/');
+      if (owner !== username) return jsonReply(res, 403, { error: 'Cannot delete another user\'s dataset' });
+      const filePath = dataFilePath(owner, fullName);
+      if (!fs.existsSync(filePath)) return jsonReply(res, 404, { error: 'Dataset not found' });
+      fs.unlinkSync(filePath);
+      console.log(`Dataset deleted: ${owner}/${fullName}`);
+      return jsonReply(res, 200, { ok: true });
+    }
+
     // GET /api/data/:owner/:fullName  —  read a dataset
     if (pathname.startsWith('/api/data/') && req.method === 'GET') {
       const username = getAuthUser(req);

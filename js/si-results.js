@@ -28,19 +28,26 @@ export async function importSIResults(csvText) {
     return { imported: 0, errors: [`Missing required columns: ${missing.join(', ')}`] };
   }
 
+  const issues = verifySIResults(rows);
+  if (issues.length) {
+    const msgs = issues.map(i => i.name ? `Bib ${i.bib} (${i.name}): ${i.issue}` : `Bib ${i.bib}: ${i.issue}`);
+    return { imported: 0, errors: [`Verification failed — ${issues.length} issue(s): ${msgs.join('; ')}`] };
+  }
+
   state.siResults = rows;
   await saveSIResults();
   return { imported: rows.length, errors: [] };
 }
 
 /**
- * Verify SI results against entries.
+ * Verify SI results rows against entries.
+ * Checks bib exists, name matches, and course matches.
  * Returns array of {bib, name, issue} objects.
  */
-export function verifySIResults() {
+export function verifySIResults(rows = state.siResults) {
   const issues = [];
 
-  for (const r of state.siResults) {
+  for (const r of rows) {
     const bib = getSIBib(r);
     if (!bib) continue;
 
@@ -50,11 +57,16 @@ export function verifySIResults() {
       continue;
     }
 
-    // Check name similarity (warn if very different)
-    const siName = getSIName(r).toUpperCase();
-    const entryName = (entry.name || '').toUpperCase();
+    const siName    = getSIName(r).toUpperCase().trim();
+    const entryName = (entry.name || '').toUpperCase().trim();
     if (siName && entryName && siName !== entryName) {
-      issues.push({ bib, name: entry.name, issue: `Name mismatch: SI has "${getSIName(r)}"` });
+      issues.push({ bib, name: entry.name, issue: `Name mismatch: SI "${getSIName(r)}" vs entry "${entry.name}"` });
+    }
+
+    const siCourse    = getSICourse(r).toUpperCase().trim();
+    const entryCourse = (entry.course || '').toUpperCase().trim();
+    if (siCourse && entryCourse && siCourse !== entryCourse) {
+      issues.push({ bib, name: entry.name, issue: `Course mismatch: SI "${getSICourse(r)}" vs entry "${entry.course}"` });
     }
   }
 
@@ -120,8 +132,21 @@ function getField(row, ...keys) {
   return '';
 }
 
-function getSIBib(r)        { return +getField(r, 'BibNo', 'Bib', 'Number', 'bibNumber') || 0; }
-function getSIName(r)       { return getField(r, 'Surname', 'Name', 'Last name', 'Lastname'); }
+export function getSIBib(r)        { return +getField(r, 'RaceNumber', 'BibNo', 'Bib', 'Number', 'bibNumber') || 0; }
+export function getSIRaceTime(r)   { return normaliseTime(getField(r, 'RaceTime', 'Race time', 'Time', 'FinishTime', 'Finish time')) || ''; }
+export function getSICourse(r)     { return getField(r, 'CourseClass', 'Course', 'Class'); }
+export function getSIStatus(r)     { return getField(r, 'Status'); }
+
+/** Set of bibs accounted for in SI results (have a race time or a non-blank status). */
+export function getSIAccountedBibs() {
+  const bibs = new Set();
+  for (const r of state.siResults) {
+    const bib = getSIBib(r);
+    if (bib > 0 && (getSIRaceTime(r) || getSIStatus(r))) bibs.add(bib);
+  }
+  return bibs;
+}
+function getSIName(r)       { return getField(r, 'Name (Free Format)', 'Surname', 'Name', 'Last name', 'Lastname'); }
 function getSIFinishTime(r) {
   const t = getField(r, 'Time', 'FinishTime', 'Finish time', 'RaceTime', 'Race time');
   return normaliseTime(t) || '';

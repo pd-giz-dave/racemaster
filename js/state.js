@@ -22,7 +22,7 @@ export const state = {
   categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist, pairMinAge, pairCat, pairRef, pairMaxDist}
   roles:      [],  // {role, description}
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
-  entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, startTime, retired, status}
+  entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, startTime, status}
   helpers:    [],  // {number, name, club, gender, dob, category, role}
   finishers:  [],  // {action, number, time} — all other fields derived from entries
   results:    [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}

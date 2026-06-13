@@ -135,7 +135,7 @@ export async function deleteFinishersFrom(stateIdx) {
   return { error: '', deleted };
 }
 
-/** Count entries on a course that have not finished (NORMAL) or retired (DNF) in the finishers list. */
+/** Count entries on a course that have not finished (NORMAL) or retired (DNF) in the finishers list or SI results. */
 export function getOutstandingCount(course) {
   const finishedOrRetiredBibs = new Set(
     state.finishers
@@ -143,6 +143,13 @@ export function getOutstandingCount(course) {
       .map(f => +f.number)
       .filter(n => n > 0)
   );
+  // Inline SI results lookup (can't import si-results.js — circular dep)
+  for (const r of state.siResults) {
+    const bib = +(Object.keys(r).reduce((v, k) => v || (k.trim().toUpperCase() === 'RACENUMBER' ? r[k] : ''), '') || 0);
+    const time   = Object.keys(r).reduce((v, k) => v || (k.trim().toUpperCase() === 'RACETIME' ? r[k] : ''), '');
+    const status = Object.keys(r).reduce((v, k) => v || (k.trim().toUpperCase() === 'STATUS'   ? r[k] : ''), '');
+    if (bib > 0 && (time || status)) finishedOrRetiredBibs.add(bib);
+  }
   return state.entries.filter(e => {
     if (!iequal(e.course, course)) return false;
     const bib = +e.bibNumber;
