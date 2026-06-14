@@ -76,7 +76,7 @@ export function addHelper({ number, name, club, gender, dob, category, role }) {
  */
 export async function submitHelper(formData) {
   const name   = cleanName(formData.name || '');
-  const gender = (formData.gender || '').charAt(0).toUpperCase();
+  const gender = formData.gender || '';
   const dob    = normaliseDate(formData.dob || '');
   const club   = cleanName(formData.club || '');
   const role   = formData.role || '';
@@ -84,7 +84,7 @@ export async function submitHelper(formData) {
   if (!name) return { error: 'Name is required' };
 
   let category = '';
-  if (dob && gender !== GENDER.PAIR_PREFIX) {
+  if (dob && gender !== GENDER.PAIR) {
     category = calculateCategory(dob, gender);
   }
 

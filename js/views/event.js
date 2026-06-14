@@ -45,6 +45,7 @@ export function renderEvent() {
     'ev-junior-start-time':  ev.juniorStartTime,
     'ev-prize-overall':      ev.prizeDepthOverall,
     'ev-prize-per-cat':      ev.prizeDepthPerCategory,
+    'ev-prize-junior-cat':   ev.juniorPrizeDepthPerCategory,
     'ev-male-record':        ev.maleRecord,
     'ev-female-record':      ev.femaleRecord,
     'ev-clear-previous':     false,
@@ -110,8 +111,9 @@ export async function saveEventForm() {
   ev.juniorLimit                = val('ev-junior-limit');
   ev.juniorTimingMethod         = val('ev-junior-timing');
   ev.juniorEntryLimit           = +val('ev-junior-limit-n') || 0;
-  ev.prizeDepthOverall          = +val('ev-prize-overall') || 3;
-  ev.prizeDepthPerCategory      = +val('ev-prize-per-cat') || 3;
+  ev.prizeDepthOverall             = +val('ev-prize-overall')    || 3;
+  ev.prizeDepthPerCategory         = +val('ev-prize-per-cat')    || 3;
+  ev.juniorPrizeDepthPerCategory   = +val('ev-prize-junior-cat') || 3;
   ev.maleRecord                 = val('ev-male-record');
   ev.femaleRecord               = val('ev-female-record');
 

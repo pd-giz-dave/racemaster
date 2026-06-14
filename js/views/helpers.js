@@ -1,7 +1,7 @@
 'use strict';
 
 import { state, saveRoles } from '../state.js';
-import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers } from '../helpers.js';
+import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
   updateDatalistClubs, updateDatalistRoles,
@@ -51,6 +51,7 @@ function fillFormForEdit(num) {
   const h = getHelper(num);
   if (!h) return;
   editingNumber = num;
+  setHTML('helper-form-number', `#${num}`);
   fillForm('', {
     'helper-form-name':      h.name   || '',
     'helper-form-gender':    h.gender || '',
@@ -72,17 +73,9 @@ function resetHelperForm() {
   document.querySelectorAll('#helpers-tbody .row-editing')
     .forEach(r => r.classList.remove('row-editing'));
   clearForm('helper-form-fields');
+  setHTML('helper-form-number', `#${getNextHelperNumber()}`);
   document.getElementById('btn-submit-helper').textContent = 'Add Helper';
   document.getElementById('btn-cancel-helper-edit').style.display = 'none';
-  const roleEl     = document.getElementById('helper-form-role');
-  const roleDescEl = document.getElementById('helper-form-role-desc');
-  if (roleEl) {
-    roleEl.value = 'HELPER';
-    if (roleDescEl) {
-      const found = state.roles.find(r => r.role.toLowerCase() === 'helper');
-      roleDescEl.value = found?.description || '';
-    }
-  }
 }
 
 // ---- Submit ----
@@ -90,19 +83,35 @@ function resetHelperForm() {
 export async function submitHelperForm() {
   const isEdit = editingNumber > 0;
 
-
+  const name = val('helper-form-name').trim();
+  if (!name) {
+    showStatus('Please enter a name.', true);
+    document.getElementById('helper-form-name')?.focus();
+    return;
+  }
 
   const role     = val('helper-form-role').trim();
+  if (!role) {
+    showStatus('Please enter a role.', true);
+    document.getElementById('helper-form-role')?.focus();
+    return;
+  }
+
+  const knownRole = state.roles.find(r => r.role.toLowerCase() === role.toLowerCase());
+  const canonicalRole = knownRole ? knownRole.role : role;
+
   const roleDesc = val('helper-form-role-desc').trim();
+  if (!knownRole && !roleDesc) {
+    showStatus('Please enter a description for the new role.', true);
+    document.getElementById('helper-form-role-desc')?.focus();
+    return;
+  }
 
   // Auto-add new role if not already in roles table
-  if (role && !isEdit) {
-    const existing = state.roles.find(r => r.role.toLowerCase() === role.toLowerCase());
-    if (!existing) {
-      state.roles.push({ role, description: roleDesc });
-      await saveRoles();
-      updateDatalistRoles();
-    }
+  if (!isEdit && !knownRole) {
+    state.roles.push({ role: canonicalRole, description: roleDesc });
+    await saveRoles();
+    updateDatalistRoles();
   }
 
   const formData = {
@@ -110,7 +119,7 @@ export async function submitHelperForm() {
     gender: val('helper-form-gender'),
     dob:    val('helper-form-dob'),
     club:   val('helper-form-club'),
-    role,
+    role:   canonicalRole,
   };
 
   showBusy(isEdit ? 'Updating…' : 'Adding helper…');
@@ -147,7 +156,7 @@ export async function confirmDeleteHelper(num) {
 
 export function wireHelpers() {
   on('btn-submit-helper',      'click', submitHelperForm);
-  on('btn-cancel-helper-edit', 'click', resetHelperForm);
+  on('btn-cancel-helper-edit', 'click', () => { resetHelperForm(); document.getElementById('helper-form-name')?.focus(); });
   on('btn-reset-helper',       'click', () => { resetHelperForm(); document.getElementById('helper-form-name')?.focus(); });
 
   on('btn-clear-all-helpers', 'click', async () => {
@@ -317,11 +326,25 @@ export function wireHelpers() {
   const roleDescEl = document.getElementById('helper-form-role-desc');
 
   if (roleEl && roleDescEl) {
+    let roleDeleting = false;
+    roleEl.addEventListener('keydown', e => { roleDeleting = (e.key === 'Backspace' || e.key === 'Delete'); });
     roleEl.addEventListener('input', () => {
-      const typed = roleEl.value.trim();
-      if (!typed) { roleDescEl.value = ''; return; }
-      const found = state.roles.find(r => r.role.toLowerCase() === typed.toLowerCase());
-      if (found) roleDescEl.value = found.description || '';
+      const raw   = roleEl.value;
+      const typed = raw.trim();
+      if (!typed) { roleDescEl.value = ''; roleDeleting = false; return; }
+      const low = typed.toLowerCase();
+      const matches = state.roles.filter(r => r.role.toLowerCase().startsWith(low));
+      if (matches.length === 1 && !roleDeleting && !raw.endsWith(' ') && typed.length < matches[0].role.length) {
+        const s = roleEl.selectionStart;
+        roleEl.value = matches[0].role;
+        roleEl.setSelectionRange(s, matches[0].role.length);
+        roleDescEl.value = matches[0].description || '';
+      } else {
+        const exact = matches.find(r => r.role.toLowerCase() === low);
+        if (exact) roleDescEl.value = exact.description || '';
+        else if (!matches.length) roleDescEl.value = '';
+      }
+      roleDeleting = false;
     });
 
     roleDescEl.addEventListener('change', async () => {

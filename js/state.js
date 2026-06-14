@@ -12,7 +12,7 @@ export const state = {
     name: '', distance: 0, date: '', startTime: '11:00:00',
     firstBibNumber: 1, categories: 'FRA', entryLimit: 200,
     timingMethod: 'Stopwatch', maleRecord: '', femaleRecord: '',
-    prizeDepthOverall: 3, prizeDepthPerCategory: 3,
+    prizeDepthOverall: 3, prizeDepthPerCategory: 3, juniorPrizeDepthPerCategory: 3,
     juniorLimit: 'None', juniorStartTime: '', juniorEntryLimit: 0,
     juniorTimingMethod: 'None',
   },
@@ -24,10 +24,11 @@ export const state = {
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
   entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, startTime, status}
   helpers:    [],  // {number, name, club, gender, dob, category, role}
-  finishers:  [],  // {action, number, time} — all other fields derived from entries
-  results:    [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}
-  prizes:     [],  // {position, category, inCatPos, time, number, name, priority}
-  siResults:  [],  // dynamic - whatever comes from SI results CSV
+  finishers:  [],  // {action, number, time}
+  results:        [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}
+  prizes:         [],  // {position, category, inCatPos, time, number, name, priority}
+  helpersReport:  [],  // {name, club, cat, role, lastRaced} — generated alongside results
+  siResults:      [],  // dynamic - whatever comes from SI results CSV
   fraPreset:  [],  // editable FRA category preset (saved to fra_preset.csv)
   wfraPreset: [],  // editable WFRA category preset (saved to wfra_preset.csv)
 
@@ -51,6 +52,7 @@ export async function loadAll() {
     loadList('finishers'),
     loadList('results'),
     loadList('prizes'),
+    loadList('helpersReport'),
     loadList('siResults'),
     loadPreset('fraPreset',  FRA_CATEGORIES),
     loadPreset('wfraPreset', WFRA_CATEGORIES),
@@ -66,8 +68,9 @@ async function loadEvent() {
     state.event.firstBibNumber    = +state.event.firstBibNumber || 1;
     state.event.entryLimit        = +state.event.entryLimit || 200;
     state.event.juniorEntryLimit  = +state.event.juniorEntryLimit || 0;
-    state.event.prizeDepthOverall     = +state.event.prizeDepthOverall || 3;
-    state.event.prizeDepthPerCategory = +state.event.prizeDepthPerCategory || 3;
+    state.event.prizeDepthOverall            = +state.event.prizeDepthOverall            || 3;
+    state.event.prizeDepthPerCategory        = +state.event.prizeDepthPerCategory        || 3;
+    state.event.juniorPrizeDepthPerCategory  = +state.event.juniorPrizeDepthPerCategory  || 3;
   }
 }
 
@@ -105,9 +108,10 @@ export async function savePreEntries()   { await writeTable('preEntries', state.
 export async function saveEntries()      { await writeTable('entries',    state.entries); }
 export async function saveHelpers()      { await writeTable('helpers',    state.helpers); }
 export async function saveFinishers()    { await writeTable('finishers',  state.finishers); }
-export async function saveResults()      { await writeTable('results',    state.results); }
-export async function savePrizes()       { await writeTable('prizes',     state.prizes); }
-export async function saveSIResults()    { await writeTable('siResults',  state.siResults); }
+export async function saveResults()        { await writeTable('results',        state.results); }
+export async function savePrizes()         { await writeTable('prizes',         state.prizes); }
+export async function saveHelpersReport()  { await writeTable('helpersReport',  state.helpersReport); }
+export async function saveSIResults()      { await writeTable('siResults',       state.siResults); }
 
 /** Apply the FRA preset categories to state.categories */
 export function applyFRACategories() {

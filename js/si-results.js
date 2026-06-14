@@ -2,11 +2,11 @@
 
 import { state } from './state.js';
 import { saveSIResults } from './state.js';
-import { COURSE, SI_RESULTS_COL_NAMES } from './constants.js';
-import { normaliseTime, iequal, timeToSeconds } from './utils.js';
+import { SI_RESULTS_COL_NAMES } from './constants.js';
+import { normaliseTime } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { getEntry } from './entries.js';
-import { buildFinishNumbersMap } from './finishers.js';
+
 
 // ============================================================
 // SportIdent results import/export (translated from SIResults.xml)
@@ -30,8 +30,7 @@ export async function importSIResults(csvText) {
 
   const issues = verifySIResults(rows);
   if (issues.length) {
-    const msgs = issues.map(i => i.name ? `Bib ${i.bib} (${i.name}): ${i.issue}` : `Bib ${i.bib}: ${i.issue}`);
-    return { imported: 0, errors: [`Verification failed — ${issues.length} issue(s): ${msgs.join('; ')}`] };
+    return { imported: 0, errors: [`Verification failed — ${issues.length} of ${rows.length} bib(s) did not match entries. Have you selected the wrong file?`] };
   }
 
   state.siResults = rows;
@@ -74,50 +73,6 @@ export function verifySIResults(rows = state.siResults) {
 }
 
 /**
- * Convert SI results into finishers format and merge into state.finishers.
- * Clears existing SI-sourced finishers first.
- * Returns {added, errors[]}.
- */
-export async function formatSIResults(course) {
-  course = course || COURSE.SENIORS;
-  const errors = [];
-
-  // Remove previously imported SI finishers for this course
-  state.finishers = state.finishers.filter(f => {
-    if (f.source !== 'si') return true;
-    const e = +f.number > 0 ? getEntry(+f.number) : null;
-    return !iequal(e?.course || '', course);
-  });
-
-  // Sort SI results by finish time / position
-  const sorted = [...state.siResults]
-    .filter(r => getSIBib(r) > 0 && getSIFinishTime(r))
-    .sort((a, b) => timeToSeconds(getSIFinishTime(a)) - timeToSeconds(getSIFinishTime(b)));
-
-  let added = 0;
-
-  for (const r of sorted) {
-    const bib = getSIBib(r);
-    const rawTime = getSIFinishTime(r);
-    const entry = getEntry(bib);
-
-    if (!entry) { errors.push(`Bib ${bib} not in entries`); }
-
-    // Check for existing manual finisher
-    const existing = state.finishers.find(f => +f.number === bib && f.source !== 'si');
-    if (existing) {
-      errors.push(`Bib ${bib} already has a manual finish`);
-    }
-
-    state.finishers.push({ action: 'Finish', number: bib, time: rawTime, source: 'si' });
-    added++;
-  }
-
-  buildFinishNumbersMap();
-  return { added, errors };
-}
-
-/**
  * Export entries in SI Timing CSV format (for loading into SI timing software).
  * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
@@ -147,7 +102,3 @@ export function getSIAccountedBibs() {
   return bibs;
 }
 function getSIName(r)       { return getField(r, 'Name (Free Format)', 'Surname', 'Name', 'Last name', 'Lastname'); }
-function getSIFinishTime(r) {
-  const t = getField(r, 'Time', 'FinishTime', 'Finish time', 'RaceTime', 'Race time');
-  return normaliseTime(t) || '';
-}

@@ -199,6 +199,10 @@
             <label for="ev-prize-per-cat">Category Prize Depth</label>
             <input type="number" id="ev-prize-per-cat" min="1" value="3">
           </div>
+          <div class="form-field">
+            <label for="ev-prize-junior-cat">Junior Category Prize Depth</label>
+            <input type="number" id="ev-prize-junior-cat" min="1" value="3">
+          </div>
         </div>
       </div>
 
@@ -296,9 +300,9 @@
                 <label for="entry-form-gender">Gender</label>
                 <select id="entry-form-gender">
                   <option value="">—</option>
-                  <option value="M">Male</option>
-                  <option value="F">Female</option>
-                  <option value="P">Pair</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Pair">Pair</option>
                 </select>
               </div>
             </div>
@@ -366,7 +370,7 @@
 
       <div class="split-layout">
         <div class="card">
-          <h3>Add Helper</h3>
+          <h3 id="helper-form-heading">Register Helper <span id="helper-form-number" class="text-muted"></span></h3>
           <div id="helper-form-fields">
             <div class="form-field mb-8">
               <label for="helper-form-name">Name</label>
@@ -377,8 +381,8 @@
                 <label for="helper-form-gender">Gender</label>
                 <select id="helper-form-gender">
                   <option value="">—</option>
-                  <option value="M">Male</option>
-                  <option value="F">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
                 </select>
               </div>
               <div class="form-field">
@@ -580,16 +584,17 @@
          RESULTS & PRIZE LIST
          ====================================================== -->
     <div class="view" id="view-results" hidden>
-      <div class="view-header"><h2>Results &amp; Prize List</h2><span class="entry-status view-status-msg" hidden></span></div>
-
-      <div class="btn-row">
-        <button class="btn" id="btn-format-results">Generate Results</button>
-      </div>
-
-      <div class="tab-bar">
-        <button class="active" onclick="switchResultsTab('senior',this)">Seniors</button>
-        <button onclick="switchResultsTab('junior',this)">Juniors</button>
-        <button onclick="switchResultsTab('prizes',this)">Prizes</button>
+      <div id="results-sticky-top">
+        <div class="view-header"><h2>Results &amp; Prize List</h2><span class="entry-status view-status-msg" hidden></span></div>
+        <div class="btn-row">
+          <button class="btn" id="btn-format-results">Generate Results</button>
+        </div>
+        <div class="tab-bar">
+          <button class="active" onclick="switchResultsTab('senior',this)">Seniors</button>
+          <button onclick="switchResultsTab('junior',this)">Juniors</button>
+          <button onclick="switchResultsTab('prizes',this)">Prizes</button>
+          <button onclick="switchResultsTab('helpers',this)">Helpers</button>
+        </div>
       </div>
 
       <div class="tab-panel active" id="tab-results-senior">
@@ -597,7 +602,7 @@
         <div class="table-scroll">
           <table class="data-table">
             <thead>
-              <tr><th>Course</th><th>Bib</th><th>Pos</th><th>Cat Pos</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th style="text-align:right">%Ldrs</th><th>Behind</th></tr>
+              <tr><th>Course</th><th>Bib</th><th>Pos</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th style="text-align:right">%Ldrs</th><th>Behind</th></tr>
             </thead>
             <tbody id="results-senior-tbody"></tbody>
           </table>
@@ -608,7 +613,7 @@
         <div class="table-scroll">
           <table class="data-table">
             <thead>
-              <tr><th>Course</th><th>Bib</th><th>Cat Pos</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th></tr>
+              <tr><th>Course</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th></tr>
             </thead>
             <tbody id="results-junior-tbody"></tbody>
           </table>
@@ -620,9 +625,20 @@
         <div class="table-scroll">
           <table class="data-table" id="prizes-table">
             <thead>
-              <tr><th>Pos</th><th>Cat</th><th>Cat Pos</th><th>Time</th><th>Name</th></tr>
+              <tr><th>Pos</th><th>Cat</th><th>In Cat</th><th>Time</th><th>Name</th></tr>
             </thead>
             <tbody id="prizes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-results-helpers">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Role</th><th>Name</th><th>Club</th><th>Cat</th><th>Last Raced</th></tr>
+            </thead>
+            <tbody id="results-helpers-tbody"></tbody>
           </table>
         </div>
       </div>

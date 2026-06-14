@@ -28,7 +28,7 @@ export function getEntriesOnCourse(course) {
 
 /** Get the entry limit for a course */
 export function getEntryLimit(course) {
-  if (course && course.toUpperCase().startsWith(COURSE.JUNIORS_PREFIX.toUpperCase())) {
+  if (course && iequal(course, COURSE.JUNIORS)) {
     return +state.event.juniorEntryLimit || 0;
   }
   return +state.event.entryLimit || 0;
@@ -101,7 +101,7 @@ export function addEntry({
  */
 export async function submitEntry(formData) {
   const name    = cleanName(formData.name || '');
-  const gender  = (formData.gender || '').charAt(0).toUpperCase();
+  const gender  = formData.gender || '';
   const dob     = normaliseDate(formData.dob || '');
   const club    = cleanName(formData.club || '');
   const fra     = formData.fraNumber || '';
@@ -109,7 +109,7 @@ export async function submitEntry(formData) {
 
   if (!name) return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
-  if (!dob && gender !== GENDER.PAIR_PREFIX) return { error: 'Date of birth is required' };
+  if (!dob && gender !== GENDER.PAIR) return { error: 'Date of birth is required' };
 
   const person = state.people.find(p => iequal(p.name, name) && p.dob === dob);
   if (isBanned(person) && !formData.overrideBan) return { bannedWarning: person.banned };
@@ -202,7 +202,7 @@ export async function updateEntry(bibNumber, formData) {
  */
 export async function insertEntryAndRenumber(atBib, formData) {
   const name     = cleanName(formData.name || '');
-  const gender   = (formData.gender || '').charAt(0).toUpperCase();
+  const gender   = formData.gender || '';
   const dob      = normaliseDate(formData.dob || '');
   const club     = cleanName(formData.club || '');
   const fra      = formData.fraNumber || '';
@@ -210,7 +210,7 @@ export async function insertEntryAndRenumber(atBib, formData) {
 
   if (!name)   return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
-  if (!dob && gender !== GENDER.PAIR_PREFIX) return { error: 'Date of birth is required' };
+  if (!dob && gender !== GENDER.PAIR) return { error: 'Date of birth is required' };
 
   const person2 = state.people.find(p => iequal(p.name, name) && p.dob === dob);
   if (isBanned(person2) && !formData.overrideBan) return { bannedWarning: person2.banned };
@@ -326,14 +326,14 @@ export async function loadPreEntries() {
 
   for (const pe of state.preEntries) {
     const name    = cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim());
-    const gender  = (pe.gender || '').charAt(0).toUpperCase() === 'F' ? GENDER.FEMALE : GENDER.MALE;
+    const gender  = iequal(pe.gender, GENDER.FEMALE) ? GENDER.FEMALE : GENDER.MALE;
     const dob     = normaliseDate(pe.dob || '');
     const club    = cleanName(pe.club || '');
     const fra     = pe.fraNumber || '';
     const preNum  = pe.participantNumber || '';
 
     if (!name) continue;
-    if (!dob && gender !== GENDER.PAIR_PREFIX) {
+    if (!dob) {
       errors.push(`Pre-entry ${preNum} (${name}) has no DoB`);
       continue;
     }

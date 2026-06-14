@@ -190,7 +190,7 @@ export function generateResultsHTML(course) {
     <th class="col-rname">Name</th>
     <th class="col-rclub">Club</th>
     <th class="col-rcat">Cat</th>
-    <th class="col-rcpos">Cat Pos</th>
+    <th class="col-rcpos">In Cat</th>
     <th class="col-rbehind">Behind</th>
   </tr></thead><tbody>`;
 

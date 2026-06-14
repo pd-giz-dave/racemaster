@@ -1,7 +1,5 @@
 'use strict';
 
-import { GENDER, LIST_SEP, SUFFIX_SEP } from './constants.js';
-
 // ============================================================
 // Utility functions (translated from Utils.xml)
 // ============================================================
@@ -90,17 +88,6 @@ export function isValidRaceTime(t) {
   return !!normaliseTime(String(t));
 }
 
-/** Strip a DNF/DSQ/no-time prefix from a race time */
-export function sanitiseRaceTime(t) {
-  if (!t) return t;
-  const s = String(t);
-  if (s.length >= 3) {
-    const pre = s.substring(0, 3).toUpperCase();
-    if (pre === 'DNF' || pre === 'DSQ' || pre === '?@P') return s.substring(3).trim();
-  }
-  return s;
-}
-
 /** Parse a date string (DD/MM/YYYY) to a Date object */
 export function parseDate(d) {
   const s = normaliseDate(d);
@@ -113,49 +100,6 @@ export function parseDate(d) {
 export function today() {
   const dt = new Date();
   return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
-}
-
-/** Build a display name for a person entry */
-export function buildNameItem(firstName, lastName, gender, dob) {
-  let fullName = firstName || '';
-  if (lastName) fullName = (fullName + ' ' + lastName).trim();
-  const g = (gender || '').toUpperCase();
-  const gPrefix = g.startsWith(GENDER.PAIR_PREFIX)   ? GENDER.PAIR_PREFIX
-                : g.startsWith(GENDER.FEMALE_PREFIX)  ? GENDER.FEMALE_PREFIX
-                : GENDER.MALE_PREFIX;
-  const dobStr = normaliseDate(dob) || '';
-  return `${fullName}${SUFFIX_SEP}${gPrefix} ${dobStr}`;
-}
-
-/** Extract the name portion from a buildNameItem result */
-export function unBuildNameItem(nameItem) {
-  return extractPart(nameItem, 0, SUFFIX_SEP);
-}
-
-/** Build a pseudo multi-column list item */
-export function buildListItem(...cols) {
-  return cols.filter(c => c !== undefined).join(LIST_SEP);
-}
-
-/** Get a column from a pseudo multi-column list item */
-export function getListColumn(item, col = 0) {
-  if (!item) return '';
-  const parts = String(item).split(LIST_SEP);
-  return col < parts.length ? parts[col].trim() : '';
-}
-
-/** Extract part N from a string joined by sep (0-indexed) */
-export function extractPart(s, part, sep) {
-  if (!s) return '';
-  const parts = String(s).split(sep);
-  return part < parts.length ? parts[part] : '';
-}
-
-/** Strip a leading prefix from a string */
-export function stripPrefix(prefix, s) {
-  if (!s) return s;
-  if (String(s).startsWith(prefix)) return s.substring(prefix.length);
-  return s;
 }
 
 /** Capitalise each word */
@@ -196,17 +140,6 @@ export function similarity(s1, s2) {
   return dp[m][n];
 }
 
-/** Create a sanitised file name */
-export function sanitiseFileName(name) {
-  return String(name || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '-');
-}
-
-/** Find a row index in an array by field value (case-insensitive) */
-export function findByField(arr, field, value) {
-  const v = String(value || '').toUpperCase();
-  return arr.findIndex(r => String(r[field] || '').toUpperCase() === v);
-}
-
 /** Sort an array of objects by one or more string fields */
 export function sortBy(arr, ...fields) {
   return [...arr].sort((a, b) => {
@@ -219,17 +152,6 @@ export function sortBy(arr, ...fields) {
     return 0;
   });
 }
-
-/** Number sort comparator for a field */
-export function sortByNum(arr, field) {
-  return [...arr].sort((a, b) => (+a[field] || 0) - (+b[field] || 0));
-}
-
-/** Deep clone a plain object/array */
-export function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
-
-/** Format a number as three zero-padded digits (for prize position sorting) */
-export function pad3(n) { return String(+n || 0).padStart(3, '0'); }
 
 /** Convert DD/MM/YYYY to YYYY-MM-DD for <input type="date"> */
 export function toISODate(ddmmyyyy) {

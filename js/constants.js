@@ -6,60 +6,24 @@
 
 // Gender constants
 export const GENDER = {
-  UNKNOWN:        'Unknown',
-  FEMALE:         'Female',
-  MALE:           'Male',
-  PAIR:           'Pair',
-  NON_BINARY:     'Non-binary',
-  FEMALE_PREFIX:  'F',
-  MALE_PREFIX:    'M',
-  PAIR_PREFIX:    'P',
-  NON_BINARY_PREFIX: 'N',
+  UNKNOWN:    'Unknown',
+  FEMALE:     'Female',
+  MALE:       'Male',
+  PAIR:       'Pair',
 };
 
 // Course constants
 export const COURSE = {
-  JUNIORS:        'Juniors',
-  SENIORS:        'Seniors',
-  JUNIORS_PREFIX: 'J',  // ToDo: drop this
+  JUNIORS: 'Juniors',
+  SENIORS: 'Seniors',
 };
 
 // Timing method constants
 export const TIMING = {
-  STOPWATCH:        'Stopwatch',
-  DIBBERS:          'Dibbers',
-  NONE:             'None',
-  DIBBERS_PREFIX:   'D', // ToDo: drop this
+  STOPWATCH: 'Stopwatch',
+  DIBBERS:   'Dibbers',
+  NONE:      'None',
 };
-
-// Results prefix constants
-export const RESULTS = {
-  NO_TIME_PREFIX: '?@P',
-  DNF_PREFIX:     'DNF',
-  DSQ_PREFIX:     'DSQ',
-  PREFIX_LENGTH:  3,
-  LEADERS_COUNT:  10,
-};
-
-// Prize priorities (string prefixes for lexicographic sort)
-export const PRIZE_PRIORITY = {
-  OVERALL:            '1',
-  CATEGORY:           '2',
-  GIRLS_BY_CATEGORY:  1000,
-  BOYS_BY_CATEGORY:   2000,
-  FEMALE_OVERALL:     4000,
-  MALE_OVERALL:       5000,
-  PAIR_OVERALL:       6000,
-  FEMALE_BY_CATEGORY: 7000,
-  MALE_BY_CATEGORY:   8000,
-  PAIR_BY_CATEGORY:   9000,
-  MULTIPLE_MARKER:    '*',
-};
-
-// Misc constants
-export const UNATTACHED_CLUB = 'Unattached';
-export const LIST_SEP        = ' | ';
-export const SUFFIX_SEP      = ' @ ';
 
 // SI Results minimum expected column names
 export const SI_RESULTS_COL_NAMES = {

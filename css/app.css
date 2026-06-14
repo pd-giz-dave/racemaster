@@ -238,6 +238,12 @@ input:focus, select:focus, textarea:focus {
 .results-cat-separator td { padding: 0; border-bottom: 2px solid var(--border); }
 .prizes-cat-sep td { padding: 1px 0; background: #d0d0d0 !important; border-bottom: none; }
 #prizes-table { width: auto; }
+#prizes-hint { flex-shrink: 0; padding: 4px 0; margin: 0; }
+#view-results:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
+#results-sticky-top { flex-shrink: 0; }
+#view-results .tab-panel.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+#view-results .tab-panel > p { flex-shrink: 0; }
+#view-results .table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 /* ---- Two-column form+table layout ---- */
 .split-layout {
@@ -605,17 +611,25 @@ input:focus, select:focus, textarea:focus {
   min-width: 100%;
 }
 
-/* ---- People view: flex column, table fills remaining space ---- */
-#view-people:not([hidden]) {
+/* ---- Simple list views: flex column, table fills remaining space ---- */
+#view-people:not([hidden]),
+#view-clubs:not([hidden]),
+#view-dibbers:not([hidden]) {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 #view-people .view-header,
-#view-people .btn-row {
+#view-people .btn-row,
+#view-clubs .view-header,
+#view-clubs .btn-row,
+#view-dibbers .view-header,
+#view-dibbers .btn-row {
   flex-shrink: 0;
 }
-#view-people .table-scroll {
+#view-people .table-scroll,
+#view-clubs .table-scroll,
+#view-dibbers .table-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;

@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { GENDER, COURSE, FRA_CATEGORIES, WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES } from './constants.js';
-import { normaliseDate, parseDate } from './utils.js';
+import { normaliseDate, parseDate, iequal } from './utils.js';
 
 // ============================================================
 // Category logic (translated from Categories.xml)
@@ -29,11 +29,10 @@ export function getPairCategories() {
     .filter(c => c && c !== '-' && c.toLowerCase() !== 'none');
 }
 
-/** Get categories for a given gender (M/F/P prefix) */
-export function getCategoriesForGender(genderPrefix) {
-  const g = (genderPrefix || '').toUpperCase().charAt(0);
-  if (g === GENDER.FEMALE_PREFIX) return getFemaleCategories();
-  if (g === GENDER.PAIR_PREFIX)   return getPairCategories();
+/** Get categories for a given gender */
+export function getCategoriesForGender(gender) {
+  if (iequal(gender, GENDER.FEMALE)) return getFemaleCategories();
+  if (iequal(gender, GENDER.PAIR))   return getPairCategories();
   return getMaleCategories();
 }
 
@@ -42,15 +41,15 @@ export function getCategoriesForGender(genderPrefix) {
  * Returns the category string or '' if cannot determine.
  */
 export function calculateCategory(dob, genderIn) {
-  const gender = (genderIn || '').toUpperCase().charAt(0);
-  if (gender === GENDER.PAIR_PREFIX) return '';
+  const gender = genderIn || '';
+  if (iequal(gender, GENDER.PAIR)) return '';
 
   const raceDateStr = state.event.date;
   const raceDate = parseDate(raceDateStr);
   const dobDate  = parseDate(normaliseDate(dob));
   if (!raceDate || !dobDate) return '';
 
-  const isFemale = gender === GENDER.FEMALE_PREFIX;
+  const isFemale = iequal(gender, GENDER.FEMALE);
 
   // EOY age = age at end of race year
   const eoyAge = raceDate.getFullYear() - dobDate.getFullYear();
@@ -141,10 +140,6 @@ export function distanceFromCategory(category) {
     if (iequal(row.pairCat,   category)) return +row.pairMaxDist   || 0;
   }
   return 0;
-}
-
-function iequal(a, b) {
-  return (a || '').toUpperCase() === (b || '').toUpperCase();
 }
 
 /**

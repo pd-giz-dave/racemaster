@@ -1,10 +1,10 @@
 'use strict';
 
 import { state } from './state.js';
-import { saveResults, savePrizes } from './state.js';
+import { saveResults, savePrizes, saveHelpersReport } from './state.js';
 import { COURSE, GENDER } from './constants.js';
 import { iequal, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
-import { getCategoryPriority, genderFromCategory } from './categories.js';
+import { calculateCategory, getCategoryPriority, genderFromCategory } from './categories.js';
 import { getEntry, getSortedEntries, isEntryBanned } from './entries.js';
 import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
@@ -29,13 +29,13 @@ export async function formatResults() {
   for (const course of courses) {
     // Stopwatch finishers for this course (manual entries, source !== 'si')
     const swFinishers = getSortedFinishers(course)
-      .filter(f => f.action === 'Finish' && f.source !== 'si');
+      .filter(f => f.action === 'Finish');
     const swBibs = new Set(swFinishers.map(f => +f.number));
 
     // SI results for this course — skip bibs already in stopwatch source
     const siFinishers = state.siResults
       .filter(r => iequal(getSICourse(r), course) && getSIBib(r) > 0 && getSIRaceTime(r))
-      .map(r => ({ action: 'Finish', number: getSIBib(r), time: getSIRaceTime(r), source: 'si' }))
+      .map(r => ({ action: 'Finish', number: getSIBib(r), time: getSIRaceTime(r) }))
       .filter(f => {
         if (swBibs.has(+f.number)) {
           clashWarnings.push(`Bib ${f.number} has stopwatch and SI result — SI ignored`);
@@ -43,28 +43,50 @@ export async function formatResults() {
         }
         return true;
       });
+    const siBibSet = new Set(siFinishers.map(f => +f.number));
 
-    // Merge and sort by adjusted race time
-    const allCourseFinishers = [...swFinishers, ...siFinishers]
-      .sort((a, b) => {
-        const ea = +a.number > 0 ? getEntry(+a.number) : null;
-        const eb = +b.number > 0 ? getEntry(+b.number) : null;
-        const ta = ea && a.time ? adjustedFinishTime(ea, a.time) : a.time;
-        const tb = eb && b.time ? adjustedFinishTime(eb, b.time) : b.time;
-        return timeToSeconds(ta) - timeToSeconds(tb);
-      });
+    // Assign each finisher a numeric sort key.
+    // SI entries use their time. SW entries use adjusted time if available; untimed SW entries
+    // get a fractional key interpolated between their nearest timed neighbours so they stay
+    // in list order, interleaved with timed entries at the right point.
+    const rawList = [...swFinishers, ...siFinishers];
+    const keys = rawList.map(f => {
+      const e = +f.number > 0 ? getEntry(+f.number) : null;
+      const t = !siBibSet.has(+f.number) && e && f.time ? adjustedFinishTime(e, f.time) : f.time;
+      return timeToSeconds(t);   // 0 means no time
+    });
+    // Fill zeros with interpolated values so untimed entries sit between their neighbours
+    const filled = [...keys];
+    for (let i = 0; i < filled.length; i++) {
+      if (filled[i] > 0) continue;
+      // find nearest timed predecessor and successor
+      let prev = 0, next = 0;
+      for (let j = i - 1; j >= 0; j--) if (keys[j] > 0) { prev = keys[j]; break; }
+      for (let j = i + 1; j < keys.length; j++) if (keys[j] > 0) { next = keys[j]; break; }
+      if (prev && next) filled[i] = (prev + next) / 2;
+      else if (prev)    filled[i] = prev + 0.5;
+      else if (next)    filled[i] = next - 0.5;
+      else              filled[i] = i;          // entire list untimed: index order
+    }
+    const allCourseFinishers = rawList
+      .map((f, i) => ({ f, key: filled[i], idx: i }))
+      .sort((a, b) => a.key - b.key || a.idx - b.idx)
+      .map(({ f }) => f);
 
     const finishers = allCourseFinishers.map(f => {
       const entry = +f.number > 0 ? getEntry(+f.number) : null;
-      const adjTime = f.source !== 'si' && entry && f.time && f.time !== '-' ? adjustedFinishTime(entry, f.time) : f.time;
+      const adjTime = !siBibSet.has(+f.number) && entry && f.time && f.time !== '-' ? adjustedFinishTime(entry, f.time) : (f.time || '');
       return { f, entry, adjTime };
-    }).filter(({ adjTime, entry }) => isValidRaceTime(adjTime) && !isEntryBanned(entry));
+    }).filter(({ entry }) => entry && !isEntryBanned(entry));
 
     if (!finishers.length) continue;
 
-    // Top-10 average for %Ldrs (computed from adjTimes before results are saved)
-    const top10     = finishers.slice(0, 10);
-    const avgTop10  = top10.reduce((s, { adjTime }) => s + timeToSeconds(adjTime), 0) / top10.length;
+    // Top-10 average for %Ldrs — only timed finishers count
+    const timedFinishers = finishers.filter(({ adjTime }) => timeToSeconds(adjTime) > 0);
+    const top10    = timedFinishers.slice(0, 10);
+    const avgTop10 = top10.length
+      ? top10.reduce((s, { adjTime }) => s + timeToSeconds(adjTime), 0) / top10.length
+      : 0;
 
     // Course records for record-breaking flag
     const maleRecordSecs   = state.event.maleRecord   ? timeToSeconds(state.event.maleRecord)   : 0;
@@ -78,9 +100,10 @@ export async function formatResults() {
       position++;
       const bib  = +f.number;
       const secs = timeToSeconds(adjTime);
-      const behindSecs   = secs - timeToSeconds(finishers[0].adjTime);
+      const leaderSecs   = timeToSeconds(finishers[0].adjTime);
+      const behindSecs   = secs > 0 && leaderSecs > 0 ? secs - leaderSecs : 0;
       const behindTime   = behindSecs > 0 ? secondsToTime(behindSecs) : '';
-      const pctLdrs      = avgTop10 > 0 ? Math.round(avgTop10 / secs * 100) : '';
+      const pctLdrs      = avgTop10 > 0 && secs > 0 ? Math.round(avgTop10 / secs * 100) : '';
 
       const gender = genderFromCategory(entry?.category || '');
       const recordSecs = gender === GENDER.FEMALE ? femaleRecordSecs : maleRecordSecs;
@@ -159,6 +182,7 @@ export async function formatResults() {
 
   await saveResults();
   await buildPrizes();
+  await buildHelpersReport();
   return { warnings: clashWarnings };
 }
 
@@ -174,8 +198,9 @@ export async function formatResults() {
  * Overall and junior sections are fixed at overallDepth.
  */
 export async function buildPrizes() {
-  const overallDepth = +state.event.prizeDepthOverall    || 3;
-  const catDepth     = +state.event.prizeDepthPerCategory || 3;
+  const overallDepth    = +state.event.prizeDepthOverall           || 3;
+  const catDepth        = +state.event.prizeDepthPerCategory       || 3;
+  const juniorCatDepth  = +state.event.juniorPrizeDepthPerCategory || 3;
 
   const isFinisher = r => r.position < 9999 && isValidRaceTime(r.time);
   const byPos      = (a, b) => a.position - b.position;
@@ -199,15 +224,20 @@ export async function buildPrizes() {
     );
   }
 
-  // Phase 1: collect names at base depths to identify multi-winners
+  // Phase 1: collect names at base depths to identify multi-winners.
+  // Category sections use overallDepth+catDepth: in the worst case all overallDepth
+  // overall slots are filled by one category, and the next catDepth runners beyond
+  // them could themselves appear in a different overall section.
+  const tentativeCatDepth = overallDepth + catDepth;
+  const tentativeJuniorCatDepth = overallDepth + juniorCatDepth;
   const sectionSets = [
-    topNPerCat(juniors.filter(isFemale),          overallDepth),
-    topNPerCat(juniors.filter(r => !isFemale(r)), overallDepth),
+    topNPerCat(juniors.filter(isFemale),          tentativeJuniorCatDepth),
+    topNPerCat(juniors.filter(r => !isFemale(r)), tentativeJuniorCatDepth),
     topN(seniors,                                  overallDepth),
     topN(seniors.filter(isFemale),                 overallDepth),
     topN(seniors.filter(r => !isFemale(r)),        overallDepth),
-    topNPerCat(seniors.filter(isFemale),           catDepth),
-    topNPerCat(seniors.filter(r => !isFemale(r)), catDepth),
+    topNPerCat(seniors.filter(isFemale),           tentativeCatDepth),
+    topNPerCat(seniors.filter(r => !isFemale(r)), tentativeCatDepth),
   ].map(results => new Set(results.map(r => r.name)));
 
   const nameCounts = {};
@@ -248,16 +278,29 @@ export async function buildPrizes() {
     }
   }
 
-  addFixedByCat('Junior Girls',              juniors.filter(isFemale),          overallDepth, true);
-  addFixedByCat('Junior Boys',               juniors.filter(r => !isFemale(r)), overallDepth, true);
+  addFixedByCat('Junior Girls',              juniors.filter(isFemale),          juniorCatDepth, true);
+  addFixedByCat('Junior Boys',               juniors.filter(r => !isFemale(r)), juniorCatDepth, true);
   addFixed('Senior Overall',                 seniors,                            'Overall',        overallDepth, false);
-  addFixed('Senior Female Overall',          seniors.filter(isFemale),           'Overall Female', overallDepth, false);
-  addFixed('Senior Male Overall',            seniors.filter(r => !isFemale(r)), 'Overall Male',   overallDepth, false);
+  addFixed('Senior Female Overall',          seniors.filter(isFemale),           'Female', overallDepth, false);
+  addFixed('Senior Male Overall',            seniors.filter(r => !isFemale(r)), 'Male',   overallDepth, false);
   addExpandedByCat('Senior Female Categories', seniors.filter(isFemale),          false);
   addExpandedByCat('Senior Male Categories',   seniors.filter(r => !isFemale(r)), false);
 
   state.prizes = prizes;
   await savePrizes();
+}
+
+export async function buildHelpersReport() {
+  state.helpersReport = state.helpers
+    .map(h => {
+      const person    = state.people.find(p => iequal(p.name, h.name || ''));
+      const club      = h.club || person?.club || '';
+      const cat       = h.dob && h.gender ? (calculateCategory(h.dob, h.gender) || '') : '';
+      const lastRaced = person?.lastSeen || '';
+      return { name: h.name || '', club, cat, role: h.role || '', lastRaced };
+    })
+    .sort((a, b) => (a.role || '').localeCompare(b.role || '') || (a.name || '').localeCompare(b.name || ''));
+  await saveHelpersReport();
 }
 
 /** Get results sorted by position for a course */
@@ -282,54 +325,4 @@ export function computeAvgTop10(course) {
   if (!top10.length) return '';
   const avgSecs = top10.reduce((s, r) => s + timeToSeconds(r.time), 0) / top10.length;
   return secondsToTime(Math.round(avgSecs));
-}
-
-/**
- * Calculate the percent behind leader and time behind for a result.
- * leaderSecs: the leader's time in seconds
- * mySecs: this runner's time in seconds
- */
-export function calcBehind(leaderSecs, mySecs) {
-  if (!leaderSecs) return { behindPercent: '', behindTime: '' };
-  const diff = mySecs - leaderSecs;
-  if (diff <= 0) return { behindPercent: '0.0', behindTime: '00:00:00' };
-  return {
-    behindPercent: (diff / leaderSecs * 100).toFixed(1),
-    behindTime:    secondsToTime(diff),
-  };
-}
-
-/**
- * Check if any records have been broken.
- * Returns {maleRecord, femaleRecord} each as {broken, time, name} or null.
- */
-export function checkRecords() {
-  const maleRecord   = state.event.maleRecord;
-  const femaleRecord = state.event.femaleRecord;
-  const result = { male: null, female: null };
-
-  const maleResults = state.results.filter(r =>
-    isValidRaceTime(r.time) &&
-    (genderFromCategory(r.category) === GENDER.MALE)
-  ).sort((a,b) => a.position - b.position);
-
-  const femaleResults = state.results.filter(r =>
-    isValidRaceTime(r.time) &&
-    (genderFromCategory(r.category) === GENDER.FEMALE)
-  ).sort((a,b) => a.position - b.position);
-
-  if (maleResults.length && maleRecord) {
-    const winnerSecs = timeToSeconds(maleResults[0].time);
-    if (winnerSecs > 0 && winnerSecs < timeToSeconds(maleRecord)) {
-      result.male = { broken: true, time: maleResults[0].time, name: maleResults[0].name };
-    }
-  }
-  if (femaleResults.length && femaleRecord) {
-    const winnerSecs = timeToSeconds(femaleResults[0].time);
-    if (winnerSecs > 0 && winnerSecs < timeToSeconds(femaleRecord)) {
-      result.female = { broken: true, time: femaleResults[0].time, name: femaleResults[0].name };
-    }
-  }
-
-  return result;
 }

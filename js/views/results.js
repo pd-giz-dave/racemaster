@@ -1,10 +1,12 @@
 'use strict';
 
 import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '../results.js';
+import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
 import { on, showStatus } from '../ui.js';
 import { showBusy } from '../utils.js';
+
 
 export function renderResults() {
   const seniors = getResultsForCourse(COURSE.SENIORS);
@@ -19,6 +21,7 @@ export function renderResults() {
     summary.innerHTML = avgPart ? `${avgPart}<span style="margin-left:2em">R = course record</span>` : '';
   }
   renderPrizes();
+  renderHelpersReport();
 }
 
 export function renderResultsTable(tbodyId, results) {
@@ -46,7 +49,6 @@ export function renderJuniorsTable(tbodyId, results) {
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
 
-  // Group by category, sort categories youngest-first, within each by time
   const groups = new Map();
   for (const r of results) {
     const cat = r.category || '';
@@ -90,11 +92,9 @@ export function renderPrizes() {
   const prizes = getPrizes();
 
   const hint = document.getElementById('prizes-hint');
-  if (hint) {
-    hint.innerHTML = prizes.length
-      ? `R = course record<span style="margin-left:2em">J = junior</span><span style="margin-left:2em">* = multi winner</span>`
-      : '';
-  }
+  if (hint) hint.innerHTML = prizes.length
+    ? `R = course record<span style="margin-left:2em">J = junior</span><span style="margin-left:2em">* = multi winner</span>`
+    : '';
 
   const overallSections = new Set(['Senior Overall', 'Senior Female Overall', 'Senior Male Overall']);
   let currentSection  = null;
@@ -121,6 +121,18 @@ export function renderPrizes() {
     </tr>`);
   }
   tbody.innerHTML = rows.join('');
+}
+
+export function renderHelpersReport() {
+  const tbody = document.getElementById('results-helpers-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = state.helpersReport.map(h => `<tr>
+    <td>${h.role || ''}</td>
+    <td>${h.name || ''}</td>
+    <td>${h.club || ''}</td>
+    <td>${h.cat || ''}</td>
+    <td>${h.lastRaced || ''}</td>
+  </tr>`).join('');
 }
 
 export async function runFormatResults() {

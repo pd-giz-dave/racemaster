@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { savePeople } from './state.js';
-import { GENDER, UNATTACHED_CLUB } from './constants.js';
+import { GENDER } from './constants.js';
 import { normaliseDate, cleanName, sortBy, today, similarity } from './utils.js';
 
 // ============================================================
@@ -24,9 +24,8 @@ function makePersonKey(name, gender, dob) {
  * Add or update a person in the people list.
  * Returns the index if a new person was added, -1 if updated, or null for a pair.
  */
-export function addPerson(name, nameId, genderIn, dob, clubIn, fraNumber, category, asHelper) {
-  const gender = (genderIn || '').charAt(0).toUpperCase();
-  if (gender === GENDER.PAIR_PREFIX) return null;
+export function addPerson(name, nameId, gender, dob, clubIn, fraNumber, category, asHelper) {
+  if (gender === GENDER.PAIR) return null;
   if (!asHelper && !normaliseDate(dob)) return null;
 
   const club = (clubIn || '').split(' | ')[0].trim();
@@ -44,7 +43,7 @@ export function addPerson(name, nameId, genderIn, dob, clubIn, fraNumber, catego
 
   const p = state.people[idx];
   p.name   = cleanedName;
-  p.gender = gender === GENDER.FEMALE_PREFIX ? GENDER.FEMALE : GENDER.MALE;
+  p.gender = gender === GENDER.FEMALE ? GENDER.FEMALE : GENDER.MALE;
   p.dob    = normaliseDate(dob) || p.dob || '';
   if (cleanedClub) p.club = cleanedClub;
   if (+fraNumber > 0) p.fraNumber = fraNumber;
@@ -143,7 +142,7 @@ export async function mergeSIEntries() {
     const name   = cleanName(`${pe.firstName} ${pe.lastName}`.trim());
     const gender = normaliseGender(pe.gender);
     const dob    = normaliseDate(pe.dob);
-    const club   = cleanName(pe.club || UNATTACHED_CLUB);
+    const club   = cleanName(pe.club);
     const fra    = pe.fraNumber || '';
 
     const key = makePersonKey(name, gender, dob);
@@ -157,7 +156,7 @@ export async function mergeSIEntries() {
     } else {
       const idx = state.people.findIndex(p => makePersonKey(p.name, p.gender, p.dob) === key);
       if (idx >= 0) {
-        if (club && club !== UNATTACHED_CLUB) state.people[idx].club = club;
+        if (club) state.people[idx].club = club;
         if (fra) state.people[idx].fraNumber = fra;
       }
     }
