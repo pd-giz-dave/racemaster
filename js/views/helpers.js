@@ -7,6 +7,7 @@ import {
   updateDatalistClubs, updateDatalistRoles,
 } from '../ui.js';
 import { capitalise, ciEq, showBusy } from '../utils.js';
+import { GENDER } from '../constants.js';
 import { isBanned } from '../entries.js';
 
 // ---- Module state ----
@@ -185,7 +186,7 @@ export function wireHelpers() {
 
     const normGender = g => {
       const u = (g || '').toUpperCase().trim();
-      return u === 'M' || u === 'MALE' ? 'M' : u === 'F' || u === 'FEMALE' ? 'F' : '';
+      return u === 'M' || u === 'MALE' ? GENDER.MALE : u === 'F' || u === 'FEMALE' ? GENDER.FEMALE : '';
     };
 
     const fillFromPerson = p => {

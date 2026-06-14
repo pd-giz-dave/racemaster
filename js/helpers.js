@@ -7,9 +7,6 @@ import { normaliseDate, cleanName, ciEq } from './utils.js';
 import { calculateCategory } from './categories.js';
 import { addPerson, sortPeople } from './data.js';
 
-// ============================================================
-// Helper registration logic (translated from Helpers.xml)
-// ============================================================
 
 /** Get total number of helpers */
 export function getNumberOfHelpers() {
@@ -84,7 +81,7 @@ export async function submitHelper(formData) {
   if (!name) return { error: 'Name is required' };
 
   let category = '';
-  if (dob && gender !== GENDER.PAIR) {
+  if (dob) {
     category = calculateCategory(dob, gender);
   }
 

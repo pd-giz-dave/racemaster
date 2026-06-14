@@ -109,7 +109,7 @@ export async function submitEntry(formData) {
 
   if (!name) return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
-  if (!dob && gender !== GENDER.PAIR) return { error: 'Date of birth is required' };
+  if (!dob) return { error: 'Date of birth is required' };
 
   const person = state.people.find(p => ciEq(p.name, name) && p.dob === dob);
   if (isBanned(person) && !formData.overrideBan) return { bannedWarning: person.banned };
@@ -210,7 +210,7 @@ export async function insertEntryAndRenumber(atBib, formData) {
 
   if (!name)   return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
-  if (!dob && gender !== GENDER.PAIR) return { error: 'Date of birth is required' };
+  if (!dob) return { error: 'Date of birth is required' };
 
   const person2 = state.people.find(p => ciEq(p.name, name) && p.dob === dob);
   if (isBanned(person2) && !formData.overrideBan) return { bannedWarning: person2.banned };

@@ -1,8 +1,5 @@
 'use strict';
 
-// ============================================================
-// Utility functions (translated from Utils.xml)
-// ============================================================
 
 /** Normalise a time string to HH:MM:SS. Returns '' on failure.
  *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.

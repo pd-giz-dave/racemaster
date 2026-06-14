@@ -1,15 +1,11 @@
 'use strict';
 
-// ====================================================
-// Constants translated from LibreOffice Basic Main.xml
-// ====================================================
 
 // Gender constants
 export const GENDER = {
-  UNKNOWN:    'Unknown',
-  FEMALE:     'Female',
-  MALE:       'Male',
-  PAIR:       'Pair',
+  UNKNOWN: 'Unknown',
+  FEMALE:  'Female',
+  MALE:    'Male',
 };
 
 // Course constants
@@ -95,14 +91,6 @@ export const WFRA_CATEGORIES = [
   [999,'none', 'NOW', 999, 999,'none', 'NOW', 999],
 ];
 
-// Default pairs categories
-export const DEFAULT_PAIR_CATEGORIES = [
-  [18, 'M-PAIR', 'NOW', 999],
-  [18, 'F-PAIR', 'NOW', 999],
-  [18, 'X-PAIR', 'NOW', 999],
-  [18, 'J-PAIR', 'NOW', 999],
-  [999,'none',   'NOW', 999],
-];
 
 // Entry form dimensions (mm) - from LibreOffice constants
 export const ENTRY_FORM = {

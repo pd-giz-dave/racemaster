@@ -1,7 +1,7 @@
 'use strict';
 
 import { readTable, writeTable } from './storage.js';
-import { FRA_CATEGORIES, WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES } from './constants.js';
+import { FRA_CATEGORIES, WFRA_CATEGORIES } from './constants.js';
 
 // ============================================================
 // Global in-memory state, loaded from and saved to JSON tables
@@ -19,7 +19,7 @@ export const state = {
   people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal}
   // clubs derived from people — not persisted
   dibbers:    [],  // {shortCode, longCode, owner, notes}
-  categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist, pairMinAge, pairCat, pairRef, pairMaxDist}
+  categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist}
   roles:      [],  // {role, description}
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
   entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, startTime, status}
@@ -79,14 +79,10 @@ async function loadPreset(key, defaults) {
   if (rows && rows.length > 0) {
     state[key] = rows;
   } else {
-    state[key] = defaults.map((row, i) => {
-      const pair = DEFAULT_PAIR_CATEGORIES[i] || [999, 'none', 'NOW', 999];
-      return {
-        maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
-        femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-        pairMinAge: pair[0], pairCat: pair[1], pairRef: pair[2], pairMaxDist: pair[3],
-      };
-    });
+    state[key] = defaults.map(row => ({
+      maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
+      femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
+    }));
   }
 }
 
@@ -115,20 +111,16 @@ export async function saveSIResults()      { await writeTable('siResults',      
 
 /** Apply the FRA preset categories to state.categories */
 export function applyFRACategories() {
-  _applyPreset(FRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES);
+  _applyPreset(FRA_CATEGORIES);
 }
 
 export function applyWFRACategories() {
-  _applyPreset(WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES);
+  _applyPreset(WFRA_CATEGORIES);
 }
 
-function _applyPreset(preset, pairs) {
-  state.categories = preset.map((row, i) => {
-    const pair = pairs[i] || [999, 'none', 'NOW', 999];
-    return {
-      maleMinAge:   row[0], maleCat:  row[1], maleRef:  row[2], maleMaxDist:   row[3],
-      femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-      pairMinAge:   pair[0], pairCat: pair[1], pairRef: pair[2], pairMaxDist:   pair[3],
-    };
-  });
+function _applyPreset(preset) {
+  state.categories = preset.map(row => ({
+    maleMinAge:   row[0], maleCat:  row[1], maleRef:  row[2], maleMaxDist:   row[3],
+    femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
+  }));
 }

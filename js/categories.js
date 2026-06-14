@@ -1,12 +1,9 @@
 'use strict';
 
 import { state } from './state.js';
-import { GENDER, COURSE, FRA_CATEGORIES, WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES } from './constants.js';
+import { GENDER, COURSE, FRA_CATEGORIES, WFRA_CATEGORIES } from './constants.js';
 import { normaliseDate, parseDate, ciEq } from './utils.js';
 
-// ============================================================
-// Category logic (translated from Categories.xml)
-// ============================================================
 
 /** Get all male/open category names from state */
 export function getMaleCategories() {
@@ -22,17 +19,9 @@ export function getFemaleCategories() {
     .filter(c => c && c !== '-' && c.toLowerCase() !== 'none');
 }
 
-/** Get all pair category names from state */
-export function getPairCategories() {
-  return state.categories
-    .map(r => r.pairCat)
-    .filter(c => c && c !== '-' && c.toLowerCase() !== 'none');
-}
-
 /** Get categories for a given gender */
 export function getCategoriesForGender(gender) {
   if (ciEq(gender, GENDER.FEMALE)) return getFemaleCategories();
-  if (ciEq(gender, GENDER.PAIR))   return getPairCategories();
   return getMaleCategories();
 }
 
@@ -42,7 +31,6 @@ export function getCategoriesForGender(gender) {
  */
 export function calculateCategory(dob, genderIn) {
   const gender = genderIn || '';
-  if (ciEq(gender, GENDER.PAIR)) return '';
 
   const raceDateStr = state.event.date;
   const raceDate = parseDate(raceDateStr);
@@ -137,7 +125,6 @@ export function distanceFromCategory(category) {
   for (const row of state.categories) {
     if (ciEq(row.femaleCat, category)) return +row.femaleMaxDist || 0;
     if (ciEq(row.maleCat,   category)) return +row.maleMaxDist   || 0;
-    if (ciEq(row.pairCat,   category)) return +row.pairMaxDist   || 0;
   }
   return 0;
 }
@@ -165,7 +152,6 @@ export function genderFromCategory(category) {
   for (const row of state.categories) {
     if (ciEq(row.femaleCat, category)) return GENDER.FEMALE;
     if (ciEq(row.maleCat,   category)) return GENDER.MALE;
-    if (ciEq(row.pairCat,   category)) return GENDER.PAIR;
   }
   return GENDER.UNKNOWN;
 }
@@ -177,7 +163,6 @@ export function getCategoryPriority(category) {
     const row = state.categories[i];
     if (ciEq(row.femaleCat, category)) return i;
     if (ciEq(row.maleCat,   category)) return i + n + 1;
-    if (ciEq(row.pairCat,   category)) return i + n*2 + 1;
   }
   return 999999;
 }
@@ -213,12 +198,8 @@ export function resetWFRAPreset() {
 }
 
 function _builtinRows(preset) {
-  return preset.map((row, i) => {
-    const pair = DEFAULT_PAIR_CATEGORIES[i] || [999, 'none', 'NOW', 999];
-    return {
-      maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
-      femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-      pairMinAge: pair[0], pairCat: pair[1], pairRef: pair[2], pairMaxDist: pair[3],
-    };
-  });
+  return preset.map(row => ({
+    maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
+    femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
+  }));
 }

@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
-import { getMaleCategories, getFemaleCategories, getPairCategories } from './categories.js';
+import { getMaleCategories, getFemaleCategories } from './categories.js';
 import { normaliseDate, normaliseTime } from './utils.js';
 
 // ---- DOM helpers ----
@@ -187,7 +187,6 @@ export function populateCategoryDropdown(selectId, currentVal) {
   const all = [
     ...getMaleCategories().map(c => ({ value: c, label: c })),
     ...getFemaleCategories().map(c => ({ value: c, label: c })),
-    ...getPairCategories().map(c => ({ value: c, label: c })),
   ];
   // Deduplicate
   const seen = new Set();

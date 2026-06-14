@@ -9,7 +9,7 @@ import {
 
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
-import { COURSE } from '../constants.js';
+import { COURSE, GENDER } from '../constants.js';
 import { ciEq, cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
@@ -367,9 +367,8 @@ export function wireEntries() {
       }
       const name = cleanName(`${pe.firstName || ''} ${pe.lastName || ''}`.trim());
       const g = (pe.gender || '').toUpperCase().trim();
-      const gender = (g === 'M' || g === 'MALE')   ? 'M'
-                   : (g === 'F' || g === 'FEMALE') ? 'F'
-                   : (g === 'P' || g === 'PAIR')   ? 'P'
+      const gender = (g === 'M' || g === 'MALE')   ? GENDER.MALE
+                   : (g === 'F' || g === 'FEMALE') ? GENDER.FEMALE
                    : '';
       fillForm('', {
         'entry-form-name':     name,
@@ -397,7 +396,7 @@ export function wireEntries() {
 
     const normGender = g => {
       const u = (g || '').toUpperCase().trim();
-      return u === 'M' || u === 'MALE' ? 'M' : u === 'F' || u === 'FEMALE' ? 'F' : u === 'P' || u === 'PAIR' ? 'P' : '';
+      return u === 'M' || u === 'MALE' ? GENDER.MALE : u === 'F' || u === 'FEMALE' ? GENDER.FEMALE : '';
     };
 
     const fillFromPerson = p => {

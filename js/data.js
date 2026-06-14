@@ -25,7 +25,6 @@ function makePersonKey(name, gender, dob) {
  * Returns the index if a new person was added, -1 if updated, or null for a pair.
  */
 export function addPerson(name, nameId, gender, dob, clubIn, fraNumber, category, asHelper) {
-  if (gender === GENDER.PAIR) return null;
   if (!asHelper && !normaliseDate(dob)) return null;
 
   const club = (clubIn || '').split(' | ')[0].trim();

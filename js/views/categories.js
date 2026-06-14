@@ -9,9 +9,8 @@ import { on, escHtml, showStatus, showConfirmDialog } from '../ui.js';
 const CAT_EDIT_FIELDS = [
   'maleMinAge','maleCat','maleRef','maleMaxDist',
   'femaleMinAge','femaleCat','femaleRef','femaleMaxDist',
-  'pairMinAge','pairCat','pairRef','pairMaxDist',
 ];
-const CAT_EDIT_WIDTHS = ['46px','60px','46px','52px','46px','60px','46px','52px','46px','60px','46px','52px'];
+const CAT_EDIT_WIDTHS = ['46px','60px','46px','52px','46px','60px','46px','52px'];
 
 // Config for each of the three category tables
 const CAT_TABLE = {
@@ -36,8 +35,8 @@ export function renderCategoryTable(key) {
   if (!tbody) return;
   tbody.innerHTML = arr.map((c, i) => `
     <tr id="${key}-cat-row-${i}">
-      ${CAT_EDIT_FIELDS.map(f => `<td>${c[f] ?? ''}</td>`).join('')}
-      <td>
+      ${CAT_EDIT_FIELDS.map((f, i) => `<td${i === 4 ? ' class="col-sep"' : ''}>${c[f] ?? ''}</td>`).join('')}
+      <td class="col-sep">
         <button class="btn-sm btn-edit"         data-key="${key}" data-idx="${i}">Edit</button>
         <button class="btn-sm btn-delete-entry" data-key="${key}" data-idx="${i}">Del</button>
       </td>
@@ -56,8 +55,8 @@ export function editCategoryRow(key, idx) {
   const row = document.getElementById(`${key}-cat-row-${idx}`);
   if (!row) return;
   row.innerHTML = CAT_EDIT_FIELDS.map((f, i) =>
-    `<td><input id="${key}-cat-${idx}-${f}" type="text" value="${escHtml(String(c[f] ?? ''))}" style="width:${CAT_EDIT_WIDTHS[i]}"></td>`
-  ).join('') + `<td>
+    `<td${i === 4 ? ' class="col-sep"' : ''}><input id="${key}-cat-${idx}-${f}" type="text" value="${escHtml(String(c[f] ?? ''))}" style="width:${CAT_EDIT_WIDTHS[i]}"></td>`
+  ).join('') + `<td class="col-sep">
     <button class="btn-sm btn-save">Save</button>
     <button class="btn-sm btn-secondary">Cancel</button>
   </td>`;
@@ -99,8 +98,8 @@ export function showAddCategoryRow(key) {
   const tr = document.createElement('tr');
   tr.id = `${key}-cat-row-new`;
   tr.innerHTML = CAT_EDIT_FIELDS.map((f, i) =>
-    `<td><input id="${key}-cat-new-${f}" type="text" value="" style="width:${CAT_EDIT_WIDTHS[i]}"></td>`
-  ).join('') + `<td>
+    `<td${i === 4 ? ' class="col-sep"' : ''}><input id="${key}-cat-new-${f}" type="text" value="" style="width:${CAT_EDIT_WIDTHS[i]}"></td>`
+  ).join('') + `<td class="col-sep">
     <button class="btn-sm btn-save">Save</button>
     <button class="btn-sm btn-secondary">Cancel</button>
   </td>`;
