@@ -122,7 +122,7 @@ export function ordinal(n) {
 }
 
 /** Case-insensitive string comparison */
-export function iequal(a, b) {
+export function ciEq(a, b) {
   return String(a || '').toUpperCase() === String(b || '').toUpperCase();
 }
 

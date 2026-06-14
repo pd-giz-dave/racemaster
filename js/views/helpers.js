@@ -6,7 +6,7 @@ import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
   updateDatalistClubs, updateDatalistRoles,
 } from '../ui.js';
-import { capitalise, iequal, showBusy } from '../utils.js';
+import { capitalise, ciEq, showBusy } from '../utils.js';
 import { isBanned } from '../entries.js';
 
 // ---- Module state ----
@@ -22,7 +22,7 @@ export function renderHelpers() {
   tbody.innerHTML = helpers.map(h => `
     <tr data-num="${h.number}">
       <td>${h.number}</td>
-      <td>${(h.name || '') + (isBanned(state.people.find(p => iequal(p.name, h.name || ''))) ? ' (banned)' : '')}</td>
+      <td>${(h.name || '') + (isBanned(state.people.find(p => ciEq(p.name, h.name || ''))) ? ' (banned)' : '')}</td>
       <td>${h.club || ''}</td>
       <td>${h.role || ''}</td>
       <td>
@@ -271,7 +271,7 @@ export function wireHelpers() {
     nameEl.addEventListener('change', () => {
       const typed = nameEl.value.trim();
       if (!typed) return;
-      const exact = state.people.find(p => iequal(p.name, typed));
+      const exact = state.people.find(p => ciEq(p.name, typed));
       if (exact) fillFromPerson(exact);
     });
 

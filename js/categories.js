@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { GENDER, COURSE, FRA_CATEGORIES, WFRA_CATEGORIES, DEFAULT_PAIR_CATEGORIES } from './constants.js';
-import { normaliseDate, parseDate, iequal } from './utils.js';
+import { normaliseDate, parseDate, ciEq } from './utils.js';
 
 // ============================================================
 // Category logic (translated from Categories.xml)
@@ -31,8 +31,8 @@ export function getPairCategories() {
 
 /** Get categories for a given gender */
 export function getCategoriesForGender(gender) {
-  if (iequal(gender, GENDER.FEMALE)) return getFemaleCategories();
-  if (iequal(gender, GENDER.PAIR))   return getPairCategories();
+  if (ciEq(gender, GENDER.FEMALE)) return getFemaleCategories();
+  if (ciEq(gender, GENDER.PAIR))   return getPairCategories();
   return getMaleCategories();
 }
 
@@ -42,14 +42,14 @@ export function getCategoriesForGender(gender) {
  */
 export function calculateCategory(dob, genderIn) {
   const gender = genderIn || '';
-  if (iequal(gender, GENDER.PAIR)) return '';
+  if (ciEq(gender, GENDER.PAIR)) return '';
 
   const raceDateStr = state.event.date;
   const raceDate = parseDate(raceDateStr);
   const dobDate  = parseDate(normaliseDate(dob));
   if (!raceDate || !dobDate) return '';
 
-  const isFemale = iequal(gender, GENDER.FEMALE);
+  const isFemale = ciEq(gender, GENDER.FEMALE);
 
   // EOY age = age at end of race year
   const eoyAge = raceDate.getFullYear() - dobDate.getFullYear();
@@ -135,9 +135,9 @@ export function seniorAllowed(category) {
 /** Get the max distance allowed for a category. Returns 0 if not found. */
 export function distanceFromCategory(category) {
   for (const row of state.categories) {
-    if (iequal(row.femaleCat, category)) return +row.femaleMaxDist || 0;
-    if (iequal(row.maleCat,   category)) return +row.maleMaxDist   || 0;
-    if (iequal(row.pairCat,   category)) return +row.pairMaxDist   || 0;
+    if (ciEq(row.femaleCat, category)) return +row.femaleMaxDist || 0;
+    if (ciEq(row.maleCat,   category)) return +row.maleMaxDist   || 0;
+    if (ciEq(row.pairCat,   category)) return +row.pairMaxDist   || 0;
   }
   return 0;
 }
@@ -163,9 +163,9 @@ export function categoryFromDistance(distance) {
 /** Determine the gender from a category name */
 export function genderFromCategory(category) {
   for (const row of state.categories) {
-    if (iequal(row.femaleCat, category)) return GENDER.FEMALE;
-    if (iequal(row.maleCat,   category)) return GENDER.MALE;
-    if (iequal(row.pairCat,   category)) return GENDER.PAIR;
+    if (ciEq(row.femaleCat, category)) return GENDER.FEMALE;
+    if (ciEq(row.maleCat,   category)) return GENDER.MALE;
+    if (ciEq(row.pairCat,   category)) return GENDER.PAIR;
   }
   return GENDER.UNKNOWN;
 }
@@ -175,9 +175,9 @@ export function getCategoryPriority(category) {
   const n = state.categories.length;
   for (let i = 0; i < n; i++) {
     const row = state.categories[i];
-    if (iequal(row.femaleCat, category)) return i;
-    if (iequal(row.maleCat,   category)) return i + n + 1;
-    if (iequal(row.pairCat,   category)) return i + n*2 + 1;
+    if (ciEq(row.femaleCat, category)) return i;
+    if (ciEq(row.maleCat,   category)) return i + n + 1;
+    if (ciEq(row.pairCat,   category)) return i + n*2 + 1;
   }
   return 999999;
 }

@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { saveEntries, savePeople } from './state.js';
 import { GENDER, COURSE } from './constants.js';
-import { normaliseDate, cleanName, iequal } from './utils.js';
+import { normaliseDate, cleanName, ciEq } from './utils.js';
 import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
@@ -17,18 +17,18 @@ export function isBanned(p) {
 }
 
 export function isEntryBanned(entry) {
-  const p = state.people.find(p => iequal(p.name, entry.name || '') && p.dob === (entry.dob || ''));
+  const p = state.people.find(p => ciEq(p.name, entry.name || '') && p.dob === (entry.dob || ''));
   return isBanned(p);
 }
 
 /** Count entries on a given course */
 export function getEntriesOnCourse(course) {
-  return state.entries.filter(e => iequal(e.course, course)).length;
+  return state.entries.filter(e => ciEq(e.course, course)).length;
 }
 
 /** Get the entry limit for a course */
 export function getEntryLimit(course) {
-  if (course && iequal(course, COURSE.JUNIORS)) {
+  if (course && ciEq(course, COURSE.JUNIORS)) {
     return +state.event.juniorEntryLimit || 0;
   }
   return +state.event.entryLimit || 0;
@@ -111,7 +111,7 @@ export async function submitEntry(formData) {
   if (!gender) return { error: 'Gender is required' };
   if (!dob && gender !== GENDER.PAIR) return { error: 'Date of birth is required' };
 
-  const person = state.people.find(p => iequal(p.name, name) && p.dob === dob);
+  const person = state.people.find(p => ciEq(p.name, name) && p.dob === dob);
   if (isBanned(person) && !formData.overrideBan) return { bannedWarning: person.banned };
 
   let category = formData.category || '';
@@ -212,7 +212,7 @@ export async function insertEntryAndRenumber(atBib, formData) {
   if (!gender) return { error: 'Gender is required' };
   if (!dob && gender !== GENDER.PAIR) return { error: 'Date of birth is required' };
 
-  const person2 = state.people.find(p => iequal(p.name, name) && p.dob === dob);
+  const person2 = state.people.find(p => ciEq(p.name, name) && p.dob === dob);
   if (isBanned(person2) && !formData.overrideBan) return { bannedWarning: person2.banned };
 
   let category = formData.category || '';
@@ -326,7 +326,7 @@ export async function loadPreEntries() {
 
   for (const pe of state.preEntries) {
     const name    = cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim());
-    const gender  = iequal(pe.gender, GENDER.FEMALE) ? GENDER.FEMALE : GENDER.MALE;
+    const gender  = ciEq(pe.gender, GENDER.FEMALE) ? GENDER.FEMALE : GENDER.MALE;
     const dob     = normaliseDate(pe.dob || '');
     const club    = cleanName(pe.club || '');
     const fra     = pe.fraNumber || '';
@@ -382,7 +382,7 @@ export function getSortedEntries() {
 
 /** Get entries for a given course */
 export function getEntriesForCourse(course) {
-  return state.entries.filter(e => iequal(e.course, course));
+  return state.entries.filter(e => ciEq(e.course, course));
 }
 
 /**

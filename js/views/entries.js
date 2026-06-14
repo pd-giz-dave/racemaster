@@ -10,7 +10,7 @@ import {
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
-import { iequal, cleanName, capitalise, showBusy } from '../utils.js';
+import { ciEq, cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
@@ -486,7 +486,7 @@ export function wireEntries() {
     nameEl.addEventListener('change', () => {
       const typed = nameEl.value.trim();
       if (!typed) return;
-      const exact = state.people.find(p => iequal(p.name, typed));
+      const exact = state.people.find(p => ciEq(p.name, typed));
       if (exact) fillFromPerson(exact);
     });
 

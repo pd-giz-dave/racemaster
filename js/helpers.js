@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { saveHelpers, savePeople } from './state.js';
 import { GENDER } from './constants.js';
-import { normaliseDate, cleanName, iequal } from './utils.js';
+import { normaliseDate, cleanName, ciEq } from './utils.js';
 import { calculateCategory } from './categories.js';
 import { addPerson, sortPeople } from './data.js';
 
@@ -149,5 +149,5 @@ export function getRoles() {
 
 /** Get helpers for a specific role */
 export function getHelpersByRole(role) {
-  return state.helpers.filter(h => iequal(h.role, role));
+  return state.helpers.filter(h => ciEq(h.role, role));
 }

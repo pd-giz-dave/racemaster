@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { TIMING, COURSE } from './constants.js';
-import { normaliseTime, timeToSeconds, secondsToTime, iequal } from './utils.js';
+import { normaliseTime, timeToSeconds, secondsToTime, ciEq } from './utils.js';
 
 // ============================================================
 // Time handling (translated from Time.xml)
@@ -18,7 +18,7 @@ export function stopwatchOffsetTime() {
 
 /** Get the stopwatch start offset for a course in seconds */
 export function stopwatchStartOffset(course) {
-  const cell = iequal(course, COURSE.JUNIORS)
+  const cell = ciEq(course, COURSE.JUNIORS)
     ? state.event.juniorStopwatchStartOffset
     : state.event.stopwatchStartOffset;
   if (!cell) return 0;
@@ -27,7 +27,7 @@ export function stopwatchStartOffset(course) {
 
 /** Set the stopwatch start offset for a course */
 export function setStopwatchStartOffset(course, timeStr) {
-  if (iequal(course, COURSE.JUNIORS)) {
+  if (ciEq(course, COURSE.JUNIORS)) {
     state.event.juniorStopwatchStartOffset = timeStr;
   } else {
     state.event.stopwatchStartOffset = timeStr;
@@ -39,14 +39,14 @@ export function setStopwatchStartOffset(course, timeStr) {
  * Returns 'S', 'D', or 'N'.
  */
 export function getTimingMethod(course) {
-  const isJunior = course && iequal(course, COURSE.JUNIORS);
+  const isJunior = course && ciEq(course, COURSE.JUNIORS);
   const raw = isJunior ? state.event.juniorTimingMethod : state.event.timingMethod;
   return raw || TIMING.STOPWATCH;
 }
 
 /** Return true if the given course uses dibbers */
 export function usingDibbers(course) {
-  return iequal(getTimingMethod(course), TIMING.DIBBERS);
+  return ciEq(getTimingMethod(course), TIMING.DIBBERS);
 }
 
 /**
@@ -59,7 +59,7 @@ export function usingDibbers(course) {
 export function adjustedFinishTime(entry, finishTime, ignoreOffset = false) {
   const course = entry.course || COURSE.SENIORS;
   const tm = getTimingMethod(course);
-  if (iequal(tm, TIMING.DIBBERS)) return finishTime; // dibbers handle their own timing
+  if (ciEq(tm, TIMING.DIBBERS)) return finishTime; // dibbers handle their own timing
 
   let startOff = stopwatchStartOffset(course);
 

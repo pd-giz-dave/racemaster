@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { saveFinishers } from './state.js';
 import { COURSE } from './constants.js';
-import { iequal } from './utils.js';
+import { ciEq } from './utils.js';
 import { getEntry } from './entries.js';
 
 // ============================================================
@@ -151,7 +151,7 @@ export function getOutstandingCount(course) {
     if (bib > 0 && (time || status)) finishedOrRetiredBibs.add(bib);
   }
   return state.entries.filter(e => {
-    if (!iequal(e.course, course)) return false;
+    if (!ciEq(e.course, course)) return false;
     const bib = +e.bibNumber;
     if (!bib) return false;
     return !finishedOrRetiredBibs.has(bib);
@@ -163,7 +163,7 @@ export function getSortedFinishers(course) {
   if (!course) return [...state.finishers];
   return state.finishers.filter(f => {
     const entry = +f.number > 0 ? getEntry(+f.number) : null;
-    return iequal(entry?.course || '', course);
+    return ciEq(entry?.course || '', course);
   });
 }
 

@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { saveResults, savePrizes, saveHelpersReport } from './state.js';
 import { COURSE, GENDER } from './constants.js';
-import { iequal, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
+import { ciEq, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
 import { calculateCategory, getCategoryPriority, genderFromCategory } from './categories.js';
 import { getEntry, getSortedEntries, isEntryBanned } from './entries.js';
 import { adjustedFinishTime } from './time-utils.js';
@@ -34,7 +34,7 @@ export async function formatResults() {
 
     // SI results for this course — skip bibs already in stopwatch source
     const siFinishers = state.siResults
-      .filter(r => iequal(getSICourse(r), course) && getSIBib(r) > 0 && getSIRaceTime(r))
+      .filter(r => ciEq(getSICourse(r), course) && getSIBib(r) > 0 && getSIRaceTime(r))
       .map(r => ({ action: 'Finish', number: getSIBib(r), time: getSIRaceTime(r) }))
       .filter(f => {
         if (swBibs.has(+f.number)) {
@@ -135,7 +135,7 @@ export async function formatResults() {
     );
     // SI results with a non-blank Status are non-finishers (DNF, DNS, mispunch, etc.)
     for (const r of state.siResults) {
-      if (!iequal(getSICourse(r), course)) continue;
+      if (!ciEq(getSICourse(r), course)) continue;
       const status = getSIStatus(r);
       if (!status) continue;
       const bib = getSIBib(r);
@@ -143,7 +143,7 @@ export async function formatResults() {
     }
 
     for (const e of getSortedEntries()) {
-      if (!iequal(e.course, course)) continue;
+      if (!ciEq(e.course, course)) continue;
       if (!dnfBibs.has(+e.bibNumber)) continue;
       if (addedBibs.has(+e.bibNumber)) continue;
       if (isEntryBanned(e)) continue;
@@ -293,7 +293,7 @@ export async function buildPrizes() {
 export async function buildHelpersReport() {
   state.helpersReport = state.helpers
     .map(h => {
-      const person    = state.people.find(p => iequal(p.name, h.name || ''));
+      const person    = state.people.find(p => ciEq(p.name, h.name || ''));
       const club      = h.club || person?.club || '';
       const cat       = h.dob && h.gender ? (calculateCategory(h.dob, h.gender) || '') : '';
       const lastRaced = person?.lastSeen || '';
@@ -306,7 +306,7 @@ export async function buildHelpersReport() {
 /** Get results sorted by position for a course */
 export function getResultsForCourse(course) {
   return state.results
-    .filter(r => iequal(r.course, course))
+    .filter(r => ciEq(r.course, course))
     .sort((a,b) => a.position - b.position);
 }
 

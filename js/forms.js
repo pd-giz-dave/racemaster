@@ -1,8 +1,8 @@
 'use strict';
 
 import { state } from './state.js';
-import { COURSE, GENDER } from './constants.js';
-import { today, ordinal, iequal } from './utils.js';
+import { COURSE } from './constants.js';
+import { today, ordinal } from './utils.js';
 import { getSortedEntries, getEntriesForCourse } from './entries.js';
 import { getResultsForCourse, getPrizes } from './results.js';
 
