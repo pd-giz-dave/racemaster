@@ -2,28 +2,50 @@
 
 import {
   getSession, setSession, clearSession,
+  getUsername, setUsername, getIsAdmin, setIsAdmin,
   isStandalone, setStandalone, isDirty, hasCachedData,
   apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset, apiChangeVisibility,
-  apiDeleteDataset, switchDataset, saveAsDataset,
+  apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiSetUserAdmin, apiDeleteUser,
 } from './storage.js';
+import { showConfirmDialog } from './ui.js';
 
-// ---- Header button label ----
+// ---- Header button label + server status ----
+
+export function startServerPing() {
+  async function ping() {
+    const el = document.getElementById('header-server-status');
+    if (!el) return;
+    try {
+      const res = await fetch('/api/ping', { cache: 'no-store' });
+      el.textContent = res.ok ? '● reachable' : '● unreachable';
+      el.style.color  = res.ok ? 'rgba(255,255,255,0.6)' : 'rgba(255,220,50,0.95)';
+    } catch {
+      el.textContent = '● unreachable';
+      el.style.color  = 'rgba(255,220,50,0.95)';
+    }
+  }
+  ping();
+  setInterval(ping, 30_000);
+}
 
 export function updateDataFileButton() {
   const btn      = document.getElementById('btn-select-datafile');
   const userSpan = document.getElementById('header-username');
   if (!btn) return;
-  const session = getSession();
+  const session   = getSession();
+  const loggedIn  = getUsername();
   if (!session) {
     btn.textContent = isStandalone() ? 'Standalone' : 'Select Data File';
     btn.style.color = 'var(--header-fg)';
-    if (userSpan) userSpan.textContent = '';
+    if (userSpan) userSpan.textContent = loggedIn ? `Logged in as ${loggedIn}${getIsAdmin() ? ' (admin)' : ''}` : 'Not logged in';
     return;
   }
   // session.dataset = 'owner/name-visibility'
   const [owner, fullName] = session.dataset.split('/');
-  btn.textContent = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
-  if (userSpan) userSpan.textContent = owner || '';
+  const name     = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
+  const ownerStr = owner === loggedIn ? `${owner} (you)` : owner;
+  btn.textContent = `Selected: ${name}` + (owner ? ` · Owned by ${ownerStr}` : '');
+  if (userSpan) userSpan.textContent = loggedIn ? `Logged in as ${loggedIn}${getIsAdmin() ? ' (admin)' : ''}` : 'Not logged in';
   btn.style.color = isDirty() ? 'var(--danger)' : 'var(--header-fg)';
 }
 
@@ -31,9 +53,10 @@ export function updateDataFileButton() {
 
 function getEl(id) { return document.getElementById(id); }
 
-function showPanel(name) {
-  getEl('df-panel-auth').hidden     = (name !== 'auth');
-  getEl('df-panel-datasets').hidden = (name !== 'datasets');
+function showPanel(name, adminUser) {
+  getEl('df-panel-auth').hidden  = (name !== 'auth');
+  getEl('df-panels-row').hidden  = (name !== 'datasets');
+  getEl('df-panel-users').hidden = (name !== 'datasets') || !adminUser;
 }
 
 function setStatus(id, msg, isError = false) {
@@ -56,6 +79,7 @@ export function openDataFileModal() {
 
     let activeToken    = getSession()?.token || null;
     let activeUsername = null;
+    let isAdminUser    = getIsAdmin();
     // Extract username from stored session dataset path if possible
     if (getSession()) activeUsername = getSession().dataset.split('/')[0] || null;
 
@@ -64,7 +88,7 @@ export function openDataFileModal() {
     if (activeToken) {
       loadDatasets();
     } else {
-      showPanel('auth');
+      showPanel('auth', false);
       setTimeout(() => getEl('df-username').focus(), 0);
     }
 
@@ -86,6 +110,10 @@ export function openDataFileModal() {
           setStandalone(false);
           activeToken    = result.token;
           activeUsername = result.username;
+          setUsername(result.username);
+          setIsAdmin(!!result.isAdmin);
+          isAdminUser = !!result.isAdmin;
+          updateDataFileButton();
           loadDatasets();
         }
       }).catch(() => {
@@ -109,7 +137,7 @@ export function openDataFileModal() {
     getEl('df-btn-connect-cancel').onclick = hideConnectConfirm;
 
     function loadDatasets() {
-      showPanel('datasets');
+      showPanel('datasets', isAdminUser);
       hideCopyForm();
       hideConnectConfirm();
       if (getEl('df-save-as-form')) getEl('df-save-as-form').hidden = true;
@@ -123,6 +151,61 @@ export function openDataFileModal() {
       }).catch(() => {
         setStatus('df-dataset-status', 'Could not load datasets.', true);
       });
+      if (isAdminUser) loadUsers();
+    }
+
+    function loadUsers() {
+      setStatus('df-user-status', 'Loading…');
+      apiListUsers(activeToken).then(users => {
+        if (!Array.isArray(users)) throw new Error(users?.error || 'Unexpected response');
+        setStatus('df-user-status', '');
+        const list = getEl('df-user-list');
+        if (!list) return;
+        list.innerHTML = users.map(u => {
+          const isSelf   = u.username === activeUsername;
+          const enc      = encodeURIComponent(u.username);
+          const badge    = u.isAdmin ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">admin</span>' : '';
+          const adminBtn = isSelf ? '' : u.isAdmin
+            ? `<button class="btn btn-sm btn-secondary df-user-unadmin" data-username="${enc}" style="flex-shrink:0">Revoke admin</button>`
+            : `<button class="btn btn-sm btn-secondary df-user-admin" data-username="${enc}" style="flex-shrink:0">Grant admin</button>`;
+          const delBtn   = isSelf ? '' : `<button class="btn btn-sm btn-danger df-user-delete" data-username="${enc}" style="flex-shrink:0">Del</button>`;
+          return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="flex:1;font-size:0.875rem">${u.username}${badge}</span>${adminBtn}${delBtn}
+          </div>`;
+        }).join('');
+        list.querySelectorAll('.df-user-admin').forEach(btn => {
+          btn.onclick = () => setUserAdmin(decodeURIComponent(btn.dataset.username), true);
+        });
+        list.querySelectorAll('.df-user-unadmin').forEach(btn => {
+          btn.onclick = () => setUserAdmin(decodeURIComponent(btn.dataset.username), false);
+        });
+        list.querySelectorAll('.df-user-delete').forEach(btn => {
+          btn.onclick = () => deleteUser(decodeURIComponent(btn.dataset.username));
+        });
+      }).catch(err => setStatus('df-user-status', err?.message || 'Could not load users.', true));
+    }
+
+    async function setUserAdmin(username, makeAdmin) {
+      const label = makeAdmin ? 'Grant admin' : 'Revoke admin';
+      const msg   = makeAdmin
+        ? `Grant admin rights to "${username}"?`
+        : `Revoke admin rights from "${username}"?`;
+      if (!await showConfirmDialog(msg, label, true)) return;
+      setStatus('df-user-status', makeAdmin ? 'Granting admin…' : 'Revoking admin…');
+      apiSetUserAdmin(activeToken, username, makeAdmin).then(result => {
+        if (result.error) { setStatus('df-user-status', result.error, true); return; }
+        loadUsers();
+      }).catch(() => setStatus('df-user-status', 'Server unreachable.', true));
+    }
+
+    async function deleteUser(username) {
+      if (!await showConfirmDialog(`Delete user "${username}"? This does not delete their datasets.`, 'Delete', true)) return;
+      setStatus('df-user-status', 'Deleting…');
+      apiDeleteUser(activeToken, username).then(result => {
+        if (result.error) { setStatus('df-user-status', result.error, true); return; }
+        setStatus('df-user-status', `"${username}" deleted.`);
+        loadUsers();
+      }).catch(() => setStatus('df-user-status', 'Server unreachable.', true));
     }
 
     function renderDatasetList(datasets) {
@@ -133,15 +216,16 @@ export function openDataFileModal() {
       }
       const rows = datasets.map(d => {
         const isOwn = d.owner === activeUsername;
+        const canManage = isOwn || isAdminUser;
         const newVis = d.visibility === 'private' ? 'public' : 'private';
-        const connectBtn = isOwn
+        const connectBtn = canManage
           ? `<button class="btn btn-sm btn-primary df-ds-connect" data-owner="${d.owner}" data-fullname="${d.fullName}">Connect</button>`
           : '';
-        const visBtn = isOwn
+        const visBtn = canManage
           ? `<button class="btn btn-sm btn-secondary df-ds-vis" data-owner="${d.owner}" data-fullname="${d.fullName}" data-newvis="${newVis}">→ ${newVis}</button>`
           : '';
         const copyBtn = `<button class="btn btn-sm btn-secondary df-ds-copy" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Copy</button>`;
-        const deleteBtn = isOwn
+        const deleteBtn = canManage
           ? `<button class="btn btn-sm btn-danger df-ds-delete" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Delete</button>`
           : '';
         const muted = '<span style="color:var(--muted)">—</span>';
@@ -149,7 +233,7 @@ export function openDataFileModal() {
           <td>${d.name}</td>
           <td>${d.eventName || muted}</td>
           <td>${d.eventDate || muted}</td>
-          <td>${d.owner}</td>
+          <td>${d.owner}${d.orphaned ? ' <span style="color:var(--muted);font-size:0.8em">(orphaned)</span>' : ''}</td>
           <td><span class="df-badge df-badge-${d.visibility}">${d.visibility}</span></td>
           <td style="white-space:nowrap">${connectBtn}${visBtn}${copyBtn}${deleteBtn}</td>
         </tr>`;
@@ -175,9 +259,8 @@ export function openDataFileModal() {
       });
     }
 
-    function deleteDataset(owner, fullName, name) {
-      const msg = `Permanently delete "${name}"?\n\nThis cannot be undone — all data in this dataset will be lost.`;
-      if (!window.confirm(msg)) return;
+    async function deleteDataset(owner, fullName, name) {
+      if (!await showConfirmDialog(`Permanently delete "${name}"? This cannot be undone — all data in this dataset will be lost.`, 'Delete', true)) return;
       setStatus('df-dataset-status', 'Deleting…');
       apiDeleteDataset(activeToken, owner, fullName).then(result => {
         if (result.error) { setStatus('df-dataset-status', result.error, true); return; }

@@ -2,7 +2,7 @@
 
 import { state, loadAll } from './state.js';
 import { restoreDirectory, dumpState, restoreState, getSession, isStandalone } from './storage.js';
-import { openDataFileModal, updateDataFileButton } from './auth.js';
+import { openDataFileModal, updateDataFileButton, startServerPing } from './auth.js';
 import { showBusy } from './utils.js';
 import { on, showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, pickFile, downloadText, sanitise } from './ui.js';
 
@@ -52,6 +52,7 @@ export async function init() {
   }
 
   updateDataFileButton();
+  startServerPing();
   window.addEventListener('racemaster-dirty-change', updateDataFileButton);
   wireNav();
   wireEvents();

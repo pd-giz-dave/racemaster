@@ -25,6 +25,8 @@ const CACHE_KEY      = 'racemaster-data';       // localStorage: full state obje
 const DIRTY_KEY      = 'racemaster-dirty';      // localStorage: unsynced changes flag
 const TOKEN_KEY      = 'racemaster-token';      // localStorage: auth token
 const DATASET_KEY    = 'racemaster-dataset';    // localStorage: current dataset name
+const USERNAME_KEY   = 'racemaster-username';   // localStorage: logged-in username
+const IS_ADMIN_KEY   = 'racemaster-isadmin';    // localStorage: admin flag
 const STANDALONE_KEY = 'racemaster-standalone'; // localStorage: standalone mode flag
 
 export const hasFSA = false;
@@ -48,7 +50,14 @@ export function setSession(token, dataset) {
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(DATASET_KEY);
+  localStorage.removeItem(USERNAME_KEY);
+  localStorage.removeItem(IS_ADMIN_KEY);
 }
+
+export function getUsername() { return localStorage.getItem(USERNAME_KEY) || ''; }
+export function setUsername(u) { localStorage.setItem(USERNAME_KEY, u || ''); }
+export function getIsAdmin()   { return localStorage.getItem(IS_ADMIN_KEY) === 'true'; }
+export function setIsAdmin(v)  { localStorage.setItem(IS_ADMIN_KEY, v ? 'true' : 'false'); }
 
 export function isDirty() {
   return localStorage.getItem(DIRTY_KEY) === 'true';
@@ -134,6 +143,28 @@ export async function apiCopyDataset(token, fromOwner, fromFullName, toName, vis
 
 export async function apiDeleteDataset(token, owner, fullName) {
   const res = await fetch(`/api/datasets/${owner}/${fullName}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+export async function apiListUsers(token) {
+  const res = await fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } });
+  return res.json();
+}
+
+export async function apiSetUserAdmin(token, username, makeAdmin) {
+  const res = await fetch(`/api/users/${encodeURIComponent(username)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ isAdmin: makeAdmin }),
+  });
+  return res.json();
+}
+
+export async function apiDeleteUser(token, username) {
+  const res = await fetch(`/api/users/${encodeURIComponent(username)}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` },
   });

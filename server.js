@@ -6,10 +6,11 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
-const PORT       = 3000;
-const ROOT       = __dirname;
-const DATA_DIR   = path.join(ROOT, 'data');
-const USERS_FILE = path.join(ROOT, 'users.txt');
+const PORT        = 3000;
+const ROOT        = __dirname;
+const DATA_DIR    = path.join(ROOT, 'data');
+const USERS_FILE  = path.join(ROOT, 'users.txt');
+const ADMINS_FILE = path.join(ROOT, 'admins.txt');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
@@ -45,6 +46,17 @@ function readUsers() {
 function writeUsers(users) {
   fs.writeFileSync(USERS_FILE, Object.entries(users).map(([n, h]) => `${n}:${h}`).join('\n') + '\n', 'utf8');
 }
+
+function readAdmins() {
+  if (!fs.existsSync(ADMINS_FILE)) return new Set();
+  return new Set(fs.readFileSync(ADMINS_FILE, 'utf8').split('\n').map(s => s.trim()).filter(Boolean));
+}
+
+function writeAdmins(admins) {
+  fs.writeFileSync(ADMINS_FILE, [...admins].join('\n') + '\n', 'utf8');
+}
+
+function isAdmin(username) { return readAdmins().has(username); }
 
 function getAuthUser(req) {
   const h = req.headers['authorization'] || '';
@@ -89,8 +101,10 @@ function emptyDataset() {
   return {};
 }
 
-// Returns array of { owner, name, fullName, visibility } visible to username
-function getDatasetsForUser(username) {
+// Returns array of { owner, name, fullName, visibility, orphaned } visible to username.
+// adminAccess=true shows all datasets including other users' private ones.
+function getDatasetsForUser(username, adminAccess = false) {
+  const knownUsers = readUsers();
   const results = [];
   let entries;
   try { entries = fs.readdirSync(DATA_DIR); }
@@ -113,12 +127,13 @@ function getDatasetsForUser(username) {
       else if (base.endsWith('-public')) { visibility = 'public';  name = base.slice(0, -7); }
       else continue;
 
-      if (visibility === 'private' && owner !== username) continue;
+      if (visibility === 'private' && owner !== username && !adminAccess) continue;
 
       const data = readDataset(owner, base);
       const ev   = Array.isArray(data.event) ? data.event[0] : null;
       results.push({ owner, name, fullName: base, visibility,
-        eventName: ev?.name || '', eventDate: ev?.date || '' });
+        eventName: ev?.name || '', eventDate: ev?.date || '',
+        orphaned: !knownUsers[owner] });
     }
   }
 
@@ -162,6 +177,11 @@ const server = http.createServer(async (req, res) => {
 
   try {
 
+    // GET /api/ping  — liveness check, no auth
+    if (pathname === '/api/ping' && req.method === 'GET') {
+      return jsonReply(res, 200, { ok: true });
+    }
+
     // POST /api/auth/login
     if (pathname === '/api/auth/login' && req.method === 'POST') {
       const body = JSON.parse(await readBody(req));
@@ -172,7 +192,7 @@ const server = http.createServer(async (req, res) => {
       }
       const token = newToken();
       sessions.set(token, username);
-      return jsonReply(res, 200, { token, username });
+      return jsonReply(res, 200, { token, username, isAdmin: isAdmin(username) });
     }
 
     // POST /api/auth/create
@@ -185,19 +205,21 @@ const server = http.createServer(async (req, res) => {
       }
       const users = readUsers();
       if (users[username]) return jsonReply(res, 409, { error: `Username "${username}" already exists` });
+      const admins = readAdmins();
+      if (Object.keys(users).length === 0) { admins.add(username); writeAdmins(admins); }
       users[username] = hashPw(password);
       writeUsers(users);
       const token = newToken();
       sessions.set(token, username);
-      console.log(`Account created: ${username}`);
-      return jsonReply(res, 200, { token, username });
+      console.log(`Account created: ${username}${admins.has(username) ? ' (admin)' : ''}`);
+      return jsonReply(res, 200, { token, username, isAdmin: admins.has(username) });
     }
 
     // GET /api/datasets  —  list datasets visible to the authenticated user
     if (pathname === '/api/datasets' && req.method === 'GET') {
       const username = getAuthUser(req);
       if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
-      return jsonReply(res, 200, getDatasetsForUser(username));
+      return jsonReply(res, 200, getDatasetsForUser(username, isAdmin(username)));
     }
 
     // POST /api/datasets/copy  —  copy any visible dataset into the requester's folder
@@ -265,7 +287,7 @@ const server = http.createServer(async (req, res) => {
       const username = getAuthUser(req);
       if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
       const [, , , owner, fullName] = pathname.split('/');
-      if (owner !== username) return jsonReply(res, 403, { error: 'Cannot modify another user\'s dataset' });
+      if (owner !== username && !isAdmin(username)) return jsonReply(res, 403, { error: 'Cannot modify another user\'s dataset' });
       const body = JSON.parse(await readBody(req));
       const newVisibility = body.visibility === 'public' ? 'public' : 'private';
       let name;
@@ -289,7 +311,7 @@ const server = http.createServer(async (req, res) => {
       const username = getAuthUser(req);
       if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
       const [, , , owner, fullName] = pathname.split('/');
-      if (owner !== username) return jsonReply(res, 403, { error: 'Cannot delete another user\'s dataset' });
+      if (owner !== username && !isAdmin(username)) return jsonReply(res, 403, { error: 'Cannot delete another user\'s dataset' });
       const filePath = dataFilePath(owner, fullName);
       if (!fs.existsSync(filePath)) return jsonReply(res, 404, { error: 'Dataset not found' });
       fs.unlinkSync(filePath);
@@ -304,7 +326,7 @@ const server = http.createServer(async (req, res) => {
       const parsed = parseDataPath(pathname);
       if (!parsed) return jsonReply(res, 400, { error: 'Invalid path — expected /api/data/:owner/:name-{private|public}' });
       const { owner, fullName, visibility } = parsed;
-      if (visibility === 'private' && owner !== username) return jsonReply(res, 403, { error: 'Access denied' });
+      if (visibility === 'private' && owner !== username && !isAdmin(username)) return jsonReply(res, 403, { error: 'Access denied' });
       return jsonReply(res, 200, readDataset(owner, fullName));
     }
 
@@ -315,7 +337,7 @@ const server = http.createServer(async (req, res) => {
       const parsed = parseDataPath(pathname);
       if (!parsed) return jsonReply(res, 400, { error: 'Invalid path — expected /api/data/:owner/:name-{private|public}' });
       const { owner, fullName } = parsed;
-      if (owner !== username) return jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' });
+      if (owner !== username && !isAdmin(username)) return jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' });
       try {
         const incoming = JSON.parse(await readBody(req));
         writeDataset(owner, fullName, incoming);
@@ -323,6 +345,57 @@ const server = http.createServer(async (req, res) => {
       } catch {
         return jsonReply(res, 400, { error: 'Invalid JSON' });
       }
+    }
+
+    // GET /api/users  — admin only, list all users
+    if (pathname === '/api/users' && req.method === 'GET') {
+      const username = getAuthUser(req);
+      console.log(`GET /api/users — auth: ${username || 'none'}`);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      if (!isAdmin(username)) return jsonReply(res, 403, { error: 'Admin only' });
+      const users  = readUsers();
+      const admins = readAdmins();
+      const list = Object.keys(users).sort().map(u => ({ username: u, isAdmin: admins.has(u) }));
+      console.log(`GET /api/users — returning ${list.length} users`);
+      return jsonReply(res, 200, list);
+    }
+
+    // PATCH /api/users/:username  — admin only, grant/revoke admin (not self)
+    if (pathname.startsWith('/api/users/') && req.method === 'PATCH') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      if (!isAdmin(username)) return jsonReply(res, 403, { error: 'Admin only' });
+      const target = sanitiseName(pathname.slice('/api/users/'.length));
+      if (!target) return jsonReply(res, 400, { error: 'Invalid username' });
+      if (target === username) return jsonReply(res, 400, { error: 'Cannot change your own admin status' });
+      const users = readUsers();
+      if (!users[target]) return jsonReply(res, 404, { error: 'User not found' });
+      const body = JSON.parse(await readBody(req));
+      const admins = readAdmins();
+      if (body.isAdmin) admins.add(target); else admins.delete(target);
+      writeAdmins(admins);
+      console.log(`Admin ${username} ${body.isAdmin ? 'granted' : 'revoked'} admin for ${target}`);
+      return jsonReply(res, 200, { ok: true });
+    }
+
+    // DELETE /api/users/:username  — admin only, cannot delete self
+    if (pathname.startsWith('/api/users/') && req.method === 'DELETE') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      if (!isAdmin(username)) return jsonReply(res, 403, { error: 'Admin only' });
+      const target = sanitiseName(pathname.slice('/api/users/'.length));
+      if (!target) return jsonReply(res, 400, { error: 'Invalid username' });
+      if (target === username) return jsonReply(res, 400, { error: 'Cannot delete your own account' });
+      const users = readUsers();
+      if (!users[target]) return jsonReply(res, 404, { error: 'User not found' });
+      delete users[target];
+      writeUsers(users);
+      const admins = readAdmins();
+      admins.delete(target);
+      writeAdmins(admins);
+      for (const [tok, u] of sessions) if (u === target) sessions.delete(tok);
+      console.log(`User deleted by admin ${username}: ${target}`);
+      return jsonReply(res, 200, { ok: true });
     }
 
     // ---- Static file serving ----

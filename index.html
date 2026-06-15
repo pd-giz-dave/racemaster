@@ -23,10 +23,11 @@
     <h1>RaceMaster</h1>
     <span class="event-name" id="home-event-name-header"></span>
     <div style="flex:1"></div>
-    <span id="header-username" style="color:rgba(255,255,255,0.75);font-size:0.8rem"></span>
     <button class="btn btn-outline" id="btn-select-datafile">Select Data File</button>
     <button class="btn btn-outline" id="btn-export-state">Export</button>
     <button class="btn btn-outline" id="btn-import-state">Import</button>
+    <span id="header-username" style="color:rgba(255,255,255,0.75);font-size:0.8rem"></span>
+    <span id="header-server-status" style="font-size:0.8rem"></span>
   </header>
 
   <!-- Sidebar navigation -->
@@ -46,7 +47,7 @@
 
       <div class="nav-section">Finishers</div>
       <a href="#" data-view="finishers">Finishers</a>
-      <a href="#" data-view="safety">Entrant Status</a>
+      <a href="#" data-view="safety">Safety Check</a>
 
       <div class="nav-section">Results</div>
       <a href="#" data-view="si-results">SI Results</a>
@@ -92,6 +93,7 @@
             <li>Record finish times on the <strong>Finishers</strong> page.</li>
             <li>Optionally, import SI results via <strong>SI Results</strong></li>
             <li>Generate <strong>Results &amp; Prize List</strong> when racing is done.</li>
+            <li>Check for outstanding entrants on the <strong>Safety Check</strong> page.</li>
           </ol>
         </div>
       </div>
@@ -543,7 +545,7 @@
          ====================================================== -->
     <div class="view" id="view-safety" hidden>
       <div class="view-header">
-        <h2>Entrant Status</h2>
+        <h2>Safety Check</h2>
         <span style="font-size:0.75rem;color:var(--muted);margin-left:1rem">Outstanding:</span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="safety-senior-outstanding">0 of 0</span></span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="safety-junior-outstanding">0 of 0</span></span>
@@ -858,8 +860,18 @@
         <button id="df-btn-standalone" class="btn btn-secondary" style="width:100%">Continue without signing in (standalone)</button>
       </div>
 
-      <!-- Datasets panel -->
-      <div id="df-panel-datasets" class="card" hidden>
+      <!-- Datasets panel + admin users card (side by side) -->
+      <div id="df-panels-row" style="display:flex;gap:1rem;align-items:flex-start" hidden>
+
+      <!-- Admin users card (left, admin only) -->
+      <div id="df-panel-users" class="card" hidden style="min-width:180px;flex-shrink:0">
+        <h3 style="margin:0 0 8px;font-size:1rem">Users</h3>
+        <div id="df-user-list"></div>
+        <p id="df-user-status" style="margin:6px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+      </div>
+
+      <!-- Datasets card (right) -->
+      <div id="df-panel-datasets" class="card" style="flex:1">
         <p style="margin:0 0 8px;font-size:0.875rem;color:var(--muted,#666)">Your datasets and public datasets from other users:</p>
         <div id="df-dataset-list" style="margin-bottom:10px"></div>
 
@@ -917,7 +929,8 @@
           <button id="df-btn-save-as" class="btn btn-secondary">Save As…</button>
           <button id="df-btn-logout" class="btn btn-secondary">Log out</button>
         </div>
-      </div>
+      </div><!-- end df-panel-datasets -->
+      </div><!-- end df-panels-row -->
     </div>
 
     <!-- Datalists for typeahead autocomplete -->
