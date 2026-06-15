@@ -116,6 +116,7 @@ export async function submitEntry(formData) {
 
   let category = formData.category || '';
   if (!category && dob) category = calculateCategory(dob, gender);
+  if (!category && dob && state.event.date) return { error: 'Too young to enter — below the minimum age for this event' };
 
   let course = formData.course || '';
   if (!course) course = calculateCourse(category, dob);
@@ -217,6 +218,8 @@ export async function insertEntryAndRenumber(atBib, formData) {
 
   let category = formData.category || '';
   if (!category && dob) category = calculateCategory(dob, gender);
+  if (!category && dob && state.event.date) return { error: 'Too young to enter — below the minimum age for this event' };
+
   let course = formData.course || '';
   if (!course) course = calculateCourse(category, dob);
 

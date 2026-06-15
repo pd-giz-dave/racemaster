@@ -8,10 +8,6 @@ import { parseSICSV } from './csv.js';
 import { getEntry } from './entries.js';
 
 
-// ============================================================
-// SportIdent results import/export (translated from SIResults.xml)
-// ============================================================
-
 /**
  * Import an SI results CSV file into state.siResults.
  * Returns {imported, errors[]}.

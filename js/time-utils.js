@@ -4,9 +4,6 @@ import { state } from './state.js';
 import { TIMING, COURSE } from './constants.js';
 import { normaliseTime, timeToSeconds, secondsToTime, ciEq } from './utils.js';
 
-// ============================================================
-// Time handling (translated from Time.xml)
-// ============================================================
 
 /** Get the stopwatch offset time in seconds (0 if elapsed-time mode, -ve if clock started late) */
 export function stopwatchOffsetTime() {

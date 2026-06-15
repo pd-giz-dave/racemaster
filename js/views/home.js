@@ -11,6 +11,7 @@ import { COURSE } from '../constants.js';
 function eventDetails(ev) {
   const rows = [];
   const row = (label, value) => rows.push(`<tr><td class="home-ev-label">${label}</td><td>${value}</td></tr>`);
+  const gap = () => rows.push(`<tr><td colspan="2" style="height:8px"></td></tr>`);
 
   if (ev.date)                        row('Date',                 ev.date);
   if (ev.distance)                    row('Distance',             `${ev.distance} km`);
@@ -22,8 +23,10 @@ function eventDetails(ev) {
                                       row('Senior timing',        ev.timingMethod);
   if (ev.prizeDepthOverall)           row('Overall prizes',       ev.prizeDepthOverall);
   if (ev.prizeDepthPerCategory)       row('Category prizes',      ev.prizeDepthPerCategory);
+  if (ev.maleRecord || ev.femaleRecord) gap();
   if (ev.maleRecord)                  row('Male record',          ev.maleRecord);
   if (ev.femaleRecord)                row('Female record',        ev.femaleRecord);
+  gap();
 
   const hasJuniors = ev.juniorLimit && ev.juniorLimit !== 'None';
   if (hasJuniors) {
@@ -32,6 +35,7 @@ function eventDetails(ev) {
     if (+ev.juniorEntryLimit > 0)     row('Junior entry limit',  ev.juniorEntryLimit);
     if (ev.juniorTimingMethod && ev.juniorTimingMethod !== 'None')
                                       row('Junior timing',       ev.juniorTimingMethod);
+    if (ev.juniorPrizeDepthPerCategory) row('Junior prizes',     ev.juniorPrizeDepthPerCategory);
   }
 
   if (!rows.length) return '';
@@ -93,7 +97,7 @@ function eventStatistics() {
 
   let catSection = '';
   if (catRows.length > 0) {
-    const header = `<tr><th>Male</th><th class="num">M</th><th>Female</th><th class="num">F</th></tr>`;
+    const header = `<tr><th>Male</th><th class="num">#</th><th>Female</th><th class="num">#</th></tr>`;
     const trs = catRows.map(r => {
       const m = entryCatMap[(r.maleCat   || '').toUpperCase()] || 0;
       const f = entryCatMap[(r.femaleCat || '').toUpperCase()] || 0;
@@ -102,7 +106,7 @@ function eventStatistics() {
         <td>${r.femaleCat || '—'}</td><td class="num">${f || '—'}</td>
       </tr>`;
     }).join('');
-    catSection = `<p class="home-stats-section">By category</p>
+    catSection = `<p class="home-stats-section">Entries by category</p>
       <table class="home-stats-table"><thead>${header}</thead><tbody>${trs}</tbody></table>`;
   }
 

@@ -6,10 +6,6 @@ import { today, ordinal } from './utils.js';
 import { getSortedEntries, getEntriesForCourse } from './entries.js';
 import { getResultsForCourse, getPrizes } from './results.js';
 
-// ============================================================
-// Print form generators (translated from Forms.xml)
-// Entry forms, finish sheets, number matrix, results slips
-// ============================================================
 
 /**
  * Generate entry form HTML for printing.

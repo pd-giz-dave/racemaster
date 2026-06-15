@@ -247,6 +247,13 @@ input:focus, select:focus, textarea:focus {
 #view-results .tab-panel > p { flex-shrink: 0; }
 #view-results .table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
+#view-categories:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
+#cat-tab-bar { flex-shrink: 0; }
+#view-categories .tab-panel.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+#view-categories .tab-panel .btn-row { flex-shrink: 0; }
+#view-categories .table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#view-categories thead tr:nth-child(2) th { top: 30px; }
+
 /* ---- Two-column form+table layout ---- */
 .split-layout {
   display: grid;

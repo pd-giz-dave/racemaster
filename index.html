@@ -328,6 +328,10 @@
                   <option value="Juniors">Juniors</option>
                 </select>
               </div>
+              <div class="form-field" id="entry-form-start-row" style="display:none">
+                <label for="entry-form-start">Start Time</label>
+                <input type="text" id="entry-form-start" placeholder="HH:MM:SS">
+              </div>
             </div>
             <div class="btn-row" style="margin-top:8px">
               <button class="btn" id="btn-submit-entry" style="flex:1">Register</button>
@@ -344,8 +348,8 @@
               <thead>
                 <tr>
                   <th>Bib</th><th>Name</th><th>Club</th>
-                  <th>G</th><th>DoB</th><th>Cat</th><th>Course</th>
-                  <th>Dibber</th><th>FRA#</th><th>Pre-No</th>
+                  <th>DoB</th><th>Cat</th><th>Course</th>
+                  <th>Dibber</th><th>Pre-No</th><th>Start</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -763,8 +767,8 @@
         </div>
         <div class="table-scroll">
           <table class="data-table"><thead>
-            <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th>MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">Actions</th></tr>
+            <tr><th colspan="5">Male</th><th colspan="5" class="col-sep">Female</th><th></th></tr>
+            <tr><th>MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th>Start</th><th class="col-sep">MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th>Start</th><th class="col-sep">Actions</th></tr>
           </thead><tbody id="categories-tbody"></tbody></table>
         </div>
       </div>

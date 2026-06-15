@@ -52,7 +52,6 @@ export const SI_TIMING_COL_NAMES = {
 
 // FRA category preset data [maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist]
 export const FRA_CATEGORIES = [
-  [-1, '-',    'NOW', 0,    -1, '-',    'NOW', 0],
   [6,  'U10B', 'EOY', 1.5,  6, 'U10G', 'EOY', 1.5],
   [10, 'U12B', 'EOY', 3,   10, 'U12G', 'EOY', 3],
   [12, 'U14B', 'EOY', 5,   12, 'U14G', 'EOY', 5],
@@ -70,11 +69,9 @@ export const FRA_CATEGORIES = [
   [70, 'M70',  'NOW', 999, 70, 'W70',  'NOW', 999],
   [75, 'M75',  'NOW', 999, 75, 'W75',  'NOW', 999],
   [80, 'M80',  'NOW', 999, 80, 'W80',  'NOW', 999],
-  [999,'none', 'NOW', 999, 999,'none', 'NOW', 999],
 ];
 
 export const WFRA_CATEGORIES = [
-  [-1, '-',    'NOW', 0,    -1, '-',    'NOW', 0],
   [6,  'U10B', 'EOY', 1.5,  6, 'U10G', 'EOY', 1.5],
   [10, 'U12B', 'EOY', 3,   10, 'U12G', 'EOY', 3],
   [12, 'U14B', 'EOY', 5,   12, 'U14G', 'EOY', 5],
@@ -88,7 +85,6 @@ export const WFRA_CATEGORIES = [
   [60, 'M60',  'NOW', 999, 60, 'W60',  'NOW', 999],
   [70, 'M70',  'NOW', 999, 70, 'W70',  'NOW', 999],
   [80, 'M80',  'NOW', 999, 80, 'W80',  'NOW', 999],
-  [999,'none', 'NOW', 999, 999,'none', 'NOW', 999],
 ];
 
 

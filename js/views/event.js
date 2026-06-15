@@ -123,6 +123,7 @@ export async function saveEventForm() {
   if (newCategories !== oldCategories) {
     if (newCategories === 'WFRA') applyWFRAPreset();
     else applyFRAPreset();
+    state.categories.forEach(c => { c.maleStart = ''; c.femaleStart = ''; });
     await saveCategories();
     await reapplyEntryCategories();
   }
@@ -133,10 +134,11 @@ export async function saveEventForm() {
     state.results   = [];  state.prizes    = [];
     state.helpers   = [];  state.finishNumbersMap = {};
     state.siResults = [];
+    state.categories.forEach(c => { c.maleStart = ''; c.femaleStart = ''; });
     await Promise.all([
       saveEntries(), saveHelpers(), saveFinishers(),
       saveResults(), savePrizes(), clearSIEntries(),
-      saveSIResults(),
+      saveSIResults(), saveCategories(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
   }

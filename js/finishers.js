@@ -6,9 +6,6 @@ import { COURSE } from './constants.js';
 import { ciEq } from './utils.js';
 import { getEntry } from './entries.js';
 
-// ============================================================
-// Finish time recording logic (translated from Finishers.xml)
-// ============================================================
 
 /**
  * Build the finishNumbersMap: maps 'S101' → [finisher_index, ...] etc.

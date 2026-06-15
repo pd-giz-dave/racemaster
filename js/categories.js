@@ -7,16 +7,12 @@ import { normaliseDate, parseDate, ciEq } from './utils.js';
 
 /** Get all male/open category names from state */
 export function getMaleCategories() {
-  return state.categories
-    .map(r => r.maleCat)
-    .filter(c => c && c !== '-' && c.toLowerCase() !== 'none');
+  return state.categories.map(r => r.maleCat).filter(Boolean);
 }
 
 /** Get all female category names from state */
 export function getFemaleCategories() {
-  return state.categories
-    .map(r => r.femaleCat)
-    .filter(c => c && c !== '-' && c.toLowerCase() !== 'none');
+  return state.categories.map(r => r.femaleCat).filter(Boolean);
 }
 
 /** Get categories for a given gender */
@@ -52,9 +48,6 @@ export function calculateCategory(dob, genderIn) {
     const minAge = isFemale ? +row.femaleMinAge : +row.maleMinAge;
     const cat    = isFemale ? row.femaleCat     : row.maleCat;
     const ref    = isFemale ? row.femaleRef     : row.maleRef;
-
-    if (!cat || cat.toLowerCase() === 'none') break;
-    if (cat === '-') continue;
 
     if (ref === 'EOY') {
       if (minAge > eoyAge) break;

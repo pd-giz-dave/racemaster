@@ -10,9 +10,6 @@ import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
 import { getSIBib, getSIRaceTime, getSICourse, getSIStatus } from './si-results.js';
 
-// ============================================================
-// Results and prize generation (translated from Results.xml)
-// ============================================================
 
 /**
  * Generate full results from finishers and entries.

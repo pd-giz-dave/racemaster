@@ -6,9 +6,6 @@ import { GENDER } from './constants.js';
 import { normaliseDate, cleanName } from './utils.js';
 import { parseSICSV } from './csv.js';
 
-// ============================================================
-// SportIdent pre-entry import logic (translated from SIEntries.xml)
-// ============================================================
 
 /**
  * Parse raw pre-entries CSV text into preEntries array.

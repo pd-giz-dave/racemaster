@@ -3,20 +3,20 @@
 import { state, saveCategories, saveFraPreset, saveWfraPreset } from '../state.js';
 import { resetFRAPreset, resetWFRAPreset } from '../categories.js';
 import { on, escHtml, showStatus, showConfirmDialog } from '../ui.js';
+import { normaliseTime } from '../utils.js';
 
 // ---- Constants ----
 
-const CAT_EDIT_FIELDS = [
-  'maleMinAge','maleCat','maleRef','maleMaxDist',
-  'femaleMinAge','femaleCat','femaleRef','femaleMaxDist',
-];
-const CAT_EDIT_WIDTHS = ['46px','60px','46px','52px','46px','60px','46px','52px'];
+const BASE_FIELDS  = ['maleMinAge','maleCat','maleRef','maleMaxDist','femaleMinAge','femaleCat','femaleRef','femaleMaxDist'];
+const BASE_WIDTHS  = ['46px','60px','46px','52px','46px','60px','46px','52px'];
+const ACTIVE_FIELDS = ['maleMinAge','maleCat','maleRef','maleMaxDist','maleStart','femaleMinAge','femaleCat','femaleRef','femaleMaxDist','femaleStart'];
+const ACTIVE_WIDTHS = ['46px','60px','46px','52px','60px','46px','60px','46px','52px','60px'];
 
 // Config for each of the three category tables
 const CAT_TABLE = {
-  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories,  label: 'category' },
-  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,   label: 'FRA preset' },
-  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset,  label: 'WFRA preset' },
+  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories, label: 'category',   fields: ACTIVE_FIELDS, widths: ACTIVE_WIDTHS, femaleSepIdx: 5 },
+  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,  label: 'FRA preset', fields: BASE_FIELDS,   widths: BASE_WIDTHS,   femaleSepIdx: 4 },
+  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset, label: 'WFRA preset',fields: BASE_FIELDS,   widths: BASE_WIDTHS,   femaleSepIdx: 4 },
 };
 
 // ---- Render ----
@@ -35,7 +35,7 @@ export function renderCategoryTable(key) {
   if (!tbody) return;
   tbody.innerHTML = arr.map((c, i) => `
     <tr id="${key}-cat-row-${i}">
-      ${CAT_EDIT_FIELDS.map((f, i) => `<td${i === 4 ? ' class="col-sep"' : ''}>${c[f] ?? ''}</td>`).join('')}
+      ${cfg.fields.map((f, i) => `<td${i === cfg.femaleSepIdx ? ' class="col-sep"' : ''}>${c[f] ?? ''}</td>`).join('')}
       <td class="col-sep">
         <button class="btn-sm btn-edit"         data-key="${key}" data-idx="${i}">Edit</button>
         <button class="btn-sm btn-delete-entry" data-key="${key}" data-idx="${i}">Del</button>
@@ -54,8 +54,8 @@ export function editCategoryRow(key, idx) {
   if (!c) return;
   const row = document.getElementById(`${key}-cat-row-${idx}`);
   if (!row) return;
-  row.innerHTML = CAT_EDIT_FIELDS.map((f, i) =>
-    `<td${i === 4 ? ' class="col-sep"' : ''}><input id="${key}-cat-${idx}-${f}" type="text" value="${escHtml(String(c[f] ?? ''))}" style="width:${CAT_EDIT_WIDTHS[i]}"></td>`
+  row.innerHTML = cfg.fields.map((f, i) =>
+    `<td${i === cfg.femaleSepIdx ? ' class="col-sep"' : ''}><input id="${key}-cat-${idx}-${f}" type="text" value="${escHtml(String(c[f] ?? ''))}" style="width:${cfg.widths[i]}"></td>`
   ).join('') + `<td class="col-sep">
     <button class="btn-sm btn-save">Save</button>
     <button class="btn-sm btn-secondary">Cancel</button>
@@ -70,9 +70,11 @@ export async function saveCategoryRow(key, idx) {
   if (!cfg) return;
   const c = cfg.getArr()[idx];
   if (!c) return;
-  for (const f of CAT_EDIT_FIELDS) {
+  for (const f of cfg.fields) {
     const v = document.getElementById(`${key}-cat-${idx}-${f}`)?.value.trim() ?? '';
-    c[f] = (f.includes('Age') || f.includes('Dist')) ? (+v === +v ? +v : c[f]) : v;
+    c[f] = f.includes('Age') || f.includes('Dist') ? (+v === +v ? +v : c[f])
+         : f.includes('Start') ? (normaliseTime(v) || '')
+         : v;
   }
   await cfg.saveFn();
   showStatus(`${cfg.label} row ${idx + 1} saved.`);
@@ -97,8 +99,8 @@ export function showAddCategoryRow(key) {
   if (!tbody || document.getElementById(`${key}-cat-row-new`)) return;
   const tr = document.createElement('tr');
   tr.id = `${key}-cat-row-new`;
-  tr.innerHTML = CAT_EDIT_FIELDS.map((f, i) =>
-    `<td${i === 4 ? ' class="col-sep"' : ''}><input id="${key}-cat-new-${f}" type="text" value="" style="width:${CAT_EDIT_WIDTHS[i]}"></td>`
+  tr.innerHTML = cfg.fields.map((f, i) =>
+    `<td${i === cfg.femaleSepIdx ? ' class="col-sep"' : ''}><input id="${key}-cat-new-${f}" type="text" value="" style="width:${cfg.widths[i]}"></td>`
   ).join('') + `<td class="col-sep">
     <button class="btn-sm btn-save">Save</button>
     <button class="btn-sm btn-secondary">Cancel</button>
@@ -113,9 +115,11 @@ export async function saveNewCategoryRow(key) {
   const cfg = CAT_TABLE[key];
   if (!cfg) return;
   const row = {};
-  for (const f of CAT_EDIT_FIELDS) {
+  for (const f of cfg.fields) {
     const v = document.getElementById(`${key}-cat-new-${f}`)?.value.trim() || '';
-    row[f] = (f.includes('Age') || f.includes('Dist')) ? +v || 0 : v;
+    row[f] = f.includes('Age') || f.includes('Dist') ? +v || 0
+           : f.includes('Start') ? (normaliseTime(v) || '')
+           : v;
   }
   cfg.getArr().push(row);
   await cfg.saveFn();

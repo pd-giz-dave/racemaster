@@ -10,7 +10,7 @@ import {
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE, GENDER } from '../constants.js';
-import { ciEq, cleanName, capitalise, showBusy } from '../utils.js';
+import { ciEq, cleanName, capitalise, showBusy, normaliseTime } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
@@ -37,13 +37,12 @@ export function renderEntries() {
       <td>${e.bibNumber}</td>
       <td>${(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '')}</td>
       <td>${e.club || ''}</td>
-      <td>${e.gender || ''}</td>
       <td>${e.dob || ''}</td>
       <td>${e.category || ''}</td>
       <td>${e.course || ''}</td>
       <td>${e.dibberNumber || ''}</td>
-      <td>${e.fraNumber || ''}</td>
       <td>${e.preEntry || ''}</td>
+      <td>${e.startTime || ''}</td>
       <td>
         <button class="btn-sm btn-edit"                 data-bib="${e.bibNumber}">Edit</button>
         <button class="btn-sm btn-insert-above-entry"  data-bib="${e.bibNumber}">Ins ↑</button>
@@ -128,7 +127,9 @@ export function fillFormForEdit(bib) {
     'entry-form-fra':      e.fraNumber || '',
     'entry-form-category': e.category  || '',
     'entry-form-course':   e.course    || '',
+    'entry-form-start':    e.startTime || '',
   });
+  document.getElementById('entry-form-start-row').style.display = '';
   document.getElementById('entry-form-bib')?.removeAttribute('tabindex');
   document.getElementById('entry-form-dibber')?.removeAttribute('tabindex');
   document.getElementById('btn-submit-entry').textContent = 'Update';
@@ -145,6 +146,7 @@ export function resetEntryForm() {
   document.querySelectorAll('#entries-tbody .row-editing')
     .forEach(r => r.classList.remove('row-editing'));
   clearForm('entry-form-fields');
+  document.getElementById('entry-form-start-row').style.display = 'none';
   const bibEl = document.getElementById('entry-form-bib');
   if (bibEl) { bibEl.value = getNextBibNumber(); bibEl.setAttribute('tabindex', '-1'); }
   const dibEl = document.getElementById('entry-form-dibber');
@@ -249,6 +251,7 @@ export async function submitEntryForm() {
     category:    val('entry-form-category'),
     course:      val('entry-form-course'),
     preEntry:    val('entry-form-peno'),
+    startTime:   normaliseTime(val('entry-form-start')),
     bibOverride:    +val('entry-form-bib')    || 0,
     dibberOverride: +val('entry-form-dibber') || 0,
     overrideBan,
