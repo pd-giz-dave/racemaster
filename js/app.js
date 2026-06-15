@@ -13,7 +13,7 @@ import { renderHelpers, wireHelpers }       from './views/helpers.js';
 import { renderFinishers, wireFinishers } from './views/finishers.js';
 import { renderResults, wireResults }       from './views/results.js';
 import { renderPreEntries, wirePreEntries } from './views/pre-entries.js';
-import { renderSafety }                      from './views/safety.js';
+import { renderSafety, wireSafety }           from './views/safety.js';
 import { renderPeople, wirePeople }         from './views/people.js';
 import { renderClubs, wireClubs }         from './views/clubs.js';
 import { renderRoles, wireRoles }           from './views/roles.js';
@@ -225,6 +225,7 @@ function wireEvents() {
   wireFinishers();
   wireResults();
 
+  wireSafety();
   wirePreEntries();
   wirePeople();
   wireClubs();

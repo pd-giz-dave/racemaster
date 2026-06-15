@@ -46,7 +46,7 @@
 
       <div class="nav-section">Finishers</div>
       <a href="#" data-view="finishers">Finishers</a>
-      <a href="#" data-view="safety">Safety Check</a>
+      <a href="#" data-view="safety">Entrant Status</a>
 
       <div class="nav-section">Results</div>
       <a href="#" data-view="si-results">SI Results</a>
@@ -543,19 +543,47 @@
          ====================================================== -->
     <div class="view" id="view-safety" hidden>
       <div class="view-header">
-        <h2>Outstanding</h2>
+        <h2>Entrant Status</h2>
+        <span style="font-size:0.75rem;color:var(--muted);margin-left:1rem">Outstanding:</span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="safety-senior-outstanding">0 of 0</span></span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="safety-junior-outstanding">0 of 0</span></span>
+        <span style="font-size:0.75rem;color:var(--muted);margin-left:1rem">DNF:</span>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="safety-senior-dnf">0</span></span>
+        <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="safety-junior-dnf">0</span></span>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="safety-tbody"></tbody>
-        </table>
+      <div class="tab-bar" id="safety-tab-bar">
+        <button class="active" data-safety-tab="outstanding">Outstanding</button>
+        <button data-safety-tab="dnf">Retirees / DNFs</button>
+        <button data-safety-tab="finished">Finishers</button>
+      </div>
+
+      <div class="tab-panel active" id="safety-tab-outstanding">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Actions</th></tr></thead>
+            <tbody id="safety-outstanding-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="safety-tab-dnf">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Actions</th></tr></thead>
+            <tbody id="safety-dnf-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="safety-tab-finished">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Pos</th><th>Time</th></tr></thead>
+            <tbody id="safety-finished-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
