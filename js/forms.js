@@ -279,3 +279,94 @@ ${contentHTML}
 </html>`);
   win.document.close();
 }
+
+/**
+ * Generate a compact prize list for narrow paper (thermal receipt printers etc.).
+ * Same columns and structure as the prizes tab view, just shrunk to fit narrow paper.
+ */
+function generateNarrowPrizeListHTML() {
+  const prizes = getPrizes();
+  const event  = state.event;
+
+  let html = `<div class="print-page prize-list-narrow">`;
+  html += `<div class="pln-header">
+    <div class="pln-title">${event.name || 'Race'} — Prize List</div>
+    <div class="pln-date">${event.date || ''}</div>
+  </div>`;
+
+  if (!prizes.length) {
+    html += `<p style="text-align:center">No prizes generated yet.</p>`;
+  } else {
+    html += `<p class="pln-hint">R = course record &nbsp; J = junior &nbsp; * = multi winner</p>`;
+    html += `<table class="pln-table"><thead><tr>
+      <th>Pos</th><th>Cat</th><th>In Cat</th><th>Time</th><th>Name</th>
+    </tr></thead><tbody>`;
+
+    const overallSections = new Set(['Senior Overall', 'Senior Female Overall', 'Senior Male Overall']);
+    let currentSection  = null;
+    let currentCategory = null;
+    for (const p of prizes) {
+      if (p.section !== currentSection) {
+        currentSection  = p.section;
+        currentCategory = null;
+        html += `<tr class="pln-section-row"><td colspan="5">${p.section}</td></tr>`;
+      } else if (p.category !== currentCategory) {
+        html += `<tr class="pln-cat-sep"><td colspan="5"></td></tr>`;
+      }
+      currentCategory = p.category;
+      const suffix   = p.isJunior ? ' J' : (p.recordBreaker ? ' R' : '');
+      const showStar = p.multiWinner && !overallSections.has(p.section);
+      const name     = (showStar ? '* ' : '') + (p.name || '');
+      html += `<tr>
+        <td>${p.position || ''}</td>
+        <td>${p.category || ''}</td>
+        <td>${p.inCatPos || ''}</td>
+        <td>${(p.time || '') + suffix}</td>
+        <td class="pln-name-cell">${name}</td>
+      </tr>`;
+    }
+
+    html += `</tbody></table>`;
+  }
+
+  html += `<div class="pln-footer">${today()}</div>`;
+  html += `</div>`;
+  return html;
+}
+
+/**
+ * Open a prize list print preview sized to the given paper width (mm).
+ * widthMm < 120 uses a compact receipt layout; otherwise uses the standard A4 layout.
+ */
+export function openPrizeListPreview(widthMm) {
+  const isNarrow  = widthMm < 120;
+  const marginMm  = isNarrow ? 3 : 8;
+  const contentMm = widthMm - 2 * marginMm;
+
+  const contentHTML = isNarrow ? generateNarrowPrizeListHTML() : generatePrizeListHTML();
+
+  const overrideCSS = `
+    @page { size: ${widthMm}mm auto; margin: ${marginMm}mm; }
+    .print-page { width: ${contentMm}mm; min-height: auto; }
+  `;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) { alert('Pop-up blocked — please allow pop-ups for this site.'); return; }
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Prize List</title>
+  <link rel="stylesheet" href="css/print.css">
+  <style>${overrideCSS}</style>
+</head>
+<body class="print-preview">
+${contentHTML}
+<script>
+  window.addEventListener('load', () => window.print());
+<\/script>
+</body>
+</html>`);
+  win.document.close();
+}

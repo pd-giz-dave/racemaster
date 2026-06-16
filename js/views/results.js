@@ -4,8 +4,9 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus, wireTabBar } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog } from '../ui.js';
 import { showBusy } from '../utils.js';
+import { openPrizeListPreview } from '../forms.js';
 
 
 export function renderResults() {
@@ -13,6 +14,10 @@ export function renderResults() {
   const juniors = getResultsForCourse(COURSE.JUNIORS);
   renderResultsTable('results-senior-tbody', seniors);
   renderJuniorsTable('results-junior-tbody', juniors);
+
+  const printBtn = document.getElementById('btn-print-prize-list');
+  if (printBtn) printBtn.disabled = getPrizes().length === 0;
+
   const summary = document.getElementById('results-senior-summary');
   if (summary) {
     const avg = computeAvgTop10(COURSE.SENIORS);
@@ -144,7 +149,29 @@ export async function runFormatResults() {
   renderResults();
 }
 
+async function printPrizeList() {
+  const choice = await showChoiceDialog('Select paper size for prize list:', [
+    { label: 'A4 (210 mm)',          value: '210' },
+    { label: 'Thermal receipt (80 mm)', value: '80'  },
+    { label: 'Custom width…',        value: 'custom' },
+  ]);
+  if (!choice) return;
+
+  let widthMm;
+  if (choice === 'custom') {
+    const raw = window.prompt('Enter paper width in mm (e.g. 80 for thermal, 210 for A4):', '80');
+    if (!raw) return;
+    widthMm = parseFloat(raw);
+    if (!(widthMm > 0)) { showStatus('Invalid paper width.', true); return; }
+  } else {
+    widthMm = parseFloat(choice);
+  }
+
+  openPrizeListPreview(widthMm);
+}
+
 export function wireResults() {
-  on('btn-format-results', 'click', runFormatResults);
+  on('btn-format-results',  'click', runFormatResults);
+  on('btn-print-prize-list','click', printPrizeList);
   wireTabBar('results-tab-bar', 'tab-results-', 'data-results-tab');
 }
