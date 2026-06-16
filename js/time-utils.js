@@ -56,8 +56,9 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
   for (let i = searchFrom - 1; i >= 0; i--) {
     if (state.finishers[i].action === 'Clock') { clockRecord = state.finishers[i]; break; }
   }
-  const isTOD       = clockRecord?.time ? +clockRecord.time.split(':')[0] > 0 : false;
-  const clockOffset = clockRecord?.time ? timeToSeconds(normaliseTime(clockRecord.time)) : 0;
+  const clockTime   = clockRecord !== null ? clockRecord.time : '';
+  const isTOD       = clockTime ? +clockTime.split(':')[0] > 0 : false;
+  const clockOffset = clockTime ? timeToSeconds(normaliseTime(clockTime)) : 0;
 
   // In time-of-day mode startRef defaults to the clock reference (elapsed = finish − clockRef).
   // In relative offset mode startRef defaults to 0; the offset is subtracted from finish directly.
@@ -70,7 +71,7 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
     if (f.action === 'Start' && +f.number === bib) { bibStart = f; break; }
   }
 
-  if (bibStart?.time) {
+  if (bibStart !== null && bibStart.time) {
     startRef = timeToSeconds(normaliseTime(bibStart.time));
   } else {
     let found = false;
