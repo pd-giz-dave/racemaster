@@ -125,6 +125,25 @@ export function renderSafety() {
     }).join('');
   }
 
+  // ---- Early Starters ----
+  const earlyStarters = state.finishers
+    .filter(f => f.action === 'Start' && +f.number > 0)
+    .sort((a, b) => +a.number - +b.number);
+
+  const earlyTbody = document.getElementById('safety-early-tbody');
+  if (earlyTbody) {
+    earlyTbody.innerHTML = earlyStarters.map(f => {
+      const r = entryInfo(+f.number);
+      return `<tr>
+        <td>${f.number}</td>
+        <td>${r.name}</td>
+        <td>${r.course}</td>
+        <td>${r.category}</td>
+        <td>${f.time || ''}</td>
+      </tr>`;
+    }).join('');
+  }
+
   // ---- Header counts ----
   const senOut = getOutstandingCount(COURSE.SENIORS);
   const jnrOut = getOutstandingCount(COURSE.JUNIORS);

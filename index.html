@@ -342,10 +342,6 @@
                   <option value="Juniors">Juniors</option>
                 </select>
               </div>
-              <div class="form-field" id="entry-form-start-row" style="display:none">
-                <label for="entry-form-start">Start Time</label>
-                <input type="text" id="entry-form-start" placeholder="HH:MM:SS">
-              </div>
             </div>
             <div class="btn-row" style="margin-top:8px">
               <button class="btn" id="btn-submit-entry" style="flex:1">Register</button>
@@ -363,7 +359,7 @@
                 <tr>
                   <th>Bib</th><th>Name</th><th>Club</th>
                   <th>DoB</th><th>Cat</th><th>Course</th>
-                  <th>Dibber</th><th>Pre-No</th><th>Start</th>
+                  <th>Dibber</th><th>Pre-No</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -571,6 +567,7 @@
         <button class="active" data-safety-tab="outstanding">Outstanding</button>
         <button data-safety-tab="dnf">Retirees / DNFs</button>
         <button data-safety-tab="finished">Finishers</button>
+        <button data-safety-tab="early">Early Starters</button>
       </div>
 
       <div class="tab-panel active" id="safety-tab-outstanding">
@@ -596,6 +593,15 @@
           <table class="data-table">
             <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Pos</th><th>Time</th></tr></thead>
             <tbody id="safety-finished-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="safety-tab-early">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Start Time</th></tr></thead>
+            <tbody id="safety-early-tbody"></tbody>
           </table>
         </div>
       </div>

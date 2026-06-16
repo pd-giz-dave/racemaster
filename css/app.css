@@ -126,6 +126,21 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
   padding-top: 10px; padding-bottom: 4px; }
 .home-stats-section:first-child { padding-top: 0; }
 
+/* ---- Event settings layout ---- */
+.event-cards-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.event-cards-row .card { flex: 1 1 220px; margin-bottom: 0; }
+
+.event-footer-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.event-footer-row .card { margin-bottom: 0; flex: 0 0 auto; }
+.event-footer-row .btn-row { margin-bottom: 0; }
+#view-event .card { background: var(--accent-light); }
+
 
 /* ---- Buttons ---- */
 .btn[hidden] { display: none; }

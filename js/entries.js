@@ -65,7 +65,7 @@ export function getEntry(bibNumber) {
  */
 export function addEntry({
   bibNumber, dibberNumber, fraNumber, name, club,
-  gender, dob, category, course, preEntry, startTime, status
+  gender, dob, category, course, preEntry
 }) {
   if (!bibNumber || +bibNumber <= 0) return -1;
   const bib = +bibNumber;
@@ -87,8 +87,6 @@ export function addEntry({
   e.category     = category      !== undefined ? category    : (e.category     || '');
   e.course       = course        !== undefined ? course      : (e.course       || COURSE.SENIORS);
   e.preEntry     = preEntry      !== undefined ? preEntry    : (e.preEntry     || '');
-  e.startTime    = startTime     !== undefined ? startTime   : (e.startTime    || '');
-  e.status       = status        !== undefined ? status      : (e.status       || '');
 
   return idx;
 }
@@ -189,8 +187,6 @@ export async function updateEntry(bibNumber, formData) {
   if (formData.fraNumber !== undefined) e.fraNumber = formData.fraNumber;
   if (formData.category  !== undefined) e.category  = formData.category;
   if (formData.course    !== undefined) e.course    = formData.course;
-  if (formData.startTime !== undefined) e.startTime = formData.startTime;
-  if (formData.status    !== undefined) e.status    = formData.status;
 
   await saveEntries();
   return { error: '' };
@@ -257,7 +253,6 @@ export async function insertEntryAndRenumber(atBib, formData) {
   state.entries.splice(idx, 0, {
     bibNumber: atBib, dibberNumber, fraNumber: fra,
     name, club, gender, dob, category, course, preEntry,
-    startTime: '',
   });
 
   addPerson(name, null, gender, dob, club, fra, category, false);
@@ -307,15 +302,6 @@ export async function deleteEntryAndRenumber(bibNumber) {
 export async function clearAllEntries() {
   state.entries = [];
   await saveEntries();
-}
-
-/** Set individual start time for an entry */
-export async function setEntryStartTime(bibNumber, timeStr) {
-  const idx = findEntryByBib(bibNumber);
-  if (idx < 0) return { error: `Bib ${bibNumber} not found` };
-  state.entries[idx].startTime = timeStr;
-  await saveEntries();
-  return { error: '' };
 }
 
 /**

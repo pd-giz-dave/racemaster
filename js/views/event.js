@@ -175,4 +175,13 @@ export function wireEvent() {
       if (limitEl) limitEl.value = categoryFromDistance(dist);
     });
   }
+
+  const pairsEl = document.getElementById('ev-has-pairs');
+  if (pairsEl) {
+    pairsEl.addEventListener('change', async () => {
+      if (!pairsEl.checked) return;
+      await showConfirmDialog('Feature not yet implemented', 'OK');
+      pairsEl.checked = false;
+    });
+  }
 }

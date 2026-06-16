@@ -22,7 +22,7 @@ export const state = {
   categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist}
   roles:      [],  // {role, description}
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
-  entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, startTime, status}
+  entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry}
   helpers:    [],  // {number, name, club, gender, dob, category, role}
   finishers:  [],  // {action, number, time}
   results:        [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}

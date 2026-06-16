@@ -60,9 +60,10 @@ export function adjustedFinishTime(entry, finishTime, ignoreOffset = false) {
 
   let startOff = stopwatchStartOffset(course);
 
-  // Individual start time overrides course start time
-  if (entry.startTime) {
-    startOff = timeToSeconds(normaliseTime(entry.startTime));
+  // Individual start time from a 'Start' finisher record overrides course start time
+  const startRecord = state.finishers.find(f => f.action === 'Start' && +f.number === +entry.bibNumber);
+  if (startRecord?.time) {
+    startOff = timeToSeconds(normaliseTime(startRecord.time));
   }
 
   let clockOff = ignoreOffset ? 0 : stopwatchOffsetTime();

@@ -42,7 +42,6 @@ export function renderEntries() {
       <td>${e.course || ''}</td>
       <td>${e.dibberNumber || ''}</td>
       <td>${e.preEntry || ''}</td>
-      <td>${e.startTime || ''}</td>
       <td>
         <button class="btn-sm btn-edit"                 data-bib="${e.bibNumber}">Edit</button>
         <button class="btn-sm btn-insert-above-entry"  data-bib="${e.bibNumber}">Ins ↑</button>
@@ -127,9 +126,7 @@ export function fillFormForEdit(bib) {
     'entry-form-fra':      e.fraNumber || '',
     'entry-form-category': e.category  || '',
     'entry-form-course':   e.course    || '',
-    'entry-form-start':    e.startTime || '',
   });
-  document.getElementById('entry-form-start-row').style.display = '';
   document.getElementById('entry-form-bib')?.removeAttribute('tabindex');
   document.getElementById('entry-form-dibber')?.removeAttribute('tabindex');
   document.getElementById('btn-submit-entry').textContent = 'Update';
@@ -145,7 +142,6 @@ export function resetEntryForm() {
   insertingAtBib = 0;
   clearRowEditing('entries-tbody');
   clearForm('entry-form-fields');
-  document.getElementById('entry-form-start-row').style.display = 'none';
   const bibEl = document.getElementById('entry-form-bib');
   if (bibEl) { bibEl.value = getNextBibNumber(); bibEl.setAttribute('tabindex', '-1'); }
   const dibEl = document.getElementById('entry-form-dibber');
@@ -250,7 +246,6 @@ export async function submitEntryForm() {
     category:    val('entry-form-category'),
     course:      val('entry-form-course'),
     preEntry:    val('entry-form-peno'),
-    startTime:   normaliseTime(val('entry-form-start')),
     bibOverride:    +val('entry-form-bib')    || 0,
     dibberOverride: +val('entry-form-dibber') || 0,
     overrideBan,
