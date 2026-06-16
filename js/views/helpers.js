@@ -3,11 +3,10 @@
 import { state, saveRoles } from '../state.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
-  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
+  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm,
   updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
 } from '../ui.js';
 import { capitalise, ciEq, showBusy } from '../utils.js';
-import { GENDER } from '../constants.js';
 import { isBanned } from '../entries.js';
 import { normaliseGender } from '../data.js';
 

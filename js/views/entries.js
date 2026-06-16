@@ -9,13 +9,13 @@ import {
 
 import { getNextBibNumber, getNextDibberNumber, normaliseGender } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
-import { COURSE, GENDER } from '../constants.js';
-import { ciEq, cleanName, capitalise, showBusy, normaliseTime } from '../utils.js';
+import { COURSE } from '../constants.js';
+import { cleanName, capitalise, showBusy, normaliseTime } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
-  downloadText, sanitise, escHtml, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
+  downloadText, sanitise, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
 } from '../ui.js';
 import { renderHome } from './home.js';
 
@@ -434,6 +434,5 @@ export function wireEntries() {
   on('entry-form-course', 'change', updateDibberField);
 
   // Entry form keyboard handling: Enter=submit, Esc=home if clean, Tab=wrap focus
-  const formContainer = document.getElementById('entry-form-fields');
   wireFormFocusTrap('entry-form-fields', submitEntryForm);
 }

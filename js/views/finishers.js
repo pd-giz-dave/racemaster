@@ -543,7 +543,6 @@ export function wireFinishers() {
   }
 
   // Tab cycling and Enter submit within form
-  const formContainer = document.getElementById('finisher-form-fields');
   wireFormFocusTrap('finisher-form-fields', submitFinisherForm);
 
   // Keep line field in sync with action radio selection when in add mode
