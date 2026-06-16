@@ -2,7 +2,7 @@
 
 import { state, saveCategories, saveFraPreset, saveWfraPreset } from '../state.js';
 import { resetFRAPreset, resetWFRAPreset } from '../categories.js';
-import { on, escHtml, showStatus, showConfirmDialog } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, wireTabBar } from '../ui.js';
 import { normaliseTime } from '../utils.js';
 
 // ---- Constants ----
@@ -149,13 +149,5 @@ export function wireCategories() {
     renderCategoryTable('wfra');
   });
 
-  // Category tab bar
-  document.querySelectorAll('#cat-tab-bar [data-cat-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#cat-tab-bar button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('#view-categories .tab-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById(`cat-tab-${btn.dataset.catTab}`)?.classList.add('active');
-    });
-  });
+  wireTabBar('cat-tab-bar', 'cat-tab-', 'data-cat-tab');
 }

@@ -350,13 +350,11 @@ const server = http.createServer(async (req, res) => {
     // GET /api/users  — admin only, list all users
     if (pathname === '/api/users' && req.method === 'GET') {
       const username = getAuthUser(req);
-      console.log(`GET /api/users — auth: ${username || 'none'}`);
       if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
       if (!isAdmin(username)) return jsonReply(res, 403, { error: 'Admin only' });
       const users  = readUsers();
       const admins = readAdmins();
       const list = Object.keys(users).sort().map(u => ({ username: u, isAdmin: admins.has(u) }));
-      console.log(`GET /api/users — returning ${list.length} users`);
       return jsonReply(res, 200, list);
     }
 
@@ -427,4 +425,5 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`\nRaceMaster dev server → http://localhost:${PORT}`);
   console.log(`Data directory        → ${DATA_DIR}`);
   console.log(`Users file            → ${USERS_FILE}\n`);
+  console.log(`Admins file           → ${ADMINS_FILE}\n`);
 });

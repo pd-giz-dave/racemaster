@@ -4,11 +4,12 @@ import { state, saveRoles } from '../state.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
-  updateDatalistClubs, updateDatalistRoles,
+  updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
 } from '../ui.js';
 import { capitalise, ciEq, showBusy } from '../utils.js';
 import { GENDER } from '../constants.js';
 import { isBanned } from '../entries.js';
+import { normaliseGender } from '../data.js';
 
 // ---- Module state ----
 
@@ -71,8 +72,7 @@ function fillFormForEdit(num) {
 
 function resetHelperForm() {
   editingNumber = 0;
-  document.querySelectorAll('#helpers-tbody .row-editing')
-    .forEach(r => r.classList.remove('row-editing'));
+  clearRowEditing('helpers-tbody');
   clearForm('helper-form-fields');
   setHTML('helper-form-number', `#${getNextHelperNumber()}`);
   document.getElementById('btn-submit-helper').textContent = 'Add Helper';
@@ -172,123 +172,16 @@ export function wireHelpers() {
   });
 
   // ---- Name typeahead against people database ----
-  const nameEl = document.getElementById('helper-form-name');
-  if (nameEl) {
-    const dropdown = document.createElement('ul');
-    dropdown.className = 'name-typeahead';
-    dropdown.hidden = true;
-    const nameWrapper = nameEl.closest('.form-field');
-    nameWrapper.style.position = 'relative';
-    nameWrapper.appendChild(dropdown);
-
-    let currentMatches = [];
-    let deletingText   = false;
-
-    const normGender = g => {
-      const u = (g || '').toUpperCase().trim();
-      return u === 'M' || u === 'MALE' ? GENDER.MALE : u === 'F' || u === 'FEMALE' ? GENDER.FEMALE : '';
-    };
-
-    const fillFromPerson = p => {
-      fillForm('', {
-        'helper-form-gender': normGender(p.gender),
-        'helper-form-dob':    p.dob  || '',
-        'helper-form-club':   p.club || '',
-      });
-    };
-
-    const closeDropdown = () => { dropdown.hidden = true; dropdown.innerHTML = ''; };
-
-    const showDropdown = () => {
-      if (currentMatches.length < 2) { closeDropdown(); return; }
-      dropdown.innerHTML = currentMatches.map((p, i) => {
-        const detail = [p.dob, p.club].filter(Boolean).join(' – ');
-        return `<li data-i="${i}" tabindex="-1">${escHtml(p.name)}${detail ? ` <span class="text-muted text-sm">(${escHtml(detail)})</span>` : ''}</li>`;
-      }).join('');
-      dropdown.hidden = false;
-      dropdown.querySelectorAll('li').forEach(li =>
-        li.addEventListener('mousedown', e => {
-          e.preventDefault();
-          const p = currentMatches[+li.dataset.i];
-          nameEl.value = p.name;
-          fillFromPerson(p);
-          closeDropdown();
-        })
-      );
-    };
-
-    nameEl.addEventListener('input', () => {
-      const raw   = nameEl.value;
-      const typed = raw.trim();
-      if (!typed) {
-        currentMatches = [];
-        deletingText   = false;
-        closeDropdown();
-        fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
-        return;
-      }
-      const hasTrailingSpace = raw.endsWith(' ');
-      const low = typed.toLowerCase();
-      currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
-      if (currentMatches.length === 1 && !deletingText && !hasTrailingSpace && typed.length < currentMatches[0].name.length) {
-        const s = nameEl.selectionStart;
-        nameEl.value = currentMatches[0].name;
-        nameEl.setSelectionRange(s, currentMatches[0].name.length);
-        fillFromPerson(currentMatches[0]);
-      } else if (currentMatches.length === 1 && !hasTrailingSpace) {
-        fillFromPerson(currentMatches[0]);
-      } else if (!currentMatches.length) {
-        fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
-      }
-      deletingText = false;
-      showDropdown();
-    });
-
-    nameEl.addEventListener('keydown', e => {
-      deletingText = (e.key === 'Backspace' || e.key === 'Delete');
-      if (e.key === 'ArrowDown' && currentMatches.length > 1) {
-        e.preventDefault();
-        showDropdown();
-        dropdown.querySelector('li')?.focus();
-      }
-    });
-
-    dropdown.addEventListener('keydown', e => {
-      const items = [...dropdown.querySelectorAll('li')];
-      const idx = items.indexOf(document.activeElement);
-      if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : nameEl.focus(); }
-      else if (e.key === 'Enter' && idx >= 0) {
-        e.preventDefault(); e.stopPropagation();
-        const p = currentMatches[idx];
-        nameEl.value = p.name;
-        fillFromPerson(p);
-        closeDropdown();
-        nameEl.focus();
-      }
-      else if (e.key === 'Escape') { closeDropdown(); nameEl.focus(); }
-    });
-
-    nameEl.addEventListener('change', () => {
-      const typed = nameEl.value.trim();
-      if (!typed) return;
-      const exact = state.people.find(p => ciEq(p.name, typed));
-      if (exact) fillFromPerson(exact);
-    });
-
-    nameEl.addEventListener('blur', () => setTimeout(() => {
-      if (dropdown.contains(document.activeElement)) return;
-      const typed = nameEl.value.trim();
-      if (!typed) {
-        fillForm('', { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' });
-        currentMatches = [];
-      } else if (currentMatches.length === 1) {
-        nameEl.value = currentMatches[0].name;
-        fillFromPerson(currentMatches[0]);
-      }
-      closeDropdown();
-    }, 150));
-  }
+  const helperFields = { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' };
+  const fillHelperFromPerson = p => fillForm('', {
+    'helper-form-gender': normaliseGender(p.gender),
+    'helper-form-dob':    p.dob  || '',
+    'helper-form-club':   p.club || '',
+  });
+  wireNameTypeahead(document.getElementById('helper-form-name'), {
+    onSelect:  fillHelperFromPerson,
+    onClear:   () => fillForm('', helperFields),
+  });
 
   // Auto-capitalise name and club fields
   for (const id of ['helper-form-name', 'helper-form-club']) {
@@ -365,25 +258,5 @@ export function wireHelpers() {
   resetHelperForm();
 
   // ---- Enter submits, Tab wraps within the form ----
-  const formContainer = document.getElementById('helper-form-fields');
-  if (formContainer) {
-    formContainer.addEventListener('keydown', async e => {
-      if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
-        e.preventDefault();
-        await submitHelperForm();
-      } else if (e.key === 'Tab') {
-        const focusable = [...formContainer.querySelectorAll(
-          'input:not([disabled]), select:not([disabled]), button:not([disabled])'
-        )].filter(el => el.offsetParent !== null);
-        if (!focusable.length) return;
-        const first = focusable[0];
-        const last  = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault(); last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault(); first.focus();
-        }
-      }
-    });
-  }
+  wireFormFocusTrap('helper-form-fields', submitHelperForm);
 }

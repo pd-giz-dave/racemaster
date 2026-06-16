@@ -5,7 +5,7 @@ import { recordFinisher, deleteFinisher, getOutstandingCount } from '../finisher
 import { getEntriesOnCourse, getEntry, isEntryBanned } from '../entries.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from '../si-results.js';
 import { getResultsForCourse } from '../results.js';
-import { setHTML, showStatus, showConfirmDialog } from '../ui.js';
+import { setHTML, showStatus, showConfirmDialog, wireTabBar } from '../ui.js';
 import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
@@ -172,12 +172,5 @@ async function unretire(bib) {
 }
 
 export function wireSafety() {
-  document.querySelectorAll('#safety-tab-bar [data-safety-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#safety-tab-bar button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('#view-safety .tab-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById(`safety-tab-${btn.dataset.safetyTab}`)?.classList.add('active');
-    });
-  });
+  wireTabBar('safety-tab-bar', 'safety-tab-', 'data-safety-tab');
 }

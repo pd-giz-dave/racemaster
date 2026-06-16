@@ -4,7 +4,7 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus } from '../ui.js';
+import { on, showStatus, wireTabBar } from '../ui.js';
 import { showBusy } from '../utils.js';
 
 
@@ -146,4 +146,5 @@ export async function runFormatResults() {
 
 export function wireResults() {
   on('btn-format-results', 'click', runFormatResults);
+  wireTabBar('results-tab-bar', 'tab-results-', 'data-results-tab');
 }

@@ -166,8 +166,7 @@ export async function mergeSIEntries() {
   return { peopleAdded };
 }
 
-function normaliseGender(g) {
-  const first = (g || '').toUpperCase().charAt(0);
-  if (first === 'F') return GENDER.FEMALE;
-  return GENDER.MALE;
+export function normaliseGender(g) {
+  const u = (g || '').toUpperCase().trim();
+  return u === 'M' || u === 'MALE' ? GENDER.MALE : u === 'F' || u === 'FEMALE' ? GENDER.FEMALE : '';
 }

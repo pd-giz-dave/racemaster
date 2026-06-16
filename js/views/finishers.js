@@ -8,8 +8,8 @@ import {
 } from '../finishers.js';
 import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned } from '../entries.js';
 import { COURSE } from '../constants.js';
-import { normaliseTime, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog } from '../ui.js';
+import { normaliseTime, timeToSeconds, showBusy } from '../utils.js';
+import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap } from '../ui.js';
 
 // ---- Module state ----
 
@@ -222,12 +222,6 @@ function getPrevTime(beforeIdx) {
     if (state.finishers[i].time && state.finishers[i].time !== '-') return state.finishers[i].time;
   }
   return '';
-}
-
-function timeToSeconds(t) {
-  if (!t) return 0;
-  const [h, m, s] = t.split(':').map(Number);
-  return h * 3600 + m * 60 + (s || 0);
 }
 
 function updatePrevTime() {
@@ -550,26 +544,7 @@ export function wireFinishers() {
 
   // Tab cycling and Enter submit within form
   const formContainer = document.getElementById('finisher-form-fields');
-  if (formContainer) {
-    formContainer.addEventListener('keydown', async e => {
-      if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
-        e.preventDefault();
-        await submitFinisherForm();
-      } else if (e.key === 'Tab') {
-        const focusable = [...formContainer.querySelectorAll(
-          'input:not([disabled]), select:not([disabled]), button:not([disabled])'
-        )].filter(el => el.offsetParent !== null && el.tabIndex !== -1);
-        if (!focusable.length) return;
-        const first = focusable[0];
-        const last  = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault(); last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault(); first.focus();
-        }
-      }
-    });
-  }
+  wireFormFocusTrap('finisher-form-fields', submitFinisherForm);
 
   // Keep line field in sync with action radio selection when in add mode
   document.querySelectorAll('input[name="finisher-event-type"]').forEach(r => {
