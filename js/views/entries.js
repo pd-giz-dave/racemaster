@@ -10,7 +10,7 @@ import {
 import { getNextBibNumber, getNextDibberNumber, normaliseGender } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
-import { cleanName, capitalise, showBusy, normaliseTime } from '../utils.js';
+import { cleanName, capitalise, showBusy } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,

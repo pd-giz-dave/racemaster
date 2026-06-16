@@ -5,36 +5,8 @@ import { TIMING, COURSE } from './constants.js';
 import { normaliseTime, timeToSeconds, secondsToTime, ciEq } from './utils.js';
 
 
-/** Get the stopwatch offset time in seconds (0 if elapsed-time mode, -ve if clock started late) */
-export function stopwatchOffsetTime() {
-  const offset = state.event.stopwatchOffsetTime;
-  if (!offset) return 0;
-  const secs = timeToSeconds(normaliseTime(offset));
-  return state.event.stopwatchLateStart ? -secs : secs;
-}
 
-/** Get the stopwatch start offset for a course in seconds */
-export function stopwatchStartOffset(course) {
-  const cell = ciEq(course, COURSE.JUNIORS)
-    ? state.event.juniorStopwatchStartOffset
-    : state.event.stopwatchStartOffset;
-  if (!cell) return 0;
-  return timeToSeconds(normaliseTime(cell));
-}
-
-/** Set the stopwatch start offset for a course */
-export function setStopwatchStartOffset(course, timeStr) {
-  if (ciEq(course, COURSE.JUNIORS)) {
-    state.event.juniorStopwatchStartOffset = timeStr;
-  } else {
-    state.event.stopwatchStartOffset = timeStr;
-  }
-}
-
-/**
- * Get the timing method (first letter) for a course.
- * Returns 'S', 'D', or 'N'.
- */
+/** Returns the timing method string ('Stopwatch', 'Dibbers', or 'None') for a course. */
 export function getTimingMethod(course) {
   const isJunior = course && ciEq(course, COURSE.JUNIORS);
   const raw = isJunior ? state.event.juniorTimingMethod : state.event.timingMethod;
@@ -47,76 +19,95 @@ export function usingDibbers(course) {
 }
 
 /**
- * Adjust finish time to get actual flight-time.
- * entry: the entry object {course, startTime}
- * finishTime: raw time string from finishers sheet
- * ignoreOffset: boolean
- * Returns HH:MM:SS string
+ * Compute a runner's race time from their raw finish time.
+ * Pass the finisher record (from state.finishers) so the lookup walks backward
+ * from that position; if omitted the first matching Finish record for the bib is used.
+ *
+ * Clock modes (nearest Clock record above the finisher):
+ *   no Clock record, or Clock with no time → relative, ref = 0
+ *   Clock with h = 0 (mm:ss or ss)         → relative, ref = Clock.time (late-start offset)
+ *   Clock with h > 0 (hh:mm:ss)            → time-of-day, ref = Clock.time
+ *
+ * Start time sources (nearest above, priority order):
+ *   1. Start finisher record for this bib
+ *   2. Category finisher record (action === entry.category)
+ *   3. Male / Female finisher record (seniors only; gender derived from categories list)
+ *   4. Seniors / Juniors finisher record for the course
+ *   default: clock reference (elapsed = finishTime − clockRef)
+ *
+ * Race time = finishTime − startRef  (clockRef cancels when both are in the same frame)
  */
-export function adjustedFinishTime(entry, finishTime, ignoreOffset = false) {
+export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
   const course = entry.course || COURSE.SENIORS;
-  const tm = getTimingMethod(course);
-  if (ciEq(tm, TIMING.DIBBERS)) return finishTime; // dibbers handle their own timing
-
-  let startOff = stopwatchStartOffset(course);
-
-  // Individual start time from a 'Start' finisher record overrides course start time
-  const startRecord = state.finishers.find(f => f.action === 'Start' && +f.number === +entry.bibNumber);
-  if (startRecord?.time) {
-    startOff = timeToSeconds(normaliseTime(startRecord.time));
-  }
-
-  let clockOff = ignoreOffset ? 0 : stopwatchOffsetTime();
-  if (ignoreOffset) { clockOff = 0; startOff = 0; }
+  if (ciEq(getTimingMethod(course), TIMING.DIBBERS)) return finishTime;
 
   const normFinishTime = normaliseTime(finishTime);
   if (!normFinishTime) return finishTime;
-  let secs = timeToSeconds(normFinishTime);
-  secs = secs - startOff - clockOff;
+  const finishSecs = timeToSeconds(normFinishTime);
+
+  const bib = +entry.bibNumber;
+  const finishIdx = finisherRecord
+    ? state.finishers.indexOf(finisherRecord)
+    : state.finishers.findIndex(f => f.action === 'Finish' && +f.number === bib);
+  const searchFrom = finishIdx >= 0 ? finishIdx : state.finishers.length;
+
+  // Nearest Clock record above
+  let clockRecord = null;
+  for (let i = searchFrom - 1; i >= 0; i--) {
+    if (state.finishers[i].action === 'Clock') { clockRecord = state.finishers[i]; break; }
+  }
+  const isTOD       = clockRecord?.time ? +clockRecord.time.split(':')[0] > 0 : false;
+  const clockOffset = clockRecord?.time ? timeToSeconds(normaliseTime(clockRecord.time)) : 0;
+
+  // In time-of-day mode startRef defaults to the clock reference (elapsed = finish − clockRef).
+  // In relative offset mode startRef defaults to 0; the offset is subtracted from finish directly.
+  let startRef = isTOD ? clockOffset : 0;
+
+  // Source 1: nearest bib-specific Start record above
+  let bibStart = null;
+  for (let i = searchFrom - 1; i >= 0; i--) {
+    const f = state.finishers[i];
+    if (f.action === 'Start' && +f.number === bib) { bibStart = f; break; }
+  }
+
+  if (bibStart?.time) {
+    startRef = timeToSeconds(normaliseTime(bibStart.time));
+  } else {
+    let found = false;
+
+    // Source 2: nearest category record above (action === runner's category)
+    if (entry.category) {
+      for (let i = searchFrom - 1; i >= 0; i--) {
+        const f = state.finishers[i];
+        if (ciEq(f.action, entry.category) && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; break; }
+      }
+    }
+
+    if (!found && !ciEq(course, COURSE.JUNIORS)) {
+      // Source 3: nearest Male / Female record above (seniors only)
+      // Derive gender from which column the category sits in the categories list
+      const catRow = state.categories.find(c => ciEq(c.maleCat, entry.category) || ciEq(c.femaleCat, entry.category));
+      const genderAction = catRow && ciEq(catRow.femaleCat, entry.category) ? 'Female' : 'Male';
+      for (let i = searchFrom - 1; i >= 0; i--) {
+        const f = state.finishers[i];
+        if (f.action === genderAction && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; break; }
+      }
+    }
+
+    if (!found) {
+      // Source 4: nearest Seniors / Juniors course-start record above
+      const courseAction = ciEq(course, COURSE.JUNIORS) ? 'Juniors' : 'Seniors';
+      for (let i = searchFrom - 1; i >= 0; i--) {
+        const f = state.finishers[i];
+        if (f.action === courseAction && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); break; }
+      }
+    }
+  }
+
+  // Time-of-day: race time = finish − startRef (startRef is an absolute time-of-day value)
+  // Relative: race time = (finish + clockOffset) − startRef (late-start offset added to finish)
+  let secs = isTOD ? (finishSecs - startRef) : (finishSecs + clockOffset - startRef);
   if (secs < 0) secs = 1;
   if (secs >= 86400) secs = 86399;
   return secondsToTime(secs);
-}
-
-/**
- * Adjust race start time for a course or individual bib.
- * clockTime: the stopwatch time recorded at start
- * Returns an object {course/bib, adjustedTime} or null on error.
- */
-export function adjustStartTime(courseOrBib, clockTimeStr) {
-  const clockTime = timeToSeconds(normaliseTime(clockTimeStr));
-  const offset = stopwatchOffsetTime();
-  let startTime;
-  if (offset < 0) {
-    // Late clock start
-    if (Math.abs(offset) > 3600) return { error: 'Offset must be no more than 1 hour' };
-    startTime = secondsToTime(clockTime - Math.abs(offset));
-  } else {
-    if (clockTime < offset) return { error: `Clock time must be at least ${secondsToTime(offset)}` };
-    startTime = secondsToTime(clockTime - offset);
-  }
-  return { startTime };
-}
-
-/** Get the current time as HH:MM:SS */
-export function currentTime() {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-}
-
-/**
- * Validate a finish time relative to the previous time.
- * Returns an error string or '' if OK.
- */
-export function validateFinishTime(prevTime, thisTime) {
-  if (!thisTime) return '';
-  const norm = normaliseTime(thisTime);
-  if (!norm) return 'Invalid time format';
-  if (prevTime) {
-    const normPrev = normaliseTime(prevTime);
-    if (normPrev && timeToSeconds(norm) < timeToSeconds(normPrev)) {
-      return `Time ${norm} is before previous ${normPrev}`;
-    }
-  }
-  return '';
 }

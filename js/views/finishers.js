@@ -21,8 +21,19 @@ const SPECIAL_BIB_LABELS = [
   ['Clock',   'No time=relative to 0; ss or mm:ss=late-start offset; hh:mm:ss=time of day'],
   ['Seniors', 'Record actual stopwatch time for seniors race start'],
   ['Juniors', 'Record actual stopwatch time for juniors race start'],
+  ['Male',    'Record start time for all male seniors (overrides Seniors)'],
+  ['Female',  'Record start time for all female seniors (overrides Seniors)'],
   ['Ignore',  'Mark accidental stopwatch trigger (is a split but ignored)'],
 ];
+
+function getCategorySpecials() {
+  return [...new Set(state.entries.map(e => e.category).filter(Boolean))].sort()
+    .map(c => [c, `Record start time for ${c} category`]);
+}
+
+function getAllSpecials() {
+  return [...SPECIAL_BIB_LABELS, ...getCategorySpecials()];
+}
 
 function updateDatalistFinisherBibs() {
   const dl = document.getElementById('datalist-finisher-bibs');
@@ -33,7 +44,7 @@ function updateDatalistFinisherBibs() {
       .map(f => +f.number)
       .filter(n => n > 0)
   );
-  const specials = SPECIAL_BIB_LABELS.map(([v, label]) =>
+  const specials = getAllSpecials().map(([v, label]) =>
     `<option value="${v}">${escHtml(label)}</option>`).join('');
   const entries = getSortedEntries()
     .filter(e => !doneBibs.has(+e.bibNumber))
@@ -162,7 +173,6 @@ export function renderFinishers() {
 
   const tbody = document.getElementById('finishers-tbody');
   if (!tbody) return;
-  const specialActionValues = new Set(SPECIAL_BIB_LABELS.map(([v]) => v));
   const startFinishLabel = f => {
     if (f.action === 'Start' ) return 'Start';
     if (f.action === 'DNF'   ) return 'Retiree';
@@ -171,8 +181,7 @@ export function renderFinishers() {
       if (!f.time) return 'Clock';
       return +f.time.split(':')[0] > 0 ? 'Clock tod' : 'Clock +offset';
     }
-    if (specialActionValues.has(f.action)) return f.action;
-    return '';
+    return f.action || '';
   };
   tbody.innerHTML = all.map((f) => {
     const sidx = state.finishers.indexOf(f);
@@ -181,12 +190,14 @@ export function renderFinishers() {
     const entry = f.number > 0 ? getEntry(+f.number) : null;
     const hasError = f.number > 0 && !entry;
     const banned   = !hasError && entry && isEntryBanned(entry);
+    const specialInfo = f.number <= 0 ? getAllSpecials().find(([v]) => v.toLowerCase() === (f.action || '').toLowerCase()) : null;
+    const nameDisplay = specialInfo ? specialInfo[1] : (entry?.name || '') + (banned ? ' (banned)' : '');
     return `<tr class="${hasError ? 'row-error' : banned ? 'row-banned' : ''}" data-sidx="${sidx}">
       <td>${lineDisplay}</td>
       <td>${startFinishLabel(f)}</td>
       <td>${f.time || ''}</td>
       <td>${numDisplay}</td>
-      <td>${(entry?.name || '') + (banned ? ' (banned)' : '')}</td>
+      <td>${escHtml(nameDisplay)}</td>
       <td>${entry?.category || ''}</td>
       <td>${f.number > 0 ? (entry?.course || '') : ''}</td>
       <td>
@@ -256,9 +267,9 @@ function fillFormForEdit(sidx) {
   const lineEl = document.getElementById('finisher-line');
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
-  const specialActions = new Set(SPECIAL_BIB_LABELS.map(([v]) => v));
   if (lineEl) lineEl.value = lineLabel(sidx);
-  if (bibEl)  bibEl.value  = f.number > 0 ? String(f.number) : specialActions.has(f.action) ? f.action : '';
+  if (bibEl)  bibEl.value  = f.number > 0 ? String(f.number)
+    : (f.action && f.action !== 'Finish' && f.action !== 'DNF') ? f.action : '';
   if (timeEl) timeEl.value = f.time || '';
 
   // Show time field in edit mode so the time can be corrected
@@ -387,7 +398,7 @@ async function submitFinisherForm() {
   }
 
   // Determine special action early — Clock records use zero context for time parsing
-  const specialAction = SPECIAL_BIB_LABELS.find(([v]) => v.toLowerCase() === rawBib.toLowerCase())?.[0] ?? null;
+  const specialAction = getAllSpecials().find(([v]) => v.toLowerCase() === rawBib.toLowerCase())?.[0] ?? null;
 
   let parsedTime = '';
   if (rawTime) {
@@ -554,13 +565,12 @@ export function wireFinishers() {
   // Special code auto-fill: when typed text uniquely matches one special code, complete it
   const bibEl = document.getElementById('finisher-bib');
   if (bibEl) {
-    const specialNames = SPECIAL_BIB_LABELS.map(([v]) => v); // ['Seniors','Juniors',...]
     bibEl.addEventListener('input', e => {
       if (e.inputType?.startsWith('delete')) return;
       const typed = bibEl.value;
       if (!typed) return;
       const low = typed.toLowerCase();
-      const matches = specialNames.filter(n => n.toLowerCase().startsWith(low));
+      const matches = getAllSpecials().map(([v]) => v).filter(n => n.toLowerCase().startsWith(low));
       if (matches.length === 1 && matches[0].toLowerCase() !== low) {
         const pos = typed.length;
         bibEl.value = matches[0];

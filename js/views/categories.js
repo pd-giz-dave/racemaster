@@ -7,16 +7,14 @@ import { normaliseTime } from '../utils.js';
 
 // ---- Constants ----
 
-const BASE_FIELDS  = ['maleMinAge','maleCat','maleRef','maleMaxDist','femaleMinAge','femaleCat','femaleRef','femaleMaxDist'];
-const BASE_WIDTHS  = ['46px','60px','46px','52px','46px','60px','46px','52px'];
-const ACTIVE_FIELDS = ['maleMinAge','maleCat','maleRef','maleMaxDist','maleStart','femaleMinAge','femaleCat','femaleRef','femaleMaxDist','femaleStart'];
-const ACTIVE_WIDTHS = ['46px','60px','46px','52px','60px','46px','60px','46px','52px','60px'];
+const CAT_FIELDS = ['maleMinAge','maleCat','maleRef','maleMaxDist','femaleMinAge','femaleCat','femaleRef','femaleMaxDist'];
+const CAT_WIDTHS = ['46px','60px','46px','52px','46px','60px','46px','52px'];
 
 // Config for each of the three category tables
 const CAT_TABLE = {
-  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories, label: 'category',   fields: ACTIVE_FIELDS, widths: ACTIVE_WIDTHS, femaleSepIdx: 5 },
-  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,  label: 'FRA preset', fields: BASE_FIELDS,   widths: BASE_WIDTHS,   femaleSepIdx: 4 },
-  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset, label: 'WFRA preset',fields: BASE_FIELDS,   widths: BASE_WIDTHS,   femaleSepIdx: 4 },
+  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories, label: 'category',   fields: CAT_FIELDS, widths: CAT_WIDTHS, femaleSepIdx: 4 },
+  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,  label: 'FRA preset', fields: CAT_FIELDS, widths: CAT_WIDTHS, femaleSepIdx: 4 },
+  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset, label: 'WFRA preset',fields: CAT_FIELDS, widths: CAT_WIDTHS, femaleSepIdx: 4 },
 };
 
 // ---- Render ----

@@ -49,7 +49,7 @@ export async function formatResults() {
     const rawList = [...swFinishers, ...siFinishers];
     const keys = rawList.map(f => {
       const e = +f.number > 0 ? getEntry(+f.number) : null;
-      const t = !siBibSet.has(+f.number) && e && f.time ? adjustedFinishTime(e, f.time) : f.time;
+      const t = !siBibSet.has(+f.number) && e && f.time ? adjustedFinishTime(e, f.time, f) : f.time;
       return timeToSeconds(t);   // 0 means no time
     });
     // Fill zeros with interpolated values so untimed entries sit between their neighbours
@@ -72,7 +72,7 @@ export async function formatResults() {
 
     const finishers = allCourseFinishers.map(f => {
       const entry = +f.number > 0 ? getEntry(+f.number) : null;
-      const adjTime = !siBibSet.has(+f.number) && entry && f.time && f.time !== '-' ? adjustedFinishTime(entry, f.time) : (f.time || '');
+      const adjTime = !siBibSet.has(+f.number) && entry && f.time && f.time !== '-' ? adjustedFinishTime(entry, f.time, f) : (f.time || '');
       return { f, entry, adjTime };
     }).filter(({ entry }) => entry && !isEntryBanned(entry));
 
