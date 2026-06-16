@@ -15,15 +15,13 @@ import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, 
 
 let editingIdx     = -1;   // index into state.finishers; -1 = adding new
 let timeTargetSidx = -1;   // index into state.finishers of the current time-mode target
+let editIsInsert   = false; // true when edit was opened via Ins↑; cancel should remove the line
 
 const SPECIAL_BIB_LABELS = [
-  ['Clock',    'Record clock start — subsequent times relative to this'],
-  ['Time',     'Like Clock but times are time of day not elapsed'],
-  ['NoStart',  'Times relative to 0'],
-  ['Offset',   'Clock started late — offset added to subsequent times'],
-  ['Seniors',  'Record actual stopwatch time for seniors race start'],
-  ['Juniors',  'Record actual stopwatch time for juniors race start'],
-  ['Ignore',   'Mark accidental stopwatch trigger (is a split but ignored)'],
+  ['Clock',   'No time=relative to 0; ss or mm:ss=late-start offset; hh:mm:ss=time of day'],
+  ['Seniors', 'Record actual stopwatch time for seniors race start'],
+  ['Juniors', 'Record actual stopwatch time for juniors race start'],
+  ['Ignore',  'Mark accidental stopwatch trigger (is a split but ignored)'],
 ];
 
 function updateDatalistFinisherBibs() {
@@ -165,11 +163,15 @@ export function renderFinishers() {
   const tbody = document.getElementById('finishers-tbody');
   if (!tbody) return;
   const specialActionValues = new Set(SPECIAL_BIB_LABELS.map(([v]) => v));
-  const startFinishLabel = action => {
-    if (action === 'Start' ) return 'Start';
-    if (action === 'DNF'   ) return 'Retiree';
-    if (action === 'Finish') return 'Finish';
-    if (specialActionValues.has(action)) return action;
+  const startFinishLabel = f => {
+    if (f.action === 'Start' ) return 'Start';
+    if (f.action === 'DNF'   ) return 'Retiree';
+    if (f.action === 'Finish') return 'Finish';
+    if (f.action === 'Clock') {
+      if (!f.time) return 'Clock';
+      return +f.time.split(':')[0] > 0 ? 'Clock tod' : 'Clock +offset';
+    }
+    if (specialActionValues.has(f.action)) return f.action;
     return '';
   };
   tbody.innerHTML = all.map((f) => {
@@ -181,7 +183,7 @@ export function renderFinishers() {
     const banned   = !hasError && entry && isEntryBanned(entry);
     return `<tr class="${hasError ? 'row-error' : banned ? 'row-banned' : ''}" data-sidx="${sidx}">
       <td>${lineDisplay}</td>
-      <td>${startFinishLabel(f.action)}</td>
+      <td>${startFinishLabel(f)}</td>
       <td>${f.time || ''}</td>
       <td>${numDisplay}</td>
       <td>${(entry?.name || '') + (banned ? ' (banned)' : '')}</td>
@@ -218,8 +220,16 @@ export function renderFinishers() {
 
 function getPrevTime(beforeIdx) {
   for (let i = beforeIdx - 1; i >= 0; i--) {
-    if (state.finishers[i].action === 'NoStart') return '00:00:00';
-    if (state.finishers[i].time && state.finishers[i].time !== '-') return state.finishers[i].time;
+    const f = state.finishers[i];
+    if (f.action === 'Clock') {
+      // Clock resets context. Time-of-day (h > 0) provides h:m context; zero/offset resets to 00:00.
+      if (f.time) {
+        const h = +f.time.split(':')[0];
+        if (h > 0) return f.time;
+      }
+      return '00:00:00';
+    }
+    if (f.time && f.time !== '-') return f.time;
   }
   return '';
 }
@@ -246,8 +256,9 @@ function fillFormForEdit(sidx) {
   const lineEl = document.getElementById('finisher-line');
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
+  const specialActions = new Set(SPECIAL_BIB_LABELS.map(([v]) => v));
   if (lineEl) lineEl.value = lineLabel(sidx);
-  if (bibEl)  bibEl.value  = f.number || f.action || '';
+  if (bibEl)  bibEl.value  = f.number > 0 ? String(f.number) : specialActions.has(f.action) ? f.action : '';
   if (timeEl) timeEl.value = f.time || '';
 
   // Show time field in edit mode so the time can be corrected
@@ -277,6 +288,7 @@ function fillFormForEdit(sidx) {
 }
 
 function resetFinisherForm() {
+  editIsInsert = false;
   editingIdx = -1;
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
@@ -308,7 +320,7 @@ export function parseFinishTime(input, prevTimeStr) {
   if (nums.length === 1)      { h = ih; m = im; s = nums[0]; }
   else if (nums.length === 2) { h = ih; m = nums[0]; s = nums[1]; }
   else                        { [h, m, s] = nums; }
-  if (s > 59 || m > 59 || h > 23) return null;
+  if (s > 59 || m > 59 || h > 24) return null;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
@@ -374,19 +386,25 @@ async function submitFinisherForm() {
     return;
   }
 
+  // Determine special action early — Clock records use zero context for time parsing
+  const specialAction = SPECIAL_BIB_LABELS.find(([v]) => v.toLowerCase() === rawBib.toLowerCase())?.[0] ?? null;
+
   let parsedTime = '';
   if (rawTime) {
     if (rawTime === '-') {
       parsedTime = '-';
     } else {
-      const prevTime = getPrevTime(editingIdx >= 0 ? editingIdx : state.finishers.length);
+      // Clock encodes its mode via part count (ss=offset, mm:ss=offset, hh:mm:ss=tod); don't inherit h:m context
+      const prevTime = specialAction === 'Clock'
+        ? ''
+        : getPrevTime(editingIdx >= 0 ? editingIdx : state.finishers.length);
       parsedTime = parseFinishTime(rawTime, prevTime) || '';
       if (!parsedTime) {
-        showStatus('Invalid time — use ss, mm:ss, or hh:mm:ss', true);
+        showStatus('Invalid time — use ss, mm:ss, hh:mm:ss or - to skip', true);
         timeEl?.focus();
         return;
       }
-      if (prevTime && timeToSeconds(parsedTime) < timeToSeconds(prevTime)) {
+      if (specialAction !== 'Clock' && prevTime && timeToSeconds(parsedTime) < timeToSeconds(prevTime)) {
         showStatus(`Time cannot go backwards (previous: ${prevTime})`, true);
         timeEl?.focus();
         return;
@@ -397,10 +415,9 @@ async function submitFinisherForm() {
   // Edit mode
   if (editingIdx >= 0) {
     showBusy('Updating…');
-    const specialEdit = SPECIAL_BIB_LABELS.find(([v]) => v.toLowerCase() === rawBib.toLowerCase())?.[0] ?? null;
-    const bib    = specialEdit ? 0 : parseInt(rawBib, 10);
-    const action = specialEdit
-      ? specialEdit
+    const bib    = specialAction ? 0 : parseInt(rawBib, 10);
+    const action = specialAction
+      ? specialAction
       : isStart  ? 'Start'
       : isRetire ? 'DNF'
       : 'Finish';
@@ -411,7 +428,7 @@ async function submitFinisherForm() {
     });
     showBusy('');
     if (result.error) { showStatus(result.error, true); bibEl?.focus(); return; }
-    const editLabel = specialEdit ? rawBib
+    const editLabel = specialAction ? rawBib
       : isStart  ? `Start bib ${rawBib}`
       : isRetire ? `Retiree bib ${rawBib}`
       : `Finish bib ${rawBib}`;
@@ -423,7 +440,6 @@ async function submitFinisherForm() {
   }
 
   // Add mode
-  const specialAction = SPECIAL_BIB_LABELS.find(([v]) => v.toLowerCase() === rawBib.toLowerCase())?.[0] ?? null;
   showBusy('Recording…');
 
   let result;
@@ -499,6 +515,7 @@ async function confirmInsertAbove(sidx) {
   const result = await insertFinisherAbove(sidx);
   showBusy('');
   if (result.error) { showStatus(result.error, true); return; }
+  editIsInsert = true;
   renderFinishers();
   if (result.newIdx >= 0) fillFormForEdit(result.newIdx);
 }
@@ -506,8 +523,18 @@ async function confirmInsertAbove(sidx) {
 // ---- Wire ----
 
 export function wireFinishers() {
-  on('btn-submit-finisher',       'click', submitFinisherForm);
-  on('btn-cancel-finisher-edit',  'click', resetFinisherForm);
+  on('btn-submit-finisher',      'click', submitFinisherForm);
+  on('btn-cancel-finisher-edit', 'click', async () => {
+    const wasInsert = editIsInsert;
+    const removeIdx = editingIdx;
+    resetFinisherForm(); // clears editIsInsert and editingIdx
+    if (wasInsert && removeIdx >= 0) {
+      showBusy('Removing…');
+      await deleteFinisher(removeIdx);
+      showBusy('');
+      renderFinishers();
+    }
+  });
 
   on('btn-clear-all-finishers', 'click', async () => {
     const n = state.finishers.length;

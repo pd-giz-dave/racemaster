@@ -424,6 +424,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\nRaceMaster dev server → http://localhost:${PORT}`);
   console.log(`Data directory        → ${DATA_DIR}`);
-  console.log(`Users file            → ${USERS_FILE}\n`);
+  console.log(`Users file            → ${USERS_FILE}`);
   console.log(`Admins file           → ${ADMINS_FILE}\n`);
 });

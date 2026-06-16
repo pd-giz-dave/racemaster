@@ -16,7 +16,7 @@ export function normaliseTime(t) {
   else if (parts.length === 2) { [m, s]    = parts; }
   else if (parts.length === 1) { [s]        = parts; }
   else return '';
-  if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return '';
+  if (h < 0 || h > 24 || m < 0 || m > 59 || s < 0 || s > 59) return '';
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
@@ -67,7 +67,7 @@ export function timeToSeconds(t) {
   const norm = normaliseTime(t);
   if (!norm) return 0;
   const [h, m, s] = norm.split(':').map(Number);
-  return h*3600 + m*60 + s;
+  return (h % 24)*3600 + m*60 + s;
 }
 
 /** Convert seconds since midnight to HH:MM:SS string */

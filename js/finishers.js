@@ -26,7 +26,7 @@ export function buildFinishNumbersMap() {
   buildSplitNumbers();
 }
 
-const NO_SPLIT_ACTIONS = new Set(['DNF', 'NoStart', 'Offset', 'Clock', 'Time']);
+const NO_SPLIT_ACTIONS = new Set(['DNF', 'Clock']);
 
 /** Assign sequential splitNumber (1-based) to each finisher; DNF/NoStart/Offset/Clock/Time get null. */
 export function buildSplitNumbers() {

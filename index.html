@@ -85,7 +85,7 @@
         <div class="card home-getting-started">
           <h3>Getting Started</h3>
           <ol style="margin-left:1.2em;line-height:2">
-            <li>Click <strong>Select Data File</strong> to select your data file.</li>
+            <li>Click <strong>Select Data File</strong> (in the header above) to select your data file.</li>
             <li>Set up the event details in <strong>Event Settings</strong>.</li>
             <li>Optionally, import pre-entries via <strong>Pre-Entries (SI)</strong>.</li>
             <li>Prepare pre-race paperwork from <strong>Paperwork</strong>.</li>
@@ -104,6 +104,8 @@
          ====================================================== -->
     <div class="view" id="view-event" hidden>
       <div class="view-header"><h2>Event Settings</h2><span class="entry-status view-status-msg" hidden></span></div>
+
+      <div class="event-cards-row">
 
       <div class="card">
         <h3>Race Details</h3>
@@ -131,6 +133,10 @@
             <label for="ev-first-bib">First Bib Number</label>
             <input type="number" id="ev-first-bib" min="1" value="1">
           </div>
+        </div>
+        <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="ev-has-pairs">
+          <label for="ev-has-pairs" style="font-size:0.85rem;color:var(--text);cursor:pointer">Has pairs</label>
         </div>
       </div>
 
@@ -208,6 +214,10 @@
         </div>
       </div>
 
+      </div><!-- /.event-cards-row -->
+
+      <div class="event-footer-row">
+
       <div class="card">
         <h3>New Race Setup</h3>
         <p class="text-muted text-sm mb-8">Tick before saving to wipe all race data from a previous event and start fresh.</p>
@@ -222,6 +232,8 @@
       <div class="btn-row">
         <button class="btn" id="btn-save-event">Save Event Settings</button>
       </div>
+
+      </div><!-- /.event-footer-row -->
     </div>
 
     <!-- ======================================================
@@ -505,7 +517,7 @@
             <div class="form-field mb-8">
               <label for="finisher-time">Finish Time</label>
               <input type="text" id="finisher-time" autocomplete="off" spellcheck="false"
-                     placeholder="ss, mm:ss or hh:mm:ss">
+                     placeholder="ss, mm:ss, hh:mm:ss or - to skip">
             </div>
             <div id="finisher-radio-group" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;font-size:0.85rem">
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
