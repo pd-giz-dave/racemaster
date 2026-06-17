@@ -71,7 +71,22 @@ function focusSidebar() {
   active?.focus();
 }
 
+function closeNavDrawer() {
+  document.querySelector('.app-shell')?.classList.remove('nav-open');
+}
+
+function wireNavToggle() {
+  const shell = document.querySelector('.app-shell');
+  document.getElementById('btn-nav-toggle')
+    ?.addEventListener('click', () => shell?.classList.toggle('nav-open'));
+  document.getElementById('nav-backdrop')
+    ?.addEventListener('click', closeNavDrawer);
+  document.querySelector('.app-sidebar')
+    ?.addEventListener('click', e => { if (e.target.matches('a[data-view]')) closeNavDrawer(); });
+}
+
 function wireNav() {
+  wireNavToggle();
   document.querySelectorAll('[data-view]').forEach(el => {
     el.addEventListener('click', e => {
       e.preventDefault();
