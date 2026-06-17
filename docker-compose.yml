@@ -8,7 +8,7 @@ services:
     # this should match the folder name the app is within
     container_name: racemaster
     networks:
-      - racmaster
+      - racemaster
     restart: unless-stopped
     #ports:
     #  - 80:80
