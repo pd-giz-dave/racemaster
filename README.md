@@ -15,6 +15,7 @@ from pre-registration through to final results. Will run on anything that can ru
 - **Prize list** — print prize list for presentation
 - **Export/Import** — save and restore event data to/from local storage or the cloud
 - **Run in th wild** - configure the event with internet access then go into the wild with no internet or mobile signal, run the event, on return auto syncs to the cloud.
+- **Run standalone** - will run standalone using just local storage, just visit the website - job done
 
 ## History
 
@@ -27,7 +28,7 @@ This is an early work in progress.
 Its feature complete except for form printing and publishing results.
 Please check back later for updates.
 
-## Running the App Locally
+## Running the App With a Local server
 
 Requires [Node.js](https://nodejs.org/).
 

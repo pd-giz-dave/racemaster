@@ -1,0 +1,42 @@
+# The web app version of the Mercia race registration spreadsheet
+# NB: we run docker in standalone mode, not swarm mode, as we are only concerned with a single VPS
+
+services:
+  racemaster:
+    image: racemaster
+    build: .
+    # this should match the folder name the app is within
+    container_name: racemaster
+    networks:
+      - racmaster
+    restart: unless-stopped
+    #ports:
+    #  - 80:80
+    labels:
+      - "traefik.enable=true"
+      # Routers
+      # redirect insecure site to secure site
+      - "traefik.http.routers.racemaster.rule=Host(`racemaster.farthings.me`)"
+      - "traefik.http.routers.racemaster.entrypoints=web"
+      - "traefik.http.routers.racemaster.middlewares=tim-redirectscheme"
+      # Redirect Scheme HTTP -> HTTPS
+      - "traefik.http.middlewares.racemaster-redirectscheme.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.racemaster-redirectscheme.redirectscheme.permanent=true"
+      # secure site
+      - "traefik.http.routers.racemaster-secure.rule=Host(`racemaster.farthings.me`)"
+      - "traefik.http.routers.racemaster-secure.entrypoints=websecure"
+      - "traefik.http.routers.racemaster-secure.tls.certresolver=myresolver"
+      # Services
+      - "traefik.http.services.racemaster-secure.loadbalancer.server.port=80"
+    volumes:
+      - ./data:/app/data
+      - ./users.txt:/app/users.txt
+      - ./admins.txt:/app/admins.txt
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  racemaster:
+    external: true
+    name: apps_proxy

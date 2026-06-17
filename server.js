@@ -6,7 +6,8 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
-const PORT        = 3000;
+const PORT        = process.env.PORT || 3000;
+const HOST        = process.env.HOST || '127.0.0.1';
 const ROOT        = __dirname;
 const DATA_DIR    = path.join(ROOT, 'data');
 const USERS_FILE  = path.join(ROOT, 'users.txt');
@@ -421,8 +422,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\nRaceMaster dev server → http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`\nRaceMaster dev server → http://${HOST}:${PORT}`);
   console.log(`Data directory        → ${DATA_DIR}`);
   console.log(`Users file            → ${USERS_FILE}`);
   console.log(`Admins file           → ${ADMINS_FILE}\n`);
