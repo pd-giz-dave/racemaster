@@ -13,22 +13,13 @@ from pre-registration through to final results. Will run on anything that can ru
 - **Results** — calculate and display results
 - **Paperwork** — generate race day forms
 - **Prize list** — print prize list for presentation
-- **Export/Import** — save and restore event data to local storage or from the cloud
+- **Export/Import** — save and restore event data to/from local storage or the cloud
 - **Run in th wild** - configure the event with internet access then go into the wild with no internet or mobile signal, run the event, on return auto syncs to the cloud.
 
 ## History
 
 This is a translation of a spreadsheet used by Mercia Fellrunners for over twenty years.
 It embodies all the experience of running fell races over that period, including: junior races, adult races, and national championship races.
-
-- **Event setup** — configuring event details and race categories
-- **Pre-entries** — importing pre-entry data from various sources
-- **On-the-day registration** — managing entries and helpers
-- **Finishers** — recording start and finish times and positions
-- **Results** — calculating and displaying results
-- **Paperwork** — generating race day forms
-- **Prize list** — printing prize list for presentation
-- **Export/Import** — saving and restoring event data
 
 ## ToDo
 
