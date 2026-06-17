@@ -4,7 +4,7 @@ import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults,
 import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
-import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
+import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on, notImplemented } from '../ui.js';
 import { showBusy, toISODate, fromISODate } from '../utils.js';
 import { renderHome } from './home.js';
 import { renderCategories } from './categories.js';
@@ -178,7 +178,7 @@ export function wireEvent() {
   if (pairsEl) {
     pairsEl.addEventListener('change', async () => {
       if (!pairsEl.checked) return;
-      await showConfirmDialog('Feature not yet implemented', 'OK');
+      await notImplemented();
       pairsEl.checked = false;
     });
   }

@@ -1,22 +1,39 @@
 # RaceMaster
 
-An offline first web-based fell race management system designed to handle all aspects of running a fell race event, from pre-registration through to final results.
+An offline first web-based fell race management system designed to handle all aspects of running a fell race event, 
+from pre-registration through to final results. Will run on anything that can run a modern web browser.
 
 ## Features
 
 - **Event setup** — configure event details and race categories
 - **Pre-entries** — import pre-entry data from various sources
-- **On-the-day registration** — manage entries and helpers
-- **Finishers** — record start and finish times and positions
+- **On-the-day registration** — extremely fast entrant registration (as little as 3 keystrokes)
+- **Finishers** — extremely fast recording of start and finish times and positions (could do it in real-time at the end of the finish funnel)
+- **Timing** - multiple options including: stopwatch, SI Timing integration
 - **Results** — calculate and display results
 - **Paperwork** — generate race day forms
 - **Prize list** — print prize list for presentation
-- **Export/Import** — save and restore event data
+- **Export/Import** — save and restore event data to local storage or from the cloud
+- **Run in th wild** - configure the event with internet access then go into the wild with no internet or mobile signal, run the event, on return auto syncs to the cloud.
+
+## History
+
+This is a translation of a spreadsheet used by Mercia Fellrunners for over twenty years.
+It embodies all the experience of running fell races over that period, including: junior races, adult races, and national championship races.
+
+- **Event setup** — configuring event details and race categories
+- **Pre-entries** — importing pre-entry data from various sources
+- **On-the-day registration** — managing entries and helpers
+- **Finishers** — recording start and finish times and positions
+- **Results** — calculating and displaying results
+- **Paperwork** — generating race day forms
+- **Prize list** — printing prize list for presentation
+- **Export/Import** — saving and restoring event data
 
 ## ToDo
 
 This is an early work in progress.
-Its feature complete except for form printing and publishing on a website.
+Its feature complete except for form printing and publishing results.
 Please check back later for updates.
 
 ## Running the App Locally

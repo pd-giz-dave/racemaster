@@ -74,6 +74,10 @@ export function showConfirmDialog(message, confirmLabel = 'Confirm', danger = fa
     .then(v => v === true);
 }
 
+export function notImplemented() {
+  return showConfirmDialog('Feature not yet implemented', 'OK');
+}
+
 export function showChoiceDialog(message, choices, { focusCancel = false } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');

@@ -4,7 +4,7 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus, wireTabBar, showChoiceDialog } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog, notImplemented } from '../ui.js';
 import { showBusy } from '../utils.js';
 import { openPrizeListPreview } from '../forms.js';
 
@@ -171,7 +171,8 @@ async function printPrizeList() {
 }
 
 export function wireResults() {
-  on('btn-format-results',  'click', runFormatResults);
-  on('btn-print-prize-list','click', printPrizeList);
+  on('btn-format-results',   'click', runFormatResults);
+  on('btn-print-prize-list', 'click', printPrizeList);
+  on('btn-publish-results',  'click', notImplemented);
   wireTabBar('results-tab-bar', 'tab-results-', 'data-results-tab');
 }
