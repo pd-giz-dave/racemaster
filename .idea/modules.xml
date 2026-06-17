@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/racemaster-web.iml" filepath="$PROJECT_DIR$/.idea/racemaster-web.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/racemaster.iml" filepath="$PROJECT_DIR$/.idea/racemaster.iml" />
     </modules>
   </component>
 </project>

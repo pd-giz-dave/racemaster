@@ -136,7 +136,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
   align-items: flex-start;
   margin-bottom: 16px;
 }
-.home-stats-card    { flex: 0 0 auto; width: fit-content; margin-bottom: 0; }
+.home-stats-card,
 .home-event-card    { flex: 0 0 auto; width: fit-content; margin-bottom: 0; }
 .home-getting-started { flex: 1; min-width: 0; margin-bottom: 0; }
 .home-stats-table { border-collapse: collapse; font-size: 0.85rem; }
