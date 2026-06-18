@@ -3,11 +3,13 @@
 import { state, savePeople } from '../state.js';
 import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, updateDatalistClubs } from '../ui.js';
 import { formatCSV, parseCSV } from '../csv.js';
-import { toISODate, fromISODate } from '../utils.js';
+import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
 import { isBanned } from '../entries.js';
+import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
 let peopleFilter    = '';
 let showBannedOnly  = false;
+let showAll         = false;
 
 export function renderPeople() {
   const tbody = document.getElementById('people-tbody');
@@ -16,9 +18,11 @@ export function renderPeople() {
   if (filterEl) filterEl.value = peopleFilter;
   const bannedEl = document.getElementById('people-show-banned');
   if (bannedEl) bannedEl.checked = showBannedOnly;
+  const showAllBtn = document.getElementById('btn-show-all-people');
+  if (showAllBtn) showAllBtn.classList.toggle('btn-active', showAll);
   const total = state.people.length;
   const low = peopleFilter.trim().toLowerCase();
-  if (!low && !showBannedOnly) {
+  if (!low && !showBannedOnly && !showAll) {
     tbody.innerHTML = '';
     setHTML('people-count', `${total} people`);
     return;
@@ -71,7 +75,7 @@ export function readPersonCells(prefix, p) {
   p.name        = document.getElementById(`${prefix}-name`)?.value.trim()                     || p.name;
   p.gender      = document.getElementById(`${prefix}-gender`)?.value                          || p.gender;
   p.dob         = fromISODate(document.getElementById(`${prefix}-dob`)?.value)                || p.dob;
-  p.club        = document.getElementById(`${prefix}-club`)?.value.trim()                     || '';
+  p.club        = normaliseClub(document.getElementById(`${prefix}-club`)?.value);
   p.fraNumber   = document.getElementById(`${prefix}-fra`)?.value.trim()                      || '';
   p.lastSeen    = fromISODate(document.getElementById(`${prefix}-lastseen`)?.value)           || '';
   p.seenTotal   = parseInt(document.getElementById(`${prefix}-count`)?.value, 10)             || 0;
@@ -116,6 +120,76 @@ export async function deletePersonRow(idx) {
   renderPeople();
 }
 
+// ---- Duplicate finder ----
+
+function findDuplicatePairs() {
+  return findSimilarPairs(state.people, p => p.name);
+}
+
+function renderDupes(pairs) {
+  const panel = document.getElementById('people-dupes-panel');
+  if (!panel) return;
+  setHTML('people-dupes-count', `${pairs.length} pair${pairs.length !== 1 ? 's' : ''} found`);
+  const tbody = document.getElementById('people-dupes-tbody');
+  if (!pairs.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted)">No potential duplicates found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = pairs.map(({ a, b, exact }) => {
+    const pa = state.people[a], pb = state.people[b];
+    if (!pa || !pb) return '';
+    return `<tr>
+      <td class="dupe-a">${escHtml(pa.name)}</td><td class="dupe-a">${pa.dob || ''}</td><td class="dupe-a">${escHtml(pa.club || '')}</td><td class="dupe-a">${pa.lastSeen || ''}</td>
+      <td style="text-align:center;color:var(--muted);font-size:1.1em">${exact ? '=' : '≈'}</td>
+      <td class="dupe-b">${escHtml(pb.name)}</td><td class="dupe-b">${pb.dob || ''}</td><td class="dupe-b">${escHtml(pb.club || '')}</td><td class="dupe-b">${pb.lastSeen || ''}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-dupe-a" data-keep="${a}" data-drop="${b}">Keep A</button>
+        <button class="btn-dupe-b" data-keep="${b}" data-drop="${a}">Keep B</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function laterDate(a, b) {
+  if (!a) return b || '';
+  if (!b) return a;
+  return toISODate(a) >= toISODate(b) ? a : b;
+}
+
+async function mergePersonPair(keepIdx, dropIdx) {
+  const keep = state.people[keepIdx];
+  const drop = state.people[dropIdx];
+  if (!keep || !drop) return;
+  if (!await showConfirmDialog(
+    `Merge "${drop.name}" (${drop.dob || 'no dob'}) into "${keep.name}" (${keep.dob || 'no dob'})?`,
+    'Merge', true
+  )) return;
+
+  keep.gender      = keep.gender      || drop.gender;
+  keep.club        = keep.club        || drop.club;
+  keep.fraNumber   = keep.fraNumber   || drop.fraNumber;
+  keep.lastSeen    = laterDate(keep.lastSeen,   drop.lastSeen);
+  keep.seenTotal   = (keep.seenTotal  || 0) + (drop.seenTotal  || 0);
+  keep.lastHelped  = laterDate(keep.lastHelped, drop.lastHelped);
+  keep.helpedTotal = (keep.helpedTotal || 0) + (drop.helpedTotal || 0);
+  keep.banned      = keep.banned || drop.banned;
+
+  state.people.splice(dropIdx, 1);
+  await savePeople();
+  showStatus(`Merged "${drop.name}" into "${keep.name}".`);
+
+  const pairs = findDuplicatePairs();
+  if (pairs.length) {
+    renderDupes(pairs);
+  } else {
+    document.getElementById('people-dupes-panel').hidden = true;
+    document.getElementById('people-main-table').hidden = false;
+  }
+  renderPeople();
+}
+
+// ---- Import / Export / Merge ----
+
 const PEOPLE_FIELDS = ['name','gender','dob','club','fraNumber','lastSeen','seenTotal','lastHelped','helpedTotal','banned'];
 
 function exportPeople() {
@@ -150,30 +224,32 @@ function normalisePeopleRows(rows) {
   ));
 }
 
-async function importPeople() {
-  const text = await pickFile('.csv');
-  if (!text) return;
-  const rows = normalisePeopleRows(parseCSV(text));
-  if (!rows) { showStatus('People CSV missing required columns: name, gender, dob (or Date of Birth)', true); return; }
+async function applyPeopleMerge(rows) {
   let added = 0, updated = 0;
+  const originalPeople = state.people.slice();
   for (const row of rows) {
     const name = (row.name || '').trim();
     if (!name) continue;
-    const existing = state.people.find(p =>
+    const existing = originalPeople.find(p =>
       p.name.toLowerCase() === name.toLowerCase() && (p.dob || '') === (row.dob || ''));
     if (existing) {
-      Object.assign(existing, {
+      const merged = {
         gender:      row.gender      || existing.gender,
         dob:         row.dob         || existing.dob,
         club:        row.club        || existing.club,
         fraNumber:   row.fraNumber   || existing.fraNumber,
         lastSeen:    row.lastSeen    || existing.lastSeen,
-        seenTotal:   +row.seenTotal  || existing.seenTotal,
+        seenTotal:   Math.max(+row.seenTotal  || 0, existing.seenTotal  || 0),
         lastHelped:  row.lastHelped  || existing.lastHelped,
-        helpedTotal: +row.helpedTotal || existing.helpedTotal,
+        helpedTotal: Math.max(+row.helpedTotal || 0, existing.helpedTotal || 0),
         banned:      row.banned      || existing.banned,
+      };
+      const changed = Object.keys(merged).some(k => {
+        const a = existing[k], b = merged[k];
+        return typeof b === 'number' ? a !== b : (a || '').toLowerCase() !== (b || '').toLowerCase();
       });
-      updated++;
+      Object.assign(existing, merged);
+      if (changed) updated++;
     } else {
       state.people.push({
         name,
@@ -191,8 +267,83 @@ async function importPeople() {
     }
   }
   await savePeople();
-  showStatus(`People import: ${added} added, ${updated} updated.`);
   renderPeople();
+  return { added, updated };
+}
+
+async function importPeople() {
+  const text = await pickFile('.csv');
+  if (!text) return;
+  const rows = normalisePeopleRows(parseCSV(text));
+  if (!rows) { showStatus('People CSV missing required columns: name, gender, dob (or Date of Birth)', true); return; }
+  const { added, updated } = await applyPeopleMerge(rows);
+  showStatus(`People import: ${added} added, ${updated} updated.`);
+}
+
+function setMergeStatus(msg, isError = false) {
+  const el = document.getElementById('people-merge-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger)' : 'var(--success,#1a6e3c)';
+}
+
+async function mergeFromFile() {
+  const text = await pickFile('.json');
+  if (!text) return;
+  let data;
+  try { data = JSON.parse(text); } catch { setMergeStatus('Not valid JSON.', true); return; }
+  if (!Array.isArray(data?.people)) { setMergeStatus('JSON file has no people array.', true); return; }
+  setMergeStatus('Merging…');
+  const { added, updated } = await applyPeopleMerge(data.people);
+  setMergeStatus(`Done: ${added} added, ${updated} updated.`);
+}
+
+async function mergeFromDataset(path) {
+  const session = getSession();
+  if (!session) { setMergeStatus('Not signed in.', true); return; }
+  setMergeStatus('Fetching…');
+  try {
+    const [owner, fullName] = path.split('/');
+    const data = await apiReadDataset(session.token, owner, fullName);
+    if (!Array.isArray(data?.people)) { setMergeStatus('No people in that dataset.', true); return; }
+    const { added, updated } = await applyPeopleMerge(data.people);
+    setMergeStatus(`Done: ${added} added, ${updated} updated.`);
+  } catch (e) {
+    setMergeStatus('Error: ' + e.message, true);
+  }
+}
+
+function openMergePanel() {
+  const panel = document.getElementById('people-merge-panel');
+  if (!panel) return;
+  panel.hidden = false;
+  setMergeStatus('');
+
+  const session = getSession();
+  const dsRow = document.getElementById('people-merge-ds-row');
+  if (!dsRow) return;
+
+  if (!session) {
+    dsRow.hidden = true;
+    return;
+  }
+
+  dsRow.hidden = false;
+  const sel = document.getElementById('people-merge-ds-select');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  sel.disabled = true;
+
+  apiListDatasets(session.token).then(datasets => {
+    const current = session.dataset;
+    const opts = datasets
+      .filter(d => `${d.owner}/${d.fullName}` !== current)
+      .map(d => `<option value="${escHtml(d.owner)}/${escHtml(d.fullName)}">${escHtml(d.name)} (${escHtml(d.owner)})</option>`);
+    sel.innerHTML = '<option value="">— select dataset —</option>' + opts.join('');
+    sel.disabled = false;
+  }).catch(() => {
+    sel.innerHTML = '<option value="">Could not load datasets</option>';
+    sel.disabled = true;
+  });
 }
 
 async function clearPeople() {
@@ -208,8 +359,41 @@ export function wirePeople() {
   on('btn-import-people', 'click', importPeople);
   on('btn-clear-people',  'click', clearPeople);
 
+  on('btn-show-all-people', 'click', () => {
+    showAll = !showAll;
+    if (showAll) { peopleFilter = ''; showBannedOnly = false; }
+    renderPeople();
+  });
+
+  on('btn-find-dupes', 'click', () => {
+    const panel = document.getElementById('people-dupes-panel');
+    if (!panel) return;
+    panel.hidden = false;
+    document.getElementById('people-main-table').hidden = true;
+    renderDupes(findDuplicatePairs());
+  });
+  on('btn-close-dupes', 'click', () => {
+    document.getElementById('people-dupes-panel').hidden = true;
+    document.getElementById('people-main-table').hidden = false;
+  });
+  document.getElementById('people-dupes-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-keep]');
+    if (!btn) return;
+    mergePersonPair(+btn.dataset.keep, +btn.dataset.drop);
+  });
+
+  on('btn-merge-people',    'click', openMergePanel);
+  on('btn-cancel-merge',    'click', () => { document.getElementById('people-merge-panel').hidden = true; });
+  on('btn-merge-from-file', 'click', mergeFromFile);
+  on('btn-do-merge-ds', 'click', () => {
+    const path = document.getElementById('people-merge-ds-select')?.value;
+    if (!path) { setMergeStatus('Select a dataset first.', true); return; }
+    mergeFromDataset(path);
+  });
+
   document.getElementById('people-filter')?.addEventListener('input', e => {
     peopleFilter = e.target.value;
+    showAll = false;
     renderPeople();
   });
 

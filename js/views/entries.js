@@ -10,7 +10,7 @@ import {
 import { getNextBibNumber, getNextDibberNumber, normaliseGender } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
-import { cleanName, capitalise, showBusy } from '../utils.js';
+import { cleanName, capitalise, showBusy, normaliseClub } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
@@ -241,7 +241,7 @@ export async function submitEntryForm() {
     name:        val('entry-form-name'),
     gender:      val('entry-form-gender'),
     dob:         val('entry-form-dob'),
-    club:        val('entry-form-club'),
+    club:        normaliseClub(val('entry-form-club')),
     fraNumber:   val('entry-form-fra'),
     category:    val('entry-form-category'),
     course:      val('entry-form-course'),

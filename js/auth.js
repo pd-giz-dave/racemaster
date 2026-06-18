@@ -18,10 +18,10 @@ export function startServerPing() {
     try {
       const res = await fetch('/api/ping', { cache: 'no-store' });
       el.textContent = res.ok ? '● reachable' : '● unreachable';
-      el.style.color  = res.ok ? 'rgba(255,255,255,0.6)' : 'rgba(255,220,50,0.95)';
+      el.style.color  = res.ok ? 'var(--header-fg-dim)' : 'var(--header-warn)';
     } catch {
       el.textContent = '● unreachable';
-      el.style.color  = 'rgba(255,220,50,0.95)';
+      el.style.color  = 'var(--header-warn)';
     }
   }
   ping();
@@ -46,7 +46,7 @@ export function updateDataFileButton() {
   const ownerStr = owner === loggedIn ? `${owner} (you)` : owner;
   btn.textContent = `Selected: ${name}` + (owner ? ` · Owned by ${ownerStr}` : '');
   if (userSpan) userSpan.textContent = loggedIn ? `Logged in as ${loggedIn}${getIsAdmin() ? ' (admin)' : ''}` : 'Not logged in';
-  btn.style.color = isDirty() ? 'var(--danger)' : 'var(--header-fg)';
+  btn.style.color = isDirty() ? 'var(--header-warn)' : 'var(--header-fg)';
 }
 
 // ---- Helpers ----
@@ -63,7 +63,7 @@ function setStatus(id, msg, isError = false) {
   const el = getEl(id);
   if (!el) return;
   el.textContent = msg;
-  el.style.color = isError ? 'var(--danger, #c0392b)' : 'var(--success, #1a6e3c)';
+  el.style.color = isError ? 'var(--danger)' : 'var(--success)';
 }
 
 function radioValue(name) {

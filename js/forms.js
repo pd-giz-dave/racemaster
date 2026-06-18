@@ -347,7 +347,7 @@ export function openPrizeListPreview(widthMm) {
 
   const overrideCSS = `
     @page { size: ${widthMm}mm auto; margin: ${marginMm}mm; }
-    .print-page { width: ${contentMm}mm; min-height: auto; }
+    .print-page { width: ${contentMm}mm; min-height: auto;${isNarrow ? ' padding: 0;' : ''} }
   `;
 
   const win = window.open('', '_blank', 'width=900,height=700');

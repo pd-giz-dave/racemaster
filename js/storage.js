@@ -171,6 +171,14 @@ export async function apiDeleteUser(token, username) {
   return res.json();
 }
 
+export async function apiReadDataset(token, owner, fullName) {
+  const res = await fetch(`/api/data/${owner}/${fullName}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 /** Create a new dataset and push the current local cache into it without switching. */
 export async function saveAsDataset(token, owner, name, visibility) {
   const createRes = await fetch('/api/datasets', {

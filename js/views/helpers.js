@@ -6,7 +6,7 @@ import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm,
   updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
 } from '../ui.js';
-import { capitalise, ciEq, showBusy } from '../utils.js';
+import { capitalise, ciEq, showBusy, normaliseClub } from '../utils.js';
 import { isBanned } from '../entries.js';
 import { normaliseGender } from '../data.js';
 
@@ -118,7 +118,7 @@ export async function submitHelperForm() {
     name:   val('helper-form-name'),
     gender: val('helper-form-gender'),
     dob:    val('helper-form-dob'),
-    club:   val('helper-form-club'),
+    club:   normaliseClub(val('helper-form-club')),
     role:   canonicalRole,
   };
 

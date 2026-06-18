@@ -109,7 +109,7 @@ export function showChoiceDialog(message, choices, { focusCancel = false } = {})
     }
 
     const cancel = document.createElement('button');
-    cancel.className = 'btn btn-secondary';
+    cancel.className = 'btn btn-secondary choice-dialog-cancel';
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', () => close(null));
     if (focusCancel) btns.prepend(cancel); else btns.appendChild(cancel);
@@ -124,6 +124,64 @@ export function showChoiceDialog(message, choices, { focusCancel = false } = {})
     document.addEventListener('keydown', onKey);
 
     setTimeout(() => (focusCancel ? cancel : btns.querySelector('button'))?.focus(), 0);
+  });
+}
+
+export function showInputDialog(message, { defaultValue = '', placeholder = '' } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'choice-dialog-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'choice-dialog-box';
+
+    const msg = document.createElement('p');
+    msg.className = 'choice-dialog-msg';
+    msg.textContent = message;
+    box.appendChild(msg);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'input-dialog-field';
+    input.value = defaultValue;
+    input.placeholder = placeholder;
+    box.appendChild(input);
+
+    const btns = document.createElement('div');
+    btns.className = 'choice-dialog-btns';
+
+    const close = value => {
+      document.body.removeChild(overlay);
+      document.removeEventListener('keydown', onKey);
+      resolve(value);
+    };
+
+    const ok = document.createElement('button');
+    ok.className = 'btn';
+    ok.textContent = 'OK';
+    ok.addEventListener('click', () => close(input.value));
+    btns.appendChild(ok);
+
+    const cancel = document.createElement('button');
+    cancel.className = 'btn btn-secondary choice-dialog-cancel';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => close(null));
+    btns.appendChild(cancel);
+
+    box.appendChild(btns);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') close(input.value);
+    });
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+
+    const onKey = e => { if (e.key === 'Escape') close(null); };
+    document.addEventListener('keydown', onKey);
+
+    setTimeout(() => input.focus(), 0);
   });
 }
 
@@ -164,7 +222,7 @@ export function updateDatalistClubs() {
   const dl = document.getElementById('datalist-clubs');
   if (!dl) return;
   const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))].sort();
-  dl.innerHTML = clubs.map(c => `<option value="${escHtml(c)}">`).join('');
+  dl.innerHTML = `<option value="(no club)">` + clubs.map(c => `<option value="${escHtml(c)}">`).join('');
 }
 
 export function updateDatalistRoles() {

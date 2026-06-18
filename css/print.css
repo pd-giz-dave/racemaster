@@ -3,6 +3,26 @@
    All measurements in mm for accurate A4 / A5 output
    ============================================================ */
 
+:root {
+  --print-preview-bg: #888;
+  --print-page-bg: #fff;
+  --print-black: #000;
+  --print-header-bg: #ddd;
+  --print-border: #999;
+  --print-border-mid: #bbb;
+  --print-border-light: #eee;
+  --print-border-sep: #ccc;
+  --print-empty-bg: #f5f5f5;
+  --print-text-dark: #333;
+  --print-text-mid: #444;
+  --print-text-muted: #555;
+  --print-footer: #666;
+  --print-footer-faint: #888;
+  --print-dnf: #999;
+  --print-prize-bg: #fffde7;
+  --print-shadow: rgba(0,0,0,0.3);
+}
+
 /* ---- Page setup ---- */
 @page {
   size: A4 portrait;
@@ -13,7 +33,7 @@
 
 /* ---- Preview wrapper (non-print) ---- */
 body.print-preview {
-  background: #888;
+  background: var(--print-preview-bg);
   padding: 20px;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 10pt;
@@ -21,12 +41,12 @@ body.print-preview {
 
 /* ---- Page block ---- */
 .print-page {
-  background: #fff;
+  background: var(--print-page-bg);
   width: 194mm;      /* A4 210mm - 2×8mm margins */
   min-height: 277mm; /* A4 297mm - 2×8mm margins */
   margin: 0 auto 20px;
   padding: 5mm;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px var(--print-shadow);
   page-break-after: always;
 }
 
@@ -41,12 +61,12 @@ body.print-preview {
   text-align: center;
   margin-bottom: 3mm;
   padding-bottom: 2mm;
-  border-bottom: 0.5mm solid #000;
+  border-bottom: 0.5mm solid var(--print-black);
 }
 
 .ef-title    { font-size: 13pt; font-weight: bold; }
 .ef-subtitle { font-size: 9pt; margin-top: 1mm; }
-.ef-dist     { font-size: 8pt; color: #333; margin-top: 0.5mm; }
+.ef-dist     { font-size: 8pt; color: var(--print-text-dark); margin-top: 0.5mm; }
 
 .entry-form-table {
   width: 100%;
@@ -55,8 +75,8 @@ body.print-preview {
 }
 
 .entry-form-table th {
-  background: #ddd;
-  border: 0.3mm solid #999;
+  background: var(--print-header-bg);
+  border: 0.3mm solid var(--print-border);
   padding: 1mm 1.5mm;
   text-align: left;
   font-weight: bold;
@@ -64,7 +84,7 @@ body.print-preview {
 }
 
 .entry-form-table td {
-  border: 0.3mm solid #bbb;
+  border: 0.3mm solid var(--print-border-mid);
   padding: 1mm 1.5mm;
   height: 7mm;
   vertical-align: middle;
@@ -83,7 +103,7 @@ body.print-preview {
 .ef-footer {
   margin-top: 2mm;
   font-size: 7pt;
-  color: #666;
+  color: var(--print-footer);
   text-align: right;
 }
 
@@ -94,7 +114,7 @@ body.print-preview {
 
 .fs-header {
   text-align: center;
-  border-bottom: 0.5mm solid #000;
+  border-bottom: 0.5mm solid var(--print-black);
   margin-bottom: 3mm;
   padding-bottom: 2mm;
 }
@@ -109,14 +129,14 @@ body.print-preview {
 }
 
 .finish-sheet-table th {
-  background: #ddd;
-  border: 0.3mm solid #999;
+  background: var(--print-header-bg);
+  border: 0.3mm solid var(--print-border);
   padding: 1.5mm 2mm;
   font-weight: bold;
 }
 
 .finish-sheet-table td {
-  border: 0.3mm solid #bbb;
+  border: 0.3mm solid var(--print-border-mid);
   height: 8mm;
   padding: 1mm 2mm;
   vertical-align: middle;
@@ -130,7 +150,7 @@ body.print-preview {
 .fs-footer {
   margin-top: 3mm;
   font-size: 7.5pt;
-  border-top: 0.3mm solid #999;
+  border-top: 0.3mm solid var(--print-border);
   padding-top: 1.5mm;
 }
 
@@ -141,7 +161,7 @@ body.print-preview {
 
 .nm-header { text-align: center; margin-bottom: 3mm; }
 .nm-title  { font-size: 12pt; font-weight: bold; }
-.nm-date   { font-size: 8pt; color: #444; }
+.nm-date   { font-size: 8pt; color: var(--print-text-mid); }
 
 .number-matrix-table {
   width: 100%;
@@ -150,24 +170,24 @@ body.print-preview {
 
 .nm-cell {
   width: 20%;
-  border: 0.3mm solid #bbb;
+  border: 0.3mm solid var(--print-border-mid);
   padding: 1.5mm 2mm;
   vertical-align: top;
   height: 14mm;
 }
 
-.nm-empty { background: #f5f5f5; }
+.nm-empty { background: var(--print-empty-bg); }
 
 .nm-bib  { display: block; font-size: 14pt; font-weight: bold; line-height: 1; }
 .nm-name { display: block; font-size: 7pt; margin-top: 1mm; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.nm-cat  { display: block; font-size: 7pt; color: #555; }
+.nm-cat  { display: block; font-size: 7pt; color: var(--print-text-muted); }
 
 /* ============================================================
    Results Sheet
    ============================================================ */
 .results-page { font-size: 8pt; }
 
-.rs-header { text-align: center; margin-bottom: 3mm; border-bottom: 0.5mm solid #000; padding-bottom: 2mm; }
+.rs-header { text-align: center; margin-bottom: 3mm; border-bottom: 0.5mm solid var(--print-black); padding-bottom: 2mm; }
 .rs-title  { font-size: 13pt; font-weight: bold; }
 .rs-sub    { font-size: 9pt; margin-top: 1mm; }
 
@@ -178,14 +198,14 @@ body.print-preview {
 }
 
 .results-table th {
-  background: #ddd;
-  border: 0.3mm solid #999;
+  background: var(--print-header-bg);
+  border: 0.3mm solid var(--print-border);
   padding: 1.5mm 2mm;
   font-weight: bold;
 }
 
 .results-table td {
-  border: 0.3mm solid #eee;
+  border: 0.3mm solid var(--print-border-light);
   padding: 1.5mm 2mm;
   vertical-align: middle;
 }
@@ -196,12 +216,12 @@ body.print-preview {
 .col-rclub   { width: 45mm; }
 .col-rcat    { width: 16mm; }
 .col-rcpos   { width: 12mm; text-align: center; }
-.col-rbehind { width: 22mm; font-family: monospace; color: #555; }
+.col-rbehind { width: 22mm; font-family: monospace; color: var(--print-text-muted); }
 
-.rs-dnf td   { color: #999; }
-.rs-prize td { font-weight: bold; background: #fffde7; }
+.rs-dnf td   { color: var(--print-dnf); }
+.rs-prize td { font-weight: bold; background: var(--print-prize-bg); }
 
-.rs-footer { margin-top: 3mm; font-size: 7pt; color: #666; text-align: right; }
+.rs-footer { margin-top: 3mm; font-size: 7pt; color: var(--print-footer); text-align: right; }
 
 /* ============================================================
    Prize List
@@ -210,7 +230,7 @@ body.print-preview {
 
 .pl-header { text-align: center; margin-bottom: 4mm; }
 .pl-title  { font-size: 14pt; font-weight: bold; }
-.pl-date   { font-size: 8pt; color: #444; margin-top: 1mm; }
+.pl-date   { font-size: 8pt; color: var(--print-text-mid); margin-top: 1mm; }
 
 .prize-table {
   width: 100%;
@@ -219,25 +239,25 @@ body.print-preview {
 }
 
 .prize-table th {
-  background: #ddd;
-  border-bottom: 0.5mm solid #999;
+  background: var(--print-header-bg);
+  border-bottom: 0.5mm solid var(--print-border);
   padding: 2mm 3mm;
   font-weight: bold;
 }
 
 .prize-table td {
-  border-bottom: 0.2mm solid #eee;
+  border-bottom: 0.2mm solid var(--print-border-light);
   padding: 2.5mm 3mm;
   vertical-align: middle;
 }
 
-.pl-cat-start td { border-top: 0.4mm solid #ccc; }
+.pl-cat-start td { border-top: 0.4mm solid var(--print-border-sep); }
 .pl-cat  { font-weight: bold; }
 .pl-pos  { width: 18mm; }
 .pl-name { }
 .pl-time { width: 22mm; font-family: monospace; }
 
-.pl-footer { margin-top: 4mm; font-size: 7pt; color: #888; text-align: right; }
+.pl-footer { margin-top: 4mm; font-size: 7pt; color: var(--print-footer-faint); text-align: right; }
 
 /* ============================================================
    Prize List — Narrow / Thermal Receipt
@@ -247,17 +267,17 @@ body.print-preview {
 
 .pln-header {
   text-align: center;
-  border-bottom: 0.4mm solid #000;
+  border-bottom: 0.4mm solid var(--print-black);
   margin-bottom: 1.5mm;
   padding-bottom: 1mm;
 }
 
 .pln-title { font-size: 8pt; font-weight: bold; }
-.pln-date  { font-size: 5.5pt; color: #444; margin-top: 0.5mm; }
+.pln-date  { font-size: 5.5pt; color: var(--print-text-mid); margin-top: 0.5mm; }
 
 .pln-hint {
   font-size: 5.5pt;
-  color: #555;
+  color: var(--print-text-muted);
   margin: 0 0 1.5mm;
 }
 
@@ -276,8 +296,8 @@ body.print-preview {
 /* col 5 (Name) takes remaining width automatically */
 
 .pln-table th {
-  background: #ddd;
-  border-bottom: 0.4mm solid #999;
+  background: var(--print-header-bg);
+  border-bottom: 0.4mm solid var(--print-border);
   padding: 0.8mm 1mm;
   font-weight: bold;
   white-space: nowrap;
@@ -285,7 +305,7 @@ body.print-preview {
 }
 
 .pln-table td {
-  border-bottom: 0.15mm solid #eee;
+  border-bottom: 0.15mm solid var(--print-border-light);
   padding: 0.8mm 1mm;
   vertical-align: middle;
   white-space: nowrap;
@@ -294,16 +314,16 @@ body.print-preview {
 
 .pln-section-row td {
   font-weight: bold;
-  border-top: 0.4mm solid #999;
-  border-bottom: 0.2mm solid #999;
-  background: #f5f5f5;
+  border-top: 0.4mm solid var(--print-border);
+  border-bottom: 0.2mm solid var(--print-border);
+  background: var(--print-empty-bg);
 }
 
 .pln-cat-sep td { padding: 0; height: 1mm; border: none; }
 
 .pln-name-cell { text-overflow: ellipsis; }
 
-.pln-footer { margin-top: 2mm; font-size: 5.5pt; color: #888; text-align: right; }
+.pln-footer { margin-top: 2mm; font-size: 5.5pt; color: var(--print-footer-faint); text-align: right; }
 
 /* ============================================================
    Print media — hide everything else

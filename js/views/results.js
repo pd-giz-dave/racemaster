@@ -4,7 +4,7 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus, wireTabBar, showChoiceDialog, notImplemented } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented } from '../ui.js';
 import { showBusy } from '../utils.js';
 import { openPrizeListPreview } from '../forms.js';
 
@@ -159,7 +159,7 @@ async function printPrizeList() {
 
   let widthMm;
   if (choice === 'custom') {
-    const raw = window.prompt('Enter paper width in mm (e.g. 80 for thermal, 210 for A4):', '80');
+    const raw = await showInputDialog('Enter paper width in mm:', { defaultValue: '80', placeholder: 'e.g. 80 for thermal, 210 for A4' });
     if (!raw) return;
     widthMm = parseFloat(raw);
     if (!(widthMm > 0)) { showStatus('Invalid paper width.', true); return; }

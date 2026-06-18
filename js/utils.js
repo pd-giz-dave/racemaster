@@ -109,6 +109,44 @@ export function cleanName(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
 }
 
+export function normaliseClub(s) {
+  const v = String(s || '').trim();
+  return v.toLowerCase() === '(no club)' ? '' : v;
+}
+
+function normStr(s) {
+  return (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 3) return 99;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 0; i < a.length; i++) {
+    const curr = [i + 1];
+    for (let j = 0; j < b.length; j++)
+      curr[j + 1] = a[i] === b[j] ? prev[j] : 1 + Math.min(prev[j + 1], curr[j], prev[j]);
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+/** Find pairs of items with similar keys (case-insensitive, Levenshtein ≤ 2).
+ *  Returns { a: indexA, b: indexB, exact: bool }[]. */
+export function findSimilarPairs(items, getKey) {
+  const keys = items.map(item => normStr(getKey(item)));
+  const pairs = [];
+  for (let i = 0; i < items.length; i++) {
+    if (!keys[i]) continue;
+    for (let j = i + 1; j < items.length; j++) {
+      if (!keys[j] || keys[i][0] !== keys[j][0]) continue;
+      const dist = keys[i] === keys[j] ? 0 :
+        (keys[i].length >= 6 && keys[j].length >= 6 ? editDistance(keys[i], keys[j]) : 99);
+      if (dist <= 2) pairs.push({ a: i, b: j, exact: dist === 0 });
+    }
+  }
+  return pairs;
+}
+
 /** Return ordinal string for a number (1st, 2nd, 3rd, etc.) */
 export function ordinal(n) {
   const i = parseInt(n);

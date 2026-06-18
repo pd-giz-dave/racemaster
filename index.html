@@ -27,8 +27,8 @@
     <button class="btn btn-outline" id="btn-select-datafile">Select Data File</button>
     <button class="btn btn-outline" id="btn-export-state">Export</button>
     <button class="btn btn-outline" id="btn-import-state">Import</button>
-    <span id="header-username" style="color:rgba(255,255,255,0.75);font-size:0.8rem"></span>
-    <span id="header-server-status" style="font-size:0.8rem"></span>
+    <span id="header-username"></span>
+    <span id="header-server-status"></span>
   </header>
 
   <!-- Sidebar navigation -->
@@ -712,12 +712,45 @@
       <div class="btn-row">
         <input type="search" id="people-filter" aria-label="Filter people" placeholder="Filter by name or club…" style="padding:4px 8px;width:220px">
         <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="people-show-banned"> Show banned</label>
+        <button class="btn btn-secondary" id="btn-show-all-people">Show All</button>
         <button class="btn btn-secondary" id="btn-export-people">Export CSV</button>
         <button class="btn btn-secondary" id="btn-import-people">Import CSV</button>
+        <button class="btn btn-secondary" id="btn-merge-people">Merge…</button>
+        <button class="btn btn-secondary" id="btn-find-dupes">Find Duplicates</button>
         <button class="btn btn-delete" id="btn-clear-people">Clear All</button>
       </div>
 
-      <div class="table-scroll">
+      <div id="people-dupes-panel" hidden>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;flex-shrink:0">
+          <strong style="font-size:0.875rem">Possible duplicates</strong>
+          <span id="people-dupes-count" style="font-size:0.875rem;color:var(--muted)"></span>
+          <button class="btn btn-secondary" id="btn-close-dupes" style="margin-left:auto">Close</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th colspan="4" class="dupe-a">A</th><th></th><th colspan="4" class="dupe-b">B</th><th></th></tr>
+              <tr><th class="dupe-a">Name</th><th class="dupe-a">DoB</th><th class="dupe-a">Club</th><th class="dupe-a">Last Seen</th><th></th><th class="dupe-b">Name</th><th class="dupe-b">DoB</th><th class="dupe-b">Club</th><th class="dupe-b">Last Seen</th><th></th></tr>
+            </thead>
+            <tbody id="people-dupes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="people-merge-panel" hidden style="flex-shrink:0;padding:4px 0 2px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <strong style="font-size:0.875rem;white-space:nowrap">Merge people from:</strong>
+          <div id="people-merge-ds-row" hidden style="display:flex;gap:6px;align-items:center;flex:1;min-width:200px">
+            <select id="people-merge-ds-select" aria-label="Dataset to merge from" style="flex:1;padding:4px 6px;min-width:140px"></select>
+            <button class="btn" id="btn-do-merge-ds">Merge</button>
+          </div>
+          <button class="btn btn-secondary" id="btn-merge-from-file">From File (JSON)…</button>
+          <button class="btn btn-secondary" id="btn-cancel-merge">Cancel</button>
+          <span id="people-merge-status" style="font-size:0.875rem;min-height:1.2em"></span>
+        </div>
+      </div>
+
+      <div id="people-main-table" class="table-scroll">
         <table class="data-table">
           <thead>
             <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Seen</th><th>Last Helped</th><th>Helped</th><th>Banned Until</th><th>Actions</th></tr>
@@ -732,18 +765,70 @@
          ====================================================== -->
     <div class="view view-list" id="view-clubs" hidden>
       <div class="view-header">
-        <h2>Clubs</h2>
+        <h2>Clubs present in the People list</h2>
         <span class="count-badge" id="clubs-count">0</span>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr><th>Name</th><th>People</th><th>Last Seen</th></tr>
-          </thead>
-          <tbody id="clubs-tbody"></tbody>
-        </table>
+      <div class="tab-bar" id="clubs-tab-bar">
+        <button class="active" data-clubs-tab="clubs">Clubs</button>
+        <button data-clubs-tab="members">Members</button>
+      </div>
+
+      <div class="tab-panel active" id="clubs-tab-clubs">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-merge-clubs">Merge Selected…</button>
+          <button class="btn btn-secondary" id="btn-find-dupe-clubs">Find Duplicates</button>
+        </div>
+        <div id="clubs-merge-panel" hidden style="flex-shrink:0;padding:4px 0 2px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <strong style="font-size:0.875rem;white-space:nowrap">Merge into:</strong>
+            <input id="clubs-merge-name" type="text" list="clubs-merge-datalist"
+                   aria-label="Club name to merge into"
+                   placeholder="New or existing club name…"
+                   style="flex:1;min-width:160px;padding:4px 6px">
+            <datalist id="clubs-merge-datalist"></datalist>
+            <button class="btn" id="btn-do-merge-clubs">Merge</button>
+            <button class="btn btn-secondary" id="btn-cancel-merge-clubs">Cancel</button>
+            <span id="clubs-merge-status" style="font-size:0.875rem;min-height:1.2em"></span>
+          </div>
+        </div>
+        <div id="clubs-dupes-panel" hidden>
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;flex-shrink:0">
+            <strong style="font-size:0.875rem">Possible duplicate clubs</strong>
+            <span id="clubs-dupes-count" style="font-size:0.875rem;color:var(--muted)"></span>
+            <button class="btn btn-secondary" id="btn-close-dupe-clubs" style="margin-left:auto">Close</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr><th colspan="2" class="dupe-a">A</th><th></th><th colspan="2" class="dupe-b">B</th><th></th></tr>
+                <tr><th class="dupe-a">Club</th><th class="dupe-a">People</th><th></th><th class="dupe-b">Club</th><th class="dupe-b">People</th><th></th></tr>
+              </thead>
+              <tbody id="clubs-dupes-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="clubs-main-table" class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th></th><th>Name</th><th>People</th><th>Last Seen</th></tr>
+            </thead>
+            <tbody id="clubs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="clubs-tab-members">
+        <p id="clubs-members-count" style="margin:4px 8px;font-size:0.875rem;color:var(--muted);flex-shrink:0"></p>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Seen</th><th>Last Helped</th><th>Helped</th><th>Banned Until</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="club-members-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
