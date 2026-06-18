@@ -412,7 +412,11 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const mime = MIME[path.extname(filePath)] || 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': mime });
+      const headers = { 'Content-Type': mime };
+      if (rel === 'sw.js' || rel === 'index.html') {
+        headers['Cache-Control'] = 'no-cache';
+      }
+      res.writeHead(200, headers);
       res.end(data);
     });
 

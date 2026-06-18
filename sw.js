@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'racemaster-v4';
+const CACHE = 'racemaster-v5';
 
 const PRECACHE = [
   '/',
