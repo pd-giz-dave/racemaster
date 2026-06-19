@@ -526,10 +526,32 @@ input:focus, select:focus, textarea:focus {
   min-width: 100%;
 }
 
+/* ---- Pre-entries view: flex column, card fixed, table fills remaining space ---- */
+#view-pre-entries:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+#view-pre-entries .view-header,
+#view-pre-entries .card {
+  flex-shrink: 0;
+}
+#view-pre-entries .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+#view-pre-entries .data-table {
+  width: max-content;
+  min-width: 100%;
+}
+
 /* ---- Simple list views: flex column, table fills remaining space ---- */
 .view-list:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
 .view-list .view-header,
-.view-list .btn-row      { flex-shrink: 0; }
+.view-list .btn-row,
+.view-list .card         { flex-shrink: 0; }
 .view-list .table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* tab panels inside view-list must also stretch so their table-scroll can scroll */
 .view-list .tab-panel.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }

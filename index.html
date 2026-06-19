@@ -39,7 +39,7 @@
       <a href="#" data-view="event">Event Settings</a>
 
       <div class="nav-section">Prepare</div>
-      <a href="#" data-view="pre-entries">Pre-Entries (SI)</a>
+      <a href="#" data-view="pre-entries">Pre-Entries</a>
       <a href="#" data-view="forms">Paperwork</a>
 
       <div class="nav-section">Registration</div>
@@ -253,9 +253,10 @@
       <div class="view-header"><h2>Paperwork</h2><span class="entry-status view-status-msg" hidden></span></div>
 
       <div class="card">
-        <h3>Blank Entry Forms</h3>
+        <h3>Entry Forms</h3>
         <div class="btn-row">
-          <button class="btn btn-secondary" id="btn-print-entry-form">Print Entry Forms</button>
+          <button class="btn btn-secondary" id="btn-print-entry-form">Print Blank Entry Forms</button>
+          <button class="btn btn-secondary" id="btn-print-pre-entry-forms">Print Pre-Entry Entry Forms</button>
         </div>
       </div>
 
@@ -454,11 +455,11 @@
     </div>
 
     <!-- ======================================================
-         PRE-ENTRIES (SI)
+         PRE-ENTRIES
          ====================================================== -->
     <div class="view" id="view-pre-entries" hidden>
       <div class="view-header">
-        <h2>Pre-Entries (SportIdent)</h2>
+        <h2>Pre-Entries</h2>
         <span class="count-badge" id="pre-entry-count">0</span>
         <span id="pre-entry-status-msg" class="entry-status view-status-msg" hidden></span>
       </div>
@@ -481,6 +482,11 @@
             <tr>
               <th>Ref</th><th>Name</th><th>G</th><th>DoB</th>
               <th>Club</th><th>Cat</th><th>FRA#</th><th>SI ID</th><th>Eligibility</th>
+              <th>Email</th><th>Address 1</th><th>Address 2</th><th>Town</th>
+              <th>County</th><th>Postcode</th><th>Country</th>
+              <th>Telephone</th><th>Mobile</th>
+              <th>Emerg. Contact</th><th>Emerg. Tel</th>
+              <th>Medical</th><th>Car Reg</th>
             </tr>
           </thead>
           <tbody id="pre-entries-tbody"></tbody>

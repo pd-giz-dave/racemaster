@@ -1,7 +1,7 @@
 'use strict';
 
 import {
-  openBlankEntryFormPreview, generateRegistrationSheetHTML,
+  openBlankEntryFormPreview, openPreFilledEntryFormPreview, generateRegistrationSheetHTML,
   generateFinishSheetHTML, generateNumberMatrixHTML,
   generateResultsHTML, generatePrizeListHTML,
   openPrintPreview,
@@ -15,6 +15,7 @@ export function renderForms() {
 
 export function wireForms() {
   on('btn-print-entry-form',       'click', () => openBlankEntryFormPreview(2));
+  on('btn-print-pre-entry-forms',  'click', () => openPreFilledEntryFormPreview());
   on('btn-print-reg-sheet',        'click', () => openPrintPreview(generateRegistrationSheetHTML(20, COURSE.SENIORS), 'Senior Registration Sheet',  'js/forms/registration-sheet.css'));
   on('btn-print-junior-reg-sheet', 'click', () => openPrintPreview(generateRegistrationSheetHTML(15, COURSE.JUNIORS), 'Junior Registration Sheet', 'js/forms/registration-sheet.css'));
   on('btn-print-finish-senior',    'click', () => openPrintPreview(generateFinishSheetHTML(COURSE.SENIORS), 'Finish Sheet (Seniors)',               'js/forms/finish-sheet.css'));

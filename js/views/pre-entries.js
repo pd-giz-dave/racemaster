@@ -25,6 +25,19 @@ export function renderPreEntries() {
       <td>${pe.fraNumber || ''}</td>
       <td>${pe.siEntriesId || ''}</td>
       <td>${pe.eligibility || ''}</td>
+      <td>${pe.email || ''}</td>
+      <td>${pe.address1 || ''}</td>
+      <td>${pe.address2 || ''}</td>
+      <td>${pe.town || ''}</td>
+      <td>${pe.county || ''}</td>
+      <td>${pe.postcode || ''}</td>
+      <td>${pe.country || ''}</td>
+      <td>${pe.telephone || ''}</td>
+      <td>${pe.mobile || ''}</td>
+      <td>${pe.contactName || ''}</td>
+      <td>${pe.contactTelephone || ''}</td>
+      <td>${pe.medical || ''}</td>
+      <td>${pe.carReg || ''}</td>
     </tr>`;
   }).join('');
   setHTML('pre-entry-count', `${preEntries.length} pre-entries`);

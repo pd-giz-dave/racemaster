@@ -22,6 +22,8 @@
   --bef-hint-size:        10pt;    /* "Please fill in at least…" line */
   --bef-lbl-size:         9pt;     /* standard field labels */
   --bef-key-size:         10.5pt;  /* Full Name / DOB / Gender labels */
+  --bef-data-key-size:    13pt;    /* text printed in Full Name / DOB fields */
+  --bef-ref-data-size:    18pt;    /* text printed in Entry No box */
   --bef-important-size:   9.5pt;   /* important note above declarations */
   --bef-decl-size:        7.5pt;   /* declaration text */
   --bef-sign-label-size:  13pt;    /* Signed / Date labels */
@@ -141,6 +143,11 @@
   flex: 1;
   min-height: var(--bef-key-field-height);
   border: 0.4mm solid #000;
+  display: flex;
+  align-items: center;
+  padding: 0 1.5mm;
+  font-size: 9pt;
+  overflow: hidden;
 }
 
 /* Refs + junior cats row */
@@ -154,7 +161,7 @@
 .bef-refs { display: flex; gap: 4mm; }
 .bef-ref  { display: flex; flex-direction: column; align-items: center; gap: 0.5mm; }
 .bef-ref-label { font-size: 7.5pt; white-space: nowrap; }
-.bef-ref-box   { width: 20mm; height: 8mm; border: 0.4mm solid #000; }
+.bef-ref-box   { width: 20mm; height: 8mm; border: 0.4mm solid #000; display: flex; align-items: center; justify-content: center; font-size: var(--bef-ref-data-size); font-weight: bold; }
 
 .bef-junior-cats   { text-align: right; flex-shrink: 0; }
 .bef-junior-label  { font-size: var(--bef-hint-size); font-weight: bold; margin-bottom: 1mm; white-space: nowrap; }
@@ -185,6 +192,7 @@
   padding-bottom: 0.5mm;
   box-sizing: border-box;
   font-size: var(--bef-lbl-size);
+  overflow: hidden;
 }
 
 .bef-flex      { flex: 1; min-width: 0; }
@@ -196,7 +204,7 @@
 /* Key rows — Full Name and DOB/Gender get larger font and taller field */
 .bef-row-key   { margin-top: var(--bef-key-row-top); }
 .bef-lbl-key   { font-size: var(--bef-key-size); }
-.bef-line-key  { height: var(--bef-key-field-height); font-size: var(--bef-key-size); }
+.bef-line-key  { height: var(--bef-key-field-height); font-size: var(--bef-data-key-size); }
 .bef-check-key { font-size: var(--bef-key-size); }
 
 /* Labels that wrap across two lines — font sized so 2 lines fit within field height */
@@ -235,6 +243,8 @@
   border: 0.4mm solid #000;
   box-sizing: border-box;
   padding: 1.5mm 1.5mm 0;
+  overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .bef-field-label { display: block; font-size: 7.5pt; }

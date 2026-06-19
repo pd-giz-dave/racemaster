@@ -2,6 +2,7 @@
 
 import { state } from '../state.js';
 import { escHtml } from '../ui.js';
+import { calculateCategory } from '../categories.js';
 import { openPopup } from './preview.js';
 
 const DECLS = [
@@ -17,7 +18,7 @@ const DECLS = [
 const CUT_GUIDE  = `<div class="bef-cut"><span class="bef-cut-label">&#9986; cut here</span></div>`;
 const EMPTY_HALF = `<div class="bef-half"></div>`;
 
-function chk(filled) { return filled ? '&#9745;' : '&#9633;'; }
+function chk(filled) { return filled ? '&#9632;' : '&#9633;'; }
 
 function entryFormHalf(org, entry = {}) {
   const isMale     = (entry.gender || '').toLowerCase().startsWith('m');
@@ -38,12 +39,12 @@ function entryFormHalf(org, entry = {}) {
       <div class="bef-title-block">Entry Form</div>
       <div class="bef-event-box">
         <div class="bef-event-label">Event</div>
-        <div class="bef-event-field"></div>
+        <div class="bef-event-field">${escHtml(entry.eventName || '')}</div>
       </div>
     </div>
     <div class="bef-refs-row">
       <div class="bef-refs">
-        <div class="bef-ref"><div class="bef-ref-label">Entry No</div><div class="bef-ref-box"></div></div>
+        <div class="bef-ref"><div class="bef-ref-label">Entry No</div><div class="bef-ref-box">${field(entry.entryNo)}</div></div>
         <div class="bef-ref"><div class="bef-ref-label">Race No</div><div class="bef-ref-box"></div></div>
         <div class="bef-ref"><div class="bef-ref-label">Dibber No</div><div class="bef-ref-box"></div></div>
       </div>
@@ -115,22 +116,74 @@ function pagesFromHalves(halves) {
 }
 
 export function generateBlankEntryFormHTML(count = 2) {
-  return pagesFromHalves(Array.from({ length: count }, () => ({})));
+  return pagesFromHalves(Array.from({ length: count }, () => ({ entryNo: 'XXXX' })));
 }
 
 export function generateEntryFormHTML(entries = []) {
   return pagesFromHalves(entries);
 }
 
-export function openBlankEntryFormPreview(count = 2) {
-  openPopup({
-    title:    'Entry Forms',
-    cssLinks: ['css/print.css', 'js/forms/entry-form.css'],
-    inlineCSS: `
-      @page { size: A4 portrait; margin: 5mm 5mm 5mm 10mm; }
-      @page :first { margin: 5mm 5mm 5mm 10mm; }
-      body.print-preview { padding: 0; }
-    `,
-    html: generateBlankEntryFormHTML(count),
+function preEntryToFormData(pe) {
+  const cat = calculateCategory(pe.dob || '', pe.gender || '') || pe.category || '';
+  const fra = pe.fraNumber
+    ? (pe.fraNumber.toUpperCase().startsWith('F-') ? pe.fraNumber : 'F-' + pe.fraNumber)
+    : '';
+  const address = [pe.address1, pe.address2, pe.town, pe.county, pe.postcode, pe.country]
+    .map(s => (s || '').trim()).filter(Boolean).join(', ');
+  return {
+    eventName:        state.event.name   || '',
+    entryNo:          pe.participantNumber || '',
+    name:             `${pe.firstName || ''} ${pe.lastName || ''}`.trim(),
+    dob:              pe.dob             || '',
+    gender:           pe.gender          || '',
+    category:         cat,
+    club:             pe.club            || '',
+    fraNumber:        fra,
+    carReg:           pe.carReg          || '',
+    address,
+    phone:            pe.mobile || pe.telephone || '',
+    emergencyContact: pe.contactName     || '',
+    emergencyPhone:   pe.contactTelephone || '',
+    email:            pe.email           || '',
+    medicalConds:     pe.medical         || '',
+  };
+}
+
+export function generatePreFilledEntryFormHTML() {
+  const sorted = [...state.preEntries].sort((a, b) => {
+    const ll = (a.lastName  || '').toLowerCase().localeCompare((b.lastName  || '').toLowerCase());
+    if (ll !== 0) return ll;
+    return (a.firstName || '').toLowerCase().localeCompare((b.firstName || '').toLowerCase());
   });
+  // Guillotine layout: top halves = first half of alphabet, bottom halves = second half.
+  // After cutting the stack in one go, top pile + bottom pile = A–Z in order.
+  const halfCount   = Math.ceil(sorted.length / 2);
+  const interleaved = [];
+  for (let i = 0; i < halfCount; i++) {
+    interleaved.push(preEntryToFormData(sorted[i]));
+    if (i + halfCount < sorted.length) interleaved.push(preEntryToFormData(sorted[i + halfCount]));
+  }
+  return pagesFromHalves(interleaved);
+}
+
+const ENTRY_FORM_POPUP = {
+  title:    'Entry Forms',
+  cssLinks: ['css/print.css', 'js/forms/entry-form.css'],
+  inlineCSS: `
+    @page { size: A4 portrait; margin: 5mm 5mm 5mm 10mm; }
+    @page :first { margin: 5mm 5mm 5mm 10mm; }
+    body.print-preview { padding: 0; }
+  `,
+};
+
+export function openBlankEntryFormPreview(count = 2) {
+  openPopup({ ...ENTRY_FORM_POPUP, html: generateBlankEntryFormHTML(count) });
+}
+
+export function openPreFilledEntryFormPreview() {
+  if (!state.preEntries.length) {
+    alert('No pre-entries loaded — import a CSV file on the Pre-Entries page first.');
+    return;
+  }
+  openPopup({ ...ENTRY_FORM_POPUP, html: generatePreFilledEntryFormHTML() });
 }
