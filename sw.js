@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'racemaster-v5';
+const CACHE = 'racemaster-v7';
 
 const PRECACHE = [
   '/',
@@ -27,7 +27,20 @@ const PRECACHE = [
   '/js/si-entries.js',
   '/js/si-results.js',
   '/js/results.js',
-  '/js/forms.js',
+  '/js/forms',
+  '/js/forms/preview.js',
+  '/js/forms/entry-form.js',
+  '/js/forms/entry-form.css',
+  '/js/forms/registration-sheet.js',
+  '/js/forms/registration-sheet.css',
+  '/js/forms/finish-sheet.js',
+  '/js/forms/finish-sheet.css',
+  '/js/forms/number-matrix.js',
+  '/js/forms/number-matrix.css',
+  '/js/forms/results.js',
+  '/js/forms/results.css',
+  '/js/forms/prize-list.js',
+  '/js/forms/prize-list.css',
   '/js/views/home.js',
   '/js/views/event.js',
   '/js/views/entries.js',
@@ -41,7 +54,7 @@ const PRECACHE = [
   '/js/views/roles.js',
   '/js/views/dibbers.js',
   '/js/views/categories.js',
-  '/js/views/view-forms.js',
+  '/js/views/forms.js',
   '/js/views/si-results.js',
 ];
 

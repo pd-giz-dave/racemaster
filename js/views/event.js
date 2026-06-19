@@ -48,6 +48,7 @@ export function renderEvent() {
     'ev-prize-junior-cat':   ev.juniorPrizeDepthPerCategory,
     'ev-male-record':        ev.maleRecord,
     'ev-female-record':      ev.femaleRecord,
+    'ev-organisation':       ev.organisation,
     'ev-clear-previous':     false,
   });
 }
@@ -116,6 +117,7 @@ export async function saveEventForm() {
   ev.juniorPrizeDepthPerCategory   = +val('ev-prize-junior-cat') || 3;
   ev.maleRecord                 = val('ev-male-record');
   ev.femaleRecord               = val('ev-female-record');
+  ev.organisation               = val('ev-organisation');
 
   showBusy('Saving…');
 

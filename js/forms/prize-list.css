@@ -1,0 +1,124 @@
+/* ============================================================
+   Prize List (A4) — same structure as narrow, larger fonts/spacing
+   ============================================================ */
+.prize-list-page { font-size: 10pt; }
+
+.pl-header { text-align: center; margin-bottom: 4mm; }
+.pl-title  { font-size: 14pt; font-weight: bold; }
+.pl-date   { font-size: 9pt; color: var(--print-text-mid); margin-top: 1mm; }
+
+.pl-hint {
+  font-size: 8pt;
+  color: var(--print-text-muted);
+  margin: 0 0 2mm;
+}
+
+.prize-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+  table-layout: fixed;
+}
+
+.prize-table th:nth-child(1), .prize-table td:nth-child(1) { width: 12mm; }  /* Pos    */
+.prize-table th:nth-child(2), .prize-table td:nth-child(2) { width: 20mm; }  /* Cat    */
+.prize-table th:nth-child(3), .prize-table td:nth-child(3) { width: 20mm; }  /* In Cat */
+.prize-table th:nth-child(4), .prize-table td:nth-child(4) { width: 35mm; }  /* Time   */
+/* col 5 (Name) takes remaining width */
+
+.prize-table th {
+  background: var(--print-header-bg);
+  border-bottom: 0.5mm solid var(--print-border);
+  padding: 1.5mm 2mm;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.prize-table td {
+  border-bottom: 0.2mm solid var(--print-border-light);
+  padding: 2mm 2mm;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pl-section-row td {
+  font-weight: bold;
+  font-size: 11pt;
+  border-top: 0.5mm solid var(--print-border);
+  border-bottom: 0.3mm solid var(--print-border);
+  background: var(--print-header-bg);
+  padding: 1.5mm 2mm;
+}
+
+.pl-cat-sep td { padding: 0; height: 2mm; border: none; }
+
+.pl-name-cell { text-overflow: ellipsis; }
+
+.pl-footer { margin-top: 4mm; font-size: 7pt; color: var(--print-footer-faint); text-align: right; }
+
+/* ============================================================
+   Prize List — Narrow / Thermal Receipt
+   ============================================================ */
+.prize-list-narrow { font-size: 6.5pt; }
+
+.pln-header {
+  text-align: center;
+  border-bottom: 0.4mm solid var(--print-black);
+  margin-bottom: 1.5mm;
+  padding-bottom: 1mm;
+}
+
+.pln-title { font-size: 8pt; font-weight: bold; }
+.pln-date  { font-size: 5.5pt; color: var(--print-text-mid); margin-top: 0.5mm; }
+
+.pln-hint {
+  font-size: 5.5pt;
+  color: var(--print-text-muted);
+  margin: 0 0 1.5mm;
+}
+
+.pln-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 6.5pt;
+  table-layout: fixed;
+}
+
+/* Fixed widths keep all columns from wrapping; name cell gets whatever is left */
+.pln-table th:nth-child(1), .pln-table td:nth-child(1) { width: 5mm; }   /* Pos     */
+.pln-table th:nth-child(2), .pln-table td:nth-child(2) { width: 9mm; }   /* Cat     */
+.pln-table th:nth-child(3), .pln-table td:nth-child(3) { width: 9mm; }   /* In Cat  */
+.pln-table th:nth-child(4), .pln-table td:nth-child(4) { width: 16mm; }  /* Time    */
+/* col 5 (Name) takes remaining width automatically */
+
+.pln-table th {
+  background: var(--print-header-bg);
+  border-bottom: 0.4mm solid var(--print-border);
+  padding: 0.8mm 1mm;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pln-table td {
+  border-bottom: 0.15mm solid var(--print-border-light);
+  padding: 0.8mm 1mm;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pln-section-row td {
+  font-weight: bold;
+  border-top: 0.4mm solid var(--print-border);
+  border-bottom: 0.2mm solid var(--print-border);
+  background: var(--print-empty-bg);
+}
+
+.pln-cat-sep td { padding: 0; height: 1mm; border: none; }
+
+.pln-name-cell { text-overflow: ellipsis; }
+
+.pln-footer { margin-top: 2mm; font-size: 5.5pt; color: var(--print-footer-faint); text-align: right; }

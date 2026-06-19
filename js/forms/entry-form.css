@@ -1,0 +1,229 @@
+/* ============================================================
+   Blank Entry Form — 2 per A4 page
+   @page for this form: margin 5mm 5mm 5mm 10mm (injected in preview window)
+   Print area: 195mm × 287mm → each half: 138.5mm, cut guide: 10mm
+   Width pulled in 2mm to avoid right-edge clip on printer non-printable strip
+   ============================================================ */
+.blank-entry-page {
+  background: var(--print-page-bg);
+  width: 193mm;
+  height: 283mm;
+  margin: 0 auto 20px;
+  page-break-after: always;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: 8pt;
+  box-sizing: border-box;
+}
+
+.blank-entry-page:last-child { page-break-after: auto; }
+
+.bef-half {
+  flex: 0 0 136.5mm;
+  height: 136.5mm;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2mm;
+  overflow: visible;
+}
+
+/* Cut guide between halves */
+.bef-cut {
+  flex: 0 0 10mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.bef-cut::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 0.3mm dashed #999;
+}
+
+.bef-cut-label {
+  font-size: 7pt;
+  color: #999;
+  background: #fff;
+  padding: 0 3mm;
+  position: relative;
+  z-index: 1;
+}
+
+/* Header */
+.bef-header {
+  display: flex;
+  align-items: stretch;
+  gap: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 0.5mm solid #000;
+  flex-shrink: 0;
+}
+
+.bef-org {
+  font-size: 16pt;
+  font-weight: bold;
+  white-space: nowrap;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.bef-title-block {
+  font-size: 18pt;
+  font-weight: bold;
+  white-space: nowrap;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bef-event-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+
+.bef-event-label { font-size: 7.5pt; }
+
+.bef-event-field {
+  flex: 1;
+  min-height: 7mm;
+  border: 0.4mm solid #000;
+}
+
+.bef-junior-cats { text-align: right; flex-shrink: 0; }
+.bef-junior-label { font-size: 10pt; font-weight: bold; margin-bottom: 1mm; white-space: nowrap; }
+.bef-junior-checks { display: flex; gap: 4mm; flex-wrap: wrap; justify-content: flex-end; }
+.bef-check-lg { font-size: 13pt !important; font-weight: bold; }
+
+/* Refs + junior cats row */
+.bef-refs-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.bef-refs { display: flex; gap: 4mm; }
+
+.bef-ref { display: flex; flex-direction: column; align-items: center; gap: 0.5mm; }
+.bef-ref-label { font-size: 7.5pt; white-space: nowrap; }
+.bef-ref-box { width: 20mm; height: 8mm; border: 0.4mm solid #000; }
+
+/* Hint */
+.bef-hint { font-size: 10pt; font-weight: bold; flex-shrink: 0; }
+
+/* Field rows */
+.bef-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  flex-shrink: 0;
+}
+
+.bef-lbl { font-size: 9pt; white-space: nowrap; padding-bottom: 0.5mm; }
+.bef-lbl-req { font-weight: bold; text-decoration: underline; }
+
+.bef-line {
+  display: inline-block;
+  border-bottom: 0.4mm solid #000;
+  height: 5mm;
+  flex-shrink: 0;
+}
+
+.bef-flex { flex: 1; min-width: 0; }
+
+.bef-check { font-size: 9pt; white-space: nowrap; padding-bottom: 0.5mm; }
+
+/* Key rows — full name and DOB/gender get extra breathing room and larger font */
+.bef-row-key { margin-top: 2mm; }
+.bef-lbl-key { font-size: 10.5pt; }
+.bef-line-key { height: 7mm; }
+.bef-check-key { font-size: 10.5pt; }
+
+/* Important note */
+.bef-important { font-size: 9.5pt; font-weight: bold; font-style: normal; flex-shrink: 0; }
+
+/* DOB / Gender split row */
+.bef-dob-gender {
+  display: flex;
+  gap: 20mm;
+  flex-shrink: 0;
+}
+
+.bef-half-cell {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  min-width: 0;
+}
+
+/* Address box + phone column */
+.bef-addr-phone {
+  display: flex;
+  gap: 3mm;
+  flex-shrink: 0;
+  align-items: stretch;
+  height: 22mm;
+}
+
+.bef-addr-field {
+  flex: 2;
+  min-width: 0;
+  border: 0.4mm solid #000;
+  box-sizing: border-box;
+  padding: 1.5mm 1.5mm 0;
+}
+
+.bef-field-label { display: block; font-size: 7.5pt; }
+
+.bef-phone-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+/* Declarations */
+.bef-declarations {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0;
+  border: 0.3mm solid #999;
+  padding: 1.5mm 2mm;
+}
+
+.bef-decl { font-size: 7.5pt; line-height: 1.3; margin: 0; }
+
+/* Signature row — signed:date = 2:1 */
+.bef-sign-row .bef-lbl { font-weight: bold; font-size: 13pt; }
+
+.bef-sign-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  flex-shrink: 0;
+  height: 9mm;
+}
+
+.bef-sign-line {
+  height: 9mm;
+  border-bottom: 0.4mm solid var(--print-black);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin-bottom: 1mm;
+}

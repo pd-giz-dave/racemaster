@@ -6,7 +6,7 @@ import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
 import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented } from '../ui.js';
 import { showBusy } from '../utils.js';
-import { openPrizeListPreview } from '../forms.js';
+import { openPrizeListPreview } from '../forms';
 
 
 export function renderResults() {

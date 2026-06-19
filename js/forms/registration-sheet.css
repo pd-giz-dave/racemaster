@@ -1,0 +1,54 @@
+/* ============================================================
+   Registration Sheet (on-the-day marshal desk check-in)
+   ============================================================ */
+.entry-form-page { font-size: 8pt; }
+
+.ef-header {
+  text-align: center;
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 0.5mm solid var(--print-black);
+}
+
+.ef-title    { font-size: 13pt; font-weight: bold; }
+.ef-subtitle { font-size: 9pt; margin-top: 1mm; }
+.ef-dist     { font-size: 8pt; color: var(--print-text-dark); margin-top: 0.5mm; }
+
+.entry-form-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+}
+
+.entry-form-table th {
+  background: var(--print-header-bg);
+  border: 0.3mm solid var(--print-border);
+  padding: 1mm 1.5mm;
+  text-align: left;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.entry-form-table td {
+  border: 0.3mm solid var(--print-border-mid);
+  padding: 1mm 1.5mm;
+  height: 7mm;
+  vertical-align: middle;
+}
+
+/* Column widths — totals ≈ 184mm */
+.col-pos  { width: 7mm;  text-align: right; }
+.col-bib  { width: 10mm; text-align: center; font-weight: bold; }
+.col-name { width: 55mm; }
+.col-club { width: 40mm; }
+.col-cat  { width: 14mm; text-align: center; }
+.col-dib  { width: 16mm; text-align: center; font-family: monospace; }
+.col-fra  { width: 18mm; }
+.col-sig  { width: 24mm; }
+
+.ef-footer {
+  margin-top: 2mm;
+  font-size: 7pt;
+  color: var(--print-footer);
+  text-align: right;
+}

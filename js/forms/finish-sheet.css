@@ -1,0 +1,46 @@
+/* ============================================================
+   Finish Sheet
+   ============================================================ */
+.finish-sheet-page { font-size: 8pt; }
+
+.fs-header {
+  text-align: center;
+  border-bottom: 0.5mm solid var(--print-black);
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+}
+
+.fs-title { font-size: 13pt; font-weight: bold; }
+.fs-sub   { font-size: 9pt; margin-top: 1mm; }
+
+.finish-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8pt;
+}
+
+.finish-sheet-table th {
+  background: var(--print-header-bg);
+  border: 0.3mm solid var(--print-border);
+  padding: 1.5mm 2mm;
+  font-weight: bold;
+}
+
+.finish-sheet-table td {
+  border: 0.3mm solid var(--print-border-mid);
+  height: 8mm;
+  padding: 1mm 2mm;
+  vertical-align: middle;
+}
+
+.col-fpos  { width: 10mm; text-align: center; font-weight: bold; }
+.col-ftime { width: 28mm; font-family: monospace; font-size: 9pt; }
+.col-fbib  { width: 18mm; font-size: 11pt; font-weight: bold; }
+.col-fname { }  /* takes remaining width */
+
+.fs-footer {
+  margin-top: 3mm;
+  font-size: 7.5pt;
+  border-top: 0.3mm solid var(--print-border);
+  padding-top: 1.5mm;
+}

@@ -1,0 +1,27 @@
+/* ============================================================
+   Number Matrix
+   ============================================================ */
+.number-matrix-page { font-size: 8pt; }
+
+.nm-header { text-align: center; margin-bottom: 3mm; }
+.nm-title  { font-size: 12pt; font-weight: bold; }
+.nm-date   { font-size: 8pt; color: var(--print-text-mid); }
+
+.number-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.nm-cell {
+  width: 20%;
+  border: 0.3mm solid var(--print-border-mid);
+  padding: 1.5mm 2mm;
+  vertical-align: top;
+  height: 14mm;
+}
+
+.nm-empty { background: var(--print-empty-bg); }
+
+.nm-bib  { display: block; font-size: 14pt; font-weight: bold; line-height: 1; }
+.nm-name { display: block; font-size: 7pt; margin-top: 1mm; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nm-cat  { display: block; font-size: 7pt; color: var(--print-text-muted); }

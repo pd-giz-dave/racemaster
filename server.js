@@ -407,6 +407,11 @@ const server = http.createServer(async (req, res) => {
 
     fs.readFile(filePath, (err, data) => {
       if (err) {
+        if (err.code === 'EISDIR') {
+          res.writeHead(301, { Location: '/' + rel + '/index.js' });
+          res.end();
+          return;
+        }
         res.writeHead(err.code === 'ENOENT' ? 404 : 500);
         res.end(err.code === 'ENOENT' ? 'Not found' : 'Server error');
         return;

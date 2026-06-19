@@ -19,7 +19,7 @@ import { renderClubs, wireClubs }         from './views/clubs.js';
 import { renderRoles, wireRoles }           from './views/roles.js';
 import { renderDibbers, wireDibbers }       from './views/dibbers.js';
 import { renderCategories, wireCategories } from './views/categories.js';
-import { renderForms, wireForms }           from './views/view-forms.js';
+import { renderForms, wireForms }           from './views/forms.js';
 import { renderSIResults, wireSIResults }   from './views/si-results.js';
 
 // ============================================================
