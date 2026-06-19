@@ -21,7 +21,7 @@
   <header class="app-header">
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
-    <h1>RaceMaster</h1>
+    <h1>RaceMaster (v0.1.0-beta)</h1>
     <span class="event-name" id="home-event-name-header"></span>
     <div style="flex:1"></div>
     <button class="btn btn-outline" id="btn-select-datafile">Select Data File</button>
@@ -1092,7 +1092,31 @@ if ('serviceWorker' in navigator) {
     // Dev mode: unregister any cached SW so files are always fetched fresh
     navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
   } else {
+    const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW:', e));
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      const overlay = document.createElement('div');
+      Object.assign(overlay.style, {
+        position: 'fixed', inset: '0', zIndex: '99999',
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      });
+      const box = document.createElement('div');
+      Object.assign(box.style, {
+        background: '#1a6b3c', color: '#fff', borderRadius: '10px',
+        padding: '28px 40px', textAlign: 'center', fontFamily: 'inherit',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+      });
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      let s = 4;
+      (function tick() {
+        box.innerHTML = '<div style="font-size:20px;font-weight:bold;margin-bottom:8px">App updated</div>' +
+          '<div style="font-size:15px">Reloading in ' + s + '…</div>';
+        if (--s >= 0) setTimeout(tick, 1000); else location.reload();
+      })();
+    });
   }
 }
 </script>
