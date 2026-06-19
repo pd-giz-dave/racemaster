@@ -15,6 +15,9 @@ const ADMINS_FILE = path.join(ROOT, 'admins.txt');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
+let needsRestart = false;
+fs.watch(__filename, () => { needsRestart = true; });
+
 
 const MIME = {
   '.html':        'text/html; charset=utf-8',
@@ -180,7 +183,7 @@ const server = http.createServer(async (req, res) => {
 
     // GET /api/ping  — liveness check, no auth
     if (pathname === '/api/ping' && req.method === 'GET') {
-      return jsonReply(res, 200, { ok: true });
+      return jsonReply(res, 200, { ok: true, needsRestart });
     }
 
     // POST /api/auth/login

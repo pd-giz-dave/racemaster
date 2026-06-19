@@ -16,9 +16,20 @@ export function startServerPing() {
     const el = document.getElementById('header-server-status');
     if (!el) return;
     try {
-      const res = await fetch('/api/ping', { cache: 'no-store' });
-      el.textContent = res.ok ? '● reachable' : '● unreachable';
-      el.style.color  = res.ok ? 'var(--header-fg-dim)' : 'var(--header-warn)';
+      const res  = await fetch('/api/ping', { cache: 'no-store' });
+      const data = res.ok ? await res.json() : null;
+      if (!res.ok) {
+        el.textContent = '● unreachable';
+        el.style.color  = 'var(--header-warn)';
+      } else if (data.needsRestart) {
+        el.textContent = '● restart required';
+        el.style.color  = 'var(--header-warn)';
+        el.title        = 'server.js has changed — restart the Docker container';
+      } else {
+        el.textContent = '● reachable';
+        el.style.color  = 'var(--header-fg-dim)';
+        el.title        = '';
+      }
     } catch {
       el.textContent = '● unreachable';
       el.style.color  = 'var(--header-warn)';
