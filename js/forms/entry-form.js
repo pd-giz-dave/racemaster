@@ -14,9 +14,23 @@ const DECLS = [
   'I accept that the Race Organiser reserves the right to refuse a race entry for any reason.',
 ];
 
-function blankEntryFormHalf(org) {
+const CUT_GUIDE  = `<div class="bef-cut"><span class="bef-cut-label">&#9986; cut here</span></div>`;
+const EMPTY_HALF = `<div class="bef-half"></div>`;
+
+function chk(filled) { return filled ? '&#9745;' : '&#9633;'; }
+
+function entryFormHalf(org, entry = {}) {
+  const isMale     = (entry.gender || '').toLowerCase().startsWith('m');
+  const isFemale   = (entry.gender || '').toLowerCase().startsWith('f');
+  const juniorBase = (entry.category || '').replace(/[BGbg]$/, '').toUpperCase();
+
   const juniorCats = ['U10','U12','U14','U16','U18','U20']
-    .map(c => `<span class="bef-check bef-check-lg">&#9633;&thinsp;${c}</span>`).join('');
+    .map(c => `<span class="bef-check bef-check-lg">${chk(juniorBase === c)}&thinsp;${c}</span>`)
+    .join('');
+
+  const field = (val) => escHtml(val || '');
+  const addr  = field(entry.address).replace(/\n/g, '<br>');
+
   return `
   <div class="bef-half">
     <div class="bef-header">
@@ -40,59 +54,72 @@ function blankEntryFormHalf(org) {
     </div>
     <div class="bef-hint">Please fill in at least the <strong><u>bold underlined</u></strong> items and please write clearly.</div>
     <div class="bef-row bef-row-key">
-      <span class="bef-lbl bef-lbl-req bef-lbl-key">Full Name (block capitals):</span><span class="bef-line bef-flex bef-line-key"></span>
+      <span class="bef-lbl bef-lbl-req bef-lbl-key">Full Name (block capitals):</span>
+      <span class="bef-line bef-flex bef-line-key">${field(entry.name)}</span>
     </div>
     <div class="bef-dob-gender bef-row-key">
       <div class="bef-half-cell">
-        <span class="bef-lbl bef-lbl-req bef-lbl-key">Date of Birth (DD/MM/YY):</span><span class="bef-line bef-flex bef-line-key"></span>
+        <span class="bef-lbl bef-lbl-req bef-lbl-key">Date of Birth (DD/MM/YY):</span>
+        <span class="bef-line bef-flex bef-line-key">${field(entry.dob)}</span>
       </div>
       <div class="bef-half-cell">
         <span class="bef-lbl bef-lbl-req bef-lbl-key">Gender:</span>
-        <span class="bef-check bef-check-key" style="margin-left:5mm">&#9633;&thinsp;Male/Open</span>
-        <span class="bef-check bef-check-key" style="margin-left:5mm">&#9633;&thinsp;Female/Ladies</span>
+        <span class="bef-check bef-check-key bef-gender-gap">${chk(isMale)}&thinsp;Male/Open</span>
+        <span class="bef-check bef-check-key bef-gender-gap">${chk(isFemale)}&thinsp;Female/Ladies</span>
       </div>
     </div>
     <div class="bef-row">
-      <span class="bef-lbl">Club:</span><span class="bef-line" style="width:70mm"></span>
-      <span class="bef-lbl">FRA/WFRA No:</span><span class="bef-line" style="width:24mm"></span>
-      <span class="bef-lbl">Car Reg:</span><span class="bef-line bef-flex"></span>
+      <span class="bef-lbl">Club:</span>
+      <span class="bef-line bef-club-line">${field(entry.club)}</span>
+      <span class="bef-lbl">FRA/WFRA No:</span>
+      <span class="bef-line bef-fra-line">${field(entry.fraNumber)}</span>
+      <span class="bef-lbl">Car Reg:</span>
+      <span class="bef-line bef-flex">${field(entry.carReg)}</span>
     </div>
     <div class="bef-addr-phone">
       <div class="bef-addr-field">
-        <div class="bef-field-label">Address</div>
+        <span class="bef-field-label">Address</span>${addr}
       </div>
       <div class="bef-phone-col">
-        <div class="bef-row"><span class="bef-lbl">Your Phone:</span><span class="bef-line bef-flex"></span></div>
-        <div class="bef-row"><span class="bef-lbl">Emergency Contact:</span><span class="bef-line bef-flex"></span></div>
-        <div class="bef-row"><span class="bef-lbl">Their Phone:</span><span class="bef-line bef-flex"></span></div>
+        <div class="bef-row"><span class="bef-lbl">Your Phone:</span><span class="bef-line bef-flex">${field(entry.phone)}</span></div>
+        <div class="bef-row"><span class="bef-lbl bef-lbl-2line">Emergency<br>Contact:</span><span class="bef-line bef-flex">${field(entry.emergencyContact)}</span></div>
+        <div class="bef-row"><span class="bef-lbl">Their Phone:</span><span class="bef-line bef-flex">${field(entry.emergencyPhone)}</span></div>
       </div>
     </div>
     <div class="bef-row">
-      <div class="bef-half-cell"><span class="bef-lbl">Email:</span><span class="bef-line bef-flex"></span></div>
-      <div class="bef-half-cell"><span class="bef-lbl">Medical Conds:</span><span class="bef-line bef-flex"></span></div>
+      <div class="bef-half-cell"><span class="bef-lbl">Email:</span><span class="bef-line bef-flex">${field(entry.email)}</span></div>
+      <div class="bef-half-cell"><span class="bef-lbl">Medical Conditions:</span><span class="bef-line bef-flex">${field(entry.medicalConds)}</span></div>
     </div>
     <div class="bef-important">Important: Read rules below. If you sign this form you are agreeing to all rules. Parent/Guardian must sign for juniors.</div>
     <div class="bef-declarations">
       ${DECLS.map(d => `<div class="bef-decl">&#9658; ${d}</div>`).join('')}
     </div>
     <div class="bef-sign-row">
-      <span class="bef-lbl">Signed:</span><span class="bef-sign-line" style="flex:2"></span>
-      <span class="bef-lbl" style="margin-left:4mm">Date:</span><span class="bef-sign-line" style="flex:1"></span>
+      <span class="bef-lbl">Signed:</span>
+      <span class="bef-sign-line bef-sign-signed"></span>
+      <span class="bef-lbl bef-sign-date-lbl">Date:</span>
+      <span class="bef-sign-line bef-sign-date"></span>
     </div>
   </div>`;
 }
 
-export function generateBlankEntryFormHTML(count = 2) {
+function pagesFromHalves(halves) {
   const org = escHtml(state.event.organisation || 'WFRA/FRA FELL RACES');
-  const formHtml = blankEntryFormHalf(org);
-  const emptyHtml = `<div class="bef-half"></div>`;
-  const cutGuide = `<div class="bef-cut"><span class="bef-cut-label">&#9986; cut here</span></div>`;
   let html = '';
-  for (let p = 0; p < Math.ceil(count / 2); p++) {
-    const hasB = p * 2 + 1 < count;
-    html += `<div class="blank-entry-page">${formHtml}${cutGuide}${hasB ? formHtml : emptyHtml}</div>`;
+  for (let i = 0; i < halves.length; i += 2) {
+    const top = entryFormHalf(org, halves[i]);
+    const bot = i + 1 < halves.length ? entryFormHalf(org, halves[i + 1]) : EMPTY_HALF;
+    html += `<div class="blank-entry-page">${top}${CUT_GUIDE}${bot}</div>`;
   }
   return html;
+}
+
+export function generateBlankEntryFormHTML(count = 2) {
+  return pagesFromHalves(Array.from({ length: count }, () => ({})));
+}
+
+export function generateEntryFormHTML(entries = []) {
+  return pagesFromHalves(entries);
 }
 
 export function openBlankEntryFormPreview(count = 2) {
