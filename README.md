@@ -25,7 +25,6 @@ It embodies all the experience of running fell races over that period, including
 ## ToDo
 
 This is an early work in progress.
-Its feature complete except for form printing and publishing results.
 Please check back later for updates.
 
 ## Running the App With a Local server

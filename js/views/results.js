@@ -4,10 +4,10 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented, sanitise } from '../ui.js';
 import { showBusy } from '../utils.js';
 import { openPrizeListPreview } from '../forms';
-
+import { downloadCSV } from '../storage.js';
 
 export function renderResults() {
   const seniors = getResultsForCourse(COURSE.SENIORS);
@@ -27,6 +27,7 @@ export function renderResults() {
   }
   renderPrizes();
   renderHelpersReport();
+  updateResultsButtons();
 }
 
 export function renderResultsTable(tbodyId, results) {
@@ -170,9 +171,42 @@ async function printPrizeList() {
   openPrizeListPreview(widthMm);
 }
 
+function activeResultsTab() {
+  return document.querySelector('#results-tab-bar [data-results-tab].active')?.dataset.resultsTab;
+}
+
+function updateResultsButtons() {
+  const exportBtn  = document.getElementById('btn-export-results-csv');
+  const publishBtn = document.getElementById('btn-publish-results');
+  const tab = activeResultsTab();
+  let disabled;
+  if (tab === 'senior') {
+    disabled = getResultsForCourse(COURSE.SENIORS).length === 0;
+  } else if (tab === 'junior') {
+    disabled = getResultsForCourse(COURSE.JUNIORS).length === 0;
+  } else {
+    disabled = true;
+  }
+  if (exportBtn)  exportBtn.disabled  = disabled;
+  if (publishBtn) publishBtn.disabled = disabled;
+}
+
+function exportResultsCSV() {
+  const eventName = sanitise(state.event.name || 'event');
+  if (activeResultsTab() === 'junior') {
+    downloadCSV(`${eventName}-results-juniors.csv`, getResultsForCourse(COURSE.JUNIORS),
+      ['course', 'bibNumber', 'inCatPos', 'name', 'club', 'category', 'time']);
+  } else {
+    downloadCSV(`${eventName}-results-seniors.csv`, getResultsForCourse(COURSE.SENIORS),
+      ['course', 'bibNumber', 'position', 'inCatPos', 'name', 'club', 'category', 'time', 'pctLdrs', 'behindTime']);
+  }
+}
+
 export function wireResults() {
-  on('btn-format-results',   'click', runFormatResults);
-  on('btn-print-prize-list', 'click', printPrizeList);
-  on('btn-publish-results',  'click', notImplemented);
+  on('btn-format-results',      'click', runFormatResults);
+  on('btn-print-prize-list',    'click', printPrizeList);
+  on('btn-export-results-csv',  'click', exportResultsCSV);
+  on('btn-publish-results',     'click', notImplemented);
   wireTabBar('results-tab-bar', 'tab-results-', 'data-results-tab');
+  document.getElementById('results-tab-bar')?.addEventListener('click', updateResultsButtons);
 }

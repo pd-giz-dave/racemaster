@@ -42,9 +42,11 @@
   --sidebar-active-bg: rgba(255,255,255,0.1);
 
   /* Buttons */
-  --btn-secondary-bg: #95a5a6;
+  --btn-secondary-bg: #ba5579;
   --btn-sm-bg: #7f8c8d;
   --btn-edit-bg: #2980b9;
+  --btn-disabled-bg: #d5d8dc;
+  --btn-disabled-fg: #8d9ea0;
 
   /* Tables */
   --table-header-bg: #ecf0f1;
@@ -243,7 +245,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
   transition: opacity 0.15s;
 }
 .btn:hover { opacity: 0.88; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:disabled { background: var(--btn-disabled-bg) !important; color: var(--btn-disabled-fg) !important; cursor: not-allowed; }
 .btn-secondary { background: var(--btn-secondary-bg); }
 .btn-danger    { background: var(--danger); }
 .btn-warn      { background: var(--warn); }

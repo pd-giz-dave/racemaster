@@ -11,6 +11,23 @@ import { showConfirmDialog } from './ui.js';
 
 // ---- Header button label + server status ----
 
+export function startUpdateCheck() {
+  function showUpdateButton() {
+    const btn = document.getElementById('btn-app-update');
+    if (btn) btn.hidden = false;
+  }
+  if (window._swWaiting) showUpdateButton();
+  window.addEventListener('sw-update-ready', showUpdateButton);
+
+  document.getElementById('btn-app-update')?.addEventListener('click', async () => {
+    const sw = window._swWaiting;
+    if (!sw) return;
+    if (!await showConfirmDialog('Apply update and reload now?', 'Update')) return;
+    navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+    sw.postMessage({ type: 'SKIP_WAITING' });
+  });
+}
+
 export function startServerPing() {
   async function ping() {
     const el = document.getElementById('header-server-status');
@@ -35,8 +52,13 @@ export function startServerPing() {
       el.style.color  = 'var(--header-warn)';
     }
   }
+  async function checkSwUpdate() {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    reg?.update();
+  }
   ping();
-  setInterval(ping, 30_000);
+  checkSwUpdate();
+  setInterval(() => { ping(); checkSwUpdate(); }, 30_000);
 }
 
 export function updateDataFileButton() {
