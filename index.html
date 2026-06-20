@@ -21,7 +21,7 @@
   <header class="app-header">
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
-    <h1>RaceMaster (v0.1.0-beta)</h1>
+    <h1>RaceMaster (v0.0.1-alpha)</h1>
     <span class="event-name" id="home-event-name-header"></span>
     <div style="flex:1"></div>
     <button class="btn btn-outline" id="btn-select-datafile">Select Data File</button>
@@ -29,6 +29,7 @@
     <button class="btn btn-outline" id="btn-import-state">Import</button>
     <span id="header-username"></span>
     <span id="header-server-status"></span>
+    <button class="btn btn-warn" id="btn-app-update" hidden>Update available</button>
   </header>
 
   <!-- Sidebar navigation -->
@@ -663,6 +664,7 @@
         <div class="btn-row">
           <button class="btn" id="btn-format-results">Generate Results</button>
           <button class="btn btn-secondary" id="btn-print-prize-list" disabled>Print Prize List</button>
+          <button class="btn btn-secondary" id="btn-export-results-csv">Export CSV</button>
           <button class="btn btn-secondary" id="btn-publish-results">Publish Results</button>
         </div>
         <div class="tab-bar" id="results-tab-bar">
@@ -1092,31 +1094,20 @@ if ('serviceWorker' in navigator) {
     // Dev mode: unregister any cached SW so files are always fetched fresh
     navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
   } else {
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW:', e));
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return;
-      const overlay = document.createElement('div');
-      Object.assign(overlay.style, {
-        position: 'fixed', inset: '0', zIndex: '99999',
-        background: 'rgba(0,0,0,0.55)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => {
+      function notifyWaiting(sw) {
+        window._swWaiting = sw;
+        window.dispatchEvent(new CustomEvent('sw-update-ready'));
+      }
+      // Update already waiting (e.g. page was reloaded while update was pending)
+      if (reg.waiting) { notifyWaiting(reg.waiting); return; }
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) notifyWaiting(sw);
+        });
       });
-      const box = document.createElement('div');
-      Object.assign(box.style, {
-        background: '#1a6b3c', color: '#fff', borderRadius: '10px',
-        padding: '28px 40px', textAlign: 'center', fontFamily: 'inherit',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-      });
-      overlay.appendChild(box);
-      document.body.appendChild(overlay);
-      let s = 4;
-      (function tick() {
-        box.innerHTML = '<div style="font-size:20px;font-weight:bold;margin-bottom:8px">App updated</div>' +
-          '<div style="font-size:15px">Reloading in ' + s + '…</div>';
-        if (--s >= 0) setTimeout(tick, 1000); else location.reload();
-      })();
-    });
+    }).catch(e => console.warn('SW:', e));
   }
 }
 </script>

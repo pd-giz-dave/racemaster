@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'racemaster-v18';
+const CACHE = 'racemaster-20260620162250';
 
 const PRECACHE = [
   '/',
@@ -11,7 +11,7 @@ const PRECACHE = [
   '/css/app.css',
   '/css/print.css',
   '/js/app.js',
-  '/js/auth.js',
+  '/js/connect.js',
   '/js/ui.js',
   '/js/constants.js',
   '/js/csv.js',
@@ -27,7 +27,6 @@ const PRECACHE = [
   '/js/si-entries.js',
   '/js/si-results.js',
   '/js/results.js',
-  '/js/forms',
   '/js/forms/preview.js',
   '/js/forms/entry-form.js',
   '/js/forms/entry-form.css',
@@ -59,10 +58,11 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
-  );
+  e.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PRECACHE)));
+});
+
+self.addEventListener('message', e => {
+  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {

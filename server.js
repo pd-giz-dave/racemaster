@@ -1,22 +1,29 @@
 #!/usr/bin/env node
 'use strict';
 
+// benign line to edit to force a server restart - #
+
 const http   = require('http');
 const fs     = require('fs');
-const path   = require('path');
+const path        = require('path');
 const crypto = require('crypto');
 
-const PORT        = process.env.PORT || 3000;
-const HOST        = process.env.HOST || '127.0.0.1';
-const ROOT        = __dirname;
-const DATA_DIR    = path.join(ROOT, 'data');
-const USERS_FILE  = path.join(ROOT, 'users.txt');
-const ADMINS_FILE = path.join(ROOT, 'admins.txt');
+const PORT    = process.env.PORT || 3000;
+const HOST          = process.env.HOST || '127.0.0.1';
+const ROOT          = __dirname;
+const DATA_DIR      = path.join(ROOT, 'data');
+const USERS_FILE    = path.join(ROOT, 'users.txt');
+const ADMINS_FILE   = path.join(ROOT, 'admins.txt');
+const SESSIONS_FILE = path.join(ROOT, 'sessions.txt');
+const SESSION_TTL  = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
 let needsRestart = false;
-fs.watch(__filename, () => { needsRestart = true; });
+fs.watchFile(__filename, { interval: 1000 }, () => {
+  needsRestart = true;
+  setTimeout(() => process.exit(0), 500);
+});
 
 
 const MIME = {
@@ -32,7 +39,31 @@ const MIME = {
 
 // ---- Authentication ----
 
-const sessions = new Map(); // token → username
+const sessions = new Map(); // token → { username, expires }
+
+function loadSessions() {
+  if (!fs.existsSync(SESSIONS_FILE)) return;
+  const now = Date.now();
+  for (const line of fs.readFileSync(SESSIONS_FILE, 'utf8').split('\n')) {
+    const parts = line.split(':');
+    if (parts.length !== 3) continue;
+    const [tok, username, exp] = parts;
+    if (Number(exp) > now) sessions.set(tok.trim(), { username: username.trim(), expires: Number(exp) });
+  }
+}
+
+function saveSessions() {
+  const lines = [];
+  for (const [tok, s] of sessions) lines.push(`${tok}:${s.username}:${s.expires}`);
+  fs.writeFileSync(SESSIONS_FILE, lines.join('\n') + (lines.length ? '\n' : ''), 'utf8');
+}
+
+function addSession(token, username) {
+  sessions.set(token, { username, expires: Date.now() + SESSION_TTL });
+  saveSessions();
+}
+
+loadSessions();
 
 function hashPw(pw)  { return crypto.createHash('sha256').update(pw).digest('hex'); }
 function newToken()  { return crypto.randomBytes(32).toString('hex'); }
@@ -64,7 +95,11 @@ function isAdmin(username) { return readAdmins().has(username); }
 
 function getAuthUser(req) {
   const h = req.headers['authorization'] || '';
-  return h.startsWith('Bearer ') ? (sessions.get(h.slice(7)) || null) : null;
+  if (!h.startsWith('Bearer ')) return null;
+  const s = sessions.get(h.slice(7));
+  if (!s) return null;
+  if (s.expires < Date.now()) { sessions.delete(h.slice(7)); saveSessions(); return null; }
+  return s.username;
 }
 
 // ---- Dataset helpers ----
@@ -195,7 +230,7 @@ const server = http.createServer(async (req, res) => {
         return jsonReply(res, 401, { error: 'Invalid username or password' });
       }
       const token = newToken();
-      sessions.set(token, username);
+      addSession(token, username);
       return jsonReply(res, 200, { token, username, isAdmin: isAdmin(username) });
     }
 
@@ -214,7 +249,7 @@ const server = http.createServer(async (req, res) => {
       users[username] = hashPw(password);
       writeUsers(users);
       const token = newToken();
-      sessions.set(token, username);
+      addSession(token, username);
       console.log(`Account created: ${username}${admins.has(username) ? ' (admin)' : ''}`);
       return jsonReply(res, 200, { token, username, isAdmin: admins.has(username) });
     }
@@ -395,7 +430,8 @@ const server = http.createServer(async (req, res) => {
       const admins = readAdmins();
       admins.delete(target);
       writeAdmins(admins);
-      for (const [tok, u] of sessions) if (u === target) sessions.delete(tok);
+      for (const [tok, s] of sessions) if (s.username === target) sessions.delete(tok);
+      saveSessions();
       console.log(`User deleted by admin ${username}: ${target}`);
       return jsonReply(res, 200, { ok: true });
     }
@@ -421,7 +457,9 @@ const server = http.createServer(async (req, res) => {
       }
       const mime = MIME[path.extname(filePath)] || 'application/octet-stream';
       const headers = { 'Content-Type': mime };
-      if (rel === 'sw.js' || rel === 'index.html') {
+      if (rel === 'sw.js') {
+        headers['Cache-Control'] = 'no-store';
+      } else if (rel === 'index.html') {
         headers['Cache-Control'] = 'no-cache';
       }
       res.writeHead(200, headers);
@@ -438,5 +476,6 @@ server.listen(PORT, HOST, () => {
   console.log(`\nRaceMaster dev server → http://${HOST}:${PORT}`);
   console.log(`Data directory        → ${DATA_DIR}`);
   console.log(`Users file            → ${USERS_FILE}`);
-  console.log(`Admins file           → ${ADMINS_FILE}\n`);
+  console.log(`Admins file           → ${ADMINS_FILE}`);
+  console.log(`Sessions file         → ${SESSIONS_FILE}\n`);
 });
