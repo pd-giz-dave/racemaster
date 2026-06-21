@@ -45,6 +45,7 @@ export function getSession() {
 export function setSession(token, dataset) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(DATASET_KEY, dataset);
+  localStorage.removeItem(STANDALONE_KEY);
 }
 
 export function clearSession() {
