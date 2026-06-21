@@ -13,11 +13,31 @@ import { COURSE } from '../constants.js';
 import { cleanName, capitalise, showBusy, normaliseClub } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
-  val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
+  val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog, escHtml,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
   downloadText, sanitise, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
+  renderTable,
 } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { renderHome } from './home.js';
+
+const ENTRY_COLS = (() => {
+  const m = TABLES.entries;
+  return [
+    { ...m[0], render: e => e.bibNumber },
+    { ...m[1], render: e => escHtml(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '') },
+    { ...m[2], render: e => escHtml(e.club || '') },
+    { ...m[3], render: e => e.dob || '' },
+    { ...m[4], render: e => e.category || '' },
+    { ...m[5], render: e => e.course || '' },
+    { ...m[6], render: e => e.dibberNumber || '' },
+    { ...m[7], render: e => e.preEntry || '' },
+    { ...m[8], render: () => `
+      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
+      <button class="btn-sm btn-insert-above-entry" data-action="ins">Ins ↑</button>
+      <button class="btn-sm btn-delete-entry" data-action="del">Del</button>` },
+  ];
+})();
 
 // ---- Module state ----
 
@@ -29,38 +49,12 @@ let overrideBan    = false;
 
 export function renderEntries() {
   const entries = getSortedEntries();
-  const tbody = document.getElementById('entries-tbody');
-  if (!tbody) return;
-
-  tbody.innerHTML = entries.map(e => `
-    <tr data-bib="${e.bibNumber}"${isEntryBanned(e) ? ' class="row-banned"' : ''}>
-      <td>${e.bibNumber}</td>
-      <td>${(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '')}</td>
-      <td>${e.club || ''}</td>
-      <td>${e.dob || ''}</td>
-      <td>${e.category || ''}</td>
-      <td>${e.course || ''}</td>
-      <td>${e.dibberNumber || ''}</td>
-      <td>${e.preEntry || ''}</td>
-      <td>
-        <button class="btn-sm btn-edit"                 data-bib="${e.bibNumber}">Edit</button>
-        <button class="btn-sm btn-insert-above-entry"  data-bib="${e.bibNumber}">Ins ↑</button>
-        <button class="btn-sm btn-delete-entry"        data-bib="${e.bibNumber}">Del</button>
-      </td>
-    </tr>`).join('');
-
-  // Wire row action buttons
-  tbody.querySelectorAll('.btn-edit').forEach(b =>
-    b.addEventListener('click', async () => {
-      const bib = +b.dataset.bib;
-      const e = getEntry(bib);
-      if (!e || !await showConfirmDialog(`Edit bib ${bib} (${e.name})?`, 'Edit')) return;
-      fillFormForEdit(bib);
-    }));
-  tbody.querySelectorAll('.btn-insert-above-entry').forEach(b =>
-    b.addEventListener('click', () => confirmInsertBefore(+b.dataset.bib)));
-  tbody.querySelectorAll('.btn-delete-entry').forEach(b =>
-    b.addEventListener('click', () => deleteEntryAndRenumberHandler(+b.dataset.bib)));
+  renderTable('entries-tbody', ENTRY_COLS, entries, {
+    rowAttrs: e => ({
+      'data-bib': e.bibNumber,
+      class: isEntryBanned(e) ? 'row-banned' : '',
+    }),
+  });
 
   const juniorCount  = entries.filter(e => e.course === COURSE.JUNIORS).length;
   const seniorCount  = entries.length - juniorCount;
@@ -430,4 +424,24 @@ export function wireEntries() {
 
   // Entry form keyboard handling: Enter=submit, Esc=home if clean, Tab=wrap focus
   wireFormFocusTrap('entry-form-fields', submitEntryForm);
+
+  document.getElementById('entries-tbody')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const bib = +btn.closest('[data-bib]')?.dataset.bib;
+    switch (btn.dataset.action) {
+      case 'edit': {
+        const entry = getEntry(bib);
+        if (!entry || !await showConfirmDialog(`Edit bib ${bib} (${entry.name})?`, 'Edit')) return;
+        fillFormForEdit(bib);
+        break;
+      }
+      case 'ins':
+        confirmInsertBefore(bib);
+        break;
+      case 'del':
+        deleteEntryAndRenumberHandler(bib);
+        break;
+    }
+  });
 }

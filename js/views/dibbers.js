@@ -1,28 +1,29 @@
 'use strict';
 
 import { state, saveDibbers } from '../state.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { parseCSV } from '../csv.js';
 
+const DIBBER_COLS = (() => {
+  const m = TABLES.dibbers;
+  return [
+    { ...m[0], render: ({ d }) => d.shortCode || '' },
+    { ...m[1], render: ({ d }) => d.longCode  || '' },
+    { ...m[2], render: ({ d }) => d.owner || '' },
+    { ...m[3], render: ({ d }) => escHtml(d.notes || '') },
+    { ...m[4], render: () => `
+      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
+      <button class="btn-sm btn-delete-entry" data-action="del">Del from here</button>` },
+  ];
+})();
+
 export function renderDibbers() {
-  const tbody = document.getElementById('dibbers-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = state.dibbers.map((d, i) => `
-    <tr id="dibber-row-${i}">
-      <td>${d.shortCode || ''}</td>
-      <td>${d.longCode  || ''}</td>
-      <td>${d.owner || ''}</td>
-      <td>${escHtml(d.notes || '')}</td>
-      <td>
-        <button class="btn-sm btn-edit"         data-idx="${i}">Edit</button>
-        <button class="btn-sm btn-delete-entry" data-idx="${i}">Del from here</button>
-      </td>
-    </tr>`).join('');
+  const rows = state.dibbers.map((d, i) => ({ d, i }));
+  renderTable('dibbers-tbody', DIBBER_COLS, rows, {
+    rowAttrs: ({ i }) => ({ id: `dibber-row-${i}`, 'data-idx': i }),
+  });
   setHTML('dibbers-count', `${state.dibbers.length} dibbers`);
-  tbody.querySelectorAll('.btn-edit').forEach(b =>
-    b.addEventListener('click', () => editDibberRow(+b.dataset.idx)));
-  tbody.querySelectorAll('.btn-delete-entry').forEach(b =>
-    b.addEventListener('click', () => deleteDibbersFrom(+b.dataset.idx)));
 }
 
 export function editDibberRow(idx) {
@@ -198,4 +199,12 @@ export function wireDibbers() {
   on('btn-export-dibbers', 'click', exportDibbers);
   on('btn-add-dibber',     'click', showAddDibberRow);
   on('btn-clear-dibbers',  'click', clearDibbers);
+
+  document.getElementById('dibbers-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const idx = +btn.closest('[data-idx]')?.dataset.idx;
+    if (btn.dataset.action === 'edit') editDibberRow(idx);
+    else if (btn.dataset.action === 'del') deleteDibbersFrom(idx);
+  });
 }

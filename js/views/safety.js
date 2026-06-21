@@ -5,10 +5,58 @@ import { recordFinisher, deleteFinisher, getOutstandingCount } from '../finisher
 import { getEntriesOnCourse, getEntry, isEntryBanned } from '../entries.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from '../si-results.js';
 import { getResultsForCourse } from '../results.js';
-import { setHTML, showStatus, showConfirmDialog, wireTabBar } from '../ui.js';
+import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
+
+const SAFETY_OUT_COLS = (() => {
+  const m = TABLES['safety-outstanding'];
+  return [
+    { ...m[0], render: e => e.bibNumber },
+    { ...m[1], render: e => (e.name || '') + (isEntryBanned(e) ? ' (banned)' : '') },
+    { ...m[2], render: e => e.course || '' },
+    { ...m[3], render: e => e.category || '' },
+    { ...m[4], render: e => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>` },
+  ];
+})();
+
+const SAFETY_DNF_COLS = (() => {
+  const m = TABLES['safety-dnf'];
+  return [
+    { ...m[0], render: d => d.bib },
+    { ...m[1], render: d => d.name },
+    { ...m[2], render: d => d.course },
+    { ...m[3], render: d => d.category },
+    { ...m[4], render: d => d.idx >= 0
+        ? `<button class="btn-sm btn-secondary" data-action="unretire">Unretire</button>`
+        : '' },
+  ];
+})();
+
+const SAFETY_FIN_COLS = (() => {
+  const m = TABLES['safety-finished'];
+  return [
+    { ...m[0], render: f => f.number },
+    { ...m[1], render: f => f.name },
+    { ...m[2], render: f => f.course },
+    { ...m[3], render: f => f.category },
+    { ...m[4], render: f => f.pos },
+    { ...m[5], render: f => f.time },
+  ];
+})();
+
+const SAFETY_EARLY_COLS = (() => {
+  const m = TABLES['safety-early'];
+  return [
+    { ...m[0], render: f => f.number },
+    { ...m[1], render: f => f.name },
+    { ...m[2], render: f => f.course },
+    { ...m[3], render: f => f.category },
+    { ...m[4], render: f => f.startTime },
+  ];
+})();
 
 function getFinishedBibs() {
   const bibs = new Set(
@@ -38,19 +86,9 @@ export function renderSafety() {
     .filter(e => { const b = +e.bibNumber; return b > 0 && !finishedBibs.has(b); })
     .sort((a, b) => +a.bibNumber - +b.bibNumber);
 
-  const outTbody = document.getElementById('safety-outstanding-tbody');
-  if (outTbody) {
-    outTbody.innerHTML = outstanding.map(e => `
-      <tr>
-        <td>${e.bibNumber}</td>
-        <td>${(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '')}</td>
-        <td>${e.course || ''}</td>
-        <td>${e.category || ''}</td>
-        <td><button class="btn-sm btn-delete btn-retire-safety" data-bib="${e.bibNumber}">Retire</button></td>
-      </tr>`).join('');
-    outTbody.querySelectorAll('.btn-retire-safety').forEach(b =>
-      b.addEventListener('click', () => retireFromSafety(+b.dataset.bib)));
-  }
+  renderTable('safety-outstanding-tbody', SAFETY_OUT_COLS, outstanding, {
+    rowAttrs: e => ({ 'data-bib': e.bibNumber }),
+  });
 
   // ---- Retirees / DNFs ----
   // SW entries (with state index for unretire)
@@ -69,24 +107,13 @@ export function renderSafety() {
     .filter((d, i, arr) => arr.findIndex(x => x.bib === d.bib) === i)
     .sort((a, b) => a.bib - b.bib);
 
-  const dnfTbody = document.getElementById('safety-dnf-tbody');
-  if (dnfTbody) {
-    dnfTbody.innerHTML = allDnfs.map(({ bib, idx }) => {
-      const r = entryInfo(bib);
-      const btn = idx >= 0
-        ? `<button class="btn-sm btn-secondary btn-unretire" data-bib="${bib}">Unretire</button>`
-        : '';
-      return `<tr>
-        <td>${bib}</td>
-        <td>${r.name}</td>
-        <td>${r.course}</td>
-        <td>${r.category}</td>
-        <td>${btn}</td>
-      </tr>`;
-    }).join('');
-    dnfTbody.querySelectorAll('.btn-unretire').forEach(b =>
-      b.addEventListener('click', () => unretire(+b.dataset.bib)));
-  }
+  const dnfRows = allDnfs.map(({ bib, idx }) => {
+    const r = entryInfo(bib);
+    return { bib, idx, name: r.name, course: r.course, category: r.category };
+  });
+  renderTable('safety-dnf-tbody', SAFETY_DNF_COLS, dnfRows, {
+    rowAttrs: d => ({ 'data-bib': d.bib }),
+  });
 
   // ---- Finishers ----
   // SW finishers
@@ -109,40 +136,23 @@ export function renderSafety() {
     }
   }
 
-  const finTbody = document.getElementById('safety-finished-tbody');
-  if (finTbody) {
-    finTbody.innerHTML = allFinished.map(f => {
-      const r   = entryInfo(+f.number);
-      const res = resultsByBib.get(+f.number);
-      return `<tr>
-        <td>${f.number}</td>
-        <td>${r.name}</td>
-        <td>${r.course}</td>
-        <td>${r.category}</td>
-        <td>${res ? res.position : ''}</td>
-        <td>${res ? res.time     : ''}</td>
-      </tr>`;
-    }).join('');
-  }
+  const finRows = allFinished.map(f => {
+    const r   = entryInfo(+f.number);
+    const res = resultsByBib.get(+f.number);
+    return { number: f.number, name: r.name, course: r.course, category: r.category, pos: res?.position ?? '', time: res?.time ?? '' };
+  });
+  renderTable('safety-finished-tbody', SAFETY_FIN_COLS, finRows);
 
   // ---- Early Starters ----
   const earlyStarters = state.finishers
     .filter(f => f.action === 'Start' && +f.number > 0)
     .sort((a, b) => +a.number - +b.number);
 
-  const earlyTbody = document.getElementById('safety-early-tbody');
-  if (earlyTbody) {
-    earlyTbody.innerHTML = earlyStarters.map(f => {
-      const r = entryInfo(+f.number);
-      return `<tr>
-        <td>${f.number}</td>
-        <td>${r.name}</td>
-        <td>${r.course}</td>
-        <td>${r.category}</td>
-        <td>${f.time || ''}</td>
-      </tr>`;
-    }).join('');
-  }
+  const earlyRows = earlyStarters.map(f => {
+    const r = entryInfo(+f.number);
+    return { number: f.number, name: r.name, course: r.course, category: r.category, startTime: f.time || '' };
+  });
+  renderTable('safety-early-tbody', SAFETY_EARLY_COLS, earlyRows);
 
   // ---- Header counts ----
   const senOut = getOutstandingCount(COURSE.SENIORS);
@@ -168,7 +178,7 @@ export function renderSafety() {
 async function retireFromSafety(bib) {
   if (!await showConfirmDialog(`Record bib ${bib} as retired?`, 'Retire', true)) return;
   showBusy('Recording retirement…');
-  const result = await recordFinisher(bib, '', 'DNF');
+  const result = await recordFinisher(bib, '-', 'DNF');
   if (result.error) { showBusy(''); showStatus(result.error, true); return; }
   showBusy('');
   showStatus(`Bib ${bib} recorded as retired.`);
@@ -192,4 +202,16 @@ async function unretire(bib) {
 
 export function wireSafety() {
   wireTabBar('safety-tab-bar', 'safety-tab-', 'data-safety-tab');
+
+  document.getElementById('safety-outstanding-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="retire"]');
+    if (!btn) return;
+    retireFromSafety(+btn.closest('[data-bib]')?.dataset.bib);
+  });
+
+  document.getElementById('safety-dnf-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="unretire"]');
+    if (!btn) return;
+    unretire(+btn.closest('[data-bib]')?.dataset.bib);
+  });
 }

@@ -55,6 +55,8 @@ const PRECACHE = [
   '/js/views/categories.js',
   '/js/views/forms.js',
   '/js/views/si-results.js',
+  '/js/help.js',
+  '/js/locale.js',
 ];
 
 self.addEventListener('install', e => {

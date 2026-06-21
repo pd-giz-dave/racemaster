@@ -9,7 +9,25 @@ import {
 import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned } from '../entries.js';
 import { COURSE } from '../constants.js';
 import { normaliseTime, timeToSeconds, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap } from '../ui.js';
+import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
+
+const FINISHER_COLS = (() => {
+  const m = TABLES.finishers;
+  return [
+    { ...m[0], render: r => r.lineDisplay },
+    { ...m[1], render: r => r.eventLabel },
+    { ...m[2], render: r => r.f.time || '' },
+    { ...m[3], render: r => r.numDisplay },
+    { ...m[4], render: r => r.nameDisplay },
+    { ...m[5], render: r => r.entry?.category || '' },
+    { ...m[6], render: r => r.f.number > 0 ? (r.entry?.course || '') : '' },
+    { ...m[7], render: () => `
+      <button class="btn-sm btn-edit btn-edit-finisher" data-action="edit">Edit</button>
+      <button class="btn-sm btn-insert-above-finisher" data-action="ins">Ins ↑</button>
+      <button class="btn-sm btn-delete-entry btn-del-finisher" data-action="del">Del</button>` },
+  ];
+})();
 
 // ---- Module state ----
 
@@ -62,6 +80,7 @@ function lineLabel(sidx) {
 }
 
 function nextLineLabel() {
+  if (state.finishers.length === 0) return '0';
   const sidx = state.finishers.length;
   const isRetire = document.querySelector('input[name="finisher-event-type"]:checked')?.value === 'retire';
   if (isRetire) return `[${sidx}]`;
@@ -140,7 +159,7 @@ export function applyMode(mode) {
     document.querySelectorAll('#finishers-tbody .row-timing-target')
       .forEach(r => r.classList.remove('row-timing-target'));
     document.querySelector('#finishers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
-    if (bibEl) { bibEl.value = ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
+    if (bibEl) { bibEl.value = state.finishers.length === 0 && editingIdx < 0 ? 'Clock' : ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
     setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
   }
 }
@@ -171,9 +190,7 @@ export function renderFinishers() {
 
   if (getCurrentMode() !== 'time') updatePrevTime();
 
-  const tbody = document.getElementById('finishers-tbody');
-  if (!tbody) return;
-  const startFinishLabel = f => {
+  const eventLabel = f => {
     if (f.action === 'Start' ) return 'Start';
     if (f.action === 'DNF'   ) return 'Retiree';
     if (f.action === 'Finish') return 'Finish';
@@ -183,43 +200,29 @@ export function renderFinishers() {
     }
     return f.action || '';
   };
-  tbody.innerHTML = all.map((f) => {
-    const sidx = state.finishers.indexOf(f);
-    const numDisplay = f.number > 0 ? f.number : '';
+
+  const rows = all.map(f => {
+    const sidx      = state.finishers.indexOf(f);
+    const numDisplay  = f.number > 0 ? f.number : '';
     const lineDisplay = f.splitNumber !== null ? f.splitNumber : `[${sidx}]`;
-    const entry = f.number > 0 ? getEntry(+f.number) : null;
-    const hasError = f.number > 0 && !entry;
-    const banned   = !hasError && entry && isEntryBanned(entry);
-    const specialInfo = f.number <= 0 ? getAllSpecials().find(([v]) => v.toLowerCase() === (f.action || '').toLowerCase()) : null;
-    const nameDisplay = specialInfo ? specialInfo[1] : (entry?.name || '') + (banned ? ' (banned)' : '');
-    return `<tr class="${hasError ? 'row-error' : banned ? 'row-banned' : ''}" data-sidx="${sidx}">
-      <td>${lineDisplay}</td>
-      <td>${startFinishLabel(f)}</td>
-      <td>${f.time || ''}</td>
-      <td>${numDisplay}</td>
-      <td>${escHtml(nameDisplay)}</td>
-      <td>${entry?.category || ''}</td>
-      <td>${f.number > 0 ? (entry?.course || '') : ''}</td>
-      <td>
-        <button class="btn-sm btn-edit btn-edit-finisher" data-sidx="${sidx}">Edit</button>
-        <button class="btn-sm btn-insert-above-finisher" data-sidx="${sidx}">Ins ↑</button>
-        <button class="btn-sm btn-delete-entry btn-del-finisher" data-sidx="${sidx}">Del</button>
-      </td>
-    </tr>`;
-  }).join('');
+    const entry     = f.number > 0 ? getEntry(+f.number) : null;
+    const hasError  = f.number > 0 && !entry;
+    const banned    = !hasError && entry && isEntryBanned(entry);
+    const specialInfo = f.number <= 0
+      ? getAllSpecials().find(([v]) => v.toLowerCase() === (f.action || '').toLowerCase())
+      : null;
+    const nameDisplay = specialInfo
+      ? specialInfo[1]
+      : escHtml((entry?.name || '') + (banned ? ' (banned)' : ''));
+    return { f, sidx, numDisplay, lineDisplay, hasError, banned, nameDisplay, entry, eventLabel: eventLabel(f) };
+  });
 
-  tbody.querySelectorAll('.btn-edit-finisher').forEach(b =>
-    b.addEventListener('click', async () => {
-      const sidx = +b.dataset.sidx;
-      if (!await showConfirmDialog(`Edit finisher at line ${sidx}?`, 'Edit')) return;
-      fillFormForEdit(sidx);
-    }));
-
-  tbody.querySelectorAll('.btn-insert-above-finisher').forEach(b =>
-    b.addEventListener('click', () => confirmInsertAbove(+b.dataset.sidx)));
-
-  tbody.querySelectorAll('.btn-del-finisher').forEach(b =>
-    b.addEventListener('click', () => confirmDeleteFinisher(+b.dataset.sidx)));
+  renderTable('finishers-tbody', FINISHER_COLS, rows, {
+    rowAttrs: r => ({
+      'data-sidx': r.sidx,
+      class: r.hasError ? 'row-error' : r.banned ? 'row-banned' : '',
+    }),
+  });
 
   // Keep time-mode display in sync after any render
   if (getCurrentMode() === 'time') refreshTimeModeDisplay();
@@ -423,6 +426,11 @@ async function submitFinisherForm() {
     }
   }
 
+  if (!parsedTime) {
+    if (isRetire || specialAction === 'Ignore') parsedTime = '-';
+    else if (specialAction === 'Clock') parsedTime = '0';
+  }
+
   // Edit mode
   if (editingIdx >= 0) {
     showBusy('Updating…');
@@ -593,4 +601,22 @@ export function wireFinishers() {
 
   // Initialize to bibs mode
   applyMode('bibs');
+
+  document.getElementById('finishers-tbody')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const sidx = +btn.closest('[data-sidx]')?.dataset.sidx;
+    switch (btn.dataset.action) {
+      case 'edit':
+        if (!await showConfirmDialog(`Edit finisher at line ${sidx}?`, 'Edit')) return;
+        fillFormForEdit(sidx);
+        break;
+      case 'ins':
+        confirmInsertAbove(sidx);
+        break;
+      case 'del':
+        confirmDeleteFinisher(sidx);
+        break;
+    }
+  });
 }

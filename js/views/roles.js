@@ -1,8 +1,20 @@
 'use strict';
 
 import { state, saveRoles } from '../state.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { formatCSV, parseCSV } from '../csv.js';
+
+const ROLE_COLS = (() => {
+  const m = TABLES.roles;
+  return [
+    { ...m[0], render: r => escHtml(r.role || '') },
+    { ...m[1], render: r => escHtml(r.description || '') },
+    { ...m[2], render: r => `
+      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
+      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
+  ];
+})();
 
 const BUILTIN_ROLES = [
   { role: 'HELPER',     description: 'General helper' },
@@ -31,20 +43,10 @@ export function renderRoles() {
   const sorted = [...state.roles]
     .map((r, i) => ({ ...r, _si: i }))
     .sort((a, b) => (a.role || '').localeCompare(b.role || ''));
-  tbody.innerHTML = sorted.map(r => `
-    <tr id="role-row-${r._si}">
-      <td>${escHtml(r.role || '')}</td>
-      <td>${escHtml(r.description || '')}</td>
-      <td>
-        <button class="btn-sm btn-edit"   data-idx="${r._si}">Edit</button>
-        <button class="btn-sm btn-delete" data-idx="${r._si}">Del</button>
-      </td>
-    </tr>`).join('');
+  renderTable('roles-tbody', ROLE_COLS, sorted, {
+    rowAttrs: r => ({ id: `role-row-${r._si}`, 'data-idx': r._si }),
+  });
   setHTML('roles-count', `${sorted.length} roles`);
-  tbody.querySelectorAll('.btn-edit').forEach(b =>
-    b.addEventListener('click', () => editRoleRow(+b.dataset.idx)));
-  tbody.querySelectorAll('.btn-delete').forEach(b =>
-    b.addEventListener('click', () => deleteRoleRow(+b.dataset.idx)));
 }
 
 function roleEditCells(prefix, r) {
@@ -183,4 +185,12 @@ export function wireRoles() {
   on('btn-import-roles', 'click', importRoles);
   on('btn-reset-roles',  'click', resetToBuiltin);
   on('btn-clear-roles',  'click', clearRoles);
+
+  document.getElementById('roles-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const idx = +btn.closest('[data-idx]')?.dataset.idx;
+    if (btn.dataset.action === 'edit') editRoleRow(idx);
+    else if (btn.dataset.action === 'del') deleteRoleRow(idx);
+  });
 }

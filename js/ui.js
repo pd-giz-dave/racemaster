@@ -361,6 +361,40 @@ export function clearRowEditing(tbodyId) {
   document.querySelectorAll(`#${tbodyId} .row-editing`).forEach(r => r.classList.remove('row-editing'));
 }
 
+export function renderThead(tbodyId, columns) {
+  const tbody = document.getElementById(tbodyId);
+  const thead = tbody?.closest('table')?.querySelector('thead');
+  if (!thead) return;
+  thead.innerHTML = '<tr>' + columns.map(c => {
+    let a = '';
+    if (c.title) a += ` title="${c.title}"`;
+    if (c.align) a += ` style="text-align:${c.align}"`;
+    if (c.class) a += ` class="${c.class}"`;
+    return `<th${a}>${c.label}</th>`;
+  }).join('') + '</tr>';
+}
+
+export function renderTable(tbodyId, columns, rows, { rowAttrs } = {}) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  renderThead(tbodyId, columns);
+  tbody.innerHTML = rows.map(r => {
+    let tr = '<tr';
+    if (rowAttrs) {
+      for (const [k, v] of Object.entries(rowAttrs(r))) {
+        if (v !== '' && v != null) tr += ` ${k}="${v}"`;
+      }
+    }
+    tr += '>' + columns.map(c => {
+      let td = '<td';
+      if (c.align) td += ` style="text-align:${c.align}"`;
+      return td + `>${c.render ? c.render(r) : ''}</td>`;
+    }).join('') + '</tr>';
+    return tr;
+  }).join('');
+  return tbody;
+}
+
 export function wireFormFocusTrap(containerId, onEnter) {
   const container = document.getElementById(containerId);
   if (!container) return;

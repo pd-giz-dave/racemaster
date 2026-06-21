@@ -4,10 +4,38 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented, sanitise } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented, sanitise, renderTable, renderThead } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { showBusy } from '../utils.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
+
+const SENIOR_COLS = (() => {
+  const m = TABLES['results-senior'];
+  return [
+    { ...m[0], render: r => r.course || '' },
+    { ...m[1], render: r => r.bibNumber || '' },
+    { ...m[2], render: r => r.position < 9999 ? r.position : 'DNF' },
+    { ...m[3], render: r => r.inCatPos || '' },
+    { ...m[4], render: r => r.name || '' },
+    { ...m[5], render: r => r.club || '' },
+    { ...m[6], render: r => r.category || '' },
+    { ...m[7], render: r => (r.time || '') + (r.recordBreaker ? ' R' : '') },
+    { ...m[8], render: r => r.pctLdrs ? r.pctLdrs + '%' : '' },
+    { ...m[9], render: r => r.behindTime || '' },
+  ];
+})();
+
+const HELPERS_COLS = (() => {
+  const m = TABLES['results-helpers'];
+  return [
+    { ...m[0], render: h => h.role || '' },
+    { ...m[1], render: h => h.name || '' },
+    { ...m[2], render: h => h.club || '' },
+    { ...m[3], render: h => h.cat || '' },
+    { ...m[4], render: h => h.lastRaced || '' },
+  ];
+})();
 
 export function renderResults() {
   const seniors = getResultsForCourse(COURSE.SENIORS);
@@ -31,27 +59,11 @@ export function renderResults() {
 }
 
 export function renderResultsTable(tbodyId, results) {
-  const tbody = document.getElementById(tbodyId);
-  if (!tbody) return;
-  tbody.innerHTML = results.map(r => {
-    const pos     = r.position < 9999 ? r.position : 'DNF';
-    const timeStr = (r.time || '') + (r.recordBreaker ? ' R' : '');
-    return `<tr>
-      <td>${r.course || ''}</td>
-      <td>${r.bibNumber || ''}</td>
-      <td>${pos}</td>
-      <td>${r.inCatPos || ''}</td>
-      <td>${r.name || ''}</td>
-      <td>${r.club || ''}</td>
-      <td>${r.category || ''}</td>
-      <td>${timeStr}</td>
-      <td style="text-align:right">${r.pctLdrs ? r.pctLdrs + '%' : ''}</td>
-      <td>${r.behindTime || ''}</td>
-    </tr>`;
-  }).join('');
+  renderTable(tbodyId, SENIOR_COLS, results);
 }
 
 export function renderJuniorsTable(tbodyId, results) {
+  renderThead(tbodyId, TABLES['results-junior']);
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
 
@@ -92,6 +104,7 @@ export function renderJuniorsTable(tbodyId, results) {
 }
 
 export function renderPrizes() {
+  renderThead('prizes-tbody', TABLES.prizes);
   const tbody = document.getElementById('prizes-tbody');
   if (!tbody) return;
 
@@ -130,15 +143,7 @@ export function renderPrizes() {
 }
 
 export function renderHelpersReport() {
-  const tbody = document.getElementById('results-helpers-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = state.helpersReport.map(h => `<tr>
-    <td>${h.role || ''}</td>
-    <td>${h.name || ''}</td>
-    <td>${h.club || ''}</td>
-    <td>${h.cat || ''}</td>
-    <td>${h.lastRaced || ''}</td>
-  </tr>`).join('');
+  renderTable('results-helpers-tbody', HELPERS_COLS, state.helpersReport);
 }
 
 export async function runFormatResults() {

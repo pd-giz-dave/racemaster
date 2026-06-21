@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { saveEntries, savePeople } from './state.js';
-import { GENDER, COURSE } from './constants.js';
+import { COURSE } from './constants.js';
 import { normaliseDate, cleanName, ciEq } from './utils.js';
 import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
@@ -302,56 +302,6 @@ export async function deleteEntryAndRenumber(bibNumber) {
 export async function clearAllEntries() {
   state.entries = [];
   await saveEntries();
-}
-
-/**
- * Load pre-entries into the entries list.
- * Matches by pre-entry participant number or by name/dob.
- * Returns {added, updated, errors[]}.
- */
-export async function loadPreEntries() {
-  let added = 0, updated = 0;
-  const errors = [];
-
-  for (const pe of state.preEntries) {
-    const name    = cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim());
-    const gender  = ciEq(pe.gender, GENDER.FEMALE) ? GENDER.FEMALE : GENDER.MALE;
-    const dob     = normaliseDate(pe.dob || '');
-    const club    = cleanName(pe.club || '');
-    const fra     = pe.fraNumber || '';
-    const preNum  = pe.participantNumber || '';
-
-    if (!name) continue;
-    if (!dob) {
-      errors.push(`Pre-entry ${preNum} (${name}) has no DoB`);
-      continue;
-    }
-
-    let category = pe.category || '';
-    if (!category && dob) category = calculateCategory(dob, gender);
-    const course = calculateCourse(category, dob);
-
-    // Check if already in entries by preEntry number
-    let existing = -1;
-    if (preNum) existing = state.entries.findIndex(e => e.preEntry === preNum);
-
-    if (existing >= 0) {
-      // Update existing entry
-      const e = state.entries[existing];
-      e.name = name; e.gender = gender; e.dob = dob;
-      e.club = club; e.fraNumber = fra; e.category = category; e.course = course;
-      updated++;
-    } else {
-      // New entry
-      const bibNumber = getNextBibNumber();
-      const dibberNumber = usingDibbers(course) ? getNextDibberNumber() : 0;
-      addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry: preNum });
-      added++;
-    }
-  }
-
-  await saveEntries();
-  return { added, updated, errors };
 }
 
 /** Re-evaluate category and course for every entry that has a DOB, using current category tables. */

@@ -104,7 +104,10 @@ export function getNextDibberNumber() {
     const idx = state.dibbers.findIndex(d => +d.shortCode === last);
     if (idx >= 0 && idx + 1 < state.dibbers.length) return +state.dibbers[idx+1].shortCode;
   }
-  return state.dibbers.length > 0 ? +state.dibbers[0].shortCode : 1;
+  if (state.dibbers.length === 0) return +state.event.firstDibberNumber || 1;
+  const first = +state.event.firstDibberNumber || 1;
+  const d = state.dibbers.find(d => +d.shortCode >= first);
+  return d ? +d.shortCode : +state.dibbers[0].shortCode;
 }
 
 /** Get total number of dibbers available */

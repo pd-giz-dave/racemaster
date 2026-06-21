@@ -1,45 +1,43 @@
 'use strict';
 
 import { importSIEntries, verifySIEntries, clearSIEntries, getSortedPreEntries } from '../si-entries.js';
-import { loadPreEntries } from '../entries.js';
 import { mergeSIEntries } from '../data.js';
 import { cleanName, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, showConfirmDialog, pickFile } from '../ui.js';
+import { on, setHTML, showStatus, showConfirmDialog, pickFile, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { renderPeople } from './people.js';
-import { renderEntries } from './entries.js';
-import { renderHome } from './home.js';
+
+const PRE_ENTRY_COLS = (() => {
+  const m = TABLES['pre-entries'];
+  return [
+    { ...m[0],  render: pe => pe.participantNumber || '' },
+    { ...m[1],  render: pe => cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim()) },
+    { ...m[2],  render: pe => pe.gender || '' },
+    { ...m[3],  render: pe => pe.dob || '' },
+    { ...m[4],  render: pe => pe.club || '' },
+    { ...m[5],  render: pe => pe.category || '' },
+    { ...m[6],  render: pe => pe.fraNumber || '' },
+    { ...m[7],  render: pe => pe.siEntriesId || '' },
+    { ...m[8],  render: pe => pe.eligibility || '' },
+    { ...m[9],  render: pe => pe.email || '' },
+    { ...m[10], render: pe => pe.address1 || '' },
+    { ...m[11], render: pe => pe.address2 || '' },
+    { ...m[12], render: pe => pe.town || '' },
+    { ...m[13], render: pe => pe.county || '' },
+    { ...m[14], render: pe => pe.postcode || '' },
+    { ...m[15], render: pe => pe.country || '' },
+    { ...m[16], render: pe => pe.telephone || '' },
+    { ...m[17], render: pe => pe.mobile || '' },
+    { ...m[18], render: pe => pe.contactName || '' },
+    { ...m[19], render: pe => pe.contactTelephone || '' },
+    { ...m[20], render: pe => pe.medical || '' },
+    { ...m[21], render: pe => pe.carReg || '' },
+  ];
+})();
 
 export function renderPreEntries() {
   const preEntries = getSortedPreEntries();
-  const tbody = document.getElementById('pre-entries-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = preEntries.map(pe => {
-    const name = cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim());
-    return `<tr>
-      <td>${pe.participantNumber || ''}</td>
-      <td>${name}</td>
-      <td>${pe.gender || ''}</td>
-      <td>${pe.dob || ''}</td>
-      <td>${pe.club || ''}</td>
-      <td>${pe.category || ''}</td>
-      <td>${pe.fraNumber || ''}</td>
-      <td>${pe.siEntriesId || ''}</td>
-      <td>${pe.eligibility || ''}</td>
-      <td>${pe.email || ''}</td>
-      <td>${pe.address1 || ''}</td>
-      <td>${pe.address2 || ''}</td>
-      <td>${pe.town || ''}</td>
-      <td>${pe.county || ''}</td>
-      <td>${pe.postcode || ''}</td>
-      <td>${pe.country || ''}</td>
-      <td>${pe.telephone || ''}</td>
-      <td>${pe.mobile || ''}</td>
-      <td>${pe.contactName || ''}</td>
-      <td>${pe.contactTelephone || ''}</td>
-      <td>${pe.medical || ''}</td>
-      <td>${pe.carReg || ''}</td>
-    </tr>`;
-  }).join('');
+  renderTable('pre-entries-tbody', PRE_ENTRY_COLS, preEntries);
   setHTML('pre-entry-count', `${preEntries.length} pre-entries`);
 }
 
@@ -77,16 +75,6 @@ export async function importSIEntriesFromFile() {
   renderPeople();
 }
 
-export async function runLoadPreEntries() {
-  showBusy('Loading pre-entries…');
-  const result = await loadPreEntries();
-  showBusy('');
-  if (result.errors.length) showStatus(result.errors.join('; '), true);
-  else showStatus(`${result.added} entries added, ${result.updated} updated.`);
-  renderEntries();
-  renderHome();
-}
-
 export async function runClearPreEntries() {
   if (!await showConfirmDialog('Clear all pre-entries?', 'Clear', true)) return;
   await clearSIEntries();
@@ -95,7 +83,6 @@ export async function runClearPreEntries() {
 }
 
 export function wirePreEntries() {
-  on('btn-import-si-entries',   'click', importSIEntriesFromFile);
-  on('btn-load-pre-to-entries', 'click', runLoadPreEntries);
-  on('btn-clear-pre-entries',   'click', runClearPreEntries);
+  on('btn-import-si-entries', 'click', importSIEntriesFromFile);
+  on('btn-clear-pre-entries', 'click', runClearPreEntries);
 }

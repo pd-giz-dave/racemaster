@@ -58,9 +58,9 @@ function parsePreEntryRow(r) {
   const medical    = get('Emergency Details - Medical Conditions');
   const carReg     = get('Emergency Details - Car Registration');
 
-  // Normalise gender
+  // Normalise gender — leave blank if not recognised so verify can flag it
   const genderFirst = genderRaw.toUpperCase().charAt(0);
-  const gender = genderFirst === 'F' ? GENDER.FEMALE : GENDER.MALE;
+  const gender = genderFirst === 'F' ? GENDER.FEMALE : genderFirst === 'M' ? GENDER.MALE : '';
 
   return {
     participantNumber, siEntriesId, firstName, lastName, gender, dob,
@@ -130,6 +130,7 @@ export function verifySIEntries() {
   if (state.preEntries.every(pe => !pe.participantNumber))           missing.push('participant number');
   if (state.preEntries.every(pe => !pe.firstName && !pe.lastName))   missing.push('name');
   if (state.preEntries.every(pe => !pe.dob))                         missing.push('date of birth');
+  if (state.preEntries.every(pe => !pe.gender))                      missing.push('gender');
   if (missing.length) {
     issues.push({ issue: `CSV format not recognised — required columns absent: ${missing.join(', ')}` });
     return issues;
@@ -147,6 +148,9 @@ export function verifySIEntries() {
     }
     if (!dob) {
       issues.push({ row: i+1, name, issue: 'Missing or invalid date of birth' });
+    }
+    if (!pe.gender) {
+      issues.push({ row: i+1, name, issue: 'Missing or unrecognised gender' });
     }
 
     const key = `${name.toUpperCase()}|${dob}`;
@@ -179,9 +183,4 @@ export function getSortedPreEntries() {
     const fb = (b.firstName || '').toUpperCase();
     return fa < fb ? -1 : fa > fb ? 1 : 0;
   });
-}
-
-/** Count pre-entries */
-export function getPreEntryCount() {
-  return state.preEntries.length;
 }

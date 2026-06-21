@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-// benign line to edit to force a server restart - #
-
 const http   = require('http');
 const fs     = require('fs');
 const path        = require('path');
@@ -473,9 +471,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\nRaceMaster dev server → http://${HOST}:${PORT}`);
-  console.log(`Data directory        → ${DATA_DIR}`);
-  console.log(`Users file            → ${USERS_FILE}`);
-  console.log(`Admins file           → ${ADMINS_FILE}`);
-  console.log(`Sessions file         → ${SESSIONS_FILE}\n`);
+  console.log(`\nRaceMaster server → http://${HOST}:${PORT}`);
+  console.log(  `Data directory    → ${DATA_DIR}`);
+  console.log(  `Users file        → ${USERS_FILE}`);
+  console.log(  `Admins file       → ${ADMINS_FILE}`);
+  console.log(  `Sessions file     → ${SESSIONS_FILE}\n`);
 });

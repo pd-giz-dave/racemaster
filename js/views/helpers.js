@@ -3,12 +3,27 @@
 import { state, saveRoles } from '../state.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
-  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm,
+  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
   updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
+  renderTable,
 } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { capitalise, ciEq, showBusy, normaliseClub } from '../utils.js';
 import { isBanned } from '../entries.js';
 import { normaliseGender } from '../data.js';
+
+const HELPER_COLS = (() => {
+  const m = TABLES.helpers;
+  return [
+    { ...m[0], render: h => h.number },
+    { ...m[1], render: h => escHtml(h.name || '') + (isBanned(state.people.find(p => ciEq(p.name, h.name || ''))) ? ' (banned)' : '') },
+    { ...m[2], render: h => escHtml(h.club || '') },
+    { ...m[3], render: h => escHtml(h.role || '') },
+    { ...m[4], render: () => `
+      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
+      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
+  ];
+})();
 
 // ---- Module state ----
 
@@ -18,26 +33,9 @@ export let editingNumber = 0;
 
 export function renderHelpers() {
   const helpers = getSortedHelpers();
-  const tbody = document.getElementById('helpers-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = helpers.map(h => `
-    <tr data-num="${h.number}">
-      <td>${h.number}</td>
-      <td>${(h.name || '') + (isBanned(state.people.find(p => ciEq(p.name, h.name || ''))) ? ' (banned)' : '')}</td>
-      <td>${h.club || ''}</td>
-      <td>${h.role || ''}</td>
-      <td>
-        <button class="btn-sm btn-edit btn-edit-helper"  data-num="${h.number}">Edit</button>
-        <button class="btn-sm btn-delete btn-del-helper" data-num="${h.number}">Del</button>
-      </td>
-    </tr>`).join('');
-  tbody.querySelectorAll('.btn-edit-helper').forEach(b =>
-    b.addEventListener('click', async () => {
-      if (!await showConfirmDialog(`Edit helper ${b.dataset.num}?`, 'Edit')) return;
-      fillFormForEdit(+b.dataset.num);
-    }));
-  tbody.querySelectorAll('.btn-del-helper').forEach(b =>
-    b.addEventListener('click', () => confirmDeleteHelper(+b.dataset.num)));
+  renderTable('helpers-tbody', HELPER_COLS, helpers, {
+    rowAttrs: h => ({ 'data-num': h.number }),
+  });
   setHTML('helper-count-display', `${helpers.length} helpers`);
   updateDatalistClubs();
   updateDatalistRoles();
@@ -258,4 +256,16 @@ export function wireHelpers() {
 
   // ---- Enter submits, Tab wraps within the form ----
   wireFormFocusTrap('helper-form-fields', submitHelperForm);
+
+  document.getElementById('helpers-tbody')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const num = +btn.closest('[data-num]')?.dataset.num;
+    if (btn.dataset.action === 'edit') {
+      if (!await showConfirmDialog(`Edit helper ${num}?`, 'Edit')) return;
+      fillFormForEdit(num);
+    } else if (btn.dataset.action === 'del') {
+      confirmDeleteHelper(num);
+    }
+  });
 }

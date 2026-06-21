@@ -37,6 +37,7 @@ export function renderEvent() {
     'ev-start-time':         ev.startTime,
     'ev-categories':         ev.categories || 'FRA',
     'ev-first-bib':          ev.firstBibNumber,
+    'ev-first-dibber':       ev.firstDibberNumber,
     'ev-entry-limit':        ev.entryLimit,
     'ev-timing-method':      ev.timingMethod,
     'ev-junior-limit':       ev.juniorLimit,
@@ -107,6 +108,7 @@ export async function saveEventForm() {
   ev.startTime                  = val('ev-start-time');
   ev.juniorStartTime            = val('ev-junior-start-time');
   ev.firstBibNumber             = +val('ev-first-bib') || 1;
+  ev.firstDibberNumber          = +val('ev-first-dibber') || 1;
   ev.entryLimit                 = +val('ev-entry-limit') || 200;
   ev.timingMethod               = val('ev-timing-method');
   ev.juniorLimit                = val('ev-junior-limit');

@@ -179,6 +179,35 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 
 .view-header h2 { font-size: 1.1rem; font-weight: 600; }
 
+.btn-help {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.btn-help.active { background: var(--accent); color: #fff; }
+
+.view-help {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+.view-help p { margin: 0 0 6px; }
+.view-help p:last-child { margin-bottom: 0; }
+.view-help strong { color: var(--accent); }
+
 /* ---- Cards ---- */
 .card {
   background: var(--panel);

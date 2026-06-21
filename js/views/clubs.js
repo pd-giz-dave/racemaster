@@ -1,10 +1,40 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs } from '../ui.js';
+import { escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { isBanned } from '../entries.js';
 import { personEditCells, readPersonCells } from './people.js';
 import { findSimilarPairs } from '../utils.js';
+
+const CLUBS_COLS = (() => {
+  const m = TABLES.clubs;
+  return [
+    { ...m[0], render: ([name]) => `<input type="checkbox" data-club="${escHtml(name)}"${selectedClubs.has(name) ? ' checked' : ''}>` },
+    { ...m[1], render: ([name]) => name ? escHtml(name) : '<em style="color:var(--muted)">(no club)</em>' },
+    { ...m[2], render: ([, d]) => d.count },
+    { ...m[3], render: ([, d]) => d.lastSeen || '' },
+  ];
+})();
+
+const CLUB_MEMBER_COLS = (() => {
+  const m = TABLES.people;
+  return [
+    { ...m[0],  render: ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '') },
+    { ...m[1],  render: ({ p }) => p.gender || '' },
+    { ...m[2],  render: ({ p }) => p.dob || '' },
+    { ...m[3],  render: ({ p }) => escHtml(p.club || '') },
+    { ...m[4],  render: ({ p }) => p.fraNumber || '' },
+    { ...m[5],  render: ({ p }) => p.lastSeen || '' },
+    { ...m[6],  render: ({ p }) => p.seenTotal || 0 },
+    { ...m[7],  render: ({ p }) => p.lastHelped || '' },
+    { ...m[8],  render: ({ p }) => p.helpedTotal || 0 },
+    { ...m[9],  render: ({ p }) => p.banned || '' },
+    { ...m[10], render: () => `
+      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
+      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
+  ];
+})();
 
 const selectedClubs = new Set();
 
@@ -23,16 +53,8 @@ function getClubs() {
 }
 
 export function renderClubs() {
-  const tbody = document.getElementById('clubs-tbody');
-  if (!tbody) return;
   const clubs = getClubs();
-  tbody.innerHTML = clubs.map(([name, d]) => `
-    <tr>
-      <td><input type="checkbox" data-club="${escHtml(name)}"${selectedClubs.has(name) ? ' checked' : ''}></td>
-      <td>${name ? escHtml(name) : '<em style="color:var(--muted)">(no club)</em>'}</td>
-      <td>${d.count}</td>
-      <td>${d.lastSeen || ''}</td>
-    </tr>`).join('');
+  renderTable('clubs-tbody', CLUBS_COLS, clubs);
   setHTML('clubs-count', `${clubs.length} clubs`);
 }
 
@@ -46,23 +68,13 @@ function renderClubMembers() {
   }
   const visible = state.people.map((p, i) => ({ p, i }))
     .filter(({ p }) => selectedClubs.has((p.club || '').trim()));
-  tbody.innerHTML = visible.map(({ p, i }) => `
-    <tr id="club-member-row-${i}"${isBanned(p) ? ' class="row-banned"' : ''}>
-      <td>${escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '')}</td>
-      <td>${p.gender || ''}</td>
-      <td>${p.dob || ''}</td>
-      <td>${escHtml(p.club || '')}</td>
-      <td>${p.fraNumber || ''}</td>
-      <td>${p.lastSeen || ''}</td>
-      <td>${p.seenTotal || 0}</td>
-      <td>${p.lastHelped || ''}</td>
-      <td>${p.helpedTotal || 0}</td>
-      <td>${p.banned || ''}</td>
-      <td>
-        <button class="btn-sm btn-edit"   data-idx="${i}">Edit</button>
-        <button class="btn-sm btn-delete" data-idx="${i}">Del</button>
-      </td>
-    </tr>`).join('');
+  renderTable('club-members-tbody', CLUB_MEMBER_COLS, visible, {
+    rowAttrs: ({ p, i }) => ({
+      id: `club-member-row-${i}`,
+      'data-idx': i,
+      class: isBanned(p) ? 'row-banned' : '',
+    }),
+  });
   setHTML('clubs-members-count', `${visible.length} member${visible.length !== 1 ? 's' : ''}`);
 }
 
@@ -241,10 +253,10 @@ export function wireClubs() {
   });
 
   document.getElementById('club-members-tbody')?.addEventListener('click', e => {
-    const btn = e.target.closest('button[data-idx]');
+    const btn = e.target.closest('[data-action]');
     if (!btn) return;
-    const idx = +btn.dataset.idx;
-    if (btn.classList.contains('btn-edit'))        editClubMemberRow(idx);
-    else if (btn.classList.contains('btn-delete')) deleteClubMemberRow(idx);
+    const idx = +btn.closest('[data-idx]')?.dataset.idx;
+    if (btn.dataset.action === 'edit') editClubMemberRow(idx);
+    else if (btn.dataset.action === 'del') deleteClubMemberRow(idx);
   });
 }

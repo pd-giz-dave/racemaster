@@ -1,11 +1,31 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, updateDatalistClubs } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, updateDatalistClubs, renderTable } from '../ui.js';
+import { TABLES } from '../locale.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
 import { isBanned } from '../entries.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
+
+const PEOPLE_COLS = (() => {
+  const m = TABLES.people;
+  return [
+    { ...m[0],  render: ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '') },
+    { ...m[1],  render: ({ p }) => p.gender || '' },
+    { ...m[2],  render: ({ p }) => p.dob || '' },
+    { ...m[3],  render: ({ p }) => escHtml(p.club || '') },
+    { ...m[4],  render: ({ p }) => p.fraNumber || '' },
+    { ...m[5],  render: ({ p }) => p.lastSeen || '' },
+    { ...m[6],  render: ({ p }) => p.seenTotal || 0 },
+    { ...m[7],  render: ({ p }) => p.lastHelped || '' },
+    { ...m[8],  render: ({ p }) => p.helpedTotal || 0 },
+    { ...m[9],  render: ({ p }) => p.banned || '' },
+    { ...m[10], render: () => `
+      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
+      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
+  ];
+})();
 
 let peopleFilter    = '';
 let showBannedOnly  = false;
@@ -33,23 +53,13 @@ export function renderPeople() {
     return (p.name || '').toLowerCase().includes(low) ||
            (p.club || '').toLowerCase().includes(low);
   });
-  tbody.innerHTML = visible.map(({ p, i }) => `
-    <tr id="person-row-${i}"${isBanned(p) ? ' class="row-banned"' : ''}>
-      <td>${escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '')}</td>
-      <td>${p.gender || ''}</td>
-      <td>${p.dob || ''}</td>
-      <td>${escHtml(p.club || '')}</td>
-      <td>${p.fraNumber || ''}</td>
-      <td>${p.lastSeen || ''}</td>
-      <td>${p.seenTotal || 0}</td>
-      <td>${p.lastHelped || ''}</td>
-      <td>${p.helpedTotal || 0}</td>
-      <td>${p.banned || ''}</td>
-      <td>
-        <button class="btn-sm btn-edit"   data-idx="${i}">Edit</button>
-        <button class="btn-sm btn-delete" data-idx="${i}">Del</button>
-      </td>
-    </tr>`).join('');
+  renderTable('people-tbody', PEOPLE_COLS, visible, {
+    rowAttrs: ({ p, i }) => ({
+      id: `person-row-${i}`,
+      'data-idx': i,
+      class: isBanned(p) ? 'row-banned' : '',
+    }),
+  });
   setHTML('people-count', `${visible.length} of ${total} people`);
 }
 
@@ -403,11 +413,11 @@ export function wirePeople() {
   });
 
   document.getElementById('people-tbody')?.addEventListener('click', e => {
-    const btn = e.target.closest('button[data-idx]');
+    const btn = e.target.closest('[data-action]');
     if (!btn) return;
-    const idx = +btn.dataset.idx;
-    if (btn.classList.contains('btn-edit'))        editPersonRow(idx);
-    else if (btn.classList.contains('btn-delete')) deletePersonRow(idx);
+    const idx = +btn.closest('[data-idx]')?.dataset.idx;
+    if (btn.dataset.action === 'edit') editPersonRow(idx);
+    else if (btn.dataset.action === 'del') deletePersonRow(idx);
   });
 
   document.addEventListener('keydown', e => {

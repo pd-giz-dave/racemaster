@@ -136,6 +136,10 @@
             <label for="ev-first-bib">First Bib Number</label>
             <input type="number" id="ev-first-bib" min="1" value="1">
           </div>
+          <div class="form-field">
+            <label for="ev-first-dibber">First Dibber Number</label>
+            <input type="number" id="ev-first-dibber" min="1" value="1">
+          </div>
         </div>
         <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:8px">
           <input type="checkbox" id="ev-has-pairs">
@@ -374,14 +378,7 @@
         <div class="table-panel">
           <div class="table-scroll">
             <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Bib</th><th>Name</th><th>Club</th>
-                  <th>DoB</th><th>Cat</th><th>Course</th>
-                  <th>Dibber</th><th>Pre-No</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+              <thead></thead>
               <tbody id="entries-tbody"></tbody>
             </table>
           </div>
@@ -445,9 +442,7 @@
         <div class="table-panel">
           <div class="table-scroll">
             <table class="data-table">
-              <thead>
-                <tr><th>#</th><th>Name</th><th>Club</th><th>Role</th><th>Actions</th></tr>
-              </thead>
+              <thead></thead>
               <tbody id="helpers-tbody"></tbody>
             </table>
           </div>
@@ -472,24 +467,13 @@
         </p>
         <div class="btn-row">
           <button class="btn" id="btn-import-si-entries">Import CSV File</button>
-          <button class="btn btn-secondary" id="btn-load-pre-to-entries" style="display:none">Load to Entries</button>
           <button class="btn btn-danger" id="btn-clear-pre-entries">Clear All</button>
         </div>
       </div>
 
       <div class="table-scroll">
         <table class="data-table">
-          <thead>
-            <tr>
-              <th>Ref</th><th>Name</th><th>G</th><th>DoB</th>
-              <th>Club</th><th>Cat</th><th>FRA#</th><th>SI ID</th><th>Eligibility</th>
-              <th>Email</th><th>Address 1</th><th>Address 2</th><th>Town</th>
-              <th>County</th><th>Postcode</th><th>Country</th>
-              <th>Telephone</th><th>Mobile</th>
-              <th>Emerg. Contact</th><th>Emerg. Tel</th>
-              <th>Medical</th><th>Car Reg</th>
-            </tr>
-          </thead>
+          <thead></thead>
           <tbody id="pre-entries-tbody"></tbody>
         </table>
       </div>
@@ -562,9 +546,7 @@
         <div class="table-panel">
           <div class="table-scroll">
             <table class="data-table">
-              <thead>
-                <tr><th>Line</th><th>Event</th><th>Clock</th><th>Bib</th><th>Name</th><th>Cat</th><th>Course</th><th>Actions</th></tr>
-              </thead>
+              <thead></thead>
               <tbody id="finishers-tbody"></tbody>
             </table>
           </div>
@@ -597,7 +579,7 @@
       <div class="tab-panel active" id="safety-tab-outstanding">
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Actions</th></tr></thead>
+            <thead></thead>
             <tbody id="safety-outstanding-tbody"></tbody>
           </table>
         </div>
@@ -606,7 +588,7 @@
       <div class="tab-panel" id="safety-tab-dnf">
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Actions</th></tr></thead>
+            <thead></thead>
             <tbody id="safety-dnf-tbody"></tbody>
           </table>
         </div>
@@ -615,7 +597,7 @@
       <div class="tab-panel" id="safety-tab-finished">
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Pos</th><th>Time</th></tr></thead>
+            <thead></thead>
             <tbody id="safety-finished-tbody"></tbody>
           </table>
         </div>
@@ -624,7 +606,7 @@
       <div class="tab-panel" id="safety-tab-early">
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Start Time</th></tr></thead>
+            <thead></thead>
             <tbody id="safety-early-tbody"></tbody>
           </table>
         </div>
@@ -679,9 +661,7 @@
         <p id="results-senior-summary" style="margin:6px 0;font-size:0.875rem;color:var(--muted)"></p>
         <div class="table-scroll">
           <table class="data-table">
-            <thead>
-              <tr><th>Course</th><th>Bib</th><th>Pos</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th style="text-align:right">%Ldrs</th><th>Behind</th></tr>
-            </thead>
+            <thead></thead>
             <tbody id="results-senior-tbody"></tbody>
           </table>
         </div>
@@ -690,9 +670,7 @@
       <div class="tab-panel" id="tab-results-junior">
         <div class="table-scroll">
           <table class="data-table">
-            <thead>
-              <tr><th>Course</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th></tr>
-            </thead>
+            <thead></thead>
             <tbody id="results-junior-tbody"></tbody>
           </table>
         </div>
@@ -702,9 +680,7 @@
         <p id="prizes-hint"></p>
         <div class="table-scroll">
           <table class="data-table" id="prizes-table">
-            <thead>
-              <tr><th>Pos</th><th>Cat</th><th>In Cat</th><th>Time</th><th>Name</th></tr>
-            </thead>
+            <thead></thead>
             <tbody id="prizes-tbody"></tbody>
           </table>
         </div>
@@ -713,9 +689,7 @@
       <div class="tab-panel" id="tab-results-helpers">
         <div class="table-scroll">
           <table class="data-table">
-            <thead>
-              <tr><th>Role</th><th>Name</th><th>Club</th><th>Cat</th><th>Last Raced</th></tr>
-            </thead>
+            <thead></thead>
             <tbody id="results-helpers-tbody"></tbody>
           </table>
         </div>
@@ -775,9 +749,7 @@
 
       <div id="people-main-table" class="table-scroll">
         <table class="data-table">
-          <thead>
-            <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Seen</th><th>Last Helped</th><th>Helped</th><th>Banned Until</th><th>Actions</th></tr>
-          </thead>
+          <thead></thead>
           <tbody id="people-tbody"></tbody>
         </table>
       </div>
@@ -834,9 +806,7 @@
         </div>
         <div id="clubs-main-table" class="table-scroll">
           <table class="data-table">
-            <thead>
-              <tr><th></th><th>Name</th><th>People</th><th>Last Seen</th></tr>
-            </thead>
+            <thead></thead>
             <tbody id="clubs-tbody"></tbody>
           </table>
         </div>
@@ -846,9 +816,7 @@
         <p id="clubs-members-count" style="margin:4px 8px;font-size:0.875rem;color:var(--muted);flex-shrink:0"></p>
         <div class="table-scroll">
           <table class="data-table">
-            <thead>
-              <tr><th>Name</th><th>G</th><th>DoB</th><th>Club</th><th>FRA</th><th>Last Seen</th><th>Seen</th><th>Last Helped</th><th>Helped</th><th>Banned Until</th><th>Actions</th></tr>
-            </thead>
+            <thead></thead>
             <tbody id="club-members-tbody"></tbody>
           </table>
         </div>
@@ -873,9 +841,7 @@
       </div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead>
-            <tr><th>Role</th><th>Description</th><th>Actions</th></tr>
-          </thead>
+          <thead></thead>
           <tbody id="roles-tbody"></tbody>
         </table>
       </div>
@@ -898,9 +864,7 @@
       </div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead>
-            <tr><th>Short Code</th><th>Long Code</th><th>Owner</th><th>Notes</th><th>Actions</th></tr>
-          </thead>
+          <thead></thead>
           <tbody id="dibbers-tbody"></tbody>
         </table>
       </div>
@@ -928,7 +892,7 @@
         <div class="table-scroll">
           <table class="data-table"><thead>
             <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th>MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">Actions</th></tr>
+            <tr><th title="Minimum age for this category">MinAge</th><th title="Category code (e.g. MV40)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Minimum age for this category">MinAge</th><th title="Category code (e.g. FV50)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Edit or delete">Actions</th></tr>
           </thead><tbody id="categories-tbody"></tbody></table>
         </div>
       </div>
@@ -942,7 +906,7 @@
         <div class="table-scroll">
           <table class="data-table"><thead>
             <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th>MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">Actions</th></tr>
+            <tr><th title="Minimum age for this category">MinAge</th><th title="Category code (e.g. MV40)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Minimum age for this category">MinAge</th><th title="Category code (e.g. FV50)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Edit or delete">Actions</th></tr>
           </thead><tbody id="fra-preset-tbody"></tbody></table>
         </div>
       </div>
@@ -956,7 +920,7 @@
         <div class="table-scroll">
           <table class="data-table"><thead>
             <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th>MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">MinAge</th><th>Cat</th><th>Ref</th><th>MaxDist</th><th class="col-sep">Actions</th></tr>
+            <tr><th title="Minimum age for this category">MinAge</th><th title="Category code (e.g. MV40)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Minimum age for this category">MinAge</th><th title="Category code (e.g. FV50)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Edit or delete">Actions</th></tr>
           </thead><tbody id="wfra-preset-tbody"></tbody></table>
         </div>
       </div>
