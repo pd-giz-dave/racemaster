@@ -1,46 +1,68 @@
 /* ============================================================
-   Finish Sheet
+   Finish Sheet — 2-column position grid, fills A4 exactly
+   @page for this form: margin 0 (injected in preview window)
+   Padding provides the 10mm content margin; suppresses browser date/title headers.
    ============================================================ */
-.finish-sheet-page { font-size: 8pt; }
 
-.fs-header {
+.finish-sheet-page {
+  background: #fff;
+  width: 210mm;
+  height: 297mm;
+  padding: 10mm;
+  box-sizing: border-box;
+  margin: 0 auto 20px;
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+}
+
+.finish-sheet-page:last-child { page-break-after: auto; }
+
+@media print {
+  .finish-sheet-page { margin: 0; }
+}
+
+.fs-hf {
+  flex-shrink: 0;
+  display: flex;
+  font-size: 10pt;
+}
+
+.fs-label {
+  flex: 1;
   text-align: center;
-  border-bottom: 0.5mm solid var(--print-black);
-  margin-bottom: 3mm;
-  padding-bottom: 2mm;
+  padding: 1mm 0;
 }
 
-.fs-title { font-size: 13pt; font-weight: bold; }
-.fs-sub   { font-size: 9pt; margin-top: 1mm; }
-
-.finish-sheet-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 8pt;
+.fs-cols {
+  flex: 1;
+  display: flex;
+  min-height: 0;
 }
 
-.finish-sheet-table th {
-  background: var(--print-header-bg);
-  border: 0.3mm solid var(--print-border);
-  padding: 1.5mm 2mm;
+.fs-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 0.5mm solid #000;
+  min-width: 0;
+}
+
+.fs-box {
+  flex: 1;
+  border: 0.5mm solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 2mm;
+  font-size: 14mm;
   font-weight: bold;
+  line-height: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 
-.finish-sheet-table td {
-  border: 0.3mm solid var(--print-border-mid);
-  height: 8mm;
-  padding: 1mm 2mm;
-  vertical-align: middle;
-}
-
-.col-fpos  { width: 10mm; text-align: center; font-weight: bold; }
-.col-ftime { width: 28mm; font-family: monospace; font-size: 9pt; }
-.col-fbib  { width: 18mm; font-size: 11pt; font-weight: bold; }
-.col-fname { }  /* takes remaining width */
-
-.fs-footer {
-  margin-top: 3mm;
-  font-size: 7.5pt;
-  border-top: 0.3mm solid var(--print-border);
-  padding-top: 1.5mm;
+.fs-clock {
+  flex: 1;
+  text-align: center;
 }

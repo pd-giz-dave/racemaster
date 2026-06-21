@@ -1,21 +1,19 @@
 'use strict';
 
 import { state } from './state.js';
-import { TIMING, COURSE } from './constants.js';
+import { COURSE } from './constants.js';
 import { normaliseTime, timeToSeconds, secondsToTime, ciEq } from './utils.js';
-
-
 
 /** Returns the timing method string ('Stopwatch', 'Dibbers', or 'None') for a course. */
 export function getTimingMethod(course) {
   const isJunior = course && ciEq(course, COURSE.JUNIORS);
   const raw = isJunior ? state.event.juniorTimingMethod : state.event.timingMethod;
-  return raw || TIMING.STOPWATCH;
+  return raw || 'Stopwatch';
 }
 
 /** Return true if the given course uses dibbers */
 export function usingDibbers(course) {
-  return ciEq(getTimingMethod(course), TIMING.DIBBERS);
+  return ciEq(getTimingMethod(course), 'Dibbers');
 }
 
 /**
@@ -39,7 +37,7 @@ export function usingDibbers(course) {
  */
 export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
   const course = entry.course || COURSE.SENIORS;
-  if (ciEq(getTimingMethod(course), TIMING.DIBBERS)) return finishTime;
+  if (ciEq(getTimingMethod(course), 'Dibbers')) return finishTime;
 
   const normFinishTime = normaliseTime(finishTime);
   if (!normFinishTime) return finishTime;

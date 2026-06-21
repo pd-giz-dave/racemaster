@@ -42,8 +42,8 @@ function openPopup({ title, cssLinks = [], inlineCSS = null, html }) {
 
 export { openPopup };
 
-export function openPrintPreview(contentHTML, title = 'Print Preview', formCss = null) {
+export function openPrintPreview(contentHTML, title = 'Print Preview', formCss = null, inlineCSS = null) {
   const cssLinks = ['css/print.css'];
   if (formCss) cssLinks.push(formCss);
-  openPopup({ title, cssLinks, html: contentHTML });
+  openPopup({ title, cssLinks, html: contentHTML, inlineCSS });
 }

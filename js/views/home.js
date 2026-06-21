@@ -15,30 +15,31 @@ function eventDetails(ev) {
 
   if (ev.date)                        row('Date',                 ev.date);
   if (ev.distance)                    row('Distance',             `${ev.distance} km`);
-  if (ev.startTime)                   row('Start time',           ev.startTime);
-  if (ev.firstBibNumber)              row('First bib',            ev.firstBibNumber);
   if (ev.categories)                  row('Categories',           ev.categories);
+  if (ev.firstBibNumber)              row('First bib',            ev.firstBibNumber);
+  if (ev.firstDibberNumber)           row('First dibber',         ev.firstDibberNumber);
+  if (ev.startTime)                   row('Start time',           ev.startTime);
   if (ev.entryLimit)                  row('Entry limit',          ev.entryLimit);
-  if (ev.timingMethod && ev.timingMethod !== 'None')
-                                      row('Senior timing',        ev.timingMethod);
-  if (ev.prizeDepthOverall)           row('Overall prizes',       ev.prizeDepthOverall);
-  if (ev.prizeDepthPerCategory)       row('Category prizes',      ev.prizeDepthPerCategory);
+  if (ev.timingMethod)                row('Senior timing',        ev.timingMethod);
   if (ev.maleRecord || ev.femaleRecord) gap();
   if (ev.maleRecord)                  row('Male record',          ev.maleRecord);
   if (ev.femaleRecord)                row('Female record',        ev.femaleRecord);
+  if (ev.prizeDepthOverall)           row('Overall prizes',       ev.prizeDepthOverall);
+  if (ev.prizeDepthPerCategory)       row('Category prizes',      ev.prizeDepthPerCategory);
   gap();
 
   const hasJuniors = ev.juniorLimit && ev.juniorLimit !== 'None';
   if (hasJuniors) {
-    row('Junior limit',                                           ev.juniorLimit);
-    if (ev.juniorStartTime)           row('Junior start',        ev.juniorStartTime);
-    if (+ev.juniorEntryLimit > 0)     row('Junior entry limit',  ev.juniorEntryLimit);
-    if (ev.juniorTimingMethod && ev.juniorTimingMethod !== 'None')
-                                      row('Junior timing',       ev.juniorTimingMethod);
-    if (ev.juniorPrizeDepthPerCategory) row('Junior prizes',     ev.juniorPrizeDepthPerCategory);
+                                        row('Junior limit',       ev.juniorLimit);
+    if (ev.juniorStartTime)             row('Junior start',       ev.juniorStartTime);
+    if (+ev.juniorEntryLimit > 0)       row('Junior entry limit', ev.juniorEntryLimit);
+    if (ev.juniorTimingMethod)          row('Junior timing',      ev.juniorTimingMethod);
+    if (ev.juniorPrizeDepthPerCategory) row('Junior cat prizes',  ev.juniorPrizeDepthPerCategory);
+  } else if (rows.length > 0) {
+    row('No juniors', '');
   }
 
-  if (!rows.length) return '';
+  if (!rows.length) row('Nothing yet', '');
   return `<table class="home-ev-table"><tbody>${rows.join('')}</tbody></table>`;
 }
 
@@ -62,20 +63,20 @@ function eventStatistics() {
     rows.push(`<tr><td class="home-ev-label"${s}>${label}</td><td${s}>${value}</td></tr>`);
   };
 
-  row('Senior entries', seniorEntries);
+  if (seniorEntries > 0) row('Senior entries', seniorEntries);
   if (juniorEntries > 0) row('Junior entries', juniorEntries);
-  row('Senior finishers', seniorFinish);
+  if (seniorEntries > 0) row('Senior finishers', seniorFinish);
   if (juniorEntries > 0) row('Junior finishers', juniorFinish);
-  row('Seniors outstanding', seniorOut, seniorOut > 0 ? 'var(--danger)' : 'var(--accent)');
+  if (seniorEntries > 0) row('Seniors outstanding', seniorOut, seniorOut > 0 ? 'var(--danger)' : 'var(--accent)');
   if (juniorEntries > 0) row('Juniors outstanding', juniorOut, juniorOut > 0 ? 'var(--danger)' : 'var(--accent)');
-  row('Helpers registered', helpers);
+  if (helpers       > 0) row('Helpers registered', helpers);
   if (preImported > 0) {
     row('Pre-entries imported', preImported);
     row('Pre-entry no-shows', preImported - preRegistered);
   }
-  row('Last bib allocated', lastBib || '—');
+  if (lastBib > 0) row('Last bib allocated', lastBib);
   if (lastDibber > 0) row('Last dibber allocated', lastDibber);
-  if (siCount > 0)    row('SI results imported', siCount);
+  if (siCount > 0) row('SI results imported', siCount);
 
   // Category breakdown — sort active categories by maleMinAge ascending
   const entryCatMap = {};
@@ -110,13 +111,13 @@ function eventStatistics() {
       <table class="home-stats-table"><thead>${header}</thead><tbody>${trs}</tbody></table>`;
   }
 
-  if (!rows.length && !catSection) return '';
+  if (!rows.length && !catSection) row('Nothing yet', '');
   return `<table class="home-ev-table"><tbody>${rows.join('')}</tbody></table>${catSection}`;
 }
 
 export function renderHome() {
   const ev = state.event;
-  setHTML('home-view-title',       ev.name ? `${ev.name} Summary` : 'Event Summary');
-  setHTML('home-event-details',    eventDetails(ev));
-  setHTML('home-statistics', eventStatistics());
+  setHTML('home-view-title', ev.name ? `${ev.name} Summary` : 'Event Summary');
+  setHTML('home-event-details', eventDetails(ev));
+  setHTML('home-statistics',    eventStatistics());
 }

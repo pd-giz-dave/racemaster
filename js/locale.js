@@ -46,7 +46,7 @@ export const TOOLTIPS = {
   'btn-print-junior-reg-sheet':  'Print a junior registration sheet',
   'btn-print-number-matrix':     'Print a grid showing all bib numbers',
   'btn-print-finish-senior':     'Print a blank senior finish sheet for recording finish order',
-  'btn-print-finish-junior':     'Print a blank junior finish sheet',
+  'btn-print-finish-junior':     'Print a blank junior finish sheet for recording finish order',
   'btn-print-results-senior':    'Print the formatted senior results table',
   'btn-print-results-junior':    'Print the formatted junior results table',
   'btn-print-prizes':            'Print the prize list',

@@ -1,41 +1,50 @@
 'use strict';
 
-import { state } from '../state.js';
-import { COURSE } from '../constants.js';
+import { openPrintPreview } from './preview.js';
 
-export function generateFinishSheetHTML(course, lines = 60) {
-  course = course || COURSE.SENIORS;
-  const event = state.event;
-  const pages = Math.ceil(lines / 30);
+const BOXES = 15;
+const PAGE_CSS = '@page { size: A4 portrait; margin: 0; }';
+const LABEL1 = 'Bib Number (or clock, juniors, seniors, ignore)';
+const LABEL2 = 'Event (blank or a time)';
+
+const hf = `
+  <div class="fs-hf">
+    <span class="fs-label">${LABEL1}</span>
+    <span class="fs-label">${LABEL2}</span>
+  </div>`;
+
+function generateFinishSheetHTML(limit) {
+  const total = +limit || 200;
+  const pages = Math.ceil((total + 1) / BOXES);
   let html = '';
 
   for (let p = 0; p < pages; p++) {
-    const startPos = p * 30 + 1;
-    const endPos   = Math.min(startPos + 29, lines);
-    html += `<div class="print-page finish-sheet-page">`;
-    html += `<div class="fs-header">
-      <div class="fs-title">${event.name || 'Race'} — Finish Sheet</div>
-      <div class="fs-sub">${course} &nbsp; ${event.date || ''}</div>
-    </div>`;
-    html += `<table class="finish-sheet-table">`;
-    html += `<thead><tr>
-      <th class="col-fpos">Pos</th>
-      <th class="col-ftime">Time</th>
-      <th class="col-fbib">Bib No</th>
-      <th class="col-fname">Name (office use)</th>
-    </tr></thead>`;
-    for (let pos = startPos; pos <= endPos; pos++) {
-      html += `<tr class="fs-row">
-        <td class="col-fpos">${pos}</td>
-        <td class="col-ftime"></td>
-        <td class="col-fbib"></td>
-        <td class="col-fname"></td>
-      </tr>`;
+    const start = p * BOXES;
+    let col1 = '', col2 = '';
+
+    for (let i = 0; i < BOXES; i++) {
+      const n = start + i;
+      const label = (p === 0 && i === 0)
+        ? `<span>${n}</span><span class="fs-clock">CLOCK</span>`
+        : n;
+      col1 += `<div class="fs-box">${label}</div>`;
+      col2 += `<div class="fs-box">${n}</div>`;
     }
-    html += `</table>`;
-    html += `<div class="fs-footer">Timekeeper signature: __________________________ &nbsp; Date: ${event.date || ''}</div>`;
-    html += `</div>`;
+
+    html += `
+      <div class="finish-sheet-page">
+        ${hf}
+        <div class="fs-cols">
+          <div class="fs-col">${col1}</div>
+          <div class="fs-col">${col2}</div>
+        </div>
+        ${hf}
+      </div>`;
   }
 
   return html;
+}
+
+export function openFinishSheetPreview(limit, title) {
+  openPrintPreview(generateFinishSheetHTML(limit), title, 'js/forms/finish-sheet.css', PAGE_CSS);
 }

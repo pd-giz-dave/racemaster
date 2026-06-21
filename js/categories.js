@@ -1,9 +1,45 @@
 'use strict';
 
 import { state } from './state.js';
-import { GENDER, COURSE, FRA_CATEGORIES, WFRA_CATEGORIES } from './constants.js';
+import { GENDER, COURSE } from './constants.js';
 import { normaliseDate, parseDate, ciEq } from './utils.js';
 
+// [maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist]
+export const FRA_CATEGORIES = [
+  [6,  'U10B', 'EOY', 1.5,  6, 'U10G', 'EOY', 1.5],
+  [10, 'U12B', 'EOY', 3,   10, 'U12G', 'EOY', 3],
+  [12, 'U14B', 'EOY', 5,   12, 'U14G', 'EOY', 5],
+  [14, 'U16B', 'EOY', 6,   14, 'U16G', 'EOY', 6],
+  [16, 'U18B', 'EOY', 8,   16, 'U18G', 'EOY', 8],
+  [18, 'U20B', 'EOY', 10,  18, 'U20G', 'EOY', 10],
+  [20, 'MU23', 'EOY', 999, 20, 'WU23', 'EOY', 999],
+  [23, 'MSEN', 'NOW', 999, 23, 'WSEN', 'NOW', 999],
+  [40, 'M40',  'NOW', 999, 40, 'W40',  'NOW', 999],
+  [45, 'M45',  'NOW', 999, 45, 'W45',  'NOW', 999],
+  [50, 'M50',  'NOW', 999, 50, 'W50',  'NOW', 999],
+  [55, 'M55',  'NOW', 999, 55, 'W55',  'NOW', 999],
+  [60, 'M60',  'NOW', 999, 60, 'W60',  'NOW', 999],
+  [65, 'M65',  'NOW', 999, 65, 'W65',  'NOW', 999],
+  [70, 'M70',  'NOW', 999, 70, 'W70',  'NOW', 999],
+  [75, 'M75',  'NOW', 999, 75, 'W75',  'NOW', 999],
+  [80, 'M80',  'NOW', 999, 80, 'W80',  'NOW', 999],
+];
+
+export const WFRA_CATEGORIES = [
+  [6,  'U10B', 'EOY', 1.5,  6, 'U10G', 'EOY', 1.5],
+  [10, 'U12B', 'EOY', 3,   10, 'U12G', 'EOY', 3],
+  [12, 'U14B', 'EOY', 5,   12, 'U14G', 'EOY', 5],
+  [14, 'U16B', 'EOY', 6,   14, 'U16G', 'EOY', 6],
+  [16, 'U18B', 'EOY', 8,   16, 'U18G', 'EOY', 8],
+  [18, 'U20B', 'EOY', 10,  18, 'U20G', 'EOY', 10],
+  [20, 'MU23', 'EOY', 999, 20, 'WU23', 'EOY', 999],
+  [23, 'MSEN', 'NOW', 999, 23, 'WSEN', 'NOW', 999],
+  [40, 'M40',  'NOW', 999, 40, 'W40',  'NOW', 999],
+  [50, 'M50',  'NOW', 999, 50, 'W50',  'NOW', 999],
+  [60, 'M60',  'NOW', 999, 60, 'W60',  'NOW', 999],
+  [70, 'M70',  'NOW', 999, 70, 'W70',  'NOW', 999],
+  [80, 'M80',  'NOW', 999, 80, 'W80',  'NOW', 999],
+];
 
 /** Get all male/open category names from state */
 export function getMaleCategories() {
@@ -146,7 +182,7 @@ export function genderFromCategory(category) {
     if (ciEq(row.femaleCat, category)) return GENDER.FEMALE;
     if (ciEq(row.maleCat,   category)) return GENDER.MALE;
   }
-  return GENDER.UNKNOWN;
+  return '';
 }
 
 /** Return the sort priority of a category (lower = higher priority for prizes) */

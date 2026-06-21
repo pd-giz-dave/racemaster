@@ -162,7 +162,7 @@
             <label for="ev-timing-method">Timing Method</label>
             <select id="ev-timing-method">
               <option value="Stopwatch">Stopwatch</option>
-              <option value="Dibbers">Dibbers (SI)</option>
+              <option value="Dibbers">Dibbers</option>
               <option value="None">None</option>
             </select>
           </div>
@@ -181,6 +181,10 @@
         <h3>Juniors</h3>
         <div class="form-grid">
           <div class="form-field">
+            <label for="ev-junior-limit">Junior Age Limit Category</label>
+            <select id="ev-junior-limit"></select>
+          </div>
+          <div class="form-field">
             <label for="ev-junior-start-time">Start Time (HH:MM:SS)</label>
             <input type="text" id="ev-junior-start-time" placeholder="11:00:00" data-normalise="time">
           </div>
@@ -191,14 +195,10 @@
           <div class="form-field">
             <label for="ev-junior-timing">Timing Method</label>
             <select id="ev-junior-timing">
-              <option value="None">None (same as seniors)</option>
               <option value="Stopwatch">Stopwatch</option>
-              <option value="Dibbers">Dibbers (SI)</option>
+              <option value="Dibbers">Dibbers</option>
+              <option value="None">None</option>
             </select>
-          </div>
-          <div class="form-field">
-            <label for="ev-junior-limit">Junior Age Limit Category</label>
-            <select id="ev-junior-limit"></select>
           </div>
         </div>
       </div>
@@ -276,6 +276,7 @@
 
       <div class="card">
         <h3>Finish Sheets</h3>
+        <p class="hint">Print on waterproof paper.</p>
         <div class="btn-row">
           <button class="btn btn-secondary" id="btn-print-finish-senior">Senior Finish Sheet</button>
           <button class="btn btn-secondary" id="btn-print-finish-junior">Junior Finish Sheet</button>

@@ -11,7 +11,7 @@ function buildPrizeListHTML(isNarrow) {
   const c         = isNarrow ? 'pln' : 'pl';
   const pageClass = isNarrow ? 'prize-list-narrow' : 'prize-list-page';
   const tblClass  = isNarrow ? 'pln-table' : 'prize-table';
-  const prizes    = getPrizes();
+  const prizes = getPrizes();
   const event     = state.event;
 
   let html = `<div class="print-page ${pageClass}">`;

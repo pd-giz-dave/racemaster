@@ -8,6 +8,22 @@ import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
+export const SI_TIMING_COL_NAMES = {
+  BIB_NUMBER:    'RaceNumber',
+  NUM_ENTRANTS:  'NumberCompetitors',
+  DIBBER_NUMBER: 'CardNumbers',
+  FRA_NUMBER:    'MembershipNumbers',
+  FORENAMES:     'Forenames',
+  SURNAMES:      'Surnames',
+  NAME:          'Name (Free Format)',
+  CATEGORY:      'Category',
+  CLUB:          'Club',
+  COURSE:        'CourseClass',
+  ENTRIES_ID:    'Participant ID',
+  ELIGIBILITY:   'Eligibility',
+  GENDER_DOB:    'GenderDOB',
+};
+
 export function isBanned(p) {
   if (!p?.banned) return false;
   const [d, m, y] = p.banned.split('/').map(Number);

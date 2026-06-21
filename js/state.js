@@ -1,7 +1,8 @@
 'use strict';
 
 import { readTable, writeTable } from './storage.js';
-import { FRA_CATEGORIES, WFRA_CATEGORIES } from './constants.js';
+import { FRA_CATEGORIES, WFRA_CATEGORIES } from './categories.js';
+import { BUILTIN_ROLES } from './roles.js';
 
 // ============================================================
 // Global in-memory state, loaded from and saved to JSON tables
@@ -9,12 +10,12 @@ import { FRA_CATEGORIES, WFRA_CATEGORIES } from './constants.js';
 
 export const state = {
   event: {
-    name: '', distance: 0, date: '', startTime: '11:00:00',
-    firstBibNumber: 1, categories: 'FRA', entryLimit: 200,
+    name: '', distance: 0, date: '', startTime: '19:30:00',
+    firstBibNumber: 1, firstDibberNumber: 1, categories: 'FRA', entryLimit: 180,
     timingMethod: 'Stopwatch', maleRecord: '', femaleRecord: '',
-    prizeDepthOverall: 3, prizeDepthPerCategory: 3, juniorPrizeDepthPerCategory: 3,
-    juniorLimit: 'None', juniorStartTime: '', juniorEntryLimit: 0,
-    juniorTimingMethod: 'None',
+    prizeDepthOverall: 3, prizeDepthPerCategory: 1, juniorPrizeDepthPerCategory: 6,
+    juniorLimit: 'None', juniorStartTime: '18:50:00', juniorEntryLimit: 100,
+    juniorTimingMethod: 'Stopwatch',
   },
   people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal}
   // clubs derived from people — not persisted
@@ -45,7 +46,6 @@ export async function loadAll() {
     loadList('people'),
     loadList('dibbers'),
     loadList('categories'),
-    loadList('roles'),
     loadList('preEntries'),
     loadList('entries'),
     loadList('helpers'),
@@ -54,6 +54,7 @@ export async function loadAll() {
     loadList('prizes'),
     loadList('helpersReport'),
     loadList('siResults'),
+    loadPreset('roles', BUILTIN_ROLES, r => ({ ...r })),
     loadPreset('fraPreset',  FRA_CATEGORIES),
     loadPreset('wfraPreset', WFRA_CATEGORIES),
   ]);
@@ -74,16 +75,14 @@ async function loadEvent() {
   }
 }
 
-async function loadPreset(key, defaults) {
+const categoryMapper = row => ({
+  maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
+  femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
+});
+
+async function loadPreset(key, defaults, mapFn = categoryMapper) {
   const rows = await readTable(key);
-  if (rows && rows.length > 0) {
-    state[key] = rows;
-  } else {
-    state[key] = defaults.map(row => ({
-      maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
-      femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-    }));
-  }
+  state[key] = (rows && rows.length > 0) ? rows : defaults.map(mapFn);
 }
 
 async function loadList(key) {

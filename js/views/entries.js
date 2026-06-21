@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import {
   findEntryByBib, findEntryByDibber, getEntry,
   submitEntry, updateEntry, clearAllEntries, deleteEntryAndRenumber, insertEntryAndRenumber,
-  getSortedEntries, exportSITimingCSV, isEntryBanned,
+  getSortedEntries, exportSITimingCSV, isEntryBanned, SI_TIMING_COL_NAMES,
 } from '../entries.js';
 
 import { getNextBibNumber, getNextDibberNumber, normaliseGender } from '../data.js';
@@ -283,7 +283,6 @@ export async function submitEntryForm() {
 
 async function runExportSITiming() {
   const { formatCSV } = await import('../csv.js');
-  const { SI_TIMING_COL_NAMES } = await import('../constants.js');
   const rows = exportSITimingCSV(getSortedEntries());
   const csv  = formatCSV(rows, Object.values(SI_TIMING_COL_NAMES));
   downloadText(csv, `${sanitise(state.event.name)}_registrations.csv`);

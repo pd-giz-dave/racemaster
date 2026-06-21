@@ -2,10 +2,20 @@
 
 import { state } from './state.js';
 import { saveSIResults } from './state.js';
-import { SI_RESULTS_COL_NAMES } from './constants.js';
 import { normaliseTime } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { getEntry } from './entries.js';
+
+const SI_RESULTS_COL_NAMES = {
+  RACE_NUMBER: 'RaceNumber',
+  NAME:        'Name (Free Format)',
+  CATEGORY:    'Category',
+  CLUB:        'Club',
+  COURSE:      'CourseClass',
+  RACE_TIME:   'RaceTime',
+  POSITION:    'Position',
+  STATUS:      'Status',
+};
 
 
 /**

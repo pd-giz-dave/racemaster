@@ -24,7 +24,7 @@ function makePersonKey(name, gender, dob) {
  * Add or update a person in the people list.
  * Returns the index if a new person was added, -1 if updated, or null for a pair.
  */
-export function addPerson(name, nameId, gender, dob, clubIn, fraNumber, category, asHelper) {
+export function addPerson(name, nameId, gender, dob, clubIn, fraNumber, _category, asHelper) {
   if (!asHelper && !normaliseDate(dob)) return null;
 
   const club = (clubIn || '').split(' | ')[0].trim();
@@ -64,14 +64,6 @@ export function sortPeople() {
   state.people = sortBy(state.people, 'name', 'dob');
 }
 
-
-/** Map a dibber short code to long code. Returns 0 for no-dibber, -1 if not found. */
-export function mapDibberNumber(shortCode) {
-  if (!shortCode || +shortCode <= 0) return 0;
-  const d = state.dibbers.find(d => +d.shortCode === +shortCode);
-  return d ? +d.longCode : -1;
-}
-
 /** Get last dibber short code number used in entries */
 export function getLastDibberNumber() {
   for (let i = state.entries.length - 1; i >= 0; i--) {
@@ -108,27 +100,6 @@ export function getNextDibberNumber() {
   const first = +state.event.firstDibberNumber || 1;
   const d = state.dibbers.find(d => +d.shortCode >= first);
   return d ? +d.shortCode : +state.dibbers[0].shortCode;
-}
-
-/** Get total number of dibbers available */
-export function getNumberOfDibbers() { return state.dibbers.length; }
-
-/** Check for duplicate-ish names in people (returns array of {idx, dups}) */
-export function checkPeopleDuplicates(threshold = 2) {
-  const result = [];
-  const sorted = sortBy(state.people, 'name');
-  for (let i = 0; i < sorted.length; i++) {
-    const ref = sorted[i].name.toLowerCase().replace(/\s/g,'');
-    const refChar = ref.charAt(0);
-    const dups = [];
-    for (let j = i+1; j < sorted.length; j++) {
-      const other = sorted[j].name.toLowerCase().replace(/\s/g,'');
-      if (other.charAt(0) !== refChar) break;
-      if (similarity(ref, other) <= threshold) dups.push(sorted[j].name);
-    }
-    if (dups.length) result.push({ name: sorted[i].name, dups });
-  }
-  return result;
 }
 
 /** Merge pre-entries into people list */
