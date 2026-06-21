@@ -1,27 +1,128 @@
 /* ============================================================
-   Number Matrix
+   Number Matrix — 4 groups of 100, one A4 page
+   @page for this form: margin 0 (injected in preview window)
    ============================================================ */
-.number-matrix-page { font-size: 8pt; }
 
-.nm-header { text-align: center; margin-bottom: 3mm; }
-.nm-title  { font-size: 12pt; font-weight: bold; }
-.nm-date   { font-size: 8pt; color: var(--print-text-mid); }
+.nm-page {
+  background: #fff;
+  width: 210mm;
+  height: 297mm;
+  padding: 10mm;
+  box-sizing: border-box;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  font-family: Arial, Helvetica, sans-serif;
+}
 
-.number-matrix-table {
+@media print {
+  .nm-page { margin: 0; }
+}
+
+/* ---- Group (one block of 100 numbers) ---- */
+
+.nm-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.nm-hdr1 {
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: bold;
+  font-size: 10pt;
+  padding-bottom: 0.5mm;
+}
+
+.nm-hdr2 {
+  flex-shrink: 0;
+  display: flex;
+  padding-bottom: 0.5mm;
+}
+
+/* Spacers that align hdr2 cells with nm-vlbl and nm-rpfx below */
+.nm-sp                         { width: 5mm; flex-shrink: 0; } /* matches nm-rpfx */
+.nm-hdr2 > .nm-sp:first-child  { width: 8mm; }                 /* matches nm-vlbl */
+
+.nm-dlbl {
+  flex: 1;
+  text-align: center;
+  font-size: 10pt;
+  font-weight: bold;
+}
+
+/* ---- Data section ---- */
+
+.nm-data {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.nm-vlbl {
+  width: 8mm;
+  flex-shrink: 0;
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  text-align: center;
+  font-size: 10pt;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nm-rows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.nm-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.nm-rpfx {
+  width: 5mm;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10pt;
+  font-weight: bold;
+}
+
+.nm-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.3mm solid #000;
+  font-size: 4mm;
+  font-weight: bold;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Diagonal cross for numbers below firstBibNumber */
+.nm-x {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  border-collapse: collapse;
+  height: 100%;
+  stroke: #666;
+  stroke-width: 1.5;
 }
 
-.nm-cell {
-  width: 20%;
-  border: 0.3mm solid var(--print-border-mid);
-  padding: 1.5mm 2mm;
-  vertical-align: top;
-  height: 14mm;
+/* Number text sits above the SVG cross */
+.nm-box > span {
+  position: relative;
+  z-index: 1;
 }
-
-.nm-empty { background: var(--print-empty-bg); }
-
-.nm-bib  { display: block; font-size: 14pt; font-weight: bold; line-height: 1; }
-.nm-name { display: block; font-size: 7pt; margin-top: 1mm; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.nm-cat  { display: block; font-size: 7pt; color: var(--print-text-muted); }

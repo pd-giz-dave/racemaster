@@ -1,41 +1,52 @@
 'use strict';
 
 import { state } from '../state.js';
-import { getSortedEntries } from '../entries.js';
+import { openPrintPreview } from './preview.js';
 
-export function generateNumberMatrixHTML() {
-  const entries = getSortedEntries();
-  if (!entries.length) return '<p>No entries</p>';
+const PAGE_CSS = '@page { size: A4 portrait; margin: 0; }';
+const DIGITS   = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const GROUPS   = 4;
 
-  const cols = 5;
-  const rows = Math.ceil(entries.length / cols);
-  const event = state.event;
+function generateNumberMatrixHTML() {
+  const firstBib = +state.event.firstBibNumber || 1;
+  const start    = Math.floor(firstBib / 100) * 100;
 
-  let html = `<div class="print-page number-matrix-page">`;
-  html += `<div class="nm-header">
-    <div class="nm-title">${event.name || 'Race'} — Number Matrix</div>
-    <div class="nm-date">${event.date || ''}</div>
-  </div>`;
-  html += `<table class="number-matrix-table"><tbody>`;
+  let groups = '';
+  for (let g = 0; g < GROUPS; g++) {
+    const groupStart = start + g * 100;
 
-  for (let r = 0; r < rows; r++) {
-    html += `<tr>`;
-    for (let c = 0; c < cols; c++) {
-      const idx = r * cols + c;
-      if (idx < entries.length) {
-        const e = entries[idx];
-        html += `<td class="nm-cell">
-          <span class="nm-bib">${e.bibNumber}</span>
-          <span class="nm-name">${e.name || ''}</span>
-          <span class="nm-cat">${e.category || ''}</span>
-        </td>`;
-      } else {
-        html += `<td class="nm-cell nm-empty"></td>`;
-      }
+    const hdr2 = `<div class="nm-sp"></div><div class="nm-sp"></div>` +
+      DIGITS.map(d => `<div class="nm-dlbl">${d}</div>`).join('');
+
+    let rows = '';
+    for (let r = 0; r < 10; r++) {
+      const rowStart = groupStart + r * 10;
+      const prefix   = String(Math.floor(rowStart / 10)).padStart(2, '0');
+      const boxes    = DIGITS.map(c => {
+        const n   = rowStart + c;
+        const num = String(n).padStart(3, '0');
+        if (n < firstBib) {
+          return `<div class="nm-box"><svg class="nm-x" viewBox="0 0 10 10" preserveAspectRatio="none"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg><span>${num}</span></div>`;
+        }
+        return `<div class="nm-box">${num}</div>`;
+      }).join('');
+      rows += `<div class="nm-row"><div class="nm-rpfx">${prefix}</div>${boxes}</div>`;
     }
-    html += `</tr>`;
+
+    groups += `
+      <div class="nm-group">
+        <div class="nm-hdr1">Last Digit</div>
+        <div class="nm-hdr2">${hdr2}</div>
+        <div class="nm-data">
+          <div class="nm-vlbl">First Two Digits</div>
+          <div class="nm-rows">${rows}</div>
+        </div>
+      </div>`;
   }
 
-  html += `</tbody></table></div>`;
-  return html;
+  return `<div class="nm-page">${groups}</div>`;
+}
+
+export function openNumberMatrixPreview() {
+  openPrintPreview(generateNumberMatrixHTML(), 'Number Matrix', 'js/forms/number-matrix.css', PAGE_CSS);
 }

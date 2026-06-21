@@ -188,6 +188,17 @@ export const HELP = {
   `,
   'view-forms': `
     <p>The <strong>Paperwork</strong> page provides facilities to print all the pre-race paperwork as well as some other useful forms/notices.</p>
+    <p>Use <strong>Print Blank Entry Forms</strong> to generate one A4 page containing two entry forms, 
+        print that as many times as required then guillotine into A5 sheets with one form per sheet.</p>
+    <p>Use <strong>Print Pre-Entry Forms</strong> to generate multiple A4 pages with filled in entry forms, one for each pre-entry.
+        They are generated two per A4 page in alphabetical order of surname in such a way that guillotining the whole 
+        printed stack into A5 sheets maintains the order when the two half stacks are combined.</p>
+    <p>The blank entry forms and the pre-filled ones have identical format and comply with FRA guidelines for both senior and junior races.</p>        
+    <p>The <strong>Finish Sheets</strong> report is intended to be given to finish funnel marshals to record bib numbers as entrants cross the finish line.
+        This is not necessary if dibber timing is being used but is useful as a backup (should SI Timing fail).
+        The senior and junior sheets are identical, just a different number of pages created to cover the entry limits.</p>
+    <p>The <strong>Number Matrix</strong> report is intended to be given to an on-course marshalls to check off runners as they pass a CP. 
+        Bib numbers are always allocated sequentially, so this makes it easy to check for missing runners.</p>
   `,
   'view-entries': `
     <p>Add competitors as they register on race day. 
