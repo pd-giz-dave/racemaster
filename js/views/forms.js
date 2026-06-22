@@ -1,7 +1,7 @@
 'use strict';
 
 import {
-  openBlankEntryFormPreview, openPreFilledEntryFormPreview,
+  openBlankEntryFormPreview, openPreFilledEntryFormPreview, openHelpersListPreview,
   openFinishSheetPreview, openNumberMatrixPreview,
 } from '../forms';
 import { state } from '../state.js';
@@ -14,6 +14,7 @@ export function renderForms() {
 export function wireForms() {
   on('btn-print-entry-form',      'click', () => openBlankEntryFormPreview(2));
   on('btn-print-pre-entry-forms', 'click', () => openPreFilledEntryFormPreview());
+  on('btn-print-helpers-list',    'click', () => openHelpersListPreview());
   on('btn-print-finish-senior',   'click', () => openFinishSheetPreview(state.event.entryLimit,       'Senior Finish Sheet'));
   on('btn-print-finish-junior',   'click', () => openFinishSheetPreview(state.event.juniorEntryLimit, 'Junior Finish Sheet'));
   on('btn-print-number-matrix',   'click', () => openNumberMatrixPreview());

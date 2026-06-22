@@ -15,7 +15,7 @@ from pre-registration through to final results. Will run on anything that can ru
 - **Paperwork** — generate entry forms for on-the-day and pre-registered entrants
 - **Export/Import** — save and restore event data to/from local storage or the cloud
 - **Run in th wild** - configure the event with internet access then go into the wild with no internet or mobile signal, run the event, on return auto syncs to the cloud.
-- **Run standalone** - will run standalone using just local storage, just visit the website - job done
+- **Run standalone** - will run standalone using just local storage, just visit the website where the app is deployed - job done
 
 ## History
 
@@ -39,10 +39,23 @@ Then open your browser at `http://localhost:3000`.
 
 The app also works as a Progressive Web App (PWA) and can be installed on mobile devices.
 
+## Installation
+
+The simplest way is to deploy as a Docker container. 
+There is a docker-compose.yml and a Dockerfile in the project root, 
+it pulls a standard node image, the rest is just the files of this project.
+Copy the project root to a suitable location, 
+edit docker-compose.yml to suit your context, and fire up the container - job done.
+
+```bash
+docker-compose up
+```
+
 ## Authentication
 
-Users are managed via a simple `users.txt` and `admins.txt` text files in the project root 
-(passwords are encrypted).
+Users are managed via a simple `users.txt`, `admins.txt` and `sessions.txt` text files in the project root 
+(passwords are encrypted). The first user created is an admin, 
+thereafter new users are not admins but any current admin can grant or revoke admin rights to others.
 
 ## Data
 
