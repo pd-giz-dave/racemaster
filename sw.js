@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'racemaster-20260622111650';
+const CACHE = 'racemaster-20260622200530';
 
 const PRECACHE = [
   '/',

@@ -18,10 +18,12 @@ export const SI_TIMING_COL_NAMES = {
   NAME:          'Name (Free Format)',
   CATEGORY:      'Category',
   CLUB:          'Club',
+  COUNTRY:       'Country',
   COURSE:        'CourseClass',
-  ENTRIES_ID:    'Participant ID',
-  ELIGIBILITY:   'Eligibility',
-  GENDER_DOB:    'GenderDOB',
+  // ToDo: match columns to SI Timing expectations
+  //ENTRIES_ID:    'Participant ID',
+  //ELIGIBILITY:   'Eligibility',
+  //GENDER_DOB:    'GenderDOB',
 };
 
 export function isBanned(p) {
@@ -453,30 +455,32 @@ function siNameParts(e) {
   return { forenames: parts[0] || '', surnames: parts.slice(1).join(' ') };
 }
 
-/** Export entries as SI Timing CSV rows. */
+/** Export dibber entries as SI Timing CSV rows. */
 export function exportSITimingCSV(entries) {
   const rows = [];
   for (const e of entries) {
-    if (!e.bibNumber) continue;
+    if (!e.bibNumber || !e.dibberNumber) continue;
     const dibberLong = e.dibberNumber > 0
       ? (state.dibbers.find(d => +d.shortCode === +e.dibberNumber)?.longCode || '')
-      : '';
+      : ''; // ToDo: this should be a show stopping error
     const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
     const { forenames, surnames } = siNameParts(e);
     rows.push({
-      'RaceNumber':         e.bibNumber,
-      'NumberCompetitors':  '',
-      'CardNumbers':        dibberLong,
-      'MembershipNumbers':  siMembershipNumbers(e),
-      'Forenames':          forenames,
-      'Surnames':           surnames,
-      'Name (Free Format)': e.name || '',
-      'Category':           e.category || '',
-      'Club':               e.club || '',
-      'CourseClass':        e.course || '',
-      'Participant ID':     siParticipantId(e),
-      'Eligibility':        siEligibility(e),
-      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
+      'RaceNumber':         e.bibNumber,             //1
+      'NumberCompetitors':  '',                      //2
+      'CardNumbers':        dibberLong,              //3
+      'MembershipNumbers':  siMembershipNumbers(e),  //4
+      'Forenames':          forenames,               //5
+      'Surnames':           surnames,                //6
+      'Name (Free Format)': e.name || '',            //7
+      'Category':           e.category || '',        //8
+      'Club':               e.club || '',            //9
+      'Country':            '',                      //10  ToDo: get country from pre-entries list
+      'CourseClass':        e.course || '',          //11
+      // ToDo: match colunms to SI Timing expectations
+      //'Participant ID':     siParticipantId(e),
+      //'Eligibility':        siEligibility(e),
+      //'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }
   return rows;
