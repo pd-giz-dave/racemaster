@@ -88,6 +88,7 @@ export function autoFillCategory() {
     if (catEl) catEl.value = cat;
     const courseEl = document.getElementById('entry-form-course');
     if (courseEl) courseEl.value = calculateCourse(cat, dob);
+    updateDibberField();
   }
 }
 

@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { savePeople } from './state.js';
 import { GENDER } from './constants.js';
-import { normaliseDate, cleanName, sortBy, today, similarity } from './utils.js';
+import { normaliseDate, cleanName, sortBy, today } from './utils.js';
 
 // ============================================================
 // People, clubs and dibbers management (from Data.xml)
@@ -89,17 +89,17 @@ export function getNextBibNumber() {
   return last > 0 ? last + 1 : +state.event.firstBibNumber || 1;
 }
 
-/** Get next dibber number to use */
+/** Get next dibber number to use. Returns null if no dibbers loaded or list exhausted. */
 export function getNextDibberNumber() {
+  if (state.dibbers.length === 0) return null;
   const last = getLastDibberNumber();
   if (last > 0) {
     const idx = state.dibbers.findIndex(d => +d.shortCode === last);
-    if (idx >= 0 && idx + 1 < state.dibbers.length) return +state.dibbers[idx+1].shortCode;
+    if (idx >= 0) return idx + 1 < state.dibbers.length ? +state.dibbers[idx + 1].shortCode : null;
   }
-  if (state.dibbers.length === 0) return +state.event.firstDibberNumber || 1;
   const first = +state.event.firstDibberNumber || 1;
   const d = state.dibbers.find(d => +d.shortCode >= first);
-  return d ? +d.shortCode : +state.dibbers[0].shortCode;
+  return d ? +d.shortCode : null;
 }
 
 /** Merge pre-entries into people list */

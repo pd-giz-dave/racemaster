@@ -177,6 +177,9 @@ export const HELP = {
     <p>The <strong>Home</strong> page shows a summary of the current event. Before you can do anything, 
         click <strong>Select Data File</strong> in the header to open an existing event file or create a new one.</p>
     <p>Follow the <strong>Getting Started</strong> steps in order — they cover the typical workflow from setup through to results.</p>
+    <p>It is recommended you create a <strong>master</strong> dataset to use as a template for all events,
+        then after the race is over and all results published save it as a new dataset with a name that reflects the name and date of the event.
+        That way your people database will accumulate and make future registrations easier.</p>
   `,
   'view-event': `
     <p>Set up the race details before printing paperwork or registering competitors.</p> 

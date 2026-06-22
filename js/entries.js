@@ -107,6 +107,56 @@ export function addEntry({
   return idx;
 }
 
+// ---- Dibber sequence helpers ----
+
+function dibberListIdx(dibber) {
+  return state.dibbers.findIndex(d => +d.shortCode === dibber);
+}
+
+function predecessorDibber(entryIdx) {
+  for (let i = entryIdx - 1; i >= 0; i--) {
+    const d = +state.entries[i].dibberNumber;
+    if (d > 0) return d;
+  }
+  return 0;
+}
+
+// Returns the list index the entry at entryIdx should occupy (one after its predecessor).
+function nextDibberListIdx(entryIdx) {
+  const pred = predecessorDibber(entryIdx);
+  if (pred > 0) {
+    const pIdx = dibberListIdx(pred);
+    return pIdx >= 0 ? pIdx + 1 : -1;
+  }
+  const first = +state.event.firstDibberNumber || 1;
+  return state.dibbers.findIndex(d => +d.shortCode >= first);
+}
+
+// Shift every dibber-using entry from fromEntryIdx onward one slot forward in the list.
+function shiftDibbersForward(fromEntryIdx, insertedListIdx) {
+  let listIdx = insertedListIdx;
+  for (let i = fromEntryIdx; i < state.entries.length; i++) {
+    if (+state.entries[i].dibberNumber > 0) {
+      listIdx++;
+      state.entries[i].dibberNumber = listIdx < state.dibbers.length ? +state.dibbers[listIdx].shortCode : 0;
+    }
+  }
+}
+
+// Shift every dibber-using entry from fromEntryIdx onward one slot backward,
+// filling the gap left by releasedDibber.
+function shiftDibbersBackward(fromEntryIdx, releasedDibber) {
+  const relIdx = dibberListIdx(releasedDibber);
+  if (relIdx < 0) return;
+  let targetIdx = relIdx;
+  for (let i = fromEntryIdx; i < state.entries.length; i++) {
+    if (+state.entries[i].dibberNumber > 0) {
+      state.entries[i].dibberNumber = +state.dibbers[targetIdx].shortCode;
+      targetIdx++;
+    }
+  }
+}
+
 /**
  * Submit a new entry from the registration form.
  * formData: {name, gender, dob, club, fraNumber, category, course, preEntry}
@@ -151,9 +201,19 @@ export async function submitEntry(formData) {
   const bibNumber = (formData.bibOverride && +formData.bibOverride > 0)
     ? +formData.bibOverride
     : getNextBibNumber();
-  const dibberNumber = (formData.dibberOverride && +formData.dibberOverride > 0)
-    ? +formData.dibberOverride
-    : (usingDibbers(course) ? getNextDibberNumber() : 0);
+
+  let dibberNumber = 0;
+  if (usingDibbers(course)) {
+    if (formData.dibberOverride && +formData.dibberOverride > 0) {
+      dibberNumber = +formData.dibberOverride;
+    } else {
+      const next = getNextDibberNumber();
+      if (next === null) return { error: state.dibbers.length === 0
+        ? 'No dibbers loaded — load dibber numbers before registering this entry'
+        : 'No more dibber numbers available — load more dibber numbers' };
+      dibberNumber = next;
+    }
+  }
 
   addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry });
 
@@ -185,8 +245,25 @@ export async function updateEntry(bibNumber, formData) {
     e.bibNumber = newBib;
   }
 
-  // Dibber change — clash-check against other entries
-  if (formData.dibberOverride !== undefined) {
+  // Course-type change drives dibber resequencing; manual override handles same-type edits
+  const oldCourse = e.course;
+  const newCourse = formData.course !== undefined ? formData.course : oldCourse;
+  const wasUsingDibbers = usingDibbers(oldCourse);
+  const nowUsingDibbers = usingDibbers(newCourse);
+
+  if (wasUsingDibbers && !nowUsingDibbers) {
+    const oldDibber = +e.dibberNumber || 0;
+    e.dibberNumber = 0;
+    if (oldDibber > 0) shiftDibbersBackward(idx + 1, oldDibber);
+  } else if (!wasUsingDibbers && nowUsingDibbers) {
+    if (state.dibbers.length === 0)
+      return { error: 'No dibbers loaded — load dibber numbers before changing this entry to a dibber course' };
+    const newListIdx = nextDibberListIdx(idx);
+    if (newListIdx < 0 || newListIdx >= state.dibbers.length)
+      return { error: 'No more dibber numbers available — load more dibber numbers' };
+    e.dibberNumber = +state.dibbers[newListIdx].shortCode;
+    shiftDibbersForward(idx + 1, newListIdx);
+  } else if (formData.dibberOverride !== undefined) {
     const newDibber = +formData.dibberOverride || 0;
     if (newDibber > 0 && newDibber !== +e.dibberNumber) {
       const clashIdx = findEntryByDibber(newDibber);
@@ -202,7 +279,7 @@ export async function updateEntry(bibNumber, formData) {
   if (formData.club      !== undefined) e.club      = cleanName(formData.club);
   if (formData.fraNumber !== undefined) e.fraNumber = formData.fraNumber;
   if (formData.category  !== undefined) e.category  = formData.category;
-  if (formData.course    !== undefined) e.course    = formData.course;
+  if (formData.course    !== undefined) e.course    = newCourse;
 
   await saveEntries();
   return { error: '' };
@@ -242,29 +319,40 @@ export async function insertEntryAndRenumber(atBib, formData) {
   });
   if (duplicate) return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
 
+  if (usingDibbers(course) && state.dibbers.length === 0)
+    return { error: 'No dibbers loaded — load dibber numbers before registering this entry' };
+
   const idx = findEntryByBib(atBib);
   if (idx < 0) return { error: `Bib ${atBib} not found` };
 
-  // The entry currently at atBib holds the dibber slot the new entry should occupy
-  const freeDibber = +state.entries[idx].dibberNumber || 0;
-  let nextDibberIdx = freeDibber > 0
-    ? state.dibbers.findIndex(d => +d.shortCode === freeDibber)
-    : -1;
+  const useManualDibber = !!(formData.dibberOverride && +formData.dibberOverride > 0);
 
-  // Shift all entries from atBib upward
+  // Determine the dibber for the new entry and the list index at which to begin
+  // shifting subsequent dibber-using entries one slot forward.
+  let dibberNumber = 0;
+  let shiftListIdx = -1;
+
+  if (usingDibbers(course) && !useManualDibber) {
+    const freeDibber = +state.entries[idx].dibberNumber || 0;
+    const newListIdx = freeDibber > 0 ? dibberListIdx(freeDibber) : nextDibberListIdx(idx);
+    if (newListIdx < 0 || newListIdx >= state.dibbers.length)
+      return { error: 'No more dibber numbers available — load more dibber numbers' };
+    dibberNumber  = +state.dibbers[newListIdx].shortCode;
+    shiftListIdx  = newListIdx;
+  } else if (useManualDibber) {
+    dibberNumber = +formData.dibberOverride;
+  }
+
+  // Shift all entries from atBib upward (bibs +1; dibbers advance one slot when shiftListIdx is set)
+  let listIdx = shiftListIdx;
   for (let i = idx; i < state.entries.length; i++) {
     const e = state.entries[i];
     e.bibNumber = +e.bibNumber + 1;
-    if (nextDibberIdx >= 0 && +e.dibberNumber > 0) {
-      const shiftIdx = nextDibberIdx + 1;
-      e.dibberNumber = shiftIdx < state.dibbers.length ? +state.dibbers[shiftIdx].shortCode : 0;
-      nextDibberIdx++;
+    if (listIdx >= 0 && +e.dibberNumber > 0) {
+      listIdx++;
+      e.dibberNumber = listIdx < state.dibbers.length ? +state.dibbers[listIdx].shortCode : 0;
     }
   }
-
-  const dibberNumber = (formData.dibberOverride && +formData.dibberOverride > 0)
-    ? +formData.dibberOverride
-    : (usingDibbers(course) ? freeDibber : 0);
 
   state.entries.splice(idx, 0, {
     bibNumber: atBib, dibberNumber, fraNumber: fra,
