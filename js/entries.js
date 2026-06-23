@@ -8,22 +8,31 @@ import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
+// Definition taken from SI Timing in June 2026
 export const SI_TIMING_COL_NAMES = {
-  BIB_NUMBER:    'RaceNumber',
-  NUM_ENTRANTS:  'NumberCompetitors',
-  DIBBER_NUMBER: 'CardNumbers',
-  FRA_NUMBER:    'MembershipNumbers',
-  FORENAMES:     'Forenames',
-  SURNAMES:      'Surnames',
-  NAME:          'Name (Free Format)',
-  CATEGORY:      'Category',
-  CLUB:          'Club',
-  COUNTRY:       'Country',
-  COURSE:        'CourseClass',
-  // ToDo: match columns to SI Timing expectations
-  //ENTRIES_ID:    'Participant ID',
-  //ELIGIBILITY:   'Eligibility',
-  //GENDER_DOB:    'GenderDOB',
+  BIB_NUMBER:           'RaceNumber',
+  NUM_ENTRANTS:         'NumberCompetitors',
+  DIBBER_NUMBER:        'CardNumbers',
+  FRA_NUMBER:           'MembershipNumbers',
+  FORENAMES:            'Forenames',
+  SURNAMES:             'Surnames',
+  NAME:                 'Name (Free Format)',
+  CATEGORY:             'Category',
+  CLUB:                 'Club',
+  COUNTRY:              'Country',
+  COURSE:               'CourseClass',
+  START_TIME:           'StartTime',
+  START_TIME_PREFERRED: 'StartTimePreference',
+  ENVELOPE_NUMBER:      'EnvelopeNumber',
+  NON_COMPETITIVE:      'NonCompetitive',
+  SEEDED:               'Seeded',
+  NOT_USED:             'NotUsed',
+  HANDICAP:             'Handicap',
+  REGISTRATION_NOTES:   'RegistrationNotes',
+  ENTRIES_ID:           'Participant ID',
+  ELIGIBILITY:          'Eligibility',
+  SOCIAL_MEDIA:         'SocialMedia',
+  GENDER_DOB:           'GenderDOB',
 };
 
 export function isBanned(p) {
@@ -435,50 +444,31 @@ export function getEntriesForCourse(course) {
  * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
  * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  */
-function siMembershipNumbers(e) {
-  const pe = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
-  return `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`;
-}
-
-function siEligibility(e) {
-  const pe = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
-  return pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : '';
-}
-
-function siParticipantId(e) {
-  const pe = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
-  return pe?.siEntriesId || '';
-}
-
-function siNameParts(e) {
-  const parts = (e.name || '').trim().split(/\s+/);
-  return { forenames: parts[0] || '', surnames: parts.slice(1).join(' ') };
-}
-
 /** Export dibber entries as SI Timing CSV rows. */
 export function exportSITimingCSV(entries) {
   const rows = [];
   for (const e of entries) {
     if (!e.bibNumber || !e.dibberNumber) continue;
-    const dibberLong = e.dibberNumber > 0
-      ? (state.dibbers.find(d => +d.shortCode === +e.dibberNumber)?.longCode || '')
-      : ''; // ToDo: this should be a show stopping error
+    const dibberEntry = state.dibbers.find(d => +d.shortCode === +e.dibberNumber);
+    if (!dibberEntry) throw new Error(`Bib ${e.bibNumber}: dibber ${e.dibberNumber} not found in dibbers list — reload dibbers and retry`);
+    const dibberLong = dibberEntry.longCode;
     const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
-    const { forenames, surnames } = siNameParts(e);
+    const nameParts    = (e.name || '').trim().split(/\s+/);
+    const pe           = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
     rows.push({
-      'RaceNumber':         e.bibNumber,             //1
-      'NumberCompetitors':  '',                      //2
-      'CardNumbers':        dibberLong,              //3
-      'MembershipNumbers':  siMembershipNumbers(e),  //4
-      'Forenames':          forenames,               //5
-      'Surnames':           surnames,                //6
-      'Name (Free Format)': e.name || '',            //7
-      'Category':           e.category || '',        //8
-      'Club':               e.club || '',            //9
-      'Country':            '',                      //10  ToDo: get country from pre-entries list
-      'CourseClass':        e.course || '',          //11
-      'Participant ID':     siParticipantId(e),
-      'Eligibility':        siEligibility(e),
+      'RaceNumber':         e.bibNumber,
+      'NumberCompetitors':  '',
+      'CardNumbers':        dibberLong,
+      'MembershipNumbers':  `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`,
+      'Forenames':          nameParts[0] || '',
+      'Surnames':           nameParts.slice(1).join(' '),
+      'Name (Free Format)': e.name || '',
+      'Category':           e.category || '',
+      'Club':               e.club || '',
+      'Country':            pe?.country || '',
+      'CourseClass':        e.course || '',
+      'Participant ID':     pe?.siEntriesId || '',
+      'Eligibility':        pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : '',
       'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }

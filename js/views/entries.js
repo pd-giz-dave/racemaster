@@ -284,8 +284,14 @@ export async function submitEntryForm() {
 
 async function runExportSITiming() {
   const { formatCSV } = await import('../csv.js');
-  const rows = exportSITimingCSV(getSortedEntries());
-  const csv  = formatCSV(rows, Object.values(SI_TIMING_COL_NAMES));
+  let rows;
+  try {
+    rows = exportSITimingCSV(getSortedEntries());
+  } catch (err) {
+    showStatus(err.message, true);
+    return;
+  }
+  const csv = formatCSV(rows, Object.values(SI_TIMING_COL_NAMES));
   downloadText(csv, `${sanitise(state.event.name)}_registrations.csv`);
   showStatus('SI timing file downloaded.');
 }
