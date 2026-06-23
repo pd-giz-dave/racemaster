@@ -60,65 +60,67 @@
 
 /* ============================================================
    Prize List — Narrow / Thermal Receipt
+   All colours forced to black; thermal printers don't render greys well.
    ============================================================ */
-.prize-list-narrow { font-size: 6.5pt; }
+.prize-list-narrow { font-size: 8pt; color: #000; }
 
 .pln-header {
   text-align: center;
-  border-bottom: 0.4mm solid var(--print-black);
-  margin-bottom: 1.5mm;
-  padding-bottom: 1mm;
+  border-bottom: 0.5mm solid #000;
+  margin-bottom: 1mm;
+  padding-bottom: 0.5mm;
 }
 
-.pln-title { font-size: 8pt; font-weight: bold; }
-.pln-date  { font-size: 5.5pt; color: var(--print-text-mid); margin-top: 0.5mm; }
+.pln-title { font-size: 10pt; font-weight: bold; color: #000; }
+.pln-date  { font-size: 8pt;  color: #000; margin-top: 0.3mm; }
 
 .pln-hint {
-  font-size: 5.5pt;
-  color: var(--print-text-muted);
-  margin: 0 0 1.5mm;
+  font-size: 8pt;
+  color: #000;
+  margin: 0 0 1mm;
 }
 
 .pln-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 6.5pt;
+  font-size: 8pt;
   table-layout: fixed;
 }
 
 /* Fixed widths keep all columns from wrapping; name cell gets whatever is left */
-.pln-table th:nth-child(1), .pln-table td:nth-child(1) { width: 5mm; }   /* Pos     */
-.pln-table th:nth-child(2), .pln-table td:nth-child(2) { width: 9mm; }   /* Cat     */
-.pln-table th:nth-child(3), .pln-table td:nth-child(3) { width: 9mm; }   /* In Cat  */
-.pln-table th:nth-child(4), .pln-table td:nth-child(4) { width: 16mm; }  /* Time    */
+.pln-table th:nth-child(1), .pln-table td:nth-child(1) { width: 7mm; }   /* Pos (3 digits max)  */
+.pln-table th:nth-child(2), .pln-table td:nth-child(2) { width: 10mm; }  /* Cat                 */
+.pln-table th:nth-child(3), .pln-table td:nth-child(3) { width: 6mm; }   /* # in cat (2 digits) */
+.pln-table th:nth-child(4), .pln-table td:nth-child(4) { width: 13mm; }  /* Time                */
 /* col 5 (Name) takes remaining width automatically */
 
 .pln-table th {
-  background: var(--print-header-bg);
-  border-bottom: 0.4mm solid var(--print-border);
-  padding: 0.8mm 1mm;
+  border-bottom: 0.5mm solid #000;
+  padding: 0.3mm 0.5mm;
   font-weight: bold;
   white-space: nowrap;
   overflow: hidden;
+  color: #000;
 }
 
 .pln-table td {
-  border-bottom: 0.15mm solid var(--print-border-light);
-  padding: 0.8mm 1mm;
+  border-bottom: 0.3mm solid #000;
+  padding: 0.3mm 0.5mm;
   vertical-align: middle;
   white-space: nowrap;
   overflow: hidden;
+  color: #000;
 }
 
 .pln-section-row td {
   font-weight: bold;
-  border-top: 0.4mm solid var(--print-border);
-  border-bottom: 0.2mm solid var(--print-border);
-  background: var(--print-empty-bg);
+  border-top: 0.5mm solid #000;
+  border-bottom: 0.5mm solid #000;
+  padding: 0.5mm 1mm;
 }
 
-.pln-cat-sep td { padding: 0; height: 1mm; border: none; }
+.pln-cat-sep td { padding: 0; height: 0.5mm; border: none; }
 
 .pln-name-cell { text-overflow: ellipsis; }
 
-.pln-footer { margin-top: 2mm; font-size: 5.5pt; color: var(--print-footer-faint); text-align: right; }
+.pln-footer { margin-top: 1.5mm; font-size: 8pt; color: #000; text-align: right; }

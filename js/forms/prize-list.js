@@ -14,7 +14,7 @@ function buildPrizeListHTML(isNarrow) {
   const prizes = getPrizes();
   const event     = state.event;
 
-  let html = `<div class="print-page ${pageClass}">`;
+  let html = `<div class="${isNarrow ? pageClass : `print-page ${pageClass}`}">`;
   html += `<div class="${c}-header">
     <div class="${c}-title">${event.name || 'Race'} — Prize List</div>
     <div class="${c}-date">${event.date || ''}</div>
@@ -25,7 +25,7 @@ function buildPrizeListHTML(isNarrow) {
   } else {
     html += `<p class="${c}-hint">R = course record &nbsp; J = junior &nbsp; * = multi winner</p>`;
     html += `<table class="${tblClass}"><thead><tr>
-      <th>Pos</th><th>Cat</th><th>In Cat</th><th>Time</th><th>Name</th>
+      <th>Pos</th><th>Cat</th><th>CP</th><th>Time</th><th>Name</th>
     </tr></thead><tbody>`;
 
     let currentSection  = null;
@@ -64,15 +64,18 @@ function        generateNarrowPrizeListHTML()  { return buildPrizeListHTML(true)
 
 export function openPrizeListPreview(widthMm) {
   const isNarrow  = widthMm < 120;
-  const marginMm  = isNarrow ? 3 : 8;
-  const contentMm = widthMm - 2 * marginMm;
+  const contentMm = widthMm - 16;
+  // @page size and content width depend on widthMm at runtime so cannot live in prize-list.css —
+  // @page rules cannot be scoped to a CSS class and widthMm varies by caller.
+  const narrowCSS = isNarrow
+    ? `@page { size: ${widthMm}mm auto; margin: 5mm; }
+       .prize-list-narrow { width: ${widthMm}mm; padding: 3mm 3mm 3mm 3mm; box-sizing: border-box; }`
+    : `@page { size: ${widthMm}mm auto; margin: 8mm; }
+       .print-page { width: ${contentMm}mm; min-height: auto; }`;
   openPopup({
     title:    'Prize List',
     cssLinks: ['css/print.css', 'js/forms/prize-list.css'],
-    inlineCSS: `
-      @page { size: ${widthMm}mm auto; margin: ${marginMm}mm; }
-      .print-page { width: ${contentMm}mm; min-height: auto;${isNarrow ? ' padding: 0;' : ''} }
-    `,
+    inlineCSS: narrowCSS,
     html: isNarrow ? generateNarrowPrizeListHTML() : generatePrizeListHTML(),
   });
 }
