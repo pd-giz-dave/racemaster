@@ -56,7 +56,7 @@ function entryFormHalf(org, entry = {}) {
     <div class="bef-hint">Please fill in at least the <strong><u>bold underlined</u></strong> items and please write clearly.</div>
     <div class="bef-row bef-row-key">
       <span class="bef-lbl bef-lbl-req bef-lbl-key">Full Name (block capitals):</span>
-      <span class="bef-line bef-flex bef-line-key">${field(entry.name)}</span>
+      <span class="bef-line bef-flex bef-line-key bef-name-field">${field(entry.name)}</span>
     </div>
     <div class="bef-dob-gender bef-row-key">
       <div class="bef-half-cell">

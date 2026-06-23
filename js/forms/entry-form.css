@@ -25,7 +25,8 @@
   --bef-hint-size:        10pt;    /* "Please fill in at least…" line */
   --bef-lbl-size:         9pt;     /* standard field labels */
   --bef-key-size:         10.5pt;  /* Full Name / DOB / Gender labels */
-  --bef-data-key-size:    13pt;    /* text printed in Full Name / DOB fields */
+  --bef-data-key-size:    13pt;    /* text printed in DOB field */
+  --bef-name-size:        16pt;    /* text printed in Full Name field */
   --bef-ref-data-size:    18pt;    /* text printed in Entry No box */
   --bef-important-size:   9pt;     /* important note above declarations */
   --bef-decl-size:        7.5pt;   /* declaration text */
@@ -209,6 +210,7 @@
 .bef-row-key   { margin-top: var(--bef-key-row-top); }
 .bef-lbl-key   { font-size: var(--bef-key-size); }
 .bef-line-key  { height: var(--bef-key-field-height); font-size: var(--bef-data-key-size); }
+.bef-name-field { font-size: var(--bef-name-size); font-weight: bold; line-height: 1; }
 .bef-check-key { font-size: var(--bef-key-size); }
 
 /* Labels that wrap across two lines — font sized so 2 lines fit within field height */
