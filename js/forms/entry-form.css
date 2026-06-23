@@ -1,8 +1,11 @@
 /* ============================================================
    Entry Form — 2 per A4 page
-   @page for this form: margin 5mm 5mm 5mm 10mm (injected in preview window)
-   Print area: 195mm × 287mm → each half: 136.5mm, cut guide: 10mm
-   Width pulled in 2mm to avoid right-edge clip on printer non-printable strip
+   @page margin is 0 (injected); all positioning is via padding on .blank-entry-page
+   so that positioning is identical regardless of OS/browser print dialog defaults.
+   Print margins: top 9mm, right 5mm, bottom 5mm, left 10mm
+   top=9mm empirically calibrated to place cut-here at paper centre (A4 = 148.5mm).
+   Each 1mm of top padding shifts the cut ~5mm on the page.
+   (297 - 9 - 5 - 10) / 2 = 136.5mm per half.
    ============================================================ */
 .blank-entry-page {
 
@@ -11,9 +14,9 @@
      any other CSS.
      ───────────────────────────────────────────────────────── */
 
-  /* Page dimensions */
-  --bef-page-width:       193mm;
-  --bef-page-height:      283mm;
+  /* Page dimensions — element fills full A4; padding provides the margins. */
+  --bef-page-width:       210mm;
+  --bef-page-height:      297mm;
   --bef-half-height:      136.5mm;
 
   /* Font sizes */
@@ -24,7 +27,7 @@
   --bef-key-size:         10.5pt;  /* Full Name / DOB / Gender labels */
   --bef-data-key-size:    13pt;    /* text printed in Full Name / DOB fields */
   --bef-ref-data-size:    18pt;    /* text printed in Entry No box */
-  --bef-important-size:   9.5pt;   /* important note above declarations */
+  --bef-important-size:   9pt;     /* important note above declarations */
   --bef-decl-size:        7.5pt;   /* declaration text */
   --bef-sign-label-size:  13pt;    /* Signed / Date labels */
   --bef-check-lg-size:    13pt;    /* junior category checkboxes */
@@ -52,13 +55,14 @@
   background: var(--print-page-bg);
   width:  var(--bef-page-width);
   height: var(--bef-page-height);
+  padding: 9mm 5mm 5mm 10mm;
+  box-sizing: border-box;
   margin: 0 auto 20px;
   page-break-after: always;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   font-size: 8pt;
-  box-sizing: border-box;
 }
 
 .blank-entry-page:last-child { page-break-after: auto; }
@@ -70,7 +74,7 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 1.2mm;
+  gap: 1mm;
   overflow: visible;
 }
 

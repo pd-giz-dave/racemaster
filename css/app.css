@@ -217,6 +217,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
   margin-bottom: 16px;
 }
 .card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; }
+.card-warn { background: #fff8e1; border-color: #f9a825; }
 
 /* ---- Home summary grid ---- */
 .home-ev-table { border-collapse: collapse; margin-top: 2px; font-size: 0.85rem; }

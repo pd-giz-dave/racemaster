@@ -477,10 +477,9 @@ export function exportSITimingCSV(entries) {
       'Club':               e.club || '',            //9
       'Country':            '',                      //10  ToDo: get country from pre-entries list
       'CourseClass':        e.course || '',          //11
-      // ToDo: match colunms to SI Timing expectations
-      //'Participant ID':     siParticipantId(e),
-      //'Eligibility':        siEligibility(e),
-      //'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
+      'Participant ID':     siParticipantId(e),
+      'Eligibility':        siEligibility(e),
+      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }
   return rows;

@@ -64,14 +64,13 @@ function        generateNarrowPrizeListHTML()  { return buildPrizeListHTML(true)
 
 export function openPrizeListPreview(widthMm) {
   const isNarrow  = widthMm < 120;
-  const contentMm = widthMm - 16;
   // @page size and content width depend on widthMm at runtime so cannot live in prize-list.css —
   // @page rules cannot be scoped to a CSS class and widthMm varies by caller.
   const narrowCSS = isNarrow
-    ? `@page { size: ${widthMm}mm auto; margin: 5mm; }
-       .prize-list-narrow { width: ${widthMm}mm; padding: 3mm 3mm 3mm 3mm; box-sizing: border-box; }`
-    : `@page { size: ${widthMm}mm auto; margin: 8mm; }
-       .print-page { width: ${contentMm}mm; min-height: auto; }`;
+    ? `@page { size: ${widthMm}mm auto; margin: 0; }
+       .prize-list-narrow { width: ${widthMm}mm; padding: 3mm 3mm 3mm 1mm; box-sizing: border-box; }`
+    : `@page { size: ${widthMm}mm auto; margin: 0; }
+       .print-page { width: ${widthMm}mm; padding: 8mm; box-sizing: border-box; min-height: auto; }`;
   openPopup({
     title:    'Prize List',
     cssLinks: ['css/print.css', 'js/forms/prize-list.css'],

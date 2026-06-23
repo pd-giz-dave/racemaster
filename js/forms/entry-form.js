@@ -44,9 +44,9 @@ function entryFormHalf(org, entry = {}) {
     </div>
     <div class="bef-refs-row">
       <div class="bef-refs">
-        <div class="bef-ref"><div class="bef-ref-label">Entry No</div><div class="bef-ref-box">${field(entry.entryNo)}</div></div>
-        <div class="bef-ref"><div class="bef-ref-label">Race No</div><div class="bef-ref-box"></div></div>
-        <div class="bef-ref"><div class="bef-ref-label">Dibber No</div><div class="bef-ref-box"></div></div>
+        <div class="bef-ref"><div class="bef-ref-label">Entry Num</div><div class="bef-ref-box">${field(entry.entryNo)}</div></div>
+        <div class="bef-ref"><div class="bef-ref-label">Race/Bib Num</div><div class="bef-ref-box"></div></div>
+        <div class="bef-ref"><div class="bef-ref-label">Dibber Num</div><div class="bef-ref-box"></div></div>
       </div>
       <div class="bef-junior-cats">
         <div class="bef-junior-label">Juniors category (age on 31st Dec)</div>
@@ -170,8 +170,7 @@ const ENTRY_FORM_POPUP = {
   title:    'Entry Forms',
   cssLinks: ['css/print.css', 'js/forms/entry-form.css'],
   inlineCSS: `
-    @page { size: A4 portrait; margin: 5mm 5mm 5mm 10mm; }
-    @page :first { margin: 5mm 5mm 5mm 10mm; }
+    @page { size: A4 portrait; margin: 0; }
     body.print-preview { padding: 0; }
   `,
 };
