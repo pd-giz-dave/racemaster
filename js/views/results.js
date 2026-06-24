@@ -4,11 +4,12 @@ import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
-import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, notImplemented, sanitise, renderTable, renderThead } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderTable, renderThead } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { showBusy } from '../utils.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
+import { publishResultsHTML } from '../forms/results-html.js';
 
 const SENIOR_COLS = (() => {
   const m = TABLES['results-senior'];
@@ -207,11 +208,52 @@ function exportResultsCSV() {
   }
 }
 
+// Last published iframe snippets keyed by type, persisted across dialog closes.
+const publishedUrls = {};
+
+function showEmbedCode() {
+  const entries = Object.entries(publishedUrls);
+  if (!entries.length) return;
+  if (entries.length === 1) {
+    void showInputDialog('Results URL for your website:', { defaultValue: entries[0][1], clipboard: true });
+    return;
+  }
+  const labels = { combined: 'Single page', juniors: 'Juniors', seniors: 'Seniors', helpers: 'Helpers' };
+  showChoiceDialog('Which results URL?', entries.map(([type]) => ({ label: labels[type], value: type })), { vertical: true })
+    .then(choice => {
+      if (choice) void showInputDialog('Results URL for your website:', { defaultValue: publishedUrls[choice], clipboard: true });
+    });
+}
+
+async function publishResults() {
+  const choice = await showChoiceDialog('Publish results to server', [
+    { label: 'Single page (juniors + seniors + helpers)', value: 'combined' },
+    { label: 'Juniors only',                              value: 'juniors'  },
+    { label: 'Seniors only',                              value: 'seniors'  },
+    { label: 'Helpers only',                              value: 'helpers'  },
+  ], { vertical: true });
+  if (!choice) return;
+  showStatus('Publishing…');
+  let url;
+  try {
+    url = await publishResultsHTML(choice);
+  } catch (err) {
+    showStatus(err.message, true);
+    return;
+  }
+  const full = `${window.location.origin}${url}`;
+  publishedUrls[choice] = full;
+  document.getElementById('btn-show-embed-code').disabled = false;
+  showStatus('Published.');
+  await showInputDialog('Results URL — paste into your website CMS:', { defaultValue: full, clipboard: true });
+}
+
 export function wireResults() {
   on('btn-format-results',      'click', runFormatResults);
   on('btn-print-prize-list',    'click', printPrizeList);
   on('btn-export-results-csv',  'click', exportResultsCSV);
-  on('btn-publish-results',     'click', notImplemented);
+  on('btn-publish-results',     'click', publishResults);
+  on('btn-show-embed-code',     'click', showEmbedCode);
   wireTabBar('results-tab-bar', 'tab-results-', 'data-results-tab');
   document.getElementById('results-tab-bar')?.addEventListener('click', updateResultsButtons);
 }

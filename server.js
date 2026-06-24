@@ -6,16 +6,18 @@ const fs     = require('fs');
 const path        = require('path');
 const crypto = require('crypto');
 
-const PORT    = process.env.PORT || 3000;
-const HOST          = process.env.HOST || '127.0.0.1';
-const ROOT          = __dirname;
-const DATA_DIR      = path.join(ROOT, 'data');
+const PORT        = process.env.PORT || 3000;
+const HOST        = process.env.HOST || '127.0.0.1';
+const ROOT        = __dirname;
+const DATA_DIR    = path.join(ROOT, 'data');
+const RESULTS_DIR = path.join(ROOT, 'results');
 const USERS_FILE    = path.join(ROOT, 'users.txt');
 const ADMINS_FILE   = path.join(ROOT, 'admins.txt');
 const SESSIONS_FILE = path.join(ROOT, 'sessions.txt');
 const SESSION_TTL  = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+if (!fs.existsSync(DATA_DIR))    fs.mkdirSync(DATA_DIR);
+if (!fs.existsSync(RESULTS_DIR)) fs.mkdirSync(RESULTS_DIR);
 
 let needsRestart = false;
 fs.watchFile(__filename, { interval: 1000 }, () => {
@@ -432,6 +434,20 @@ const server = http.createServer(async (req, res) => {
       saveSessions();
       console.log(`User deleted by admin ${username}: ${target}`);
       return jsonReply(res, 200, { ok: true });
+    }
+
+    // POST /api/publish-results — write an HTML results page to the results/ directory
+    if (pathname === '/api/publish-results' && req.method === 'POST') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      const body = JSON.parse(await readBody(req));
+      const safe = (body.filename || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+      if (!safe || !safe.endsWith('.html')) return jsonReply(res, 400, { error: 'Invalid filename' });
+      const dest = path.join(RESULTS_DIR, safe);
+      if (!dest.startsWith(RESULTS_DIR + path.sep)) return jsonReply(res, 400, { error: 'Invalid filename' });
+      fs.writeFileSync(dest, body.html || '', 'utf8');
+      console.log(`Results published: ${safe} by ${username}`);
+      return jsonReply(res, 200, { ok: true, url: `/results/${safe}` });
     }
 
     // ---- Static file serving ----

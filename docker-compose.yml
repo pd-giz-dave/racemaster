@@ -16,14 +16,14 @@ services:
       - "traefik.enable=true"
       # Routers
       # redirect insecure site to secure site
-      - "traefik.http.routers.racemaster.rule=Host(`racemaster.farthings.me`)"
+      - "traefik.http.routers.racemaster.rule=Host(`racemaster.${HOST_DOMAIN_NAME}`)"
       - "traefik.http.routers.racemaster.entrypoints=web"
-      - "traefik.http.routers.racemaster.middlewares=tim-redirectscheme"
+      - "traefik.http.routers.racemaster.middlewares=racemaster-redirectscheme"
       # Redirect Scheme HTTP -> HTTPS
       - "traefik.http.middlewares.racemaster-redirectscheme.redirectscheme.scheme=https"
       - "traefik.http.middlewares.racemaster-redirectscheme.redirectscheme.permanent=true"
       # secure site
-      - "traefik.http.routers.racemaster-secure.rule=Host(`racemaster.farthings.me`)"
+      - "traefik.http.routers.racemaster-secure.rule=Host(`racemaster.${HOST_DOMAIN_NAME}`)"
       - "traefik.http.routers.racemaster-secure.entrypoints=websecure"
       - "traefik.http.routers.racemaster-secure.tls.certresolver=myresolver"
       # Services
@@ -31,8 +31,10 @@ services:
     volumes:
       - .:/app
       - ./data:/app/data
+      - ./results:/app/results
       - ./users.txt:/app/users.txt
       - ./admins.txt:/app/admins.txt
+      - ./sessions.txt:/app/sessions.txt
 
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -692,6 +692,16 @@ input:focus, select:focus, textarea:focus {
   justify-content: flex-start;
 }
 .choice-dialog-cancel { margin-left: auto; }
+.choice-dialog-box--wide { max-width: 480px; }
+.choice-dialog-btns--vertical {
+  flex-direction: column;
+  align-items: stretch;
+}
+.choice-dialog-btns--vertical .choice-dialog-cancel {
+  margin-left: 0;
+  align-self: flex-end;
+  width: auto;
+}
 .input-dialog-field {
   width: 100%;
   box-sizing: border-box;

@@ -42,14 +42,10 @@ export const TOOLTIPS = {
   // Paperwork
   'btn-print-entry-form':        'Print blank entry forms for competitors to fill in at registration',
   'btn-print-pre-entry-forms':   'Print entry forms pre-filled with pre-entry details — load pre-entries first',
-  'btn-print-reg-sheet':         'Print a senior registration sheet listing all entered competitors',
-  'btn-print-junior-reg-sheet':  'Print a junior registration sheet',
-  'btn-print-number-matrix':     'Print a grid showing all bib numbers',
+  'btn-print-helpers-list':      'Print a blank helpers list for the RO to record names and roles on race day',
   'btn-print-finish-senior':     'Print a blank senior finish sheet for recording finish order',
   'btn-print-finish-junior':     'Print a blank junior finish sheet for recording finish order',
-  'btn-print-results-senior':    'Print the formatted senior results table',
-  'btn-print-results-junior':    'Print the formatted junior results table',
-  'btn-print-prizes':            'Print the prize list',
+  'btn-print-number-matrix':     'Print a 2D grid showing all bib numbers for cross-checking at CPs',
 
   // Entries
   'btn-export-entries-si':       'Export the entry list as a CSV for importing into the SI Timing system (for when using dibbers)',
@@ -105,6 +101,7 @@ export const TOOLTIPS = {
   'btn-print-prize-list':        'Print the prize list for the presentation',
   'btn-export-results-csv':      'Export results as a CSV spreadsheet for publication or DIY manipulation',
   'btn-publish-results':         'Publish results online',
+  'btn-show-embed-code':         'Show the URL to embed the last published results in your website',
 
   // People
   'people-filter':               'Filter the people list by name or club',

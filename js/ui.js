@@ -78,13 +78,13 @@ export function notImplemented() {
   return showConfirmDialog('Feature not yet implemented', 'OK');
 }
 
-export function showChoiceDialog(message, choices, { focusCancel = false } = {}) {
+export function showChoiceDialog(message, choices, { focusCancel = false, vertical = false } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'choice-dialog-overlay';
 
     const box = document.createElement('div');
-    box.className = 'choice-dialog-box';
+    box.className = vertical ? 'choice-dialog-box choice-dialog-box--wide' : 'choice-dialog-box';
 
     const msg = document.createElement('p');
     msg.className = 'choice-dialog-msg';
@@ -92,7 +92,7 @@ export function showChoiceDialog(message, choices, { focusCancel = false } = {})
     box.appendChild(msg);
 
     const btns = document.createElement('div');
-    btns.className = 'choice-dialog-btns';
+    btns.className = vertical ? 'choice-dialog-btns choice-dialog-btns--vertical' : 'choice-dialog-btns';
 
     const close = value => {
       document.body.removeChild(overlay);
@@ -127,13 +127,13 @@ export function showChoiceDialog(message, choices, { focusCancel = false } = {})
   });
 }
 
-export function showInputDialog(message, { defaultValue = '', placeholder = '' } = {}) {
+export function showInputDialog(message, { defaultValue = '', placeholder = '', clipboard = false } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'choice-dialog-overlay';
 
     const box = document.createElement('div');
-    box.className = 'choice-dialog-box';
+    box.className = 'choice-dialog-box choice-dialog-box--wide';
 
     const msg = document.createElement('p');
     msg.className = 'choice-dialog-msg';
@@ -155,6 +155,18 @@ export function showInputDialog(message, { defaultValue = '', placeholder = '' }
       document.removeEventListener('keydown', onKey);
       resolve(value);
     };
+
+    if (clipboard) {
+      const copy = document.createElement('button');
+      copy.className = 'btn';
+      copy.textContent = 'Copy to Clipboard';
+      copy.addEventListener('click', () => {
+        navigator.clipboard.writeText(input.value).catch(() => {});
+        copy.textContent = 'Copied!';
+        setTimeout(() => { copy.textContent = 'Copy to Clipboard'; }, 1500);
+      });
+      btns.appendChild(copy);
+    }
 
     const ok = document.createElement('button');
     ok.className = 'btn';
