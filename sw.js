@@ -1,68 +1,10 @@
 'use strict';
 
-const CACHE = 'racemaster-20260624151918';
+// auto updated if anything changes
+const CACHE = 'racemaster-20260625145805';
 
-const PRECACHE = [
-  '/',
-  '/index.html',
-  '/favicon.ico',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/css/app.css',
-  '/css/print.css',
-  '/js/app.js',
-  '/js/connect.js',
-  '/js/ui.js',
-  '/js/constants.js',
-  '/js/csv.js',
-  '/js/storage.js',
-  '/js/state.js',
-  '/js/utils.js',
-  '/js/categories.js',
-  '/js/time-utils.js',
-  '/js/data.js',
-  '/js/entries.js',
-  '/js/helpers.js',
-  '/js/finishers.js',
-  '/js/roles.js',
-  '/js/si-entries.js',
-  '/js/si-results.js',
-  '/js/results.js',
-  '/js/forms/index.js',
-  '/js/forms/preview.js',
-  '/js/forms/entry-form.js',
-  '/js/forms/entry-form.css',
-  '/js/forms/helpers-list.js',
-  '/js/forms/helpers-list.css',
-  '/js/forms/registration-sheet.js',
-  '/js/forms/registration-sheet.css',
-  '/js/forms/finish-sheet.js',
-  '/js/forms/finish-sheet.css',
-  '/js/forms/number-matrix.js',
-  '/js/forms/number-matrix.css',
-  '/js/forms/results.js',
-  '/js/forms/results.css',
-  '/js/forms/results-html.js',
-  '/js/forms/prize-list.js',
-  '/js/forms/prize-list.css',
-  '/js/views/home.js',
-  '/js/views/event.js',
-  '/js/views/entries.js',
-  '/js/views/helpers.js',
-  '/js/views/finishers.js',
-  '/js/views/results.js',
-  '/js/views/pre-entries.js',
-  '/js/views/safety.js',
-  '/js/views/people.js',
-  '/js/views/clubs.js',
-  '/js/views/roles.js',
-  '/js/views/dibbers.js',
-  '/js/views/categories.js',
-  '/js/views/forms.js',
-  '/js/views/si-results.js',
-  '/js/help.js',
-  '/js/locale.js',
-];
+// auto computed when the server sees a request for this file
+const PRECACHE = [];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PRECACHE)));

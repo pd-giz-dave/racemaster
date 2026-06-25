@@ -1,7 +1,6 @@
 'use strict';
 
 import { state } from './state.js';
-import { saveResults, savePrizes, saveHelpersReport } from './state.js';
 import { COURSE, GENDER } from './constants.js';
 import { ciEq, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
 import { calculateCategory, getCategoryPriority, genderFromCategory } from './categories.js';
@@ -11,13 +10,9 @@ import { getSortedFinishers } from './finishers.js';
 import { getSIBib, getSIRaceTime, getSICourse, getSIStatus } from './si-results.js';
 
 
-/**
- * Generate full results from finishers and entries.
- * Populates state.results and state.prizes.
- */
-export async function formatResults() {
-  state.results = [];
-  state.prizes  = [];
+/** Generate full results from finishers and entries. Returns { warnings, results, prizes, helpersReport }. */
+export function formatResults() {
+  const results = [];
 
   const courses = [COURSE.SENIORS, COURSE.JUNIORS];
 
@@ -174,27 +169,15 @@ export async function formatResults() {
       catGroups[cat].forEach((r, i) => { r.inCatPos = i + 1; });
     }
 
-    state.results.push(...courseResults);
+    results.push(...courseResults);
   }
 
-  await saveResults();
-  await buildPrizes();
-  await buildHelpersReport();
-  return { warnings: clashWarnings };
+  const prizes       = buildPrizes(results);
+  const helpersReport = buildHelpersReport();
+  return { warnings: clashWarnings, results, prizes, helpersReport };
 }
 
-/**
- * Build the ordered prize list from state.results.
- *
- * Order: junior girls by cat, junior boys by cat, senior overall,
- *        senior female overall, senior male overall,
- *        senior female by cat, senior male by cat.
- *
- * Category sections expand beyond catDepth so there are always catDepth
- * non-multi-winner entries per category (multi-winners counted but shown with *).
- * Overall and junior sections are fixed at overallDepth.
- */
-export async function buildPrizes() {
+function buildPrizes(results) {
   const overallDepth    = +state.event.prizeDepthOverall           || 3;
   const catDepth        = +state.event.prizeDepthPerCategory       || 3;
   const juniorCatDepth  = +state.event.juniorPrizeDepthPerCategory || 3;
@@ -203,8 +186,8 @@ export async function buildPrizes() {
   const byPos      = (a, b) => a.position - b.position;
   const isFemale   = r => genderFromCategory(r.category) === GENDER.FEMALE;
 
-  const juniors = getResultsForCourse(COURSE.JUNIORS).filter(isFinisher);
-  const seniors = getResultsForCourse(COURSE.SENIORS).filter(isFinisher);
+  const juniors = getResultsForCourse(COURSE.JUNIORS, results).filter(isFinisher);
+  const seniors = getResultsForCourse(COURSE.SENIORS, results).filter(isFinisher);
 
   function catsSorted(results) {
     return [...new Set(results.map(r => r.category))]
@@ -283,12 +266,11 @@ export async function buildPrizes() {
   addExpandedByCat('Senior Female Categories', seniors.filter(isFemale),          false);
   addExpandedByCat('Senior Male Categories',   seniors.filter(r => !isFemale(r)), false);
 
-  state.prizes = prizes;
-  await savePrizes();
+  return prizes;
 }
 
-export async function buildHelpersReport() {
-  state.helpersReport = state.helpers
+function buildHelpersReport() {
+  return state.helpers
     .map(h => {
       const person    = state.people.find(p => ciEq(p.name, h.name || ''));
       const club      = h.club || person?.club || '';
@@ -297,27 +279,17 @@ export async function buildHelpersReport() {
       return { name: h.name || '', club, cat, role: h.role || '', lastRaced };
     })
     .sort((a, b) => (a.role || '').localeCompare(b.role || '') || (a.name || '').localeCompare(b.name || ''));
-  await saveHelpersReport();
 }
 
 /** Get results sorted by position for a course */
-export function getResultsForCourse(course) {
-  return state.results
+export function getResultsForCourse(course, results) {
+  return results
     .filter(r => ciEq(r.course, course))
     .sort((a,b) => a.position - b.position);
 }
 
-/** Get the prize list */
-export function getPrizes() {
-  return [...state.prizes];
-}
-
-/**
- * Compute the average time (HH:MM:SS) of the top N finishers for a course.
- * Uses state.results. Returns '' if no results.
- */
-export function computeAvgTop10(course) {
-  const finishers = getResultsForCourse(course).filter(r => r.position < 9999 && isValidRaceTime(r.time));
+export function computeAvgTop10(course, results) {
+  const finishers = getResultsForCourse(course, results).filter(r => r.position < 9999 && isValidRaceTime(r.time));
   const top10 = finishers.slice(0, 10);
   if (!top10.length) return '';
   const avgSecs = top10.reduce((s, r) => s + timeToSeconds(r.time), 0) / top10.length;

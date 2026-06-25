@@ -26,10 +26,7 @@ export const state = {
   entries:    [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry}
   helpers:    [],  // {number, name, club, gender, dob, category, role}
   finishers:  [],  // {action, number, time}
-  results:        [],  // {course, bibNumber, position, inCatPos, name, club, category, time, behindPercent, behindTime, prize}
-  prizes:         [],  // {position, category, inCatPos, time, number, name, priority}
-  helpersReport:  [],  // {name, club, cat, role, lastRaced} — generated alongside results
-  siResults:      [],  // dynamic - whatever comes from SI results CSV
+  siResults:  [],  // dynamic - whatever comes from SI results CSV
   fraPreset:  [],  // editable FRA category preset (saved to fra_preset.csv)
   wfraPreset: [],  // editable WFRA category preset (saved to wfra_preset.csv)
 
@@ -50,9 +47,6 @@ export async function loadAll() {
     loadList('entries'),
     loadList('helpers'),
     loadList('finishers'),
-    loadList('results'),
-    loadList('prizes'),
-    loadList('helpersReport'),
     loadList('siResults'),
     loadPreset('roles', BUILTIN_ROLES, r => ({ ...r })),
     loadPreset('fraPreset',  FRA_CATEGORIES),
@@ -103,10 +97,7 @@ export async function savePreEntries()   { await writeTable('preEntries', state.
 export async function saveEntries()      { await writeTable('entries',    state.entries); }
 export async function saveHelpers()      { await writeTable('helpers',    state.helpers); }
 export async function saveFinishers()    { await writeTable('finishers',  state.finishers); }
-export async function saveResults()        { await writeTable('results',        state.results); }
-export async function savePrizes()         { await writeTable('prizes',         state.prizes); }
-export async function saveHelpersReport()  { await writeTable('helpersReport',  state.helpersReport); }
-export async function saveSIResults()      { await writeTable('siResults',       state.siResults); }
+export async function saveSIResults()    { await writeTable('siResults',  state.siResults); }
 
 /** Apply the FRA preset categories to state.categories */
 export function applyFRACategories() {

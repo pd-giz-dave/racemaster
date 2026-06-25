@@ -1,9 +1,9 @@
 'use strict';
 
-import { state }               from '../state.js';
-import { getResultsForCourse } from '../results.js';
-import { getCategoryPriority } from '../categories.js';
-import { COURSE }              from '../constants.js';
+import { state }                           from '../state.js';
+import { formatResults, getResultsForCourse, computeAvgTop10 } from '../results.js';
+import { getCategoryPriority }             from '../categories.js';
+import { COURSE }                          from '../constants.js';
 import { toISODate }           from '../utils.js';
 import { sanitise }            from '../ui.js';
 
@@ -21,6 +21,7 @@ const EXPORT_EXTRA_CSS = `
   .re-subtitle { font-size: 0.875rem; color: var(--muted); margin-bottom: 20px; }
   .re-section  { font-size: 0.95rem; font-weight: 600; margin: 24px 0 8px;
                  padding-bottom: 4px; border-bottom: 2px solid var(--border); }
+  .re-summary  { font-size: 0.8rem; color: var(--muted); margin: 0 0 8px; }
   .re-footer   { margin-top: 24px; font-size: 0.75rem; color: var(--muted); text-align: right; }
 `;
 
@@ -50,8 +51,8 @@ function heading() {
 <p class="re-subtitle">${esc(date)}</p>`;
 }
 
-function juniorsSection() {
-  const results = getResultsForCourse(COURSE.JUNIORS);
+function juniorsSection(results) {
+  results = getResultsForCourse(COURSE.JUNIORS, results);
   if (!results.length) return '<h3 class="re-section">Junior Results</h3><p>No junior results.</p>';
 
   const groups = new Map();
@@ -89,9 +90,15 @@ function juniorsSection() {
 </table>`;
 }
 
-function seniorsSection() {
-  const results = getResultsForCourse(COURSE.SENIORS);
+function seniorsSection(allResults) {
+  const results = getResultsForCourse(COURSE.SENIORS, allResults);
   if (!results.length) return '<h3 class="re-section">Senior Results</h3><p>No senior results.</p>';
+
+  const avg = computeAvgTop10(COURSE.SENIORS, allResults);
+  const n   = Math.min(results.filter(r => r.position < 9999).length, 10);
+  const summary = avg
+    ? `<p class="re-summary">Top ${n} average: ${avg}&nbsp;&nbsp;&nbsp;R = course record</p>`
+    : `<p class="re-summary">R = course record</p>`;
 
   const rows = results.map(r => {
     const pos  = r.position < 9999 ? r.position : '';
@@ -105,14 +112,15 @@ function seniorsSection() {
   }).join('');
 
   return `<h3 class="re-section">Senior Results</h3>
+${summary}
 <table class="data-table">
   <thead><tr><th>Course</th><th>Bib</th><th>Pos</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th>%Ldrs</th><th>Behind</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>`;
 }
 
-function helpersSection() {
-  const helpers = state.helpersReport;
+function helpersSection(helpersReport) {
+  const helpers = helpersReport;
   if (!helpers.length) return '<h3 class="re-section">Helpers</h3><p>No helpers recorded.</p>';
 
   const rows = helpers.map(h => `<tr>
@@ -128,10 +136,10 @@ function helpersSection() {
 }
 
 const SECTIONS = {
-  combined: () => heading() + juniorsSection() + seniorsSection() + helpersSection(),
-  juniors:  () => heading() + juniorsSection(),
-  seniors:  () => heading() + seniorsSection(),
-  helpers:  () => heading() + helpersSection(),
+  combined: (r, h) => heading() + juniorsSection(r) + seniorsSection(r) + helpersSection(h),
+  juniors:  (r, h) => heading() + juniorsSection(r),
+  seniors:  (r, h) => heading() + seniorsSection(r),
+  helpers:  (r, h) => heading() + helpersSection(h),
 };
 
 const TITLES = {
@@ -154,8 +162,9 @@ function makeFilename(type) {
  * Returns the server-relative URL of the published file.
  */
 export async function publishResultsHTML(type) {
+  const { results, helpersReport } = formatResults();
   const filename = makeFilename(type);
-  const html     = await wrap(TITLES[type](), SECTIONS[type]());
+  const html     = await wrap(TITLES[type](), SECTIONS[type](results, helpersReport));
   const token    = localStorage.getItem('racemaster-token');
   const res = await fetch('/api/publish-results', {
     method:  'POST',

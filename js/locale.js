@@ -10,10 +10,11 @@
 export const TOOLTIPS = {
   // Header
   'btn-nav-toggle':              'Open / close the navigation menu',
-  'btn-select-datafile':         'Open or create an event data file',
+  'btn-app-update':              'A new version of RaceMaster is available — click to apply it',
+
+  // Datasets view
   'btn-export-state':            'Export all event data as a JSON backup file',
   'btn-import-state':            'Import event data from a JSON backup file',
-  'btn-app-update':              'A new version of RaceMaster is available — click to apply it',
 
   // Event settings
   'ev-name':                     'The name of the race event',
@@ -97,7 +98,6 @@ export const TOOLTIPS = {
   'btn-import-si-results':       'Import an SI Timing (processable) results CSV file to load finish times when using dibbers',
 
   // Results
-  'btn-format-results':          'Calculate finishing positions, age-category places and prizes from the recorded finish times',
   'btn-print-prize-list':        'Print the prize list for the presentation',
   'btn-export-results-csv':      'Export results as a CSV spreadsheet for publication or DIY manipulation',
   'btn-publish-results':         'Publish results online',
@@ -259,7 +259,7 @@ export const HELP = {
         You can re-import if more data arrives later.</p>
   `,
   'view-results': `
-    <p>Click <strong>Generate Results</strong> to calculate finishing positions, age-category places and prizes. 
+    <p>Results, prizes and helpers are calculated automatically when you open this page.
         Switch between the <strong>Seniors</strong>, <strong>Juniors</strong>, <strong>Prizes</strong> and <strong>Helpers</strong> tabs to review the output.</p>
     <p>Use <strong>Export CSV</strong> to save a results spreadsheet for publication, 
         or <strong>Print Prize List</strong> to print overall and category winners for the presentation.</p>
@@ -287,9 +287,23 @@ export const HELP = {
     <p>Custom categories can be added here if the standard schemes do not cover your event.</p>
   `,
   'view-roles': `
-    <p>The list of helper roles (e.g. Timekeeper, Start Marshal, Registration). 
+    <p>The list of helper roles (e.g. Timekeeper, Start Marshal, Registration).
         Assign roles when recording helpers on the Helpers page so the helpers report shows who did what.</p>
     <p>Add roles here before recording helpers, or type them directly into the helpers form.</p>
+  `,
+  'view-datafile': `
+    <p>Datasets are stored on the RaceMaster server. Sign in to view, create, and connect to your datasets.
+        Each dataset holds all the data for one event — entries, finishers, results, and so on.</p>
+    <p><strong>Connect</strong> — load a dataset from the server and make it the active dataset.
+        Any unsaved local changes can be pushed first or discarded.</p>
+    <p><strong>Save As</strong> — copy the current in-memory data to a new server dataset (useful for keeping history of each event).</p>
+    <p><strong>Copy</strong> — duplicate an existing server dataset under a new name, without changing which one is connected.</p>
+    <p><strong>Export / Import</strong> — save or restore a local JSON snapshot of all event data, independent of the server.</p>
+    <p>Private datasets are only visible to their owner (and admins). Public datasets are visible to all signed-in users.</p>
+    <p>When not signed-in you will see a login panel, either sign-in to your existing account or 
+        create a new one (they are completely free with no-catches).
+        If you do not want to use an account just select <strong>Continue without signing in</strong>. 
+        In that case you can you use the Export/Import buttons to work purely locally.</p>
   `,
 };
 

@@ -1,12 +1,11 @@
 'use strict';
 
-import { formatResults, getResultsForCourse, computeAvgTop10, getPrizes } from '../results.js';
+import { formatResults, getResultsForCourse, computeAvgTop10 } from '../results.js';
 import { state } from '../state.js';
 import { COURSE } from '../constants.js';
 import { getCategoryPriority } from '../categories.js';
 import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderTable, renderThead } from '../ui.js';
 import { TABLES } from '../locale.js';
-import { showBusy } from '../utils.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
 import { publishResultsHTML } from '../forms/results-html.js';
@@ -27,6 +26,9 @@ const SENIOR_COLS = (() => {
   ];
 })();
 
+let _results = [];
+let _prizes  = [];
+
 const HELPERS_COLS = (() => {
   const m = TABLES['results-helpers'];
   return [
@@ -39,24 +41,29 @@ const HELPERS_COLS = (() => {
 })();
 
 export function renderResults() {
-  const seniors = getResultsForCourse(COURSE.SENIORS);
-  const juniors = getResultsForCourse(COURSE.JUNIORS);
+  const { warnings, results, prizes, helpersReport } = formatResults();
+  _results = results;
+  _prizes  = prizes;
+
+  const seniors = getResultsForCourse(COURSE.SENIORS, results);
+  const juniors = getResultsForCourse(COURSE.JUNIORS, results);
   renderResultsTable('results-senior-tbody', seniors);
   renderJuniorsTable('results-junior-tbody', juniors);
 
   const printBtn = document.getElementById('btn-print-prize-list');
-  if (printBtn) printBtn.disabled = getPrizes().length === 0;
+  if (printBtn) printBtn.disabled = prizes.length === 0;
 
   const summary = document.getElementById('results-senior-summary');
   if (summary) {
-    const avg = computeAvgTop10(COURSE.SENIORS);
+    const avg = computeAvgTop10(COURSE.SENIORS, results);
     const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
     const avgPart = avg ? `Top ${n} average: ${avg}` : '';
     summary.innerHTML = avgPart ? `${avgPart}<span style="margin-left:2em">R = course record</span>` : '';
   }
-  renderPrizes();
-  renderHelpersReport();
+  renderPrizes(prizes);
+  renderHelpersReport(helpersReport);
   updateResultsButtons();
+  return warnings;
 }
 
 export function renderResultsTable(tbodyId, results) {
@@ -104,12 +111,10 @@ export function renderJuniorsTable(tbodyId, results) {
   tbody.innerHTML = rows.join('');
 }
 
-export function renderPrizes() {
+export function renderPrizes(prizes) {
   renderThead('prizes-tbody', TABLES.prizes);
   const tbody = document.getElementById('prizes-tbody');
   if (!tbody) return;
-
-  const prizes = getPrizes();
 
   const hint = document.getElementById('prizes-hint');
   if (hint) hint.innerHTML = prizes.length
@@ -143,18 +148,10 @@ export function renderPrizes() {
   tbody.innerHTML = rows.join('');
 }
 
-export function renderHelpersReport() {
-  renderTable('results-helpers-tbody', HELPERS_COLS, state.helpersReport);
+export function renderHelpersReport(helpersReport) {
+  renderTable('results-helpers-tbody', HELPERS_COLS, helpersReport);
 }
 
-export async function runFormatResults() {
-  showBusy('Formatting results…');
-  const { warnings } = await formatResults();
-  showBusy('');
-  if (warnings.length) showStatus(`Results generated — ${warnings.length} clash(es): ${warnings.join('; ')}`, true);
-  else showStatus('Results generated.');
-  renderResults();
-}
 
 async function printPrizeList() {
   const choice = await showChoiceDialog('Select paper size for prize list:', [
@@ -185,25 +182,28 @@ function updateResultsButtons() {
   const exportBtn  = document.getElementById('btn-export-results-csv');
   const publishBtn = document.getElementById('btn-publish-results');
   const tab = activeResultsTab();
-  let disabled;
-  if (tab === 'senior') {
-    disabled = getResultsForCourse(COURSE.SENIORS).length === 0;
-  } else if (tab === 'junior') {
-    disabled = getResultsForCourse(COURSE.JUNIORS).length === 0;
-  } else {
-    disabled = true;
-  }
-  if (exportBtn)  exportBtn.disabled  = disabled;
-  if (publishBtn) publishBtn.disabled = disabled;
+
+  const seniors = getResultsForCourse(COURSE.SENIORS, _results);
+  const juniors = getResultsForCourse(COURSE.JUNIORS, _results);
+
+  let exportDisabled;
+  if (tab === 'senior')      exportDisabled = seniors.length === 0;
+  else if (tab === 'junior') exportDisabled = juniors.length === 0;
+  else                       exportDisabled = true;
+
+  const hasAnyResults = seniors.length > 0 || juniors.length > 0;
+
+  if (exportBtn)  exportBtn.disabled  = exportDisabled;
+  if (publishBtn) publishBtn.disabled = !hasAnyResults;
 }
 
 function exportResultsCSV() {
   const eventName = sanitise(state.event.name || 'event');
   if (activeResultsTab() === 'junior') {
-    downloadCSV(`${eventName}-results-juniors.csv`, getResultsForCourse(COURSE.JUNIORS),
+    downloadCSV(`${eventName}-results-juniors.csv`, getResultsForCourse(COURSE.JUNIORS, _results),
       ['course', 'bibNumber', 'inCatPos', 'name', 'club', 'category', 'time']);
   } else {
-    downloadCSV(`${eventName}-results-seniors.csv`, getResultsForCourse(COURSE.SENIORS),
+    downloadCSV(`${eventName}-results-seniors.csv`, getResultsForCourse(COURSE.SENIORS, _results),
       ['course', 'bibNumber', 'position', 'inCatPos', 'name', 'club', 'category', 'time', 'pctLdrs', 'behindTime']);
   }
 }
@@ -249,7 +249,6 @@ async function publishResults() {
 }
 
 export function wireResults() {
-  on('btn-format-results',      'click', runFormatResults);
   on('btn-print-prize-list',    'click', printPrizeList);
   on('btn-export-results-csv',  'click', exportResultsCSV);
   on('btn-publish-results',     'click', publishResults);

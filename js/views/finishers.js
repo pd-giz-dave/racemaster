@@ -160,6 +160,8 @@ export function applyMode(mode) {
       .forEach(r => r.classList.remove('row-timing-target'));
     document.querySelector('#finishers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
     if (bibEl) { bibEl.value = state.finishers.length === 0 && editingIdx < 0 ? 'Clock' : ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
+    const lineEl = document.getElementById('finisher-line');
+    if (lineEl) lineEl.value = nextLineLabel();
     setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
   }
 }

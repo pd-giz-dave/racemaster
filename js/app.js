@@ -2,7 +2,7 @@
 
 import { state, loadAll } from './state.js';
 import { restoreDirectory, dumpState, restoreState, getSession, isStandalone } from './storage.js';
-import { openDataFileModal, updateDataFileButton, startServerPing, startUpdateCheck } from './connect.js';
+import { wireDatafileView, refreshDatafileView, updateDataFileButton, startServerPing, startUpdateCheck } from './connect.js';
 import { showBusy } from './utils.js';
 import { on, showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, pickFile, downloadText, sanitise } from './ui.js';
 
@@ -32,38 +32,44 @@ let currentView = 'home';
 export async function init() {
   showBusy('Loading…');
 
-  if (!getSession() && !isStandalone()) {
-    showBusy('');
-    await openDataFileModal();
-    showBusy('Loading…');
-  }
-
-  try {
-    await restoreDirectory();
-    await loadAll();
-    updateBannerEventName(state.event.name);
+  async function connectAndLoad() {
     const session = getSession();
-    if (session) {
-      showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
-    } else {
-      showStatus(state.event.name ? `Standalone: ${state.event.name}` : 'Standalone mode — no server sync');
+    showBusy('Loading…');
+    try {
+      await restoreDirectory();
+      await loadAll();
+      updateBannerEventName(state.event.name);
+      if (session) {
+        showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
+      } else {
+        showStatus(state.event.name ? `Standalone: ${state.event.name}` : 'Standalone mode — no server sync');
+      }
+    } catch (e) {
+      showStatus('Error loading data: ' + e.message, true);
     }
-  } catch (e) {
-    showStatus('Error loading data: ' + e.message, true);
+    updateDataFileButton();
+    renderAll();
+    showView('home');
+    showBusy('');
+    setTimeout(focusSidebar, 0);
   }
 
-  updateDataFileButton();
   wireViewHelp();
   wireTooltips();
   startServerPing();
   startUpdateCheck();
   window.addEventListener('racemaster-dirty-change', updateDataFileButton);
+  wireDatafileView(connectAndLoad);
   wireNav();
   wireEvents();
-  renderAll();
-  showBusy('');
-  showView('home');
-  setTimeout(focusSidebar, 0);
+
+  if (!getSession() && !isStandalone()) {
+    showView('datafile');
+    showBusy('');
+    return;
+  }
+
+  await connectAndLoad();
 }
 
 // ---- Navigation ----
@@ -189,6 +195,7 @@ function renderView(v) {
     case 'categories':   renderCategories();   break;
     case 'forms':        renderForms();        break;
     case 'si-results':   renderSIResults();    break;
+    case 'datafile':     refreshDatafileView(); break;
   }
 }
 
@@ -220,22 +227,6 @@ async function importState() {
 // ---- Event wiring (orchestration) ----
 
 function wireEvents() {
-  on('btn-select-datafile', 'click', async () => {
-    await openDataFileModal();
-    const session = getSession();
-    showBusy('Loading…');
-    await restoreDirectory();
-    await loadAll();
-    updateBannerEventName(state.event.name);
-    showBusy('');
-    renderAll();
-    showView('home');
-    if (session) {
-      showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
-    } else {
-      showStatus(state.event.name ? `Standalone: ${state.event.name}` : 'Standalone mode — no server sync');
-    }
-  });
   on('btn-export-state', 'click', exportState);
   on('btn-import-state', 'click', importState);
 

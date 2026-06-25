@@ -2,7 +2,7 @@
 
 import { state } from '../state.js';
 import { today } from '../utils.js';
-import { getPrizes } from '../results.js';
+import { formatResults } from '../results.js';
 import { openPopup } from './preview.js';
 
 const OVERALL_SECTIONS = new Set(['Senior Overall', 'Senior Female Overall', 'Senior Male Overall']);
@@ -11,7 +11,7 @@ function buildPrizeListHTML(isNarrow) {
   const c         = isNarrow ? 'pln' : 'pl';
   const pageClass = isNarrow ? 'prize-list-narrow' : 'prize-list-page';
   const tblClass  = isNarrow ? 'pln-table' : 'prize-table';
-  const prizes = getPrizes();
+  const { prizes } = formatResults();
   const event     = state.event;
 
   let html = `<div class="${isNarrow ? pageClass : `print-page ${pageClass}`}">`;

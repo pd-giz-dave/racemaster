@@ -15,12 +15,6 @@ EXCLUDES=(
   --exclude='users.txt' --exclude='admins.txt' --exclude='sessions.txt'
 )
 SRC="$(dirname "$0")/../"
-SW="$SRC/sw.js"
-
-# Bump the SW cache version so the browser detects a new service worker on every deploy
-NEW_CACHE="racemaster-$(date +%Y%m%d%H%M%S)"
-sed -i "s/const CACHE = 'racemaster-[^']*';/const CACHE = '${NEW_CACHE}';/" "$SW"
-echo "SW cache version → ${NEW_CACHE}"
 
 echo "Ensuring ${REMOTE}:${DEST} exists..."
 ssh "$REMOTE" "sudo mkdir -p ${DEST}"

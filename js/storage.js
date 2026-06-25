@@ -271,7 +271,7 @@ export async function restoreDirectory() {
       headers: { 'Authorization': `Bearer ${session.token}` },
     });
     if (res.status === 401) {
-      clearSession(); // token expired (server restarted) — fall through to cache
+      clearSession(); // token expired — fall through to cache
     } else if (res.ok) {
       const serverData = await res.json();
       localStorage.setItem(CACHE_KEY, JSON.stringify(serverData));

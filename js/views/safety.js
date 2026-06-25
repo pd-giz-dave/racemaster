@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { recordFinisher, deleteFinisher, getOutstandingCount } from '../finishers.js';
 import { getEntriesOnCourse, getEntry, isEntryBanned } from '../entries.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from '../si-results.js';
-import { getResultsForCourse } from '../results.js';
+import { formatResults, getResultsForCourse } from '../results.js';
 import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { COURSE } from '../constants.js';
@@ -128,10 +128,10 @@ export function renderSafety() {
   const allFinished = [...swFinished, ...siFinished]
     .sort((a, b) => +a.number - +b.number);
 
-  // Position/time from state.results (populated by Format Results)
+  const { results } = formatResults();
   const resultsByBib = new Map();
   for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
-    for (const r of getResultsForCourse(course)) {
+    for (const r of getResultsForCourse(course, results)) {
       if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
     }
   }

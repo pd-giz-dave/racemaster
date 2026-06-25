@@ -23,11 +23,8 @@
     <img src="favicon.ico" class="app-icon" alt="">
     <h1>RaceMaster (v0.0.1-alpha)</h1>
     <span class="event-name" id="home-event-name-header"></span>
+    <span id="header-dataset-name"></span>
     <div style="flex:1"></div>
-    <button class="btn btn-outline" id="btn-select-datafile">Select Data File</button>
-    <button class="btn btn-outline" id="btn-export-state">Export</button>
-    <button class="btn btn-outline" id="btn-import-state">Import</button>
-    <span id="header-username"></span>
     <span id="header-server-status"></span>
     <button class="btn btn-warn" id="btn-app-update" hidden>Update available</button>
   </header>
@@ -37,6 +34,7 @@
     <nav>
       <div class="nav-section">Overview</div>
       <a href="#" data-view="home">Home</a>
+      <a href="#" data-view="datafile">Datasets</a>
       <a href="#" data-view="event">Event Settings</a>
 
       <div class="nav-section">Prepare</div>
@@ -88,7 +86,7 @@
         <div class="card home-getting-started">
           <h3>Getting Started</h3>
           <ol style="margin-left:1.2em;line-height:2">
-            <li>Click <strong>Select Data File</strong> (in the header above) to select your data file.</li>
+            <li>Navigate to <strong>Datasets</strong> to log in (optional) and select or create a dataset.</li>
             <li>Set up the event details in <strong>Event Settings</strong>.</li>
             <li>Optionally, import pre-entries via <strong>Pre-Entries (SI)</strong>.</li>
             <li>Prepare pre-race paperwork from <strong>Paperwork</strong>.</li>
@@ -637,7 +635,6 @@
       <div id="results-sticky-top">
         <div class="view-header"><h2>Results &amp; Prize List</h2><span class="entry-status view-status-msg" hidden></span></div>
         <div class="btn-row">
-          <button class="btn" id="btn-format-results">Generate Results</button>
           <button class="btn btn-secondary" id="btn-print-prize-list" disabled>Print Prize List</button>
           <button class="btn btn-secondary" id="btn-export-results-csv">Export CSV</button>
           <button class="btn btn-secondary" id="btn-publish-results">Publish Results</button>
@@ -921,104 +918,115 @@
     </div>
 
     <!-- ======================================================
-         DATA FILE / AUTH
+         DATASETS
          ====================================================== -->
     <div class="view" id="view-datafile" hidden>
       <div class="view-header">
-        <h2>Pick/Create Data File</h2>
-        <span id="df-logged-in-user" style="font-size:0.875rem;color:var(--muted)"></span>
-      </div>
-
-      <!-- Auth panel -->
-      <div id="df-panel-auth" class="card" style="max-width:420px">
-        <div class="form-field" style="margin-bottom:10px">
-          <label for="df-username">Username</label>
-          <input id="df-username" type="text" autocomplete="username" style="width:100%">
-        </div>
-        <div class="form-field" style="margin-bottom:12px">
-          <label for="df-password">Password</label>
-          <input id="df-password" type="password" autocomplete="current-password" style="width:100%">
-        </div>
+        <h2>Datasets</h2>
         <div class="btn-row">
-          <button id="df-btn-login" class="btn btn-primary">Sign In</button>
-          <button id="df-btn-create-account" class="btn btn-secondary">Create Account</button>
+          <button class="btn btn-secondary" id="btn-export-state">Export</button>
+          <button class="btn btn-secondary" id="btn-import-state">Import</button>
         </div>
-        <p id="df-auth-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
-        <hr style="margin:12px 0;border:none;border-top:1px solid var(--border,#ddd)">
-        <button id="df-btn-standalone" class="btn btn-secondary" style="width:100%">Continue without signing in (standalone)</button>
       </div>
 
-      <!-- Datasets panel + admin users card (side by side) -->
-      <div id="df-panels-row" style="display:flex;gap:1rem;align-items:flex-start" hidden>
+      <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap">
 
-      <!-- Admin users card (left, admin only) -->
-      <div id="df-panel-users" class="card" hidden style="min-width:180px;flex-shrink:0">
-        <h3 style="margin:0 0 8px;font-size:1rem">Users</h3>
-        <div id="df-user-list"></div>
-        <p id="df-user-status" style="margin:6px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+        <!-- Account card: login form (logged out) or signed-in status (logged in) -->
+        <div class="card" style="min-width:240px;flex-shrink:0;width:280px">
+          <div id="df-panel-auth">
+            <div class="form-field" style="margin-bottom:10px">
+              <label for="df-username">Username</label>
+              <input id="df-username" type="text" autocomplete="username" style="width:100%">
+            </div>
+            <div class="form-field" style="margin-bottom:12px">
+              <label for="df-password">Password</label>
+              <input id="df-password" type="password" autocomplete="current-password" style="width:100%">
+            </div>
+            <div class="btn-row">
+              <button id="df-btn-login" class="btn btn-primary">Sign In</button>
+              <button id="df-btn-create-account" class="btn btn-secondary">Create Account</button>
+            </div>
+            <p id="df-auth-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+            <hr style="margin:12px 0;border:none;border-top:1px solid var(--border,#ddd)">
+            <button id="df-btn-standalone" class="btn btn-secondary" style="width:100%">Continue without signing in</button>
+          </div>
+          <div id="df-panel-loggedin" hidden>
+            <p id="df-logged-in-user" style="margin:0 0 12px;font-size:0.875rem;color:var(--muted)"></p>
+            <button id="df-btn-logout" class="btn btn-secondary" style="width:100%">Log out</button>
+            <!-- Admin users section (admin only) -->
+            <div id="df-panel-users" hidden style="margin-top:16px;border-top:1px solid var(--border,#ddd);padding-top:12px">
+              <h3 style="margin:0 0 8px;font-size:1rem">Users</h3>
+              <div id="df-user-list"></div>
+              <p id="df-user-status" style="margin:6px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Datasets area -->
+        <div id="df-panels-row" style="display:none;gap:1rem;align-items:flex-start;flex:1;flex-wrap:wrap">
+
+          <!-- Datasets card -->
+          <div id="df-panel-datasets" class="card" style="flex:1;min-width:300px">
+            <p style="margin:0 0 8px;font-size:0.875rem;color:var(--muted,#666)">Your datasets and public datasets from other users:</p>
+            <div id="df-dataset-list" style="margin-bottom:10px"></div>
+
+            <!-- Connect confirmation -->
+            <div id="df-connect-confirm" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
+              <p id="df-connect-confirm-msg" style="margin:0 0 8px;font-size:0.875rem"></p>
+              <div class="btn-row">
+                <button id="df-btn-connect-push" class="btn btn-primary" hidden>Push &amp; Connect</button>
+                <button id="df-btn-connect-discard" class="btn btn-secondary"></button>
+                <button id="df-btn-connect-cancel" class="btn btn-secondary">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Copy form -->
+            <div id="df-copy-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
+              <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong id="df-copy-source-label"></strong> to:</p>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input id="df-copy-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
+                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-copy-vis" value="private" checked> Private</label>
+                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-copy-vis" value="public"> Public</label>
+              </div>
+              <div class="btn-row" style="margin-top:8px">
+                <button id="df-btn-do-copy" class="btn btn-primary">Copy</button>
+                <button id="df-btn-cancel-copy" class="btn btn-secondary">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Save As form -->
+            <div id="df-save-as-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
+              <p style="margin:0 0 6px;font-size:0.875rem">Save current data as new dataset:</p>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input id="df-save-as-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
+                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="private" checked> Private</label>
+                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="public"> Public</label>
+              </div>
+              <div class="btn-row" style="margin-top:8px">
+                <button id="df-btn-do-save-as" class="btn btn-primary">Save As</button>
+                <button id="df-btn-cancel-save-as" class="btn btn-secondary">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Create form -->
+            <div style="border-top:1px solid var(--border,#ddd);padding-top:10px;margin-bottom:4px">
+              <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">New dataset:</p>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input id="df-new-dataset-name" type="text" placeholder="dataset-name" aria-label="Dataset name" style="flex:1;min-width:100px">
+                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="private" checked> Private</label>
+                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="public"> Public</label>
+                <button id="df-btn-create-dataset" class="btn btn-primary">Create</button>
+              </div>
+            </div>
+
+            <p id="df-dataset-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+            <div class="btn-row" style="margin-top:10px">
+              <button id="df-btn-save-as" class="btn btn-secondary">Save As…</button>
+            </div>
+          </div><!-- end df-panel-datasets -->
+
+        </div><!-- end df-panels-row -->
       </div>
-
-      <!-- Datasets card (right) -->
-      <div id="df-panel-datasets" class="card" style="flex:1">
-        <p style="margin:0 0 8px;font-size:0.875rem;color:var(--muted,#666)">Your datasets and public datasets from other users:</p>
-        <div id="df-dataset-list" style="margin-bottom:10px"></div>
-
-        <!-- Connect confirmation (shown when Connect is clicked) -->
-        <div id="df-connect-confirm" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
-          <p id="df-connect-confirm-msg" style="margin:0 0 8px;font-size:0.875rem"></p>
-          <div class="btn-row">
-            <button id="df-btn-connect-push" class="btn btn-primary" hidden>Push &amp; Connect</button>
-            <button id="df-btn-connect-discard" class="btn btn-secondary"></button>
-            <button id="df-btn-connect-cancel" class="btn btn-secondary">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Copy form (shown when Copy is clicked) -->
-        <div id="df-copy-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
-          <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong id="df-copy-source-label"></strong> to:</p>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input id="df-copy-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
-            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-copy-vis" value="private" checked> Private</label>
-            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-copy-vis" value="public"> Public</label>
-          </div>
-          <div class="btn-row" style="margin-top:8px">
-            <button id="df-btn-do-copy" class="btn btn-primary">Copy</button>
-            <button id="df-btn-cancel-copy" class="btn btn-secondary">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Save As form (copy current local data to a new dataset) -->
-        <div id="df-save-as-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
-          <p style="margin:0 0 6px;font-size:0.875rem">Save current data as new dataset:</p>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input id="df-save-as-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
-            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="private" checked> Private</label>
-            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="public"> Public</label>
-          </div>
-          <div class="btn-row" style="margin-top:8px">
-            <button id="df-btn-do-save-as" class="btn btn-primary">Save As</button>
-            <button id="df-btn-cancel-save-as" class="btn btn-secondary">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Create form -->
-        <div style="border-top:1px solid var(--border,#ddd);padding-top:10px;margin-bottom:4px">
-          <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">New dataset:</p>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input id="df-new-dataset-name" type="text" placeholder="dataset-name" aria-label="Dataset name" style="flex:1;min-width:100px">
-            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="private" checked> Private</label>
-            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="public"> Public</label>
-            <button id="df-btn-create-dataset" class="btn btn-primary">Create</button>
-          </div>
-        </div>
-
-        <p id="df-dataset-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
-        <div class="btn-row" style="margin-top:10px">
-          <button id="df-btn-save-as" class="btn btn-secondary">Save As…</button>
-          <button id="df-btn-logout" class="btn btn-secondary">Log out</button>
-        </div>
-      </div><!-- end df-panel-datasets -->
-      </div><!-- end df-panels-row -->
     </div>
 
     <!-- Datalists for typeahead autocomplete -->

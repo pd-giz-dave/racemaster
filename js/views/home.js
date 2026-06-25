@@ -71,8 +71,10 @@ function eventStatistics() {
   if (juniorEntries > 0) row('Juniors outstanding', juniorOut, juniorOut > 0 ? 'var(--danger)' : 'var(--accent)');
   if (helpers       > 0) row('Helpers registered', helpers);
   if (preImported > 0) {
+    const onTheDay = state.entries.filter(e => !e.preEntry).length;
     row('Pre-entries imported', preImported);
-    row('Pre-entry no-shows', preImported - preRegistered);
+    row('Pre-entry no-shows',   preImported - preRegistered);
+    row('On-the-day entries',   onTheDay);
   }
   if (lastBib > 0) row('Last bib allocated', lastBib);
   if (lastDibber > 0) row('Last dibber allocated', lastDibber);

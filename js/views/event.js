@@ -1,6 +1,6 @@
 'use strict';
 
-import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveResults, savePrizes, saveCategories, saveSIResults } from '../state.js';
+import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults } from '../state.js';
 import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
@@ -86,8 +86,6 @@ export async function saveEventForm() {
       ['Entries',     state.entries.length],
       ['Pre-entries', state.preEntries.length],
       ['Finishers',   state.finishers.length],
-      ['Results',     state.results.length],
-      ['Prizes',      state.prizes.length],
       ['Helpers',     state.helpers.length],
       ['SI Results',  state.siResults.length],
     ].filter(([, n]) => n > 0);
@@ -134,13 +132,11 @@ export async function saveEventForm() {
   // Clear previous race data if requested
   if (doClear) {
     state.entries   = [];  state.finishers = [];
-    state.results   = [];  state.prizes    = [];
     state.helpers   = [];  state.finishNumbersMap = {};
     state.siResults = [];
     await Promise.all([
       saveEntries(), saveHelpers(), saveFinishers(),
-      saveResults(), savePrizes(), clearSIEntries(),
-      saveSIResults(), saveCategories(),
+      clearSIEntries(), saveSIResults(), saveCategories(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
   }
