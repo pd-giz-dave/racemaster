@@ -458,6 +458,7 @@ export const TABLES = {
     { label: 'Short Code', title: 'Short (3-digit) SI card number' },
     { label: 'Long Code',  title: 'Full SI card number' },
     { label: 'Owner',      title: 'Who owns this card' },
+    { label: 'Lost',       title: 'Date this dibber was lost — lost dibbers are excluded from allocation' },
     { label: 'Notes',      title: 'Additional notes' },
     { label: 'Actions',    title: 'Edit or delete' },
   ],

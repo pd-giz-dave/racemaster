@@ -96,7 +96,7 @@ export function updateDibberField() {
   const dibEl = document.getElementById('entry-form-dibber');
   if (!dibEl || document.activeElement === dibEl || editingBib) return;
   const course = val('entry-form-course') || COURSE.SENIORS;
-  dibEl.value = usingDibbers(course) ? (getNextDibberNumber() || '') : '';
+  dibEl.value = usingDibbers(course) ? (getNextDibberNumber()?.number ?? '') : '';
 }
 
 export function isEntryFormDirty() {
@@ -215,7 +215,7 @@ export async function submitEntryForm() {
         if (await showConfirmDialog(`Dibber ${typedDibber} is already assigned to bib ${clashBib}. Edit that entry?`, 'Edit')) {
           fillFormForEdit(clashBib);
         } else {
-          document.getElementById('entry-form-dibber').value = getNextDibberNumber() || '';
+          document.getElementById('entry-form-dibber').value = getNextDibberNumber()?.number ?? '';
         }
         return;
       }
@@ -271,7 +271,8 @@ export async function submitEntryForm() {
     focusEntryErrorField(result.error);
   } else {
     const bib = isEdit ? editingBib : result.bibNumber;
-    showStatus(isEdit ? `Bib ${bib} updated.` : isInsert ? `Bib ${bib} inserted; subsequent entries renumbered.` : `Bib ${bib} registered.`);
+    const baseMsg = isEdit ? `Bib ${bib} updated.` : isInsert ? `Bib ${bib} inserted; subsequent entries renumbered.` : `Bib ${bib} registered.`;
+    showStatus(result.lostWarning ? `${baseMsg} ${result.lostWarning}` : baseMsg, !!result.lostWarning);
     resetEntryForm();
     document.getElementById('entry-form-peno')?.focus();
     renderEntries();

@@ -132,15 +132,25 @@ function predecessorDibber(entryIdx) {
   return 0;
 }
 
-// Returns the list index the entry at entryIdx should occupy (one after its predecessor).
+// Returns { idx, skipped } — the list index the entry at entryIdx should occupy, skipping lost dibbers.
 function nextDibberListIdx(entryIdx) {
   const pred = predecessorDibber(entryIdx);
+  let idx;
   if (pred > 0) {
     const pIdx = dibberListIdx(pred);
-    return pIdx >= 0 ? pIdx + 1 : -1;
+    if (pIdx < 0) return { idx: -1, skipped: [] };
+    idx = pIdx + 1;
+  } else {
+    const first = +state.event.firstDibberNumber || 1;
+    idx = state.dibbers.findIndex(d => +d.shortCode >= first);
+    if (idx < 0) return { idx: -1, skipped: [] };
   }
-  const first = +state.event.firstDibberNumber || 1;
-  return state.dibbers.findIndex(d => +d.shortCode >= first);
+  const skipped = [];
+  while (idx < state.dibbers.length && state.dibbers[idx].lost) {
+    skipped.push(state.dibbers[idx].shortCode);
+    idx++;
+  }
+  return { idx: idx < state.dibbers.length ? idx : -1, skipped };
 }
 
 // Shift every dibber-using entry from fromEntryIdx onward one slot forward in the list.
@@ -149,6 +159,7 @@ function shiftDibbersForward(fromEntryIdx, insertedListIdx) {
   for (let i = fromEntryIdx; i < state.entries.length; i++) {
     if (+state.entries[i].dibberNumber > 0) {
       listIdx++;
+      while (listIdx < state.dibbers.length && state.dibbers[listIdx].lost) listIdx++;
       state.entries[i].dibberNumber = listIdx < state.dibbers.length ? +state.dibbers[listIdx].shortCode : 0;
     }
   }
@@ -162,7 +173,8 @@ function shiftDibbersBackward(fromEntryIdx, releasedDibber) {
   let targetIdx = relIdx;
   for (let i = fromEntryIdx; i < state.entries.length; i++) {
     if (+state.entries[i].dibberNumber > 0) {
-      state.entries[i].dibberNumber = +state.dibbers[targetIdx].shortCode;
+      while (targetIdx < state.dibbers.length && state.dibbers[targetIdx].lost) targetIdx++;
+      state.entries[i].dibberNumber = targetIdx < state.dibbers.length ? +state.dibbers[targetIdx].shortCode : 0;
       targetIdx++;
     }
   }
@@ -214,15 +226,20 @@ export async function submitEntry(formData) {
     : getNextBibNumber();
 
   let dibberNumber = 0;
+  let lostWarning  = '';
   if (usingDibbers(course)) {
     if (formData.dibberOverride && +formData.dibberOverride > 0) {
+      const lostDibber = state.dibbers.find(d => +d.shortCode === +formData.dibberOverride);
+      if (lostDibber?.lost) return { error: `Dibber ${formData.dibberOverride} is marked lost (since ${lostDibber.lost})` };
       dibberNumber = +formData.dibberOverride;
     } else {
       const next = getNextDibberNumber();
       if (next === null) return { error: state.dibbers.length === 0
         ? 'No dibbers loaded — load dibber numbers before registering this entry'
         : 'No more dibber numbers available — load more dibber numbers' };
-      dibberNumber = next;
+      dibberNumber = next.number;
+      if (next.skipped.length)
+        lostWarning = `Dibber${next.skipped.length > 1 ? 's' : ''} ${next.skipped.join(', ')} skipped (marked lost)`;
     }
   }
 
@@ -236,7 +253,7 @@ export async function submitEntry(formData) {
   await saveEntries();
   await savePeople();
 
-  return { bibNumber, dibberNumber, error: '' };
+  return { bibNumber, dibberNumber, error: '', lostWarning };
 }
 
 /**
@@ -248,6 +265,7 @@ export async function updateEntry(bibNumber, formData) {
   if (idx < 0) return { error: `Bib ${bibNumber} not found` };
 
   const e = state.entries[idx];
+  let lostWarning = '';
 
   // Bib change — clash-check against other entries
   if (formData.bibOverride && +formData.bibOverride > 0 && +formData.bibOverride !== +bibNumber) {
@@ -269,14 +287,18 @@ export async function updateEntry(bibNumber, formData) {
   } else if (!wasUsingDibbers && nowUsingDibbers) {
     if (state.dibbers.length === 0)
       return { error: 'No dibbers loaded — load dibber numbers before changing this entry to a dibber course' };
-    const newListIdx = nextDibberListIdx(idx);
+    const { idx: newListIdx, skipped } = nextDibberListIdx(idx);
     if (newListIdx < 0 || newListIdx >= state.dibbers.length)
       return { error: 'No more dibber numbers available — load more dibber numbers' };
     e.dibberNumber = +state.dibbers[newListIdx].shortCode;
     shiftDibbersForward(idx + 1, newListIdx);
+    if (skipped.length)
+      lostWarning = `Dibber${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')} skipped (marked lost)`;
   } else if (formData.dibberOverride !== undefined) {
     const newDibber = +formData.dibberOverride || 0;
     if (newDibber > 0 && newDibber !== +e.dibberNumber) {
+      const lostDibber = state.dibbers.find(d => +d.shortCode === newDibber);
+      if (lostDibber?.lost) return { error: `Dibber ${newDibber} is marked lost (since ${lostDibber.lost})` };
       const clashIdx = findEntryByDibber(newDibber);
       if (clashIdx >= 0 && clashIdx !== idx)
         return { error: `Dibber ${newDibber} is already assigned to bib ${state.entries[clashIdx].bibNumber}` };
@@ -293,7 +315,7 @@ export async function updateEntry(bibNumber, formData) {
   if (formData.course    !== undefined) e.course    = newCourse;
 
   await saveEntries();
-  return { error: '' };
+  return { error: '', lostWarning };
 }
 
 /**

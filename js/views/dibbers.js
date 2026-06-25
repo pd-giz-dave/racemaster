@@ -11,8 +11,9 @@ const DIBBER_COLS = (() => {
     { ...m[0], render: ({ d }) => d.shortCode || '' },
     { ...m[1], render: ({ d }) => d.longCode  || '' },
     { ...m[2], render: ({ d }) => d.owner || '' },
-    { ...m[3], render: ({ d }) => escHtml(d.notes || '') },
-    { ...m[4], render: () => `
+    { ...m[3], render: ({ d }) => d.lost ? `<span style="color:var(--danger)">${escHtml(d.lost)}</span>` : '' },
+    { ...m[4], render: ({ d }) => escHtml(d.notes || '') },
+    { ...m[5], render: () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
       <button class="btn-sm btn-delete-entry" data-action="del">Del from here</button>` },
   ];
@@ -33,9 +34,10 @@ export function editDibberRow(idx) {
   if (!row) return;
   row.innerHTML = `
     <td>${d.shortCode || ''}</td>
-    <td><input id="dib-long-${idx}"  type="text" value="${escHtml(String(d.longCode || ''))}"    style="width:90px"></td>
-    <td><input id="dib-avail-${idx}" type="text" value="${escHtml(d.owner || '')}"        style="width:80px"></td>
-    <td><input id="dib-notes-${idx}" type="text" value="${escHtml(d.notes || '')}"               style="width:160px"></td>
+    <td><input id="dib-long-${idx}"  type="text" value="${escHtml(String(d.longCode || ''))}" style="width:90px"></td>
+    <td><input id="dib-avail-${idx}" type="text" value="${escHtml(d.owner || '')}"            style="width:80px"></td>
+    <td><input id="dib-lost-${idx}"  type="date" value="${escHtml(d.lost  || '')}"            style="width:130px"></td>
+    <td><input id="dib-notes-${idx}" type="text" value="${escHtml(d.notes || '')}"            style="width:100%;min-width:120px"></td>
     <td>
       <button class="btn-sm btn-save"      data-idx="${idx}">Save</button>
       <button class="btn-sm btn-secondary" data-idx="${idx}">Cancel</button>
@@ -58,7 +60,8 @@ export async function saveDibberRow(idx) {
     d.longCode = +longVal;
   }
   d.owner = document.getElementById(`dib-avail-${idx}`)?.value.trim() || '';
-  d.notes        = document.getElementById(`dib-notes-${idx}`)?.value.trim() || '';
+  d.lost  = document.getElementById(`dib-lost-${idx}`)?.value.trim()  || '';
+  d.notes = document.getElementById(`dib-notes-${idx}`)?.value.trim() || '';
   await saveDibbers();
   showStatus(`Dibber ${d.shortCode} updated.`);
   renderDibbers();
@@ -108,7 +111,7 @@ export async function saveNewDibberRow() {
   }
   const avail = document.getElementById('dib-new-avail')?.value.trim() || '';
   const notes = document.getElementById('dib-new-notes')?.value.trim() || '';
-  state.dibbers.push({ shortCode: +short, longCode: +long, owner: avail, notes });
+  state.dibbers.push({ shortCode: +short, longCode: +long, owner: avail, lost: '', notes });
   state.dibbers.sort((a, b) => +a.shortCode - +b.shortCode);
   await saveDibbers();
   showStatus(`Dibber ${short} added.`);
@@ -129,6 +132,7 @@ export async function deleteDibbersFrom(idx) {
 const SHORT_ALIASES = ['shortCode', 'Short Code', 'Number'];
 const LONG_ALIASES  = ['longCode',  'Long Code',  'Code'];
 const OWNER_ALIASES = ['owner',     'Owner'];
+const LOST_ALIASES  = ['lost',      'Lost'];
 const NOTES_ALIASES = ['notes',     'Notes'];
 
 function findAlias(keys, aliases) { return aliases.find(a => keys.includes(a)); }
@@ -140,11 +144,13 @@ function normaliseDibberRows(rows) {
   const longKey  = findAlias(keys, LONG_ALIASES);
   if (!shortKey || !longKey) return null;
   const ownerKey = findAlias(keys, OWNER_ALIASES);
+  const lostKey  = findAlias(keys, LOST_ALIASES);
   const notesKey = findAlias(keys, NOTES_ALIASES);
   return rows.map(r => ({
     shortCode: r[shortKey],
     longCode:  r[longKey],
     owner:     ownerKey ? r[ownerKey] : '',
+    lost:      lostKey  ? r[lostKey]  : '',
     notes:     notesKey ? r[notesKey] : '',
   }));
 }
@@ -166,10 +172,11 @@ export async function importDibbersFromFile() {
     if (existing >= 0) {
       state.dibbers[existing].longCode     = long;
       state.dibbers[existing].owner = row.owner || state.dibbers[existing].owner;
-      state.dibbers[existing].notes        = row.notes        || state.dibbers[existing].notes;
+      state.dibbers[existing].lost  = row.lost  || state.dibbers[existing].lost;
+      state.dibbers[existing].notes = row.notes || state.dibbers[existing].notes;
       updated++;
     } else {
-      state.dibbers.push({ shortCode: short, longCode: long, owner: row.owner || '', notes: row.notes || '' });
+      state.dibbers.push({ shortCode: short, longCode: long, owner: row.owner || '', lost: row.lost || '', notes: row.notes || '' });
       added++;
     }
   }
@@ -181,8 +188,8 @@ export async function importDibbersFromFile() {
 }
 
 function exportDibbers() {
-  const lines = ['shortCode,longCode,owner,notes',
-    ...state.dibbers.map(d => `${d.shortCode},${d.longCode},${d.owner || ''},${d.notes || ''}`)];
+  const lines = ['shortCode,longCode,owner,lost,notes',
+    ...state.dibbers.map(d => `${d.shortCode},${d.longCode},${d.owner || ''},${d.lost || ''},${d.notes || ''}`)];
   downloadText(lines.join('\n'), `${sanitise(state.event?.name || 'dibbers')}_dibbers.csv`);
 }
 

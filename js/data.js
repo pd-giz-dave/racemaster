@@ -89,17 +89,27 @@ export function getNextBibNumber() {
   return last > 0 ? last + 1 : +state.event.firstBibNumber || 1;
 }
 
-/** Get next dibber number to use. Returns null if no dibbers loaded or list exhausted. */
+/** Get next dibber number to use, skipping lost ones.
+ *  Returns { number, skipped } or null if list exhausted. */
 export function getNextDibberNumber() {
   if (state.dibbers.length === 0) return null;
   const last = getLastDibberNumber();
+  let idx;
   if (last > 0) {
-    const idx = state.dibbers.findIndex(d => +d.shortCode === last);
-    if (idx >= 0) return idx + 1 < state.dibbers.length ? +state.dibbers[idx + 1].shortCode : null;
+    const i = state.dibbers.findIndex(d => +d.shortCode === last);
+    idx = i >= 0 ? i + 1 : state.dibbers.length;
+  } else {
+    const first = +state.event.firstDibberNumber || 1;
+    idx = state.dibbers.findIndex(d => +d.shortCode >= first);
+    if (idx < 0) return null;
   }
-  const first = +state.event.firstDibberNumber || 1;
-  const d = state.dibbers.find(d => +d.shortCode >= first);
-  return d ? +d.shortCode : null;
+  const skipped = [];
+  while (idx < state.dibbers.length && state.dibbers[idx].lost) {
+    skipped.push(state.dibbers[idx].shortCode);
+    idx++;
+  }
+  if (idx >= state.dibbers.length) return null;
+  return { number: +state.dibbers[idx].shortCode, skipped };
 }
 
 /** Merge pre-entries into people list */
