@@ -6,3 +6,4 @@ export { openHelpersListPreview }                           from './helpers-list
 export { openFinishSheetPreview }                           from './finish-sheet.js';
 export { openNumberMatrixPreview }                          from './number-matrix.js';
 export { openPrizeListPreview }                             from './prize-list.js';
+export { openBibsPreview }                                  from './bibs.js';

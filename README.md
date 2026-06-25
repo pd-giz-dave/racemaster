@@ -2,6 +2,7 @@
 
 An offline first web-based fell race management system designed to handle all aspects of running a fell race event, 
 from pre-registration through to final results. Will run on anything that can run a modern web browser.
+Once loaded it does not require internet access to use it.
 
 ## Features
 
@@ -63,6 +64,13 @@ Event data is stored as JSON files in the `data/` directory.
 Data also includes a 'people' database that accumulates from race to race, 
 allowing entry form auto-complete for entrants that have been seen before.
 Data can also be exported to a CSV file for easy import into spreadsheets.
+
+The data stored is the complete state for an event, including all results and timing data.
+Re-loading it provides the opportunity to update it or just use it as an event archive..
+
+Results are stored as HTML files in the `results/` directory as complete 
+standalone pages so can be easily linked to from your website or just 
+publish its URL anywhere.  
 
 ## License
 

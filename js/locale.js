@@ -47,6 +47,9 @@ export const TOOLTIPS = {
   'btn-print-finish-senior':     'Print a blank senior finish sheet for recording finish order',
   'btn-print-finish-junior':     'Print a blank junior finish sheet for recording finish order',
   'btn-print-number-matrix':     'Print a 2D grid showing all bib numbers for cross-checking at CPs',
+  'bib-first':                   'First bib number to print — must be between 1 and 999',
+  'bib-count':                   'Number of bibs to print — first + count must not exceed 999',
+  'btn-print-bibs':              'Print race bibs 2-up on A4; guillotine the stack to produce two sorted A5 piles',
 
   // Entries
   'btn-export-entries-si':       'Export the entry list as a CSV for importing into the SI Timing system (for when using dibbers)',
@@ -201,6 +204,7 @@ export const HELP = {
         The senior and junior sheets are identical, just a different number of pages created to cover the entry limits.</p>
     <p>The <strong>Number Matrix</strong> report is intended to be given to an on-course marshalls to check off runners as they pass a CP. 
         Bib numbers are always allocated sequentially, so this makes it easy to check for missing runners.</p>
+    <p>The <strong>Print Bibs</strong> button allows you to print two A5 landscape numbers per A4 sheet, for use when the RO forgets to get bibs.</p>
   `,
   'view-entries': `
     <p>Add competitors as they register on race day. 

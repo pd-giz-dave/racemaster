@@ -1,10 +1,11 @@
 'use strict';
 
 import { state, loadAll } from './state.js';
-import { restoreDirectory, dumpState, restoreState, getSession, isStandalone } from './storage.js';
-import { wireDatafileView, refreshDatafileView, updateDataFileButton, startServerPing, startUpdateCheck } from './connect.js';
+import { restoreDirectory, getSession, isStandalone } from './storage.js';
+import { updateDataFileButton, startServerPing, startUpdateCheck } from './connect.js';
+import { wireDatasets, renderDatasets } from './views/datasets.js';
 import { showBusy } from './utils.js';
-import { on, showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, pickFile, downloadText, sanitise } from './ui.js';
+import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
 
 import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
@@ -59,7 +60,7 @@ export async function init() {
   startServerPing();
   startUpdateCheck();
   window.addEventListener('racemaster-dirty-change', updateDataFileButton);
-  wireDatafileView(connectAndLoad);
+  wireDatasets(connectAndLoad);
   wireNav();
   wireEvents();
 
@@ -147,7 +148,7 @@ export function showView(viewName) {
 
 // ---- Render dispatcher ----
 
-function renderAll() {
+export function renderAll() {
   renderHome();
   renderSafety();
   updateDatalistNames();
@@ -195,41 +196,13 @@ function renderView(v) {
     case 'categories':   renderCategories();   break;
     case 'forms':        renderForms();        break;
     case 'si-results':   renderSIResults();    break;
-    case 'datafile':     refreshDatafileView(); break;
+    case 'datafile':     renderDatasets(); break;
   }
-}
-
-// ---- State export / import ----
-
-function exportState() {
-  const data = dumpState();
-  const name = sanitise(state.event.name || 'racemaster');
-  downloadText(JSON.stringify(data, null, 2), `${name}_state.json`);
-  showStatus('State exported.');
-}
-
-async function importState() {
-  const text = await pickFile('.json');
-  if (!text) return;
-  let data;
-  try { data = JSON.parse(text); }
-  catch { showStatus('Not a valid JSON file.', true); return; }
-  if (!await showConfirmDialog('Import will replace ALL current data. This cannot be undone. Continue?', 'Import', true)) return;
-  showBusy('Importing…');
-  await restoreState(data);
-  await loadAll();
-  showBusy('');
-  renderAll();
-  showView('home');
-  showStatus('State imported successfully.');
 }
 
 // ---- Event wiring (orchestration) ----
 
 function wireEvents() {
-  on('btn-export-state', 'click', exportState);
-  on('btn-import-state', 'click', importState);
-
   wireEvent();
   wireEntries();
   wireHelpers();
