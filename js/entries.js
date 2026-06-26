@@ -1,6 +1,8 @@
 'use strict';
 
 import { state } from './state.js';
+import { createEntry } from './schema.js';
+import { SI } from './si-schema.js';
 import { saveEntries, savePeople } from './state.js';
 import { COURSE } from './constants.js';
 import { normaliseDate, cleanName, ciEq } from './utils.js';
@@ -8,32 +10,6 @@ import { calculateCategory, calculateCourse } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
-// Definition taken from SI Timing in June 2026
-export const SI_TIMING_COL_NAMES = {
-  BIB_NUMBER:           'RaceNumber',
-  NUM_ENTRANTS:         'NumberCompetitors',
-  DIBBER_NUMBER:        'CardNumbers',
-  FRA_NUMBER:           'MembershipNumbers',
-  FORENAMES:            'Forenames',
-  SURNAMES:             'Surnames',
-  NAME:                 'Name (Free Format)',
-  CATEGORY:             'Category',
-  CLUB:                 'Club',
-  COUNTRY:              'Country',
-  COURSE:               'CourseClass',
-  START_TIME:           'StartTime',
-  START_TIME_PREFERRED: 'StartTimePreference',
-  ENVELOPE_NUMBER:      'EnvelopeNumber',
-  NON_COMPETITIVE:      'NonCompetitive',
-  SEEDED:               'Seeded',
-  NOT_USED:             'NotUsed',
-  HANDICAP:             'Handicap',
-  REGISTRATION_NOTES:   'RegistrationNotes',
-  ENTRIES_ID:           'Participant ID',
-  ELIGIBILITY:          'Eligibility',
-  SOCIAL_MEDIA:         'SocialMedia',
-  GENDER_DOB:           'GenderDOB',
-};
 
 export function isBanned(p) {
   if (!p?.banned) return false;
@@ -100,7 +76,7 @@ export function addEntry({
   let idx = findEntryByBib(bib);
   if (idx < 0) {
     idx = state.entries.length;
-    state.entries.push({});
+    state.entries.push(createEntry());
   }
 
   const e = state.entries[idx];
@@ -477,21 +453,22 @@ export function exportSITimingCSV(entries) {
     const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
     const nameParts    = (e.name || '').trim().split(/\s+/);
     const pe           = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
+    const c = SI.timingExport;
     rows.push({
-      'RaceNumber':         e.bibNumber,
-      'NumberCompetitors':  '',
-      'CardNumbers':        dibberLong,
-      'MembershipNumbers':  `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`,
-      'Forenames':          nameParts[0] || '',
-      'Surnames':           nameParts.slice(1).join(' '),
-      'Name (Free Format)': e.name || '',
-      'Category':           e.category || '',
-      'Club':               e.club || '',
-      'Country':            pe?.country || '',
-      'CourseClass':        e.course || '',
-      'Participant ID':     pe?.siEntriesId || '',
-      'Eligibility':        pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : '',
-      'GenderDOB':          e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
+      [c.BIB_NUMBER]:           e.bibNumber,
+      [c.NUM_ENTRANTS]:         '',
+      [c.DIBBER_NUMBER]:        dibberLong,
+      [c.FRA_NUMBER]:           `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`,
+      [c.FORENAMES]:            nameParts[0] || '',
+      [c.SURNAMES]:             nameParts.slice(1).join(' '),
+      [c.NAME]:                 e.name || '',
+      [c.CATEGORY]:             e.category || '',
+      [c.CLUB]:                 e.club || '',
+      [c.COUNTRY]:              pe?.country || '',
+      [c.COURSE]:               e.course || '',
+      [c.ENTRIES_ID]:           pe?.siEntriesId || '',
+      [c.ELIGIBILITY]:          pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : '',
+      [c.GENDER_DOB]:           e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
     });
   }
   return rows;

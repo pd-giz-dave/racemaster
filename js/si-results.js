@@ -5,17 +5,7 @@ import { saveSIResults } from './state.js';
 import { normaliseTime } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { getEntry } from './entries.js';
-
-const SI_RESULTS_COL_NAMES = {
-  RACE_NUMBER: 'RaceNumber',
-  NAME:        'Name (Free Format)',
-  CATEGORY:    'Category',
-  CLUB:        'Club',
-  COURSE:      'CourseClass',
-  RACE_TIME:   'RaceTime',
-  POSITION:    'Position',
-  STATUS:      'Status',
-};
+import { SI } from './si-schema.js';
 
 
 /**
@@ -28,8 +18,7 @@ export async function importSIResults(csvText) {
   const { headers, rows } = parseSICSV(csvText);
   if (!rows.length) return { imported: 0, errors: ['No data in file'] };
 
-  const required = Object.values(SI_RESULTS_COL_NAMES);
-  const missing = required.filter(col => !headers.includes(col));
+  const missing = SI.resultsImport.required.filter(col => !headers.includes(col));
   if (missing.length) {
     return { imported: 0, errors: [`Missing required columns: ${missing.join(', ')}`] };
   }
@@ -93,10 +82,10 @@ function getField(row, ...keys) {
   return '';
 }
 
-export function getSIBib(r)        { return +getField(r, 'RaceNumber', 'BibNo', 'Bib', 'Number', 'bibNumber') || 0; }
-export function getSIRaceTime(r)   { return normaliseTime(getField(r, 'RaceTime', 'Race time', 'Time', 'FinishTime', 'Finish time')) || ''; }
-export function getSICourse(r)     { return getField(r, 'CourseClass', 'Course', 'Class'); }
-export function getSIStatus(r)     { return getField(r, 'Status'); }
+export function getSIBib(r)        { return +getField(r, ...SI.resultsImport.bib)      || 0; }
+export function getSIRaceTime(r)   { return normaliseTime(getField(r, ...SI.resultsImport.raceTime)) || ''; }
+export function getSICourse(r)     { return getField(r, ...SI.resultsImport.course); }
+export function getSIStatus(r)     { return getField(r, ...SI.resultsImport.status); }
 
 /** Set of bibs accounted for in SI results (have a race time or a non-blank status). */
 export function getSIAccountedBibs() {
@@ -107,4 +96,4 @@ export function getSIAccountedBibs() {
   }
   return bibs;
 }
-function getSIName(r)       { return getField(r, 'Name (Free Format)', 'Surname', 'Name', 'Last name', 'Lastname'); }
+function getSIName(r)       { return getField(r, ...SI.resultsImport.name); }

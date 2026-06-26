@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { savePeople } from './state.js';
+import { createPerson } from './schema.js';
 import { GENDER } from './constants.js';
 import { normaliseDate, cleanName, sortBy, today } from './utils.js';
 
@@ -36,7 +37,7 @@ export function addPerson(name, nameId, gender, dob, clubIn, fraNumber, _categor
 
   if (idx < 0 || idx >= state.people.length) {
     idx = state.people.length;
-    state.people.push({ seenTotal: 0, helpedTotal: 0 });
+    state.people.push(createPerson());
     isNew = true;
   }
 
@@ -130,10 +131,7 @@ export async function mergeSIEntries() {
 
     const key = makePersonKey(name, gender, dob);
     if (!existingKeys.has(key)) {
-      state.people.push({
-        name, gender, dob, club, fraNumber: fra,
-        lastSeen: '', seenTotal: 0, lastHelped: '', helpedTotal: 0,
-      });
+      state.people.push(createPerson({ name, gender, dob, club, fraNumber: fra }));
       existingKeys.add(key);
       peopleAdded++;
     } else {

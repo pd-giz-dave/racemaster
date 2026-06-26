@@ -1,6 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
+import { createFinisher } from './schema.js';
 import { saveFinishers } from './state.js';
 import { COURSE } from './constants.js';
 import { ciEq } from './utils.js';
@@ -87,7 +88,7 @@ export async function recordFinisher(bibNumber, timeStr, action) {
   }
 
   const idx = state.finishers.length;
-  state.finishers.push({ action, number: bib || '', time: timeStr || '' });
+  state.finishers.push(createFinisher({ action, number: bib || '', time: timeStr || '' }));
 
   if (bib > 0 && entry?.course) {
     const key = courseKey(entry.course, bib);

@@ -5,6 +5,7 @@ import { savePreEntries } from './state.js';
 import { GENDER } from './constants.js';
 import { normaliseDate, cleanName } from './utils.js';
 import { parseSICSV } from './csv.js';
+import { SI } from './si-schema.js';
 
 
 /**
@@ -21,11 +22,7 @@ export function parseSIEntriesCSV(text) {
 }
 
 function parsePreEntryRow(r) {
-  // Pick all the fields we want from all those available.
-  // Try field name variants for SI and EC (there is no overlap, so no ambiguity)
-
   const get = (...keys) => {
-    // local function to test what we've got
     for (const k of keys) {
       const found = Object.keys(r).find(rk => rk.trim().toUpperCase() === k.toUpperCase());
       if (found !== undefined) return (r[found] || '').trim();
@@ -33,42 +30,16 @@ function parsePreEntryRow(r) {
     return '';
   };
 
-  // get each field of interest (case insensitive)
-  const participantNumber = get('Participant - Participant No','RaceNumber');
-  const siEntriesId      = get('Participant - SiEntries ID');
-  const firstName  = get('Participant - First Name','Forename');
-  const lastName   = get('Participant - Last Name','Surname');
-  const genderRaw  = get('Participant - Gender','Participant - Class Sex at Birth','Participant - Sex','Gender');
-  const dob        = get('Participant - Date of Birth','DOB');
-  const club       = get('Entry Details - Club','Club');
-  const fraNumber  = get('Entry Details - FRA Membership Number','MembershipId');
-  const category   = get('Participant - Class','AgeGroup');
-  const email      = get('Participant - Email Address','email');
-  const address1   = get('Participant - Address Line 1','Address1');
-  const address2   = get('Participant - Address Line 2','Address2');
-  const town       = get('Participant - Postal Town','Town/City');
-  const county     = get('Participant - County','Region');
-  const postcode   = get('Participant - Post Code','Postcode');
-  const country    = get('Participant - Country','Country');
-  const telephone  = get('Participant - Telephone No','phone');
-  const mobile     = get('Participant - Mobile No');
-  const eligibility= get('English Championships Eligibility - I am eligible for English Champs');
-  const contactName= get('Emergency Details - Emergency Contact Name');
-  const contactTelephone = get('Emergency Details - Emergency Contact Telephone');
-  const medical    = get('Emergency Details - Medical Conditions');
-  const carReg     = get('Emergency Details - Car Registration');
+  const result = {};
+  for (const [field, keys] of Object.entries(SI.entriesImport)) {
+    result[field] = get(...keys);
+  }
 
   // Normalise gender — leave blank if not recognised so verify can flag it
-  const genderFirst = genderRaw.toUpperCase().charAt(0);
-  const gender = genderFirst === 'F' ? GENDER.FEMALE : genderFirst === 'M' ? GENDER.MALE : '';
+  const g = result.gender.toUpperCase().charAt(0);
+  result.gender = g === 'F' ? GENDER.FEMALE : g === 'M' ? GENDER.MALE : '';
 
-  return {
-    participantNumber, siEntriesId, firstName, lastName, gender, dob,
-    club, fraNumber, category, email,
-    address1, address2, town, county, postcode, country,
-    telephone, mobile, eligibility,
-    contactName, contactTelephone, medical, carReg,
-  };
+  return result;
 }
 
 /**

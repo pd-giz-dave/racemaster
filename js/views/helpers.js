@@ -1,6 +1,7 @@
 'use strict';
 
 import { state, saveRoles } from '../state.js';
+import { createRole } from '../schema.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
@@ -107,7 +108,7 @@ export async function submitHelperForm() {
 
   // Auto-add new role if not already in roles table
   if (!isEdit && !knownRole) {
-    state.roles.push({ role: canonicalRole, description: roleDesc });
+    state.roles.push(createRole({ role: canonicalRole, description: roleDesc }));
     await saveRoles();
     updateDatalistRoles();
   }

@@ -3,6 +3,7 @@
 import { readTable, writeTable } from './storage.js';
 import { FRA_CATEGORIES, WFRA_CATEGORIES } from './categories.js';
 import { BUILTIN_ROLES } from './roles.js';
+import { createCategory } from './schema.js';
 
 // ============================================================
 // Global in-memory state, loaded from and saved to JSON tables
@@ -17,9 +18,9 @@ export const state = {
     juniorLimit: 'None', juniorStartTime: '18:50:00', juniorEntryLimit: 100,
     juniorTimingMethod: 'Stopwatch',
   },
-  people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal}
+  people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal, banned}
   // clubs derived from people — not persisted
-  dibbers:    [],  // {shortCode, longCode, owner, notes}
+  dibbers:    [],  // {shortCode, longCode, owner, lost, notes}
   categories: [],  // {maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist}
   roles:      [],  // {role, description}
   preEntries: [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
@@ -69,10 +70,8 @@ async function loadEvent() {
   }
 }
 
-const categoryMapper = row => ({
-  maleMinAge: row[0], maleCat: row[1], maleRef: row[2], maleMaxDist: row[3],
-  femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-});
+const categoryMapper = ([maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist]) =>
+  createCategory({ maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist });
 
 async function loadPreset(key, defaults, mapFn = categoryMapper) {
   const rows = await readTable(key);
@@ -109,8 +108,5 @@ export function applyWFRACategories() {
 }
 
 function _applyPreset(preset) {
-  state.categories = preset.map(row => ({
-    maleMinAge:   row[0], maleCat:  row[1], maleRef:  row[2], maleMaxDist:   row[3],
-    femaleMinAge: row[4], femaleCat: row[5], femaleRef: row[6], femaleMaxDist: row[7],
-  }));
+  state.categories = preset.map(categoryMapper);
 }

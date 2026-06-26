@@ -1,20 +1,16 @@
 'use strict';
 
 import { state, saveCategories, saveFraPreset, saveWfraPreset } from '../state.js';
+import { CSV } from '../csv-schema.js';
 import { resetFRAPreset, resetWFRAPreset } from '../categories.js';
 import { on, escHtml, showStatus, showConfirmDialog, wireTabBar } from '../ui.js';
 import { normaliseTime } from '../utils.js';
 
-// ---- Constants ----
-
-const CAT_FIELDS = ['maleMinAge','maleCat','maleRef','maleMaxDist','femaleMinAge','femaleCat','femaleRef','femaleMaxDist'];
-const CAT_WIDTHS = ['46px','60px','46px','52px','46px','60px','46px','52px'];
-
 // Config for each of the three category tables
 const CAT_TABLE = {
-  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories, label: 'category',   fields: CAT_FIELDS, widths: CAT_WIDTHS, femaleSepIdx: 4 },
-  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,  label: 'FRA preset', fields: CAT_FIELDS, widths: CAT_WIDTHS, femaleSepIdx: 4 },
-  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset, label: 'WFRA preset',fields: CAT_FIELDS, widths: CAT_WIDTHS, femaleSepIdx: 4 },
+  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories, label: 'category',   fields: CSV.categories.fields, widths: CSV.categories.widths, femaleSepIdx: 4 },
+  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,  label: 'FRA preset', fields: CSV.categories.fields, widths: CSV.categories.widths, femaleSepIdx: 4 },
+  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset, label: 'WFRA preset',fields: CSV.categories.fields, widths: CSV.categories.widths, femaleSepIdx: 4 },
 };
 
 // ---- Render ----

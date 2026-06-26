@@ -1,6 +1,8 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
+import { createPerson } from '../schema.js';
+import { CSV } from '../csv-schema.js';
 import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, updateDatalistClubs, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { formatCSV, parseCSV } from '../csv.js';
@@ -200,31 +202,16 @@ async function mergePersonPair(keepIdx, dropIdx) {
 
 // ---- Import / Export / Merge ----
 
-const PEOPLE_FIELDS = ['name','gender','dob','club','fraNumber','lastSeen','seenTotal','lastHelped','helpedTotal','banned'];
-
 function exportPeople() {
-  const csv = formatCSV(state.people, PEOPLE_FIELDS);
+  const csv = formatCSV(state.people, CSV.people.fields);
   downloadText(csv, `${sanitise(state.event?.name || 'people')}_people.csv`);
 }
-
-const PEOPLE_COL_ALIASES = {
-  name:        ['name', 'Name'],
-  gender:      ['gender', 'Gender'],
-  dob:         ['dob', 'Date of Birth', 'DOB'],
-  club:        ['club', 'Club'],
-  fraNumber:   ['fraNumber', 'FRA Number', 'FRANumber'],
-  lastSeen:    ['lastSeen', 'Last Seen'],
-  seenTotal:   ['seenTotal', 'Seen Total'],
-  lastHelped:  ['lastHelped', 'Last Helped'],
-  helpedTotal: ['helpedTotal', 'Helped Total'],
-  banned:      ['banned',      'Banned Until', 'Banned'],
-};
 
 function normalisePeopleRows(rows) {
   if (!rows.length) return rows;
   const keys = Object.keys(rows[0]);
   const map = {};
-  for (const [field, aliases] of Object.entries(PEOPLE_COL_ALIASES)) {
+  for (const [field, aliases] of Object.entries(CSV.people.aliases)) {
     const found = aliases.find(a => keys.includes(a));
     if (found) map[field] = found;
   }
@@ -261,7 +248,7 @@ async function applyPeopleMerge(rows) {
       Object.assign(existing, merged);
       if (changed) updated++;
     } else {
-      state.people.push({
+      state.people.push(createPerson({
         name,
         gender:      row.gender     || '',
         dob:         row.dob        || '',
@@ -272,7 +259,7 @@ async function applyPeopleMerge(rows) {
         lastHelped:  row.lastHelped  || '',
         helpedTotal: +row.helpedTotal || 0,
         banned:      row.banned      || '',
-      });
+      }));
       added++;
     }
   }

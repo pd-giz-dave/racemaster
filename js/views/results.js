@@ -8,6 +8,7 @@ import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise
 import { TABLES } from '../locale.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
+import { CSV } from '../csv-schema.js';
 import { publishResultsHTML } from '../forms/results-html.js';
 
 const SENIOR_COLS = (() => {
@@ -200,11 +201,9 @@ function updateResultsButtons() {
 function exportResultsCSV() {
   const eventName = sanitise(state.event.name || 'event');
   if (activeResultsTab() === 'junior') {
-    downloadCSV(`${eventName}-results-juniors.csv`, getResultsForCourse(COURSE.JUNIORS, _results),
-      ['course', 'bibNumber', 'inCatPos', 'name', 'club', 'category', 'time']);
+    downloadCSV(`${eventName}-results-juniors.csv`, getResultsForCourse(COURSE.JUNIORS, _results), CSV.results.juniors);
   } else {
-    downloadCSV(`${eventName}-results-seniors.csv`, getResultsForCourse(COURSE.SENIORS, _results),
-      ['course', 'bibNumber', 'position', 'inCatPos', 'name', 'club', 'category', 'time', 'pctLdrs', 'behindTime']);
+    downloadCSV(`${eventName}-results-seniors.csv`, getResultsForCourse(COURSE.SENIORS, _results), CSV.results.seniors);
   }
 }
 

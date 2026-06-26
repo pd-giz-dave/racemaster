@@ -1,6 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
+import { createHelper } from './schema.js';
 import { saveHelpers, savePeople } from './state.js';
 import { normaliseDate, cleanName, ciEq } from './utils.js';
 import { calculateCategory } from './categories.js';
@@ -50,7 +51,7 @@ export function addHelper({ number, name, club, gender, dob, category, role }) {
   let idx = number ? findHelperByNumber(number) : -1;
   if (idx < 0) {
     idx = state.helpers.length;
-    state.helpers.push({});
+    state.helpers.push(createHelper());
   }
 
   const h = state.helpers[idx];

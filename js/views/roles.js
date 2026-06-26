@@ -1,6 +1,8 @@
 'use strict';
 
 import { state, saveRoles } from '../state.js';
+import { createRole } from '../schema.js';
+import { CSV } from '../csv-schema.js';
 import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { formatCSV, parseCSV } from '../csv.js';
@@ -114,7 +116,7 @@ async function deleteRoleRow(idx) {
 }
 
 function exportRoles() {
-  downloadText(formatCSV(state.roles, ['role', 'description']),
+  downloadText(formatCSV(state.roles, CSV.roles.fields),
     `${sanitise(state.event?.name || 'roles')}_roles.csv`);
 }
 
@@ -132,7 +134,7 @@ async function importRoles() {
       existing.description = row.description || existing.description;
       updated++;
     } else {
-      state.roles.push({ role, description: row.description || '' });
+      state.roles.push(createRole({ role, description: row.description || '' }));
       added++;
     }
   }

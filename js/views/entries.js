@@ -4,8 +4,9 @@ import { state } from '../state.js';
 import {
   findEntryByBib, findEntryByDibber, getEntry,
   submitEntry, updateEntry, clearAllEntries, deleteEntryAndRenumber, insertEntryAndRenumber,
-  getSortedEntries, exportSITimingCSV, isEntryBanned, SI_TIMING_COL_NAMES,
+  getSortedEntries, exportSITimingCSV, isEntryBanned,
 } from '../entries.js';
+import { SI } from '../si-schema.js';
 
 import { getNextBibNumber, getNextDibberNumber, normaliseGender } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
@@ -292,7 +293,7 @@ async function runExportSITiming() {
     showStatus(err.message, true);
     return;
   }
-  const csv = formatCSV(rows, Object.values(SI_TIMING_COL_NAMES));
+  const csv = formatCSV(rows, Object.values(SI.timingExport));
   downloadText(csv, `${sanitise(state.event.name)}_registrations.csv`);
   showStatus('SI timing file downloaded.');
 }

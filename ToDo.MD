@@ -3,6 +3,7 @@
 - Review all code and remove now not used code (there has been a lot of development).
 - Re-factor the code to separate out data structure knowledge - a 'models' dir?
 - Make the server console log persistent (with size limiting)
+- Add test suite
 
 ## Implement the pairs system
 
@@ -12,7 +13,8 @@
 
 How? 
 SI Timing only reports control code numbers, so a naming scheme is required.
-SI Timing system provides: NumSplits, [ControlCode, Split] * N, split is a time.
+SI Timing system provides: NumSplits, [ControlCode, Split] * NumSplits, 
+split is  elapsed time from the previous control.
 
 ## Add How-To pages
 
