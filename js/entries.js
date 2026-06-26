@@ -432,11 +432,6 @@ export function getSortedEntries() {
   return [...state.entries].sort((a, b) => (+a.bibNumber || 0) - (+b.bibNumber || 0));
 }
 
-/** Get entries for a given course */
-export function getEntriesForCourse(course) {
-  return state.entries.filter(e => ciEq(e.course, course));
-}
-
 /**
  * Export entries in SI timing CSV format.
  * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.

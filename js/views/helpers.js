@@ -9,9 +9,8 @@ import {
   renderTable,
 } from '../ui.js';
 import { TABLES } from '../locale.js';
-import { capitalise, ciEq, showBusy, normaliseClub } from '../utils.js';
+import { capitalise, ciEq, showBusy, normaliseClub, normaliseGender } from '../utils.js';
 import { isBanned } from '../entries.js';
-import { normaliseGender } from '../data.js';
 
 const HELPER_COLS = (() => {
   const m = TABLES.helpers;

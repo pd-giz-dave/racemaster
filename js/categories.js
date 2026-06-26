@@ -51,12 +51,6 @@ export function getFemaleCategories() {
   return state.categories.map(r => r.femaleCat).filter(Boolean);
 }
 
-/** Get categories for a given gender */
-export function getCategoriesForGender(gender) {
-  if (ciEq(gender, GENDER.FEMALE)) return getFemaleCategories();
-  return getMaleCategories();
-}
-
 /**
  * Calculate the category for the given DoB and gender on the race date.
  * Returns the category string or '' if cannot determine.
@@ -147,15 +141,6 @@ export function seniorAllowed(category) {
   const catMax = maxAgeFromCategory(category);
   if (catMax === 0) return true; // unknown or open-ended (oldest) category → senior
   return catMax > maxAgeFromCategory(juniorLimit);
-}
-
-/** Get the max distance allowed for a category. Returns 0 if not found. */
-export function distanceFromCategory(category) {
-  for (const row of state.categories) {
-    if (ciEq(row.femaleCat, category)) return +row.femaleMaxDist || 0;
-    if (ciEq(row.maleCat,   category)) return +row.maleMaxDist   || 0;
-  }
-  return 0;
 }
 
 /**

@@ -310,10 +310,6 @@ export async function writeTable(table, rows) {
   scheduleSyncToServer();
 }
 
-/** Not used with server storage — kept for call-site compatibility */
-export async function readText()  { return null; }
-export async function writeText() {}
-
 /** Return the full cache as a plain object (all tables that exist). */
 export function dumpState() { return cacheLoad(); }
 

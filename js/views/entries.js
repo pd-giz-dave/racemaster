@@ -8,10 +8,10 @@ import {
 } from '../entries.js';
 import { SI } from '../si-schema.js';
 
-import { getNextBibNumber, getNextDibberNumber, normaliseGender } from '../data.js';
+import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse } from '../categories.js';
 import { COURSE } from '../constants.js';
-import { cleanName, capitalise, showBusy, normaliseClub } from '../utils.js';
+import { cleanName, capitalise, showBusy, normaliseClub, normaliseGender } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog, escHtml,
@@ -98,13 +98,6 @@ export function updateDibberField() {
   if (!dibEl || document.activeElement === dibEl || editingBib) return;
   const course = val('entry-form-course') || COURSE.SENIORS;
   dibEl.value = usingDibbers(course) ? (getNextDibberNumber()?.number ?? '') : '';
-}
-
-export function isEntryFormDirty() {
-  const container = document.getElementById('entry-form-fields');
-  if (!container) return false;
-  return [...container.querySelectorAll('input:not([type="checkbox"]):not(#entry-form-bib), select')]
-    .some(el => el.value.trim() !== '');
 }
 
 export function fillFormForEdit(bib) {

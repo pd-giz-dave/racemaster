@@ -18,7 +18,7 @@ const SAFETY_OUT_COLS = (() => {
     { ...m[1], render: e => (e.name || '') + (isEntryBanned(e) ? ' (banned)' : '') },
     { ...m[2], render: e => e.course || '' },
     { ...m[3], render: e => e.category || '' },
-    { ...m[4], render: e => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>` },
+    { ...m[4], render: () => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>` },
   ];
 })();
 
@@ -57,6 +57,44 @@ const SAFETY_EARLY_COLS = (() => {
     { ...m[4], render: f => f.startTime },
   ];
 })();
+
+const SAFETY_NOSHOWS_COLS = (() => {
+  const m = TABLES['safety-noshows'];
+  return [
+    { ...m[0], render: r => r.name },
+    { ...m[1], render: r => r.dob },
+    { ...m[2], render: r => r.club },
+    { ...m[3], render: r => r.category },
+    { ...m[4], render: r => r.participantNumber },
+    { ...m[5], render: r => r.dupBib ?? '' },
+  ];
+})();
+
+function buildNoShows() {
+  return state.preEntries.map(pe => {
+    // Accounted for if any entry directly references this pre-entry
+    if (pe.participantNumber && state.entries.some(e => e.preEntry === pe.participantNumber)) return null;
+
+    const peName = [pe.firstName, pe.lastName].filter(Boolean).join(' ').trim();
+    const dob    = pe.dob || '';
+
+    // Check for an entry with matching name+dob that wasn't linked (entered on the day)
+    const dupEntry = state.entries.find(e => {
+      if ((e.name || '').toUpperCase() !== peName.toUpperCase()) return false;
+      return !dob || !e.dob || e.dob === dob;
+    });
+
+    return {
+      name:              peName,
+      dob:               pe.dob      || '',
+      club:              pe.club     || '',
+      category:          pe.category || '',
+      participantNumber: pe.participantNumber || '',
+      dupBib:            dupEntry ? dupEntry.bibNumber : null,
+    };
+  }).filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name) || a.dob.localeCompare(b.dob));
+}
 
 function getFinishedBibs() {
   const bibs = new Set(
@@ -153,6 +191,12 @@ export function renderSafety() {
     return { number: f.number, name: r.name, course: r.course, category: r.category, startTime: f.time || '' };
   });
   renderTable('safety-early-tbody', SAFETY_EARLY_COLS, earlyRows);
+
+  // ---- No-shows ----
+  const noShowRows = buildNoShows();
+  renderTable('safety-noshows-tbody', SAFETY_NOSHOWS_COLS, noShowRows, {
+    rowAttrs: r => ({ class: r.dupBib !== null ? 'row-timing-target' : '' }),
+  });
 
   // ---- Header counts ----
   const senOut = getOutstandingCount(COURSE.SENIORS);

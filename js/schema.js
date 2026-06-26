@@ -50,3 +50,20 @@ export function createCategory({
 } = {}) {
   return { maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist };
 }
+
+export function createEvent({
+  name = '', distance = 0, date = '', startTime = '19:30:00',
+  firstBibNumber = 1, firstDibberNumber = 1, categories = 'FRA', entryLimit = 180,
+  timingMethod = 'Stopwatch', maleRecord = '', femaleRecord = '',
+  prizeDepthOverall = 3, prizeDepthPerCategory = 1, juniorPrizeDepthPerCategory = 6,
+  juniorLimit = 'None', juniorStartTime = '18:50:00', juniorEntryLimit = 100,
+  juniorTimingMethod = 'Stopwatch',
+} = {}) {
+  return {
+    name, distance, date, startTime,
+    firstBibNumber, firstDibberNumber, categories, entryLimit,
+    timingMethod, maleRecord, femaleRecord,
+    prizeDepthOverall, prizeDepthPerCategory, juniorPrizeDepthPerCategory,
+    juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod,
+  };
+}

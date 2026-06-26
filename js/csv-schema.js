@@ -2,14 +2,17 @@
 
 // ----------------------------------------------------------------
 // CSV format definitions for all internally-managed data files.
-// fields:  column order for export (matches schema.js field names)
+// fields:  derived from schema.js factory functions — field order
+//          matches factory parameter order; add fields there, not here.
 // aliases: accepted column names on import (first entry = canonical)
-// Excludes SI Timing formats — those are in si-entries.js / si-results.js.
+// Excludes SI Timing formats — those are in si-schema.js.
 // ----------------------------------------------------------------
+
+import { createDibber, createPerson, createRole, createCategory } from './schema.js';
 
 export const CSV = {
   dibbers: {
-    fields:  ['shortCode', 'longCode', 'owner', 'lost', 'notes'],
+    fields:  Object.keys(createDibber()),
     aliases: {
       shortCode: ['shortCode', 'Short Code', 'Number'],
       longCode:  ['longCode',  'Long Code',  'Code'],
@@ -20,7 +23,7 @@ export const CSV = {
   },
 
   people: {
-    fields:  ['name', 'gender', 'dob', 'club', 'fraNumber', 'lastSeen', 'seenTotal', 'lastHelped', 'helpedTotal', 'banned'],
+    fields:  Object.keys(createPerson()),
     aliases: {
       name:        ['name',        'Name'],
       gender:      ['gender',      'Gender'],
@@ -36,7 +39,7 @@ export const CSV = {
   },
 
   roles: {
-    fields:  ['role', 'description'],
+    fields:  Object.keys(createRole()),
     aliases: {
       role:        ['role',        'Role'],
       description: ['description', 'Description'],
@@ -45,8 +48,8 @@ export const CSV = {
 
   categories: {
     // widths must stay parallel to fields — one entry per column
-    fields:  ['maleMinAge', 'maleCat', 'maleRef', 'maleMaxDist', 'femaleMinAge', 'femaleCat', 'femaleRef', 'femaleMaxDist'],
-    widths:  ['46px',       '60px',    '46px',    '52px',        '46px',         '60px',      '46px',      '52px'],
+    fields:  Object.keys(createCategory()),
+    widths:  ['46px', '60px', '46px', '52px', '46px', '60px', '46px', '52px'],
   },
 
   results: {

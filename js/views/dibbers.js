@@ -131,18 +131,19 @@ export async function deleteDibbersFrom(idx) {
   renderDibbers();
 }
 
-function findAlias(keys, aliases) { return aliases.find(a => keys.includes(a)); }
+function findAlias(keys, field) {
+  return (CSV.dibbers.aliases[field] ?? [field]).find(a => keys.includes(a));
+}
 
 function normaliseDibberRows(rows) {
   if (!rows.length) return rows;
   const keys     = Object.keys(rows[0]);
-  const a        = CSV.dibbers.aliases;
-  const shortKey = findAlias(keys, a.shortCode);
-  const longKey  = findAlias(keys, a.longCode);
+  const shortKey = findAlias(keys, 'shortCode');
+  const longKey  = findAlias(keys, 'longCode');
   if (!shortKey || !longKey) return null;
-  const ownerKey = findAlias(keys, a.owner);
-  const lostKey  = findAlias(keys, a.lost);
-  const notesKey = findAlias(keys, a.notes);
+  const ownerKey = findAlias(keys, 'owner');
+  const lostKey  = findAlias(keys, 'lost');
+  const notesKey = findAlias(keys, 'notes');
   return rows.map(r => createDibber({
     shortCode: r[shortKey],
     longCode:  r[longKey],
@@ -158,7 +159,7 @@ export async function importDibbersFromFile() {
   const raw = parseCSV(text);
   const rows = normaliseDibberRows(raw);
   if (!rows) {
-    showStatus(`Dibber CSV must have a short code column (${CSV.dibbers.aliases.shortCode.join(' / ')}) and a long code column (${CSV.dibbers.aliases.longCode.join(' / ')})`, true);
+    showStatus(`Dibber CSV must have a short code column (${(CSV.dibbers.aliases.shortCode ?? ['shortCode']).join(' / ')}) and a long code column (${(CSV.dibbers.aliases.longCode ?? ['longCode']).join(' / ')})`, true);
     return;
   }
   let added = 0, updated = 0;

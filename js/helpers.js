@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { createHelper } from './schema.js';
 import { saveHelpers, savePeople } from './state.js';
-import { normaliseDate, cleanName, ciEq } from './utils.js';
+import { normaliseDate, cleanName } from './utils.js';
 import { calculateCategory } from './categories.js';
 import { addPerson, sortPeople } from './data.js';
 
@@ -17,12 +17,6 @@ export function getNumberOfHelpers() {
 export function findHelperByNumber(number) {
   if (!number || +number <= 0) return -1;
   return state.helpers.findIndex(h => +h.number === +number);
-}
-
-/** Find a helper by name (case-insensitive). Returns index or -1. */
-export function findHelperByName(name) {
-  const n = (name || '').toUpperCase().trim();
-  return state.helpers.findIndex(h => (h.name || '').toUpperCase() === n);
 }
 
 /** Get a helper object by number. Returns null if not found. */
@@ -137,14 +131,4 @@ export async function clearAllHelpers() {
 /** Get helpers sorted by number */
 export function getSortedHelpers() {
   return [...state.helpers].sort((a, b) => (+a.number || 0) - (+b.number || 0));
-}
-
-/** Get all roles defined in state.roles */
-export function getRoles() {
-  return state.roles.map(r => r.role).filter(Boolean);
-}
-
-/** Get helpers for a specific role */
-export function getHelpersByRole(role) {
-  return state.helpers.filter(h => ciEq(h.role, role));
 }

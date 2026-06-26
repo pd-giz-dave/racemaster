@@ -3,21 +3,14 @@
 import { readTable, writeTable } from './storage.js';
 import { FRA_CATEGORIES, WFRA_CATEGORIES } from './categories.js';
 import { BUILTIN_ROLES } from './roles.js';
-import { createCategory } from './schema.js';
+import { createCategory, createEvent } from './schema.js';
 
 // ============================================================
 // Global in-memory state, loaded from and saved to JSON tables
 // ============================================================
 
 export const state = {
-  event: {
-    name: '', distance: 0, date: '', startTime: '19:30:00',
-    firstBibNumber: 1, firstDibberNumber: 1, categories: 'FRA', entryLimit: 180,
-    timingMethod: 'Stopwatch', maleRecord: '', femaleRecord: '',
-    prizeDepthOverall: 3, prizeDepthPerCategory: 1, juniorPrizeDepthPerCategory: 6,
-    juniorLimit: 'None', juniorStartTime: '18:50:00', juniorEntryLimit: 100,
-    juniorTimingMethod: 'Stopwatch',
-  },
+  event: createEvent(),
   people:     [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal, banned}
   // clubs derived from people — not persisted
   dibbers:    [],  // {shortCode, longCode, owner, lost, notes}

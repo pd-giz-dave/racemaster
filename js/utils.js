@@ -1,5 +1,6 @@
 'use strict';
 
+import { GENDER } from './constants.js';
 
 /** Normalise a time string to HH:MM:SS. Returns '' on failure.
  *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.
@@ -147,32 +148,9 @@ export function findSimilarPairs(items, getKey) {
   return pairs;
 }
 
-/** Return ordinal string for a number (1st, 2nd, 3rd, etc.) */
-export function ordinal(n) {
-  const i = parseInt(n);
-  if (isNaN(i)) return String(n);
-  const s = ['th','st','nd','rd'];
-  const v = i % 100;
-  return i + (s[(v-20)%10] || s[v] || s[0]);
-}
-
 /** Case-insensitive string comparison */
 export function ciEq(a, b) {
   return String(a || '').toUpperCase() === String(b || '').toUpperCase();
-}
-
-/** Levenshtein-distance based similarity (lower = more similar) */
-export function similarity(s1, s2) {
-  const a = s1.toLowerCase();
-  const b = s2.toLowerCase();
-  const m = a.length, n = b.length;
-  const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i || j));
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
-    }
-  }
-  return dp[m][n];
 }
 
 /** Sort an array of objects by one or more string fields */
@@ -208,4 +186,9 @@ export function showBusy(msg = '') {
   if (el) el.textContent = msg;
   const overlay = document.getElementById('busy-overlay');
   if (overlay) overlay.style.display = msg ? 'flex' : 'none';
+}
+
+export function normaliseGender(g) {
+  const u = (g || '').toUpperCase().trim();
+  return u === 'M' || u === 'MALE' ? GENDER.MALE : u === 'F' || u === 'FEMALE' ? GENDER.FEMALE : '';
 }

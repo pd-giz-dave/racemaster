@@ -1,6 +1,6 @@
 # ToDo
 
-- Review all code and remove now not used code (there has been a lot of development).
+- Add column sorts to lists where appropriate
 - Add test suite
 
 ## Implement the pairs system
@@ -43,9 +43,5 @@ Is that appropriate here, or should it be a separate system?
 
 ## Add a "What's New" page
 
-Show when a new version is available before confirm do the update.
-Need a way of re-showing it - make app header "Racemaster (version)" clickable.
-
-## Add a "What's Changed" page
-
-Show what has changed in the latest version.
+Show it when a new version is available before user confirms the update.
+Need a way of re-showing it – make app header "Racemaster (version)" clickable.

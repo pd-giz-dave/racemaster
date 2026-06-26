@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { savePeople } from './state.js';
 import { createPerson } from './schema.js';
 import { GENDER } from './constants.js';
-import { normaliseDate, cleanName, sortBy, today } from './utils.js';
+import { normaliseDate, cleanName, sortBy, today, normaliseGender } from './utils.js';
 
 // ============================================================
 // People, clubs and dibbers management (from Data.xml)
@@ -148,7 +148,3 @@ export async function mergeSIEntries() {
   return { peopleAdded };
 }
 
-export function normaliseGender(g) {
-  const u = (g || '').toUpperCase().trim();
-  return u === 'M' || u === 'MALE' ? GENDER.MALE : u === 'F' || u === 'FEMALE' ? GENDER.FEMALE : '';
-}

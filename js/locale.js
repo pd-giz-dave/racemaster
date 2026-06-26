@@ -399,6 +399,14 @@ export const TABLES = {
     { label: 'Cat',        title: 'Age category' },
     { label: 'Start Time', title: 'Individual start time recorded for this competitor' },
   ],
+  'safety-noshows': [
+    { label: 'Name',        title: 'Pre-entry name' },
+    { label: 'DOB',         title: 'Date of birth from pre-entry' },
+    { label: 'Club',        title: "Competitor's club" },
+    { label: 'Cat',         title: 'Age category from pre-entry' },
+    { label: 'Pre-entry #', title: 'SI Entries participant number' },
+    { label: 'On-day bib',  title: 'Bib assigned if they entered on the day without linking to their pre-entry' },
+  ],
   'results-senior': [
     { label: 'Course',  title: 'Senior or junior course' },
     { label: 'Bib',     title: 'Race number' },

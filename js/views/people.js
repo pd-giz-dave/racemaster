@@ -211,7 +211,8 @@ function normalisePeopleRows(rows) {
   if (!rows.length) return rows;
   const keys = Object.keys(rows[0]);
   const map = {};
-  for (const [field, aliases] of Object.entries(CSV.people.aliases)) {
+  for (const field of CSV.people.fields) {
+    const aliases = CSV.people.aliases[field] ?? [field];
     const found = aliases.find(a => keys.includes(a));
     if (found) map[field] = found;
   }
