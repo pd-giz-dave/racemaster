@@ -5,10 +5,11 @@ import {
   recordFinisher, updateFinisher, deleteFinishersFrom, clearAllFinishers,
   deleteFinisher, insertFinisherAbove,
   getSortedFinishers, buildSplitNumbers,
+  getAllSpecials, lineLabel, getPrevTime, parseFinishTime,
 } from '../finishers.js';
 import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned } from '../entries.js';
 import { COURSE } from '../constants.js';
-import { normaliseTime, timeToSeconds, showBusy } from '../utils.js';
+import { timeToSeconds, showBusy } from '../utils.js';
 import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 
@@ -35,24 +36,6 @@ let editingIdx     = -1;   // index into state.finishers; -1 = adding new
 let timeTargetSidx = -1;   // index into state.finishers of the current time-mode target
 let editIsInsert   = false; // true when edit was opened via Ins↑; cancel should remove the line
 
-const SPECIAL_BIB_LABELS = [
-  ['Clock',   'No time=relative to 0; ss or mm:ss=late-start offset; hh:mm:ss=time of day'],
-  ['Seniors', 'Record actual stopwatch time for seniors race start'],
-  ['Juniors', 'Record actual stopwatch time for juniors race start'],
-  ['Male',    'Record start time for all male seniors (overrides Seniors)'],
-  ['Female',  'Record start time for all female seniors (overrides Seniors)'],
-  ['Ignore',  'Mark accidental stopwatch trigger (is a split but ignored)'],
-];
-
-function getCategorySpecials() {
-  return [...new Set(state.entries.map(e => e.category).filter(Boolean))].sort()
-    .map(c => [c, `Record start time for ${c} category`]);
-}
-
-function getAllSpecials() {
-  return [...SPECIAL_BIB_LABELS, ...getCategorySpecials()];
-}
-
 function updateDatalistFinisherBibs() {
   const dl = document.getElementById('datalist-finisher-bibs');
   if (!dl) return;
@@ -71,12 +54,6 @@ function updateDatalistFinisherBibs() {
       return `<option value="${e.bibNumber}">${escHtml(label)}</option>`;
     }).join('');
   dl.innerHTML = specials + entries;
-}
-
-function lineLabel(sidx) {
-  const f = state.finishers[sidx];
-  if (!f) return `[${sidx}]`;
-  return f.splitNumber !== null ? String(f.splitNumber) : `[${sidx}]`;
 }
 
 function nextLineLabel() {
@@ -234,22 +211,6 @@ export function renderFinishers() {
   }
 }
 
-function getPrevTime(beforeIdx) {
-  for (let i = beforeIdx - 1; i >= 0; i--) {
-    const f = state.finishers[i];
-    if (f.action === 'Clock') {
-      // Clock resets context. Time-of-day (h > 0) provides h:m context; zero/offset resets to 00:00.
-      if (f.time) {
-        const h = +f.time.split(':')[0];
-        if (h > 0) return f.time;
-      }
-      return '00:00:00';
-    }
-    if (f.time && f.time !== '-') return f.time;
-  }
-  return '';
-}
-
 function updatePrevTime() {
   const el = document.getElementById('finisher-prev-time');
   if (el) el.value = getPrevTime(editingIdx >= 0 ? editingIdx : state.finishers.length);
@@ -319,25 +280,6 @@ function resetFinisherForm() {
   // Re-apply bibs mode appearance (hides time field, restores bib focus)
   applyMode('bibs');
   renderFinishers();
-}
-
-// ---- Time parsing ----
-
-export function parseFinishTime(input, prevTimeStr) {
-  const parts = input.split(/\D+/).filter(Boolean);
-  if (!parts.length || parts.length > 3 || parts.some(p => !/^\d+$/.test(p))) return null;
-  const nums = parts.map(Number);
-  let ih = 0, im = 0;
-  if (prevTimeStr) {
-    const norm = normaliseTime(prevTimeStr);
-    if (norm) { const [ph, pm] = norm.split(':').map(Number); ih = ph; im = pm; }
-  }
-  let h, m, s;
-  if (nums.length === 1)      { h = ih; m = im; s = nums[0]; }
-  else if (nums.length === 2) { h = ih; m = nums[0]; s = nums[1]; }
-  else                        { [h, m, s] = nums; }
-  if (s > 59 || m > 59 || h > 24) return null;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 // ---- Submit ----

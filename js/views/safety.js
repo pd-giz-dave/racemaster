@@ -1,15 +1,16 @@
 'use strict';
 
 import { state } from '../state.js';
-import { recordFinisher, deleteFinisher, getOutstandingCount } from '../finishers.js';
-import { getEntriesOnCourse, getEntry, isEntryBanned } from '../entries.js';
-import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from '../si-results.js';
-import { formatResults, getResultsForCourse } from '../results.js';
+import { recordFinisher, deleteFinisher } from '../finishers.js';
+import { isEntryBanned } from '../entries.js';
 import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
-import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
+import {
+  getOutstandingRows, getDnfRows, getFinishedRows,
+  getEarlyStarterRows, buildNoShows, getSafetyCounts,
+} from '../safety.js';
 
 const SAFETY_OUT_COLS = (() => {
   const m = TABLES['safety-outstanding'];
@@ -70,143 +71,25 @@ const SAFETY_NOSHOWS_COLS = (() => {
   ];
 })();
 
-function buildNoShows() {
-  return state.preEntries.map(pe => {
-    // Accounted for if any entry directly references this pre-entry
-    if (pe.participantNumber && state.entries.some(e => e.preEntry === pe.participantNumber)) return null;
-
-    const peName = [pe.firstName, pe.lastName].filter(Boolean).join(' ').trim();
-    const dob    = pe.dob || '';
-
-    // Check for an entry with matching name+dob that wasn't linked (entered on the day)
-    const dupEntry = state.entries.find(e => {
-      if ((e.name || '').toUpperCase() !== peName.toUpperCase()) return false;
-      return !dob || !e.dob || e.dob === dob;
-    });
-
-    return {
-      name:              peName,
-      dob:               pe.dob      || '',
-      club:              pe.club     || '',
-      category:          pe.category || '',
-      participantNumber: pe.participantNumber || '',
-      dupBib:            dupEntry ? dupEntry.bibNumber : null,
-    };
-  }).filter(Boolean)
-    .sort((a, b) => a.name.localeCompare(b.name) || a.dob.localeCompare(b.dob));
-}
-
-function getFinishedBibs() {
-  const bibs = new Set(
-    state.finishers
-      .filter(f => f.action === 'Finish' || f.action === 'DNF')
-      .map(f => +f.number)
-      .filter(n => n > 0)
-  );
-  for (const bib of getSIAccountedBibs()) bibs.add(bib);
-  return bibs;
-}
-
-function entryInfo(bib) {
-  const e = getEntry(bib);
-  return {
-    name:     (e?.name || '') + (isEntryBanned(e) ? ' (banned)' : ''),
-    course:   e?.course   || '',
-    category: e?.category || '',
-  };
-}
-
 export function renderSafety() {
-  const finishedBibs = getFinishedBibs();
-
-  // ---- Outstanding ----
-  const outstanding = [...state.entries]
-    .filter(e => { const b = +e.bibNumber; return b > 0 && !finishedBibs.has(b); })
-    .sort((a, b) => +a.bibNumber - +b.bibNumber);
-
-  renderTable('safety-outstanding-tbody', SAFETY_OUT_COLS, outstanding, {
+  renderTable('safety-outstanding-tbody', SAFETY_OUT_COLS, getOutstandingRows(), {
     rowAttrs: e => ({ 'data-bib': e.bibNumber }),
   });
 
-  // ---- Retirees / DNFs ----
-  // SW entries (with state index for unretire)
-  const swDnfs = state.finishers
-    .map((f, idx) => ({ bib: +f.number, idx }))
-    .filter(d => d.bib > 0 && state.finishers[d.idx].action === 'DNF');
-  const swDnfBibs = new Set(swDnfs.map(d => d.bib));
-
-  // SI entries with a non-blank Status not already in SW list
-  const siDnfs = state.siResults
-    .filter(r => getSIStatus(r) && getSIBib(r) > 0 && !swDnfBibs.has(getSIBib(r)))
-    .map(r => ({ bib: getSIBib(r), idx: -1 }));
-
-  // Deduplicate by bib (SW wins), sort by bib
-  const allDnfs = [...swDnfs, ...siDnfs]
-    .filter((d, i, arr) => arr.findIndex(x => x.bib === d.bib) === i)
-    .sort((a, b) => a.bib - b.bib);
-
-  const dnfRows = allDnfs.map(({ bib, idx }) => {
-    const r = entryInfo(bib);
-    return { bib, idx, name: r.name, course: r.course, category: r.category };
-  });
+  const dnfRows = getDnfRows();
   renderTable('safety-dnf-tbody', SAFETY_DNF_COLS, dnfRows, {
     rowAttrs: d => ({ 'data-bib': d.bib }),
   });
 
-  // ---- Finishers ----
-  // SW finishers
-  const swFinished = state.finishers.filter(f => f.action === 'Finish' && +f.number > 0);
-  const swFinishedBibs = new Set(swFinished.map(f => +f.number));
+  renderTable('safety-finished-tbody', SAFETY_FIN_COLS, getFinishedRows());
 
-  // SI finishers (have a race time, not already in SW list)
-  const siFinished = state.siResults
-    .filter(r => getSIRaceTime(r) && getSIBib(r) > 0 && !swFinishedBibs.has(getSIBib(r)))
-    .map(r => ({ number: getSIBib(r) }));
+  renderTable('safety-early-tbody', SAFETY_EARLY_COLS, getEarlyStarterRows());
 
-  const allFinished = [...swFinished, ...siFinished]
-    .sort((a, b) => +a.number - +b.number);
-
-  const { results } = formatResults();
-  const resultsByBib = new Map();
-  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
-    for (const r of getResultsForCourse(course, results)) {
-      if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
-    }
-  }
-
-  const finRows = allFinished.map(f => {
-    const r   = entryInfo(+f.number);
-    const res = resultsByBib.get(+f.number);
-    return { number: f.number, name: r.name, course: r.course, category: r.category, pos: res?.position ?? '', time: res?.time ?? '' };
-  });
-  renderTable('safety-finished-tbody', SAFETY_FIN_COLS, finRows);
-
-  // ---- Early Starters ----
-  const earlyStarters = state.finishers
-    .filter(f => f.action === 'Start' && +f.number > 0)
-    .sort((a, b) => +a.number - +b.number);
-
-  const earlyRows = earlyStarters.map(f => {
-    const r = entryInfo(+f.number);
-    return { number: f.number, name: r.name, course: r.course, category: r.category, startTime: f.time || '' };
-  });
-  renderTable('safety-early-tbody', SAFETY_EARLY_COLS, earlyRows);
-
-  // ---- No-shows ----
-  const noShowRows = buildNoShows();
-  renderTable('safety-noshows-tbody', SAFETY_NOSHOWS_COLS, noShowRows, {
+  renderTable('safety-noshows-tbody', SAFETY_NOSHOWS_COLS, buildNoShows(), {
     rowAttrs: r => ({ class: r.dupBib !== null ? 'row-timing-target' : '' }),
   });
 
-  // ---- Header counts ----
-  const senOut = getOutstandingCount(COURSE.SENIORS);
-  const jnrOut = getOutstandingCount(COURSE.JUNIORS);
-
-  const senDnf = allDnfs.filter(({ bib }) => getEntry(bib)?.course === COURSE.SENIORS).length;
-  const jnrDnf = allDnfs.filter(({ bib }) => getEntry(bib)?.course === COURSE.JUNIORS).length;
-
-  const senEntries = getEntriesOnCourse(COURSE.SENIORS);
-  const jnrEntries = getEntriesOnCourse(COURSE.JUNIORS);
+  const { senOut, jnrOut, senDnf, jnrDnf, senEntries, jnrEntries } = getSafetyCounts(dnfRows);
   setHTML('safety-senior-outstanding', `${senOut} of ${senEntries}`);
   setHTML('safety-junior-outstanding', `${jnrOut} of ${jnrEntries}`);
   const setBadgeBg = (id, alert) => {
@@ -232,7 +115,6 @@ async function retireFromSafety(bib) {
 
 async function unretire(bib) {
   if (!await showConfirmDialog(`Remove retirement for bib ${bib}?`, 'Unretire', true)) return;
-  // Re-find the DNF index at confirm time, not at render time
   const stateIdx = state.finishers.findIndex(f => f.action === 'DNF' && +f.number === bib);
   if (stateIdx < 0) { showStatus('Retirement record not found.', true); return; }
   showBusy('Removing retirement…');

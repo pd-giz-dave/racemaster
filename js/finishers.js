@@ -4,8 +4,17 @@ import { state } from './state.js';
 import { createFinisher } from './schema.js';
 import { saveFinishers } from './state.js';
 import { COURSE } from './constants.js';
-import { ciEq } from './utils.js';
+import { ciEq, normaliseTime } from './utils.js';
 import { getEntry } from './entries.js';
+
+export const SPECIAL_BIB_LABELS = [
+  ['Clock',   'No time=relative to 0; ss or mm:ss=late-start offset; hh:mm:ss=time of day'],
+  ['Seniors', 'Record actual stopwatch time for seniors race start'],
+  ['Juniors', 'Record actual stopwatch time for juniors race start'],
+  ['Male',    'Record start time for all male seniors (overrides Seniors)'],
+  ['Female',  'Record start time for all female seniors (overrides Seniors)'],
+  ['Ignore',  'Mark accidental stopwatch trigger (is a split but ignored)'],
+];
 
 
 /**
@@ -181,4 +190,51 @@ export async function insertFinisherAbove(stateIdx) {
   buildFinishNumbersMap();
   await saveFinishers();
   return { error: '', newIdx: stateIdx };
+}
+
+export function getCategorySpecials() {
+  return [...new Set(state.entries.map(e => e.category).filter(Boolean))].sort()
+    .map(c => [c, `Record start time for ${c} category`]);
+}
+
+export function getAllSpecials() {
+  return [...SPECIAL_BIB_LABELS, ...getCategorySpecials()];
+}
+
+export function lineLabel(sidx) {
+  const f = state.finishers[sidx];
+  if (!f) return `[${sidx}]`;
+  return f.splitNumber !== null ? String(f.splitNumber) : `[${sidx}]`;
+}
+
+export function getPrevTime(beforeIdx) {
+  for (let i = beforeIdx - 1; i >= 0; i--) {
+    const f = state.finishers[i];
+    if (f.action === 'Clock') {
+      if (f.time) {
+        const h = +f.time.split(':')[0];
+        if (h > 0) return f.time;
+      }
+      return '00:00:00';
+    }
+    if (f.time && f.time !== '-') return f.time;
+  }
+  return '';
+}
+
+export function parseFinishTime(input, prevTimeStr) {
+  const parts = input.split(/\D+/).filter(Boolean);
+  if (!parts.length || parts.length > 3 || parts.some(p => !/^\d+$/.test(p))) return null;
+  const nums = parts.map(Number);
+  let ih = 0, im = 0;
+  if (prevTimeStr) {
+    const norm = normaliseTime(prevTimeStr);
+    if (norm) { const [ph, pm] = norm.split(':').map(Number); ih = ph; im = pm; }
+  }
+  let h, m, s;
+  if (nums.length === 1)      { h = ih; m = im; s = nums[0]; }
+  else if (nums.length === 2) { h = ih; m = nums[0]; s = nums[1]; }
+  else                        { [h, m, s] = nums; }
+  if (s > 59 || m > 59 || h > 24) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }

@@ -8,6 +8,7 @@ import { TABLES } from '../locale.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
 import { isBanned } from '../entries.js';
+import { laterDate, normalisePeopleRows } from '../data.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
 const PEOPLE_COLS = (() => {
@@ -162,12 +163,6 @@ function renderDupes(pairs) {
   }).join('');
 }
 
-function laterDate(a, b) {
-  if (!a) return b || '';
-  if (!b) return a;
-  return toISODate(a) >= toISODate(b) ? a : b;
-}
-
 async function mergePersonPair(keepIdx, dropIdx) {
   const keep = state.people[keepIdx];
   const drop = state.people[dropIdx];
@@ -205,21 +200,6 @@ async function mergePersonPair(keepIdx, dropIdx) {
 function exportPeople() {
   const csv = formatCSV(state.people, CSV.people.fields);
   downloadText(csv, `${sanitise(state.event?.name || 'people')}_people.csv`);
-}
-
-function normalisePeopleRows(rows) {
-  if (!rows.length) return rows;
-  const keys = Object.keys(rows[0]);
-  const map = {};
-  for (const field of CSV.people.fields) {
-    const aliases = CSV.people.aliases[field] ?? [field];
-    const found = aliases.find(a => keys.includes(a));
-    if (found) map[field] = found;
-  }
-  if (!map.name || !map.gender || !map.dob) return null;
-  return rows.map(r => Object.fromEntries(
-    Object.entries(map).map(([field, src]) => [field, r[src] ?? ''])
-  ));
 }
 
 async function applyPeopleMerge(rows) {

@@ -5,7 +5,7 @@ import { escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs, r
 import { TABLES } from '../locale.js';
 import { isBanned } from '../entries.js';
 import { personEditCells, readPersonCells } from './people.js';
-import { findSimilarPairs } from '../utils.js';
+import { getClubs, findDuplicateClubPairs } from '../clubs.js';
 
 const CLUBS_COLS = (() => {
   const m = TABLES.clubs;
@@ -37,20 +37,6 @@ const CLUB_MEMBER_COLS = (() => {
 })();
 
 const selectedClubs = new Set();
-
-function getClubs() {
-  const map = new Map();
-  for (const p of state.people) {
-    const club = (p.club || '').trim();
-    const entry = map.get(club) || { count: 0, lastSeen: '' };
-    entry.count++;
-    if (p.lastSeen && p.lastSeen > entry.lastSeen) entry.lastSeen = p.lastSeen;
-    map.set(club, entry);
-  }
-  const named = [...map.entries()].filter(([n]) => n).sort((a, b) => a[0].localeCompare(b[0]));
-  const blank = map.has('') ? [['', map.get('')]] : [];
-  return [...blank, ...named];
-}
 
 export function renderClubs() {
   const clubs = getClubs();
@@ -111,12 +97,6 @@ async function deleteClubMemberRow(idx) {
   await savePeople();
   showStatus(`${p.name} deleted.`);
   renderClubMembers();
-}
-
-function findDuplicateClubPairs() {
-  const clubs = getClubs().filter(([n]) => n);
-  return findSimilarPairs(clubs, ([name]) => name)
-    .map(({ a, b, exact }) => ({ a: clubs[a], b: clubs[b], exact }));
 }
 
 function renderClubDupes(pairs) {

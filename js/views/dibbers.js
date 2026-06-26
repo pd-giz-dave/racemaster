@@ -3,6 +3,7 @@
 import { state, saveDibbers } from '../state.js';
 import { createDibber } from '../schema.js';
 import { CSV } from '../csv-schema.js';
+import { normaliseDibberRows } from '../data.js';
 import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { parseCSV } from '../csv.js';
@@ -129,28 +130,6 @@ export async function deleteDibbersFrom(idx) {
   await saveDibbers();
   showStatus(`${count} dibber${count === 1 ? '' : 's'} deleted.`);
   renderDibbers();
-}
-
-function findAlias(keys, field) {
-  return (CSV.dibbers.aliases[field] ?? [field]).find(a => keys.includes(a));
-}
-
-function normaliseDibberRows(rows) {
-  if (!rows.length) return rows;
-  const keys     = Object.keys(rows[0]);
-  const shortKey = findAlias(keys, 'shortCode');
-  const longKey  = findAlias(keys, 'longCode');
-  if (!shortKey || !longKey) return null;
-  const ownerKey = findAlias(keys, 'owner');
-  const lostKey  = findAlias(keys, 'lost');
-  const notesKey = findAlias(keys, 'notes');
-  return rows.map(r => createDibber({
-    shortCode: r[shortKey],
-    longCode:  r[longKey],
-    owner:     ownerKey ? r[ownerKey] : '',
-    lost:      lostKey  ? r[lostKey]  : '',
-    notes:     notesKey ? r[notesKey] : '',
-  }));
 }
 
 export async function importDibbersFromFile() {

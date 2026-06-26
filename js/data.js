@@ -2,16 +2,17 @@
 
 import { state } from './state.js';
 import { savePeople } from './state.js';
-import { createPerson } from './schema.js';
+import { createPerson, createDibber } from './schema.js';
+import { CSV } from './csv-schema.js';
 import { GENDER } from './constants.js';
-import { normaliseDate, cleanName, sortBy, today, normaliseGender } from './utils.js';
+import { normaliseDate, cleanName, sortBy, today, normaliseGender, toISODate } from './utils.js';
 
-// ============================================================
-// People, clubs and dibbers management (from Data.xml)
-// ============================================================
+// ====================================
+// People, clubs and dibbers management
+// ====================================
 
 /** Find a person by name, gender and DoB. Returns index or -1. */
-export function findPerson(name, gender, dob) {
+function findPerson(name, gender, dob) {
   const key = makePersonKey(name, gender, dob);
   return state.people.findIndex(p => makePersonKey(p.name, p.gender, p.dob) === key);
 }
@@ -146,5 +147,48 @@ export async function mergeSIEntries() {
   sortPeople();
   await savePeople();
   return { peopleAdded };
+}
+
+export function laterDate(a, b) {
+  if (!a) return b || '';
+  if (!b) return a;
+  return toISODate(a) >= toISODate(b) ? a : b;
+}
+
+export function normalisePeopleRows(rows) {
+  if (!rows.length) return rows;
+  const keys = Object.keys(rows[0]);
+  const map = {};
+  for (const field of CSV.people.fields) {
+    const aliases = CSV.people.aliases[field] ?? [field];
+    const found = aliases.find(a => keys.includes(a));
+    if (found) map[field] = found;
+  }
+  if (!map.name || !map.gender || !map.dob) return null;
+  return rows.map(r => Object.fromEntries(
+    Object.entries(map).map(([field, src]) => [field, r[src] ?? ''])
+  ));
+}
+
+function findDibberAlias(keys, field) {
+  return (CSV.dibbers.aliases[field] ?? [field]).find(a => keys.includes(a));
+}
+
+export function normaliseDibberRows(rows) {
+  if (!rows.length) return rows;
+  const keys     = Object.keys(rows[0]);
+  const shortKey = findDibberAlias(keys, 'shortCode');
+  const longKey  = findDibberAlias(keys, 'longCode');
+  if (!shortKey || !longKey) return null;
+  const ownerKey = findDibberAlias(keys, 'owner');
+  const lostKey  = findDibberAlias(keys, 'lost');
+  const notesKey = findDibberAlias(keys, 'notes');
+  return rows.map(r => createDibber({
+    shortCode: r[shortKey],
+    longCode:  r[longKey],
+    owner:     ownerKey ? r[ownerKey] : '',
+    lost:      lostKey  ? r[lostKey]  : '',
+    notes:     notesKey ? r[notesKey] : '',
+  }));
 }
 
