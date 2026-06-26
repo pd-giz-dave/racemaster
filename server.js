@@ -163,7 +163,7 @@ function writeDataset(owner, fullName, data) {
 }
 
 function emptyDataset() {
-  return {};
+  return { _version: 1 };
 }
 
 // Returns array of { owner, name, fullName, visibility, orphaned } visible to username.
@@ -272,7 +272,9 @@ function parseDataPath(pathname) {
 // ---- Request handler ----
 
 const server = http.createServer(async (req, res) => {
-  const { pathname } = new URL(req.url, `http://localhost:${PORT}`);
+  const _url = new URL(req.url, `http://localhost:${PORT}`);
+  const { pathname } = _url;
+  const force = _url.searchParams.get('force') === 'true';
 
   try {
 
@@ -439,8 +441,16 @@ const server = http.createServer(async (req, res) => {
       if (owner !== username && !isAdmin(username)) return jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' });
       try {
         const incoming = JSON.parse(await readBody(req));
+        const current  = readDataset(owner, fullName);
+        const currentVersion  = current._version  || 0;
+        const incomingVersion = incoming._version || 0;
+        if (!force && currentVersion > 0 && incomingVersion !== currentVersion) {
+          return jsonReply(res, 409, { error: 'Dataset has been modified by another session — reload to get the latest data.' });
+        }
+        incoming._version = currentVersion + 1;
         writeDataset(owner, fullName, incoming);
-        return jsonReply(res, 200, { ok: true });
+        console.log(`[data] ${owner}/${fullName} saved at version ${incoming._version}`);
+        return jsonReply(res, 200, { ok: true, version: incoming._version });
       } catch {
         return jsonReply(res, 400, { error: 'Invalid JSON' });
       }

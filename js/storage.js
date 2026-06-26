@@ -31,7 +31,8 @@ const STANDALONE_KEY = 'racemaster-standalone'; // localStorage: standalone mode
 
 export const hasFSA = false;
 
-let _syncTimer = null;
+let _syncTimer    = null;
+let _conflicted   = false;
 
 // ---- Session management ----
 
@@ -63,6 +64,9 @@ export function setIsAdmin(v)  { localStorage.setItem(IS_ADMIN_KEY, v ? 'true' :
 export function isDirty() {
   return localStorage.getItem(DIRTY_KEY) === 'true';
 }
+
+export function getVersion()     { return cacheLoad()._version || 0; }
+export function isConflicted()  { return _conflicted; }
 
 export function hasCachedData() {
   const data = cacheLoad();
@@ -190,10 +194,12 @@ export async function saveAsDataset(token, owner, name, visibility) {
   const created = await createRes.json();
   if (created.error) return created;
 
-  const pushRes = await fetch(`/api/data/${owner}/${created.fullName}`, {
+  const saveData = cacheLoad();
+  saveData._version = 1; // new dataset always starts at version 1
+  const pushRes = await fetch(`/api/data/${owner}/${created.fullName}?force=true`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: localStorage.getItem(CACHE_KEY) || '{}',
+    body: JSON.stringify(saveData),
   });
   if (!pushRes.ok) return { error: 'Dataset created but push failed' };
   return created;
@@ -226,12 +232,18 @@ function cacheSaveTable(table, rows) {
 
 // ---- Server sync ----
 
-async function syncToServer() {
+function notifyConflict() {
+  window.dispatchEvent(new CustomEvent('racemaster-conflict'));
+}
+
+async function syncToServer(force = false, silent = false) {
+  if (_conflicted) return;
   if (localStorage.getItem(DIRTY_KEY) !== 'true') return;
   const session = getSession();
   if (!session) return;
   try {
-    const res = await fetch(`/api/data/${session.dataset}`, {
+    const url = `/api/data/${session.dataset}${force ? '?force=true' : ''}`;
+    const res = await fetch(url, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -239,7 +251,17 @@ async function syncToServer() {
       },
       body: localStorage.getItem(CACHE_KEY) || '{}',
     });
-    if (res.ok) { localStorage.removeItem(DIRTY_KEY); notifyDirty(); }
+    if (res.ok) {
+      const { version } = await res.json();
+      const cache = cacheLoad();
+      cache._version = version;
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      localStorage.removeItem(DIRTY_KEY);
+      notifyDirty();
+    } else if (res.status === 409) {
+      _conflicted = true;
+      if (!silent) notifyConflict();
+    }
   } catch {
     // Server unreachable — dirty flag persists; will retry on next write
   }
@@ -264,7 +286,7 @@ export async function restoreDirectory() {
   if (!session) return true; // standalone — use localStorage cache
 
   if (localStorage.getItem(DIRTY_KEY) === 'true') {
-    await syncToServer();
+    await syncToServer(false, true); // silent — fresh GET follows regardless
   }
   try {
     const res = await fetch(`/api/data/${session.dataset}`, {
@@ -276,6 +298,7 @@ export async function restoreDirectory() {
       const serverData = await res.json();
       localStorage.setItem(CACHE_KEY, JSON.stringify(serverData));
       localStorage.removeItem(DIRTY_KEY);
+      _conflicted = false;
     }
   } catch {
     // Server unreachable — use localStorage cache as-is
@@ -318,7 +341,7 @@ export async function restoreState(data) {
   localStorage.setItem(CACHE_KEY, JSON.stringify(data));
   localStorage.setItem(DIRTY_KEY, 'true');
   notifyDirty();
-  await syncToServer();
+  await syncToServer(true); // force — intentional overwrite from imported file
 }
 
 /** Download rows as a CSV file to the local filesystem */

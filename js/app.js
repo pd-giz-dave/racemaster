@@ -2,7 +2,7 @@
 
 import { state, loadAll } from './state.js';
 import { restoreDirectory, getSession, isStandalone } from './storage.js';
-import { updateDataFileButton, startServerPing, startUpdateCheck } from './connect.js';
+import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch } from './connect.js';
 import { wireDatasets, renderDatasets } from './views/datasets.js';
 import { showBusy } from './utils.js';
 import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
@@ -59,6 +59,7 @@ export async function init() {
   wireTooltips();
   startServerPing();
   startUpdateCheck();
+  startConflictWatch();
   window.addEventListener('racemaster-dirty-change', updateDataFileButton);
   wireDatasets(connectAndLoad);
   wireNav();

@@ -1,6 +1,6 @@
 'use strict';
 
-import { getSession, isDirty } from './storage.js';
+import { getSession, isDirty, getVersion, isConflicted } from './storage.js';
 import { showConfirmDialog } from './ui.js';
 
 export function startUpdateCheck() {
@@ -17,6 +17,20 @@ export function startUpdateCheck() {
     if (!await showConfirmDialog('Apply update and reload now?', 'Update')) return;
     navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
     sw.postMessage({ type: 'SKIP_WAITING' });
+  });
+}
+
+export function startConflictWatch() {
+  window.addEventListener('racemaster-conflict', async () => {
+    updateDataFileButton();
+    if (await showConfirmDialog(
+      'This dataset has been updated by another session — your changes may not have saved. Reload now to get the latest data?',
+      'Reload'
+    )) {
+      location.reload();
+    } else {
+      updateDataFileButton();
+    }
   });
 }
 
@@ -64,7 +78,20 @@ export function updateDataFileButton() {
     return;
   }
   const [owner, fullName] = session.dataset.split('/');
-  const name = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
-  dsSpan.textContent = ` · ${owner} / ${name}`;
-  dsSpan.style.color = isDirty() ? 'var(--header-warn)' : '';
+  const name    = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
+  const version = getVersion();
+  const dirty   = isDirty();
+  if (isConflicted()) {
+    dsSpan.textContent   = ` ⚠ conflict — reload required`;
+    dsSpan.style.color      = '#333';
+    dsSpan.style.background = 'var(--header-warn)';
+    dsSpan.style.padding    = '2px 6px';
+    dsSpan.style.borderRadius = '3px';
+  } else {
+    dsSpan.textContent      = ` · ${owner} / ${name}  v${version}${dirty ? ' *' : ''}`;
+    dsSpan.style.color      = dirty ? 'var(--header-warn)' : '';
+    dsSpan.style.background = '';
+    dsSpan.style.padding    = '';
+    dsSpan.style.borderRadius = '';
+  }
 }

@@ -12,7 +12,7 @@ DEST="/apps/racemaster"
 
 EXCLUDES=(
   --exclude='.git' --exclude='.idea' --exclude='scripts' --exclude='data' --exclude='results'
-  --exclude='users.txt' --exclude='admins.txt' --exclude='sessions.txt'
+  --exclude='users.txt' --exclude='admins.txt' --exclude='sessions.txt' --exclude='server.log'
 )
 SRC="$(dirname "$0")/../"
 
