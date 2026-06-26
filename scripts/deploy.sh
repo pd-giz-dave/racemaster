@@ -11,7 +11,8 @@ REMOTE="$1"
 DEST="/apps/racemaster"
 
 EXCLUDES=(
-  --exclude='.git' --exclude='.idea' --exclude='scripts' --exclude='data' --exclude='results'
+  --exclude='.claude' --exclude='.git' --exclude='.idea'
+  --exclude='scripts' --exclude='data' --exclude='results'
   --exclude='users.txt' --exclude='admins.txt' --exclude='sessions.txt' --exclude='server.log'
 )
 SRC="$(dirname "$0")/../"
