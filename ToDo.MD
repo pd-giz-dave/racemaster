@@ -1,7 +1,6 @@
 # ToDo
 
 - Review all code and remove now not used code (there has been a lot of development).
-- Re-factor the code to separate out data structure knowledge - a 'models' dir?
 - Make the server console log persistent (with size limiting)
 - Add test suite
 

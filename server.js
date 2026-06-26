@@ -19,6 +19,34 @@ const SESSION_TTL  = 30 * 24 * 60 * 60 * 1000; // 30 days
 if (!fs.existsSync(DATA_DIR))    fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(RESULTS_DIR)) fs.mkdirSync(RESULTS_DIR);
 
+// ---- Persistent logging ----
+// Appends timestamped lines to server.log; rotates to server.log.1 at 1 MB.
+
+const { format: utilFormat } = require('util');
+const LOG_FILE  = path.join(ROOT, 'server.log');
+const LOG_MAX   = 1 * 1024 * 1024;
+
+function writeLog(level, args) {
+  const line = `[${new Date().toISOString()}] [${level}] ${utilFormat(...args)}\n`;
+  try {
+    if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= LOG_MAX) {
+      if (fs.existsSync(`${LOG_FILE}.9`)) fs.unlinkSync(`${LOG_FILE}.9`);
+      for (let i = 8; i >= 1; i--) {
+        if (fs.existsSync(`${LOG_FILE}.${i}`)) fs.renameSync(`${LOG_FILE}.${i}`, `${LOG_FILE}.${i + 1}`);
+      }
+      fs.renameSync(LOG_FILE, `${LOG_FILE}.1`);
+    }
+    fs.appendFileSync(LOG_FILE, line);
+  } catch { /* never let logging break the server */ }
+}
+
+const _log  = console.log.bind(console);
+const _warn = console.warn.bind(console);
+const _err  = console.error.bind(console);
+console.log   = (...a) => { _log(...a);  writeLog('INFO',  a); };
+console.warn  = (...a) => { _warn(...a); writeLog('WARN',  a); };
+console.error = (...a) => { _err(...a);  writeLog('ERROR', a); };
+
 fs.watchFile(__filename, { interval: 1000 }, () => {
   setTimeout(() => process.exit(0), 500);
 });
@@ -210,7 +238,7 @@ function buildSwContent() {
 
   return fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')
     .replace(/const CACHE = '[^']+';/,        `const CACHE = 'racemaster-${fingerprint}';`)
-    .replace(/const PRECACHE = \[[\s\S]*?\];/, precacheStr);
+    .replace(/const PRECACHE = \[[\s\S]*?];/, precacheStr);
 }
 
 // ---- HTTP helpers ----
@@ -528,5 +556,6 @@ server.listen(PORT, HOST, () => {
   console.log(  `Results directory → ${RESULTS_DIR}`)
   console.log(  `Users file        → ${USERS_FILE}`);
   console.log(  `Admins file       → ${ADMINS_FILE}`);
-  console.log(  `Sessions file     → ${SESSIONS_FILE}\n`);
+  console.log(  `Sessions file     → ${SESSIONS_FILE}`);
+  console.log(  `Log file          → ${LOG_FILE}\n`)
 });
