@@ -21,7 +21,8 @@
   <header class="app-header">
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
-    <h1>RaceMaster (v0.0.1-alpha)</h1>
+    <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.1-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <div style="flex:1"></div>
@@ -32,7 +33,7 @@
   <!-- Sidebar navigation -->
   <aside class="app-sidebar">
     <nav>
-      <div class="nav-section">Overview</div>
+      <div class="nav-section">Setup</div>
       <a href="#" data-view="home">Home</a>
       <a href="#" data-view="datafile">Datasets</a>
       <a href="#" data-view="event">Event Settings</a>
@@ -237,7 +238,7 @@
         <div class="form-field" style="flex-direction:row;align-items:center;gap:8px">
           <input type="checkbox" id="ev-clear-previous">
           <label for="ev-clear-previous" style="font-size:0.85rem;color:var(--text);cursor:pointer">
-            Clear all previous state
+            Clear previous event
           </label>
         </div>
       </div>
@@ -525,7 +526,7 @@
                      style="background:#f0f0f0;color:var(--muted);cursor:default">
             </div>
             <div class="form-field mb-8">
-              <label for="finisher-time">Finish Time</label>
+              <label for="finisher-time">Clock Time</label>
               <input type="text" id="finisher-time" autocomplete="off" spellcheck="false"
                      placeholder="ss, mm:ss, hh:mm:ss or - to skip">
             </div>
@@ -1059,6 +1060,16 @@
     <datalist id="datalist-clubs"></datalist>
     <datalist id="datalist-roles"></datalist>
     <datalist id="datalist-finisher-bibs"></datalist>
+
+    <!-- About -->
+    <div class="view" id="view-about" hidden>
+      <div class="view-header"><h2>About RaceMaster</h2></div>
+    </div>
+
+    <!-- What's New -->
+    <div class="view" id="view-whats-new" hidden>
+      <div class="view-header"><h2>What's New</h2></div>
+    </div>
 
   </main><!-- end .app-main -->
 </div><!-- end .app-shell -->

@@ -1,6 +1,6 @@
 'use strict';
 
-import { TOOLTIPS, HELP } from './locale.js';
+import { TOOLTIPS, HELP, PAGES } from './locale.js';
 
 export function wireTooltips() {
   for (const [id, tip] of Object.entries(TOOLTIPS)) {
@@ -31,5 +31,16 @@ export function wireViewHelp() {
       btn.classList.toggle('active', !panel.hidden);
     });
     header.prepend(btn);
+  }
+}
+
+export function wireStaticPages() {
+  for (const [key, html] of Object.entries(PAGES)) {
+    const view = document.getElementById(`view-${key}`);
+    if (!view) continue;
+    const card = document.createElement('div');
+    card.className = 'card page-content';
+    card.innerHTML = html;
+    view.appendChild(card);
   }
 }

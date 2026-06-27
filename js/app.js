@@ -22,7 +22,7 @@ import { renderDibbers, wireDibbers }       from './views/dibbers.js';
 import { renderCategories, wireCategories } from './views/categories.js';
 import { renderForms, wireForms }           from './views/forms.js';
 import { renderSIResults, wireSIResults }   from './views/si-results.js';
-import { wireViewHelp, wireTooltips }        from './help.js';
+import { wireViewHelp, wireTooltips, wireStaticPages } from './help.js';
 
 // ============================================================
 // Application bootstrap and UI wiring
@@ -57,6 +57,7 @@ export async function init() {
 
   wireViewHelp();
   wireTooltips();
+  wireStaticPages();
   startServerPing();
   startUpdateCheck();
   startConflictWatch();

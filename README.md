@@ -12,11 +12,11 @@ Once loaded it does not require internet access to use it.
 - **Finishers** — extremely fast recording of start and finish times and positions (it can be done in real-time at the end of the finish funnel)
 - **Timing** - multiple options including: stopwatch, SI Timing integration, early and late starters
 - **Juniors** — junior races can run concurrently with adult races using the same stopwatch
-- **Results** — calculate and display results and print a prize list by category
+- **Results** — calculate, display and publish results and print a prize list by category
 - **Paperwork** — generate entry forms for on-the-day and pre-registered entrants
 - **Export/Import** — save and restore event data to/from local storage or the cloud
 - **Run in th wild** - configure the event with internet access then go into the wild with no internet or mobile signal, run the event, on return auto syncs to the cloud.
-- **Run standalone** - will run standalone using just local storage, just visit the website where the app is deployed - job done
+- **Run standalone** - will run standalone using local storage, just visit the website where the app is deployed - job done
 
 ## History
 

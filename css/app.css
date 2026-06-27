@@ -108,6 +108,38 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .app-header .event-name { font-size: 0.9rem; opacity: 0.85; }
 .app-header .app-icon { width: 28px; height: 28px; flex-shrink: 0; }
 .app-header .btn { color: var(--header-fg); border-color: var(--header-fg); }
+
+.btn-help-header {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--header-fg);
+  background: transparent;
+  color: var(--header-fg);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.btn-help-header:hover { background: rgba(255,255,255,0.15); }
+
+.btn-header-version {
+  background: transparent;
+  border: none;
+  color: var(--header-fg-dim);
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.btn-header-version:hover { color: var(--header-fg); text-decoration: underline; }
+
+.page-content { max-width: 680px; }
+.page-content h3 { margin: 14px 0 6px; font-size: 1rem; }
+.page-content ul { margin: 0 0 10px; padding-left: 1.4em; line-height: 1.8; }
+.page-content p  { margin: 0 0 8px; }
 #header-username    { font-size: 0.8rem; color: var(--header-fg-mid); }
 #header-server-status {
   font-size: 0.875rem;

@@ -297,7 +297,7 @@ async function submitFinisherForm() {
   // ---- Time mode ----
   if (getCurrentMode() === 'time') {
     if (timeTargetSidx < 0) { showStatus('No untimed finishers.', true); return; }
-    if (!rawTime) { showStatus('Enter a finish time or - to skip.', true); timeEl?.focus(); return; }
+    if (!rawTime) { showStatus('Enter a clock time or - to skip.', true); timeEl?.focus(); return; }
     const tf = state.finishers[timeTargetSidx];
     const tfLabel = tf?.number > 0 ? `bib ${tf.number}` : (tf?.action || 'line');
     let parsedTime;

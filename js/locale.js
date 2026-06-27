@@ -10,6 +10,8 @@
 export const TOOLTIPS = {
   // Header
   'btn-nav-toggle':              'Open / close the navigation menu',
+  'btn-app-about':               'About RaceMaster',
+  'btn-app-whats-new':           "What's new in this version",
   'btn-app-update':              'A new version of RaceMaster is available — click to apply it',
 
   // Datasets view
@@ -186,7 +188,7 @@ export const HELP = {
     <p>The <strong>distance</strong> is used to split entrants into juniors or seniors according the FRA distance rules for juniors.</p>
     <p>The <strong>category scheme</strong> (FRA 5-year or WFRA 10-year) controls which age bands are used for results and prizes.</p>
     <p>The <string>timing method</string> determines how finishers are recorded.</p> 
-    <p>All fields can be updated at any point. However, be wary of the <strong>Clear all previous state</strong> checkbox, 
+    <p>All fields can be updated at any point. However, be wary of the <strong>Clear previous event</strong> checkbox, 
         which will reset all data and settings ready for a new event.</p>
   `,
   'view-forms': `
@@ -306,8 +308,47 @@ export const HELP = {
     <p>Private datasets are only visible to their owner (and admins). Public datasets are visible to all signed-in users.</p>
     <p>When not signed-in you will see a login panel, either sign-in to your existing account or 
         create a new one (they are completely free with no-catches).
-        If you do not want to use an account just select <strong>Continue without signing in</strong>. 
+        If you do not want to use an account just select <strong>Continue without signing in</strong>.
         In that case you can you use the Export/Import buttons to work purely locally.</p>
+  `,
+};
+
+export const PAGES = {
+  about: `
+    <p>RaceMaster is an offline-first web application for managing fell running race day operations.
+       Once loaded it works without an internet connection and syncs automatically when the server is reachable.</p>
+    <h3>Features</h3>
+    <ul>
+      <li><strong>Pre-entries</strong> — import from SportIdent / EntryCentral CSV, print pre-filled entry forms</li>
+      <li><strong>Registration</strong> — on-the-day entry with automatic bib and SI card (dibber) assignment</li>
+      <li><strong>Finishers</strong> — stopwatch time entry or SI dibber result import</li>
+      <li><strong>Results</strong> — automatic category placing and prize list, CSV export, web publish</li>
+      <li><strong>Safety</strong> — live outstanding / DNF / finished counts; no-show pre-entry list</li>
+      <li><strong>Helpers</strong> — record volunteer names, roles, and contribution history</li>
+      <li><strong>People database</strong> — persistent runner history across events</li>
+      <li><strong>Paperwork</strong> — printable entry forms, finish sheets, number matrix, and A5 race bibs</li>
+      <li><strong>Multi-device</strong> — conflict detection when two sessions edit the same dataset simultaneously</li>
+    </ul>
+    <h3>Data storage</h3>
+    <p>All data is held in JSON files on the local server and cached in the browser.
+       Use <em>Datasets</em> to back up, restore, or switch between events.</p>
+    <h3>Feedback &amp; issues</h3>
+    <p>Report problems or suggestions to the race organiser running this server.</p>
+  `,
+
+  'whats-new': `
+    <h3>v0.0.1-alpha — current version</h3>
+    <ul>
+      <li><strong>About / What's New</strong> — this page and the ? button in the header</li>
+      <li><strong>Optimistic locking</strong> — version counter detects simultaneous edits; header shows version and dirty indicator</li>
+      <li><strong>Safety: No-shows tab</strong> — lists pre-entries that never checked in; highlights where a same-name on-day entry exists without a pre-entry link</li>
+      <li><strong>Logic / view separation</strong> — pure data functions moved to <code>js/*.js</code> files, enabling unit testing without DOM</li>
+      <li><strong>Server log rotation</strong> — persistent <code>server.log</code> with automatic rotation up to <code>server.log.9</code></li>
+      <li><strong>Results publishing</strong> — publish results to a public web page directly from the app</li>
+      <li><strong>Schema factories</strong> — <code>createEvent()</code>, <code>createPerson()</code> etc. as single source of truth for data shapes</li>
+      <li><strong>CSV alias fallback</strong> — import columns map by alias; unknown columns fall back to the field name</li>
+      <li><strong>Race bibs</strong> — SVG A5 bibs printed 2-up on A4, guillotine-sorted for easy stacking</li>
+    </ul>
   `,
 };
 
