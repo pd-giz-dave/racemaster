@@ -92,11 +92,11 @@
   table-layout: fixed;
 }
 
-/* Fixed widths keep all columns from wrapping; name cell gets whatever is left */
-.pln-table th:nth-child(1), .pln-table td:nth-child(1) { width: 7mm;  padding-right: 0; }   /* Pos     */
-.pln-table th:nth-child(2), .pln-table td:nth-child(2) { width: 10mm; }                      /* Cat     */
-.pln-table th:nth-child(3), .pln-table td:nth-child(3) { width: 6mm;  padding-right: 0; }   /* In Cat  */
-.pln-table th:nth-child(4), .pln-table td:nth-child(4) { width: 13mm; padding-right: 2mm; } /* Time    */
+/* Fixed mm widths — tweak from actual printout; name takes the rest */
+.pln-table th:nth-child(1), .pln-table td:nth-child(1) { width: 6mm;  padding-left: 0; padding-right: 0; } /* Pos:  3 digits */
+.pln-table th:nth-child(2), .pln-table td:nth-child(2) { width: 10mm; padding-left: 0; padding-right: 0; } /* Cat:  4 chars  */
+.pln-table th:nth-child(3), .pln-table td:nth-child(3) { width: 3mm;  padding-left: 0; padding-right: 0; } /* CP:   1 digit  */
+.pln-table th:nth-child(4), .pln-table td:nth-child(4) { width: 17mm; padding-left: 0; padding-right: 0; } /* Time: 10 chars */
 /* col 5 (Name) takes remaining width automatically */
 
 .pln-table th {

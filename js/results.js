@@ -261,7 +261,7 @@ function buildPrizes(results) {
   const prizes = [];
 
   function makeRow(section, category, isJunior, r, catPos) {
-    return { section, category, isJunior, inCatPos: catPos, position: r.position, time: r.time, name: r.name, bibNumber: r.bibNumber, recordBreaker: !!r.recordBreaker, multiWinner: multiWinners.has(r.name) };
+    return { section, category, entryCategory: r.category, isJunior, inCatPos: catPos, position: r.position, time: r.time, name: r.name, bibNumber: r.bibNumber, recordBreaker: !!r.recordBreaker, multiWinner: multiWinners.has(r.name) };
   }
 
   function addFixed(section, results, category, depth, isJunior) {
@@ -317,6 +317,7 @@ function buildPairsPrizes(pairsResults, depth) {
       .forEach((r, i) => prizes.push({
         section,
         category:      label,
+        entryCategory: r.category,
         isJunior,
         inCatPos:      i + 1,
         position:      r.position,

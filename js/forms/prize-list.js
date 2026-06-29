@@ -27,7 +27,7 @@ export function buildPrizeRowsHTML(prizes) {
     const name     = (showStar ? '* ' : '') + esc(p.name || '');
     rows.push(`<tr>
       <td>${p.position || ''}</td>
-      <td>${esc(p.category || '')}</td>
+      <td>${esc(p.entryCategory || '')}</td>
       <td>${p.inCatPos || ''}</td>
       <td>${esc(p.time || '') + suffix}</td>
       <td class="prize-name-cell">${name}</td>
@@ -52,9 +52,9 @@ function buildPrizeListHTML(isNarrow) {
   if (!allPrizes.length) {
     html += `<p>No prizes generated yet.</p>`;
   } else {
-    html += `<p class="${c}-hint">R = course record &nbsp; J = junior &nbsp; * = multi winner</p>`;
+    html += `<p class="${c}-hint">Time suffix: R = course record &nbsp; J = junior &nbsp; </br> Name prefix: * = multi cat winner</p>`;
     html += `<table class="${tblClass}"><thead><tr>
-      <th>Pos</th><th>Cat</th><th>CP</th><th>Time</th><th>Name</th>
+      <th>Pos</th><th>Cat</th><th>IC</th><th>Time</th><th>Name</th>
     </tr></thead><tbody>`;
     html += buildPrizeRowsHTML(allPrizes);
     html += `</tbody></table>`;
