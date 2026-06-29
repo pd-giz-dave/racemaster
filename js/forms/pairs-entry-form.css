@@ -1,0 +1,268 @@
+/* ============================================================
+   Pairs Entry Form — 2 per A4 page
+   @page margin is 0 (injected); all positioning is via padding on .pairs-entry-page
+   Print margins: top 9mm, right 5mm, bottom 5mm, left 10mm
+   top=9mm places cut guide at paper centre (A4 = 148.5mm).
+   (297 - 9 - 5 - 10) / 2 = 136.5mm per half.
+   ============================================================ */
+.pairs-entry-page {
+
+  /* ── Tweakable values ──────────────────────────────────────
+     Change these to adjust the form without touching other CSS.
+     ─────────────────────────────────────────────────────────  */
+
+  --pef-page-width:        210mm;
+  --pef-page-height:       297mm;
+  --pef-half-height:       136.5mm;
+
+  /* Font sizes */
+  --pef-org-size:          14pt;
+  --pef-title-size:        16pt;
+  --pef-hint-size:         9pt;
+  --pef-lbl-size:          8.5pt;
+  --pef-key-size:          9.5pt;
+  --pef-data-key-size:     12pt;
+  --pef-name-size:         13pt;
+  --pef-ref-data-size:     16pt;
+  --pef-runner-label-size: 8pt;
+  --pef-important-size:    8.5pt;
+  --pef-decl-size:         6.5pt;
+  --pef-sign-label-size:   11pt;
+  --pef-check-lg-size:     11pt;
+
+  /* Field heights */
+  --pef-field-height:      5mm;
+  --pef-key-field-height:  6mm;
+  --pef-sign-height:       7.5mm;
+
+  /* Column widths */
+  --pef-club-width:        85mm;
+
+  /* Gaps and spacing */
+  --pef-dob-gender-gap:    15mm;
+  --pef-gender-gap:        4mm;
+  --pef-junior-gap:        3mm;
+  --pef-key-row-top:       1mm;
+  --pef-date-gap:          4mm;
+
+  /* ── Structural rules — no need to change these ──────────── */
+
+  background: var(--print-page-bg);
+  width:  var(--pef-page-width);
+  height: var(--pef-page-height);
+  padding: 9mm 5mm 5mm 10mm;
+  box-sizing: border-box;
+  margin: 0 auto 20px;
+  page-break-after: always;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: 8pt;
+}
+
+.pairs-entry-page:last-child { page-break-after: auto; }
+
+.pef-half {
+  flex: 0 0 var(--pef-half-height);
+  height: var(--pef-half-height);
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  overflow: visible;
+}
+
+/* Cut guide between halves */
+.pef-cut {
+  flex: 0 0 10mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.pef-cut::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0; right: 0;
+  border-top: 0.3mm dashed #999;
+}
+.pef-cut-label {
+  font-size: 7pt;
+  color: #999;
+  background: #fff;
+  padding: 0 3mm;
+  position: relative;
+  z-index: 1;
+}
+
+/* Header */
+.pef-header {
+  display: flex;
+  align-items: stretch;
+  gap: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 0.5mm solid #000;
+  flex-shrink: 0;
+}
+.pef-org {
+  font-size: var(--pef-org-size);
+  font-weight: bold;
+  white-space: nowrap;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.pef-title-block {
+  font-size: var(--pef-title-size);
+  font-weight: bold;
+  white-space: nowrap;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pef-event-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+.pef-event-label { font-size: 7.5pt; }
+.pef-event-field {
+  flex: 1;
+  min-height: var(--pef-key-field-height);
+  border: 0.4mm solid #000;
+  display: flex;
+  align-items: center;
+  padding: 0 1.5mm;
+  font-size: 9pt;
+  overflow: hidden;
+}
+
+/* Refs + junior cats row */
+.pef-refs-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.pef-refs { display: flex; gap: 4mm; }
+.pef-ref  { display: flex; flex-direction: column; align-items: center; gap: 0.5mm; }
+.pef-ref-label { font-size: 7.5pt; white-space: nowrap; }
+.pef-ref-box {
+  width: 20mm; height: 8mm;
+  border: 0.4mm solid #000;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--pef-ref-data-size); font-weight: bold;
+}
+
+.pef-junior-cats   { text-align: right; flex-shrink: 0; }
+.pef-junior-label  { font-size: 8.5pt; font-weight: bold; margin-bottom: 1mm; white-space: nowrap; }
+.pef-junior-checks { display: flex; gap: var(--pef-junior-gap); flex-wrap: wrap; justify-content: flex-end; }
+.pef-check-lg      { font-size: var(--pef-check-lg-size) !important; font-weight: bold; }
+
+/* Hint */
+.pef-hint { font-size: var(--pef-hint-size); font-weight: bold; flex-shrink: 0; }
+
+/* Runner sections */
+.pef-runner-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5mm;
+  flex-shrink: 0;
+}
+.pef-runner-second { }
+.pef-runner-label {
+  font-size: var(--pef-runner-label-size);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.3mm;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Field rows */
+.pef-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  flex-shrink: 0;
+}
+.pef-lbl     { font-size: var(--pef-lbl-size); white-space: nowrap; padding-bottom: 0.5mm; }
+.pef-lbl-req { font-weight: bold; text-decoration: underline; }
+
+.pef-line {
+  display: inline-flex;
+  align-items: flex-end;
+  border-bottom: 0.4mm solid #000;
+  height: var(--pef-field-height);
+  flex-shrink: 0;
+  padding-bottom: 0.5mm;
+  box-sizing: border-box;
+  font-size: var(--pef-lbl-size);
+  overflow: hidden;
+}
+.pef-flex      { flex: 1; min-width: 0; }
+.pef-club-line { width: var(--pef-club-width); }
+
+.pef-check { font-size: var(--pef-lbl-size); white-space: nowrap; padding-bottom: 0.5mm; }
+
+/* Key rows — Full Name and DOB/Gender get larger font and taller field */
+.pef-row-key   { margin-top: var(--pef-key-row-top); }
+.pef-lbl-key   { font-size: var(--pef-key-size); }
+.pef-line-key  { height: var(--pef-key-field-height); font-size: var(--pef-data-key-size); }
+.pef-name-field { font-size: var(--pef-name-size); font-weight: bold; line-height: 1; }
+.pef-check-key { font-size: var(--pef-key-size); }
+
+.pef-gender-gap { margin-left: var(--pef-gender-gap); }
+
+/* DOB / Gender split row */
+.pef-dob-gender {
+  display: flex;
+  gap: var(--pef-dob-gender-gap);
+  flex-shrink: 0;
+}
+.pef-half-cell {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  min-width: 0;
+}
+
+/* Important note */
+.pef-important { font-size: var(--pef-important-size); font-weight: bold; flex-shrink: 0; }
+
+/* Declarations — flex: 1 fills whatever space is left between fixed rows and signatures */
+.pef-declarations {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  border: 0.3mm solid #999;
+  padding: 1.5mm 2mm;
+  overflow: hidden;
+}
+.pef-decl { font-size: var(--pef-decl-size); line-height: 1.3; margin: 0; }
+
+/* Signature rows — signed:date = 2:1, same as single entry form */
+.pef-sign-row .pef-lbl { font-weight: bold; font-size: var(--pef-sign-label-size); }
+.pef-sign-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  flex-shrink: 0;
+  height: var(--pef-sign-height);
+}
+.pef-sign-line {
+  height: var(--pef-sign-height);
+  border-bottom: 0.4mm solid var(--print-black);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin-bottom: 1mm;
+}
+.pef-sign-signed   { flex: 2; }
+.pef-sign-date     { flex: 1; }
+.pef-sign-date-lbl { margin-left: var(--pef-date-gap); }

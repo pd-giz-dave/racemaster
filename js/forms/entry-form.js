@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from '../state.js';
-import { escHtml } from '../ui.js';
+import { escHtml, showStatus } from '../ui.js';
 import { calculateCategory } from '../categories.js';
 import { openPopup } from './preview.js';
 
@@ -181,7 +181,7 @@ export function openBlankEntryFormPreview(count = 2) {
 
 export function openPreFilledEntryFormPreview() {
   if (!state.preEntries.length) {
-    alert('No pre-entries loaded — import a CSV file on the Pre-Entries page first.');
+    showStatus('No pre-entries loaded — import a CSV file on the Pre-Entries page first.', true);
     return;
   }
   openPopup({ ...ENTRY_FORM_POPUP, html: generatePreFilledEntryFormHTML() });

@@ -43,9 +43,11 @@ export const TOOLTIPS = {
   'btn-save-event':              'Save all event settings',
 
   // Paperwork
-  'btn-print-entry-form':        'Print blank entry forms for competitors to fill in at registration',
-  'btn-print-pre-entry-forms':   'Print entry forms pre-filled with pre-entry details — load pre-entries first',
-  'btn-print-helpers-list':      'Print a blank helpers list for the RO to record names and roles on race day',
+  'btn-print-entry-form':          'Print blank entry forms for competitors to fill in at registration',
+  'btn-print-pre-entry-forms':     'Print entry forms pre-filled with pre-entry details — load pre-entries first',
+  'btn-print-pairs-entry-forms':            'Print blank pairs entry forms with two runner sections and two signature lines',
+  'btn-print-pre-entry-pairs-entry-forms':  'Print pairs entry forms pre-filled with pre-entry details — load pre-entries first',
+  'btn-print-helpers-list':        'Print a blank helpers list for the RO to record names and roles on race day',
   'btn-print-finish-senior':     'Print a blank senior finish sheet for recording finish order',
   'btn-print-finish-junior':     'Print a blank junior finish sheet for recording finish order',
   'btn-print-number-matrix':     'Print a 2D grid showing all bib numbers for cross-checking at CPs',

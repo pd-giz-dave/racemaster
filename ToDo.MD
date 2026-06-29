@@ -3,10 +3,6 @@
 - Add column sorts to lists where appropriate
 - Add test suite
 
-## Implement the pairs system
-
-- modified entry form, eg. Time Trial
-
 ## Add splits option to results when using dibbers
 
 How? 
