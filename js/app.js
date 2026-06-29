@@ -166,7 +166,10 @@ function renderView(v) {
       renderEntries();
       setTimeout(() => {
         document.querySelector('#entries-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
-        document.getElementById('entry-form-peno')?.focus();
+        (state.event.hasPairs
+          ? document.getElementById('entry-form-type')
+          : document.getElementById('entry-form-peno')
+        )?.focus();
       }, 0);
       break;
     case 'helpers':

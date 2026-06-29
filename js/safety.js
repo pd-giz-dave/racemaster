@@ -1,10 +1,11 @@
 'use strict';
 
 import { state } from './state.js';
-import { getEntry, isEntryBanned, getEntriesOnCourse } from './entries.js';
+import { getEntry, isEntryBanned, getEntriesOnCourse, getEntryName } from './entries.js';
+import { derivePairGender } from './categories.js';
 import { getOutstandingCount } from './finishers.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from './si-results.js';
-import { formatResults, getResultsForCourse } from './results.js';
+import { formatResults } from './results.js';
 import { COURSE } from './constants.js';
 
 export function getFinishedBibs() {
@@ -19,11 +20,12 @@ export function getFinishedBibs() {
 }
 
 function entryInfo(bib) {
-  const e = getEntry(bib);
+  const e  = getEntry(bib);
+  const pg = e?.partner ? derivePairGender(e.gender, e.partner.gender) : '';
   return {
-    name:     (e?.name || '') + (isEntryBanned(e) ? ' (banned)' : ''),
+    name:     getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : ''),
     course:   e?.course   || '',
-    category: e?.category || '',
+    category: pg ? `${e?.category || ''} ${pg}`.trim() : (e?.category || ''),
   };
 }
 
@@ -61,12 +63,10 @@ export function getFinishedRows() {
     .filter(r => getSIRaceTime(r) && getSIBib(r) > 0 && !swFinishedBibs.has(getSIBib(r)))
     .map(r => ({ number: getSIBib(r) }));
 
-  const { results } = formatResults();
+  const { seniors, juniors } = formatResults();
   const resultsByBib = new Map();
-  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
-    for (const r of getResultsForCourse(course, results)) {
-      if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
-    }
+  for (const r of [...seniors, ...juniors]) {
+    if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
   }
 
   return [...swFinished, ...siFinished]

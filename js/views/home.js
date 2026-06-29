@@ -13,6 +13,7 @@ function eventDetails(ev) {
   const row = (label, value) => rows.push(`<tr><td class="home-ev-label">${label}</td><td>${value}</td></tr>`);
   const gap = () => rows.push(`<tr><td colspan="2" style="height:8px"></td></tr>`);
 
+  if (ev.hasPairs)                     row('Pairs',               'Enabled');
   if (ev.date)                        row('Date',                 ev.date);
   if (ev.distance)                    row('Distance',             `${ev.distance} km`);
   if (ev.categories)                  row('Categories',           ev.categories);
@@ -29,6 +30,7 @@ function eventDetails(ev) {
   gap();
 
   const hasJuniors = ev.juniorLimit && ev.juniorLimit !== 'None';
+
   if (hasJuniors) {
                                         row('Junior limit',       ev.juniorLimit);
     if (ev.juniorStartTime)             row('Junior start',       ev.juniorStartTime);

@@ -8,7 +8,7 @@ Once loaded it does not require internet access to use it.
 
 - **Event setup** — configure event details and race categories
 - **Pre-entries** — import pre-entry data from various sources
-- **On-the-day registration** — extremely fast entrant registration (as little as 3 keystrokes)
+- **On-the-day registration** — extremely fast entrant registration for solo or pairs (as little as 3 keystrokes)
 - **Finishers** — extremely fast recording of start and finish times and positions (it can be done in real-time at the end of the finish funnel)
 - **Timing** - multiple options including: stopwatch, SI Timing integration, early and late starters
 - **Juniors** — junior races can run concurrently with adult races using the same stopwatch

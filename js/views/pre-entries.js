@@ -3,7 +3,7 @@
 import { importSIEntries, verifySIEntries, clearSIEntries, getSortedPreEntries } from '../si-entries.js';
 import { mergeSIEntries } from '../data.js';
 import { cleanName, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, showConfirmDialog, pickFile, renderTable } from '../ui.js';
+import { on, setHTML, showStatus, showConfirmDialog, escHtml, pickFile, renderTable, wireTabBar } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { renderPeople } from './people.js';
 
@@ -41,6 +41,18 @@ export function renderPreEntries() {
   setHTML('pre-entry-count', `${preEntries.length} pre-entries`);
 }
 
+function renderIssues(issues) {
+  const tbody = document.getElementById('pre-entries-issues-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = issues.map(({ row, name, issue }) =>
+    `<tr><td>${row ?? ''}</td><td>${escHtml(name || '')}</td><td>${escHtml(issue)}</td></tr>`
+  ).join('');
+}
+
+function switchTab(tab) {
+  document.getElementById('pre-entries-tab-bar')?.querySelector(`[data-pe-tab="${tab}"]`)?.click();
+}
+
 export async function importSIEntriesFromFile() {
   const text = await pickFile('.csv,.txt');
   if (!text) return;
@@ -56,11 +68,9 @@ export async function importSIEntriesFromFile() {
   // Auto-verify
   const issues = verifySIEntries();
   if (issues.length) {
-    showStatus(
-      `${result.added} added, ${result.updated} updated — ${issues.length} issue(s): ` +
-      issues.map(i => i.name ? `${i.name}: ${i.issue}` : i.issue).join('; '),
-      true
-    );
+    showStatus(`${result.added} added, ${result.updated} updated — ${issues.length} issue(s) found.`, true);
+    renderIssues(issues);
+    switchTab('issues');
     renderPreEntries();
     return;
   }
@@ -68,9 +78,8 @@ export async function importSIEntriesFromFile() {
   showBusy('Merging…');
   const merged = await mergeSIEntries();
   showBusy('');
-  showStatus(
-    `${result.added} added, ${result.updated} updated — merged: +${merged.peopleAdded} people.`
-  );
+  showStatus(`${result.added} added, ${result.updated} updated — merged: +${merged.peopleAdded} people.`);
+  switchTab('data');
   renderPreEntries();
   renderPeople();
 }
@@ -85,4 +94,5 @@ export async function runClearPreEntries() {
 export function wirePreEntries() {
   on('btn-import-si-entries', 'click', importSIEntriesFromFile);
   on('btn-clear-pre-entries', 'click', runClearPreEntries);
+  wireTabBar('pre-entries-tab-bar', 'pre-entries-tab-', 'data-pe-tab');
 }

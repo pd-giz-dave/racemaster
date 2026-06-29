@@ -1,9 +1,9 @@
 'use strict';
 
 import { state }                           from '../state.js';
-import { formatResults, getResultsForCourse, computeAvgTop10 } from '../results.js';
+import { formatResults, computeAvgTop10 } from '../results.js';
+import { getEntryName } from '../entries.js';
 import { getCategoryPriority }             from '../categories.js';
-import { COURSE }                          from '../constants.js';
 import { toISODate }           from '../utils.js';
 import { sanitise }            from '../ui.js';
 
@@ -51,10 +51,22 @@ function heading() {
 <p class="re-subtitle">${esc(date)}</p>`;
 }
 
-function juniorsSection(results) {
-  results = getResultsForCourse(COURSE.JUNIORS, results);
-  if (!results.length) return '<h3 class="re-section">Junior Results</h3><p>No junior results.</p>';
+// ---- Shared tbody row builders (used by screen rendering and publish HTML) ----
 
+export function buildSeniorsBodyHTML(results) {
+  return results.map(r => {
+    const pos  = r.position < 9999 ? r.position : 'DNF';
+    const time = r.position < 9999 ? esc(r.time || '') + (r.recordBreaker ? ' R' : '') : '';
+    return `<tr>
+      <td>${pos}</td><td>${esc(r.bibNumber||'')}</td>
+      <td>${esc(r.inCatPos||'')}</td>
+      <td>${esc(getEntryName(r))}</td><td>${esc(r.club||'')}</td>
+      <td>${esc(r.category||'')}</td><td>${time}</td>
+      <td>${r.pctLdrs ? r.pctLdrs + '%' : ''}</td><td>${esc(r.behindTime||'')}</td></tr>`;
+  }).join('');
+}
+
+export function buildJuniorsBodyHTML(results) {
   const groups = new Map();
   for (const r of results) {
     const cat = r.category || '';
@@ -69,77 +81,95 @@ function juniorsSection(results) {
       return a.position - b.position;
     });
   }
-
-  let rows = '';
+  const rows = [];
   sortedCats.forEach((cat, i) => {
-    if (i > 0) rows += `<tr class="results-cat-separator"><td colspan="7"></td></tr>`;
+    if (i > 0) rows.push(`<tr class="results-cat-separator"><td colspan="6"></td></tr>`);
     for (const r of groups.get(cat)) {
       const time = r.position < 9999 ? esc(r.time || '') : 'DNF';
-      rows += `<tr>
-        <td>${esc(r.course||'')}</td><td>${esc(r.bibNumber||'')}</td>
-        <td>${esc(r.inCatPos||'')}</td><td>${esc(r.name||'')}</td>
+      rows.push(`<tr>
+        <td>${esc(r.bibNumber||'')}</td>
+        <td>${esc(r.inCatPos||'')}</td><td>${esc(getEntryName(r))}</td>
         <td>${esc(r.club||'')}</td><td>${esc(r.category||'')}</td>
-        <td>${time}</td></tr>`;
+        <td>${time}</td></tr>`);
     }
   });
+  return rows.join('');
+}
 
+export function buildPairsBodyHTML(pairsResults) {
+  return pairsResults.map(r => {
+    const pos   = r.position < 9999 ? r.position : 'DNF';
+    const time  = r.position < 9999 ? esc(r.time || '') : 'DNF';
+    const club2 = r.partner?.club;
+    const club  = club2 && club2 !== r.club ? `${r.club || ''} / ${club2}` : (r.club || '');
+    const pg    = r.pairGender || '';
+    const cat   = pg ? `${r.category || ''} ${pg}`.trim() : (r.category || '');
+    return `<tr>
+      <td>${pos}</td><td>${esc(r.bibNumber||'')}</td><td>${r.inCatPos||''}</td>
+      <td>${esc(r.name||'')}</td><td>${esc(r.partner?.name||'')}</td>
+      <td>${esc(club)}</td><td>${esc(cat)}</td><td>${time}</td></tr>`;
+  }).join('');
+}
+
+export function buildHelpersBodyHTML(helpersReport) {
+  return helpersReport.map(h => `<tr>
+    <td>${esc(h.role||'')}</td><td>${esc(h.name||'')}</td>
+    <td>${esc(h.club||'')}</td><td>${esc(h.cat||'')}</td>
+    <td>${esc(h.lastRaced||'')}</td></tr>`).join('');
+}
+
+// ---- Publish section builders (wrap row HTML in full table markup) ----
+
+function juniorsSection(juniors) {
+  if (!juniors.length) return '<h3 class="re-section">Junior Results</h3><p>No junior results.</p>';
   return `<h3 class="re-section">Junior Results</h3>
 <table class="data-table">
-  <thead><tr><th>Course</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th></tr></thead>
-  <tbody>${rows}</tbody>
+  <thead><tr><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th></tr></thead>
+  <tbody>${buildJuniorsBodyHTML(juniors)}</tbody>
 </table>`;
 }
 
-function seniorsSection(allResults) {
-  const results = getResultsForCourse(COURSE.SENIORS, allResults);
-  if (!results.length) return '<h3 class="re-section">Senior Results</h3><p>No senior results.</p>';
-
-  const avg = computeAvgTop10(COURSE.SENIORS, allResults);
-  const n   = Math.min(results.filter(r => r.position < 9999).length, 10);
+function seniorsSection(seniors) {
+  if (!seniors.length) return '<h3 class="re-section">Senior Results</h3><p>No senior results.</p>';
+  const avg = computeAvgTop10(seniors);
+  const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
   const summary = avg
     ? `<p class="re-summary">Top ${n} average: ${avg}&nbsp;&nbsp;&nbsp;R = course record</p>`
     : `<p class="re-summary">R = course record</p>`;
-
-  const rows = results.map(r => {
-    const pos  = r.position < 9999 ? r.position : '';
-    const time = r.position < 9999 ? esc(r.time || '') + (r.recordBreaker ? ' R' : '') : 'DNF';
-    return `<tr>
-      <td>${esc(r.course||'')}</td><td>${esc(r.bibNumber||'')}</td>
-      <td>${pos}</td><td>${esc(r.inCatPos||'')}</td>
-      <td>${esc(r.name||'')}</td><td>${esc(r.club||'')}</td>
-      <td>${esc(r.category||'')}</td><td>${time}</td>
-      <td>${r.pctLdrs ? r.pctLdrs + '%' : ''}</td><td>${esc(r.behindTime||'')}</td></tr>`;
-  }).join('');
-
   return `<h3 class="re-section">Senior Results</h3>
 ${summary}
 <table class="data-table">
-  <thead><tr><th>Course</th><th>Bib</th><th>Pos</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th>%Ldrs</th><th>Behind</th></tr></thead>
-  <tbody>${rows}</tbody>
+  <thead><tr><th>Pos</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th>%Ldrs</th><th>Behind</th></tr></thead>
+  <tbody>${buildSeniorsBodyHTML(seniors)}</tbody>
+</table>`;
+}
+
+function pairsSection(pairsResults) {
+  if (!pairsResults.length) return '';
+  return `<h3 class="re-section">Pairs Results</h3>
+<table class="data-table">
+  <thead><tr><th>Pos</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Partner</th><th>Club</th><th>Cat</th><th>Time</th></tr></thead>
+  <tbody>${buildPairsBodyHTML(pairsResults)}</tbody>
 </table>`;
 }
 
 function helpersSection(helpersReport) {
-  const helpers = helpersReport;
-  if (!helpers.length) return '<h3 class="re-section">Helpers</h3><p>No helpers recorded.</p>';
-
-  const rows = helpers.map(h => `<tr>
-    <td>${esc(h.role||'')}</td><td>${esc(h.name||'')}</td>
-    <td>${esc(h.club||'')}</td><td>${esc(h.cat||'')}</td>
-    <td>${esc(h.lastRaced||'')}</td></tr>`).join('');
-
+  if (!helpersReport.length) return '<h3 class="re-section">Helpers</h3><p>No helpers recorded.</p>';
   return `<h3 class="re-section">Helpers</h3>
 <table class="data-table">
   <thead><tr><th>Role</th><th>Name</th><th>Club</th><th>Cat</th><th>Last Raced</th></tr></thead>
-  <tbody>${rows}</tbody>
+  <tbody>${buildHelpersBodyHTML(helpersReport)}</tbody>
 </table>`;
 }
 
 const SECTIONS = {
-  combined: (r, h) => heading() + juniorsSection(r) + seniorsSection(r) + helpersSection(h),
-  juniors:  (r, h) => heading() + juniorsSection(r),
-  seniors:  (r, h) => heading() + seniorsSection(r),
-  helpers:  (r, h) => heading() + helpersSection(h),
+  combined: ({ seniors, juniors, pairsResults, helpersReport }) =>
+    heading() + juniorsSection(juniors) + seniorsSection(seniors) +
+    (pairsResults.length ? pairsSection(pairsResults) : '') + helpersSection(helpersReport),
+  juniors:  ({ juniors })         => heading() + juniorsSection(juniors),
+  seniors:  ({ seniors })         => heading() + seniorsSection(seniors),
+  helpers:  ({ helpersReport })   => heading() + helpersSection(helpersReport),
+  pairs:    ({ pairsResults })    => heading() + pairsSection(pairsResults),
 };
 
 const TITLES = {
@@ -147,9 +177,10 @@ const TITLES = {
   juniors:  () => `${state.event.name || 'Results'} — Juniors`,
   seniors:  () => `${state.event.name || 'Results'} — Seniors`,
   helpers:  () => `${state.event.name || 'Results'} — Helpers`,
+  pairs:    () => `${state.event.name || 'Results'} — Pairs`,
 };
 
-const SUFFIXES = { combined: 'results-combined', juniors: 'results-juniors', seniors: 'results-seniors', helpers: 'results-helpers' };
+const SUFFIXES = { combined: 'results-combined', juniors: 'results-juniors', seniors: 'results-seniors', helpers: 'results-helpers', pairs: 'results-pairs' };
 
 function makeFilename(type) {
   const name = sanitise(state.event.name || 'results');
@@ -157,14 +188,10 @@ function makeFilename(type) {
   return date ? `${name}_${date}_${SUFFIXES[type]}.html` : `${name}_${SUFFIXES[type]}.html`;
 }
 
-/**
- * Generate and publish a results HTML page to the server's /results/ directory.
- * Returns the server-relative URL of the published file.
- */
 export async function publishResultsHTML(type) {
-  const { results, helpersReport } = formatResults();
+  const data     = formatResults();
   const filename = makeFilename(type);
-  const html     = await wrap(TITLES[type](), SECTIONS[type](results, helpersReport));
+  const html     = await wrap(TITLES[type](), SECTIONS[type](data));
   const token    = localStorage.getItem('racemaster-token');
   const res = await fetch('/api/publish-results', {
     method:  'POST',

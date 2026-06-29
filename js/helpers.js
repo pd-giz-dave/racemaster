@@ -60,53 +60,46 @@ export function addHelper({ number, name, club, gender, dob, category, role }) {
   return idx;
 }
 
-/**
- * Submit a new helper from the registration form.
- * formData: {name, gender, dob, club, role}
- * Returns {number, error} — error is '' on success.
- */
-export async function submitHelper(formData) {
-  const name   = cleanName(formData.name || '');
-  const gender = formData.gender || '';
-  const dob    = normaliseDate(formData.dob || '');
-  const club   = cleanName(formData.club || '');
-  const role   = formData.role || '';
+function prepareHelper(formData, existingHelper = null) {
+  const ex = existingHelper;
+  const name   = cleanName(formData.name   !== undefined ? formData.name   : (ex?.name   || ''));
+  const gender =          (formData.gender !== undefined ? formData.gender : (ex?.gender || ''));
+  const dob    = normaliseDate(formData.dob!== undefined ? formData.dob    : (ex?.dob    || ''));
+  const club   = cleanName(formData.club   !== undefined ? formData.club   : (ex?.club   || ''));
+  const role   =          (formData.role   !== undefined ? formData.role   : (ex?.role   || ''));
 
   if (!name) return { error: 'Name is required' };
 
-  let category = '';
-  if (dob) {
-    category = calculateCategory(dob, gender);
-  }
+  const category = dob ? calculateCategory(dob, gender) : (ex?.category || '');
+
+  return { name, gender, dob, club, role, category };
+}
+
+export async function submitHelper(formData) {
+  const prep = prepareHelper(formData);
+  if (prep.error) return { error: prep.error };
+  const { name, gender, dob, club, role, category } = prep;
 
   const number = getNextHelperNumber();
   addHelper({ number, name, club, gender, dob, category, role });
-
-  // Update people list (as helper)
   addPerson(name, null, gender, dob, club, '', category, true);
-
   sortPeople();
   await saveHelpers();
   await savePeople();
-
   return { number, error: '' };
 }
 
-/**
- * Update an existing helper.
- * Returns {error} — error is '' on success.
- */
 export async function updateHelper(number, formData) {
   const idx = findHelperByNumber(number);
   if (idx < 0) return { error: `Helper ${number} not found` };
 
+  const prep = prepareHelper(formData, state.helpers[idx]);
+  if (prep.error) return { error: prep.error };
+  const { name, gender, dob, club, role, category } = prep;
+
   const h = state.helpers[idx];
-  if (formData.name     !== undefined) h.name     = cleanName(formData.name);
-  if (formData.gender   !== undefined) h.gender   = formData.gender;
-  if (formData.dob      !== undefined) h.dob      = normaliseDate(formData.dob);
-  if (formData.club     !== undefined) h.club     = cleanName(formData.club);
-  if (formData.category !== undefined) h.category = formData.category;
-  if (formData.role     !== undefined) h.role     = formData.role;
+  h.name = name; h.gender = gender; h.dob = dob;
+  h.club = club; h.role = role; h.category = category;
 
   await saveHelpers();
   return { error: '' };

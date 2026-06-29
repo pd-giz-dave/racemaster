@@ -3,14 +3,14 @@
 import { state } from './state.js';
 import { COURSE, GENDER } from './constants.js';
 import { ciEq, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
-import { calculateCategory, getCategoryPriority, genderFromCategory } from './categories.js';
-import { getEntry, getSortedEntries, isEntryBanned } from './entries.js';
+import { calculateCategory, getCategoryPriority, genderFromCategory, derivePairGender } from './categories.js';
+import { getEntry, getSortedEntries, isEntryBanned, getEntryName } from './entries.js';
 import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
 import { getSIBib, getSIRaceTime, getSICourse, getSIStatus } from './si-results.js';
 
 
-/** Generate full results from finishers and entries. Returns { warnings, results, prizes, helpersReport }. */
+/** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, helpersReport }. */
 export function formatResults() {
   const results = [];
 
@@ -101,6 +101,9 @@ export function formatResults() {
       const recordSecs = gender === GENDER.FEMALE ? femaleRecordSecs : maleRecordSecs;
       const recordBreaker = recordSecs > 0 && secs > 0 && secs < recordSecs;
 
+      const isPair     = !!(entry?.partner);
+      const pairGender = isPair ? derivePairGender(entry.gender, entry.partner.gender) : '';
+
       courseResults.push({
         course,
         bibNumber:    bib || '',
@@ -114,6 +117,9 @@ export function formatResults() {
         pctLdrs,
         recordBreaker,
         prize:        '',
+        isPair,
+        partner:      entry?.partner  ?? null,
+        pairGender,
       });
     }
 
@@ -153,13 +159,16 @@ export function formatResults() {
         pctLdrs:       '',
         recordBreaker: false,
         prize:         '',
+        isPair:        !!(e.partner),
+        partner:       e.partner ?? null,
+        pairGender:    e.partner ? derivePairGender(e.gender, e.partner.gender) : '',
       });
     }
 
-    // Calculate in-category positions
+    // Calculate in-category positions (excluding pairs from individual categories)
     const catGroups = {};
     for (const r of courseResults) {
-      if (r.position >= 9999) continue;
+      if (r.position >= 9999 || r.isPair) continue;
       const cat = r.category || '';
       if (!catGroups[cat]) catGroups[cat] = [];
       catGroups[cat].push(r);
@@ -172,9 +181,31 @@ export function formatResults() {
     results.push(...courseResults);
   }
 
-  const prizes       = buildPrizes(results);
+  const pairsResults = results.filter(r => r.isPair);
+
+  // Calculate in-category positions for pairs: grouped by (isJunior, pairGender)
+  const isJuniorCat = r => /^U\d/i.test(r.category || '');
+  const pairCatGroups = {};
+  for (const r of pairsResults) {
+    if (r.position >= 9999) continue;
+    const key = `${isJuniorCat(r) ? 'J' : 'S'}|${r.pairGender}`;
+    if (!pairCatGroups[key]) pairCatGroups[key] = [];
+    pairCatGroups[key].push(r);
+  }
+  for (const group of Object.values(pairCatGroups)) {
+    group.sort((a, b) => a.position - b.position);
+    group.forEach((r, i) => { r.inCatPos = i + 1; });
+  }
+
+  const depth         = +state.event.prizeDepthOverall || 3;
+  const prizes        = [
+    ...buildPrizes(results),
+    ...(pairsResults.length ? buildPairsPrizes(pairsResults, depth) : []),
+  ];
+  const seniors       = getResultsForCourse(COURSE.SENIORS, results);
+  const juniors       = getResultsForCourse(COURSE.JUNIORS, results);
   const helpersReport = buildHelpersReport();
-  return { warnings: clashWarnings, results, prizes, helpersReport };
+  return { warnings: clashWarnings, seniors, juniors, pairsResults, prizes, helpersReport };
 }
 
 function buildPrizes(results) {
@@ -182,7 +213,7 @@ function buildPrizes(results) {
   const catDepth        = +state.event.prizeDepthPerCategory       || 3;
   const juniorCatDepth  = +state.event.juniorPrizeDepthPerCategory || 3;
 
-  const isFinisher = r => r.position < 9999 && isValidRaceTime(r.time);
+  const isFinisher = r => r.position < 9999 && !r.isPair;
   const byPos      = (a, b) => a.position - b.position;
   const isFemale   = r => genderFromCategory(r.category) === GENDER.FEMALE;
 
@@ -269,6 +300,41 @@ function buildPrizes(results) {
   return prizes;
 }
 
+function buildPairsPrizes(pairsResults, depth) {
+  const byPos      = (a, b) => a.position - b.position;
+  const isFinisher = r => r.position < 9999;
+  const isJuniorCat = r => /^U\d/i.test(r.category || '');
+  const finishers  = pairsResults.filter(isFinisher);
+  if (!finishers.length) return [];
+
+  const juniors = finishers.filter(isJuniorCat);
+  const seniors = finishers.filter(r => !isJuniorCat(r));
+
+  const prizes = [];
+  const addGroup = (label, group, isJunior) => {
+    const section = `${isJunior ? 'Junior ' : ''}${label} Pairs`;
+    [...group.filter(r => r.pairGender === label)].sort(byPos).slice(0, depth)
+      .forEach((r, i) => prizes.push({
+        section,
+        category:      label,
+        isJunior,
+        inCatPos:      i + 1,
+        position:      r.position,
+        time:          r.time,
+        name:          getEntryName(r),
+        bibNumber:     r.bibNumber,
+        recordBreaker: false,
+        multiWinner:   false,
+      }));
+  };
+
+  for (const label of ['Male', 'Female', 'Mixed']) {
+    addGroup(label, juniors, true);
+    addGroup(label, seniors, false);
+  }
+  return prizes;
+}
+
 function buildHelpersReport() {
   return state.helpers
     .map(h => {
@@ -288,8 +354,8 @@ export function getResultsForCourse(course, results) {
     .sort((a,b) => a.position - b.position);
 }
 
-export function computeAvgTop10(course, results) {
-  const finishers = getResultsForCourse(course, results).filter(r => r.position < 9999 && isValidRaceTime(r.time));
+export function computeAvgTop10(results) {
+  const finishers = results.filter(r => r.position < 9999 && isValidRaceTime(r.time));
   const top10 = finishers.slice(0, 10);
   if (!top10.length) return '';
   const avgSecs = top10.reduce((s, r) => s + timeToSeconds(r.time), 0) / top10.length;

@@ -52,6 +52,9 @@ export function setSession(token, dataset) {
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(DATASET_KEY);
+}
+
+export function clearCredentials() {
   localStorage.removeItem(USERNAME_KEY);
   localStorage.removeItem(IS_ADMIN_KEY);
 }

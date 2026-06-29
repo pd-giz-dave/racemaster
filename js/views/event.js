@@ -4,7 +4,7 @@ import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategori
 import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
-import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on, notImplemented } from '../ui.js';
+import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
 import { showBusy, toISODate, fromISODate } from '../utils.js';
 import { renderHome } from './home.js';
 import { renderCategories } from './categories.js';
@@ -50,6 +50,7 @@ export function renderEvent() {
     'ev-male-record':        ev.maleRecord,
     'ev-female-record':      ev.femaleRecord,
     'ev-organisation':       ev.organisation,
+    'ev-has-pairs':          ev.hasPairs,
     'ev-clear-previous':     false,
   });
 }
@@ -118,6 +119,7 @@ export async function saveEventForm() {
   ev.maleRecord                 = val('ev-male-record');
   ev.femaleRecord               = val('ev-female-record');
   ev.organisation               = val('ev-organisation');
+  ev.hasPairs                   = !!(document.getElementById('ev-has-pairs')?.checked);
 
   showBusy('Saving…');
 
@@ -146,6 +148,7 @@ export async function saveEventForm() {
   showBusy('');
   showStatus('Event saved' + (doClear ? ' — race data cleared.' : '.'));
   renderHome();
+  setTimeout(() => window.dispatchEvent(new CustomEvent('rm:navigate', { detail: 'home' })), 2000);
 }
 
 export function applyCatPreset(preset) {
@@ -174,12 +177,4 @@ export function wireEvent() {
     });
   }
 
-  const pairsEl = document.getElementById('ev-has-pairs');
-  if (pairsEl) {
-    pairsEl.addEventListener('change', async () => {
-      if (!pairsEl.checked) return;
-      await notImplemented();
-      pairsEl.checked = false;
-    });
-  }
 }

@@ -5,7 +5,7 @@ import { createRole } from '../schema.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
-  updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
+  updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead, wireClubTypeahead, wireRoleTypeahead,
   renderTable,
 } from '../ui.js';
 import { TABLES } from '../locale.js';
@@ -191,55 +191,16 @@ export function wireHelpers() {
     });
   }
 
-  // Club field: autofill when typed text becomes unambiguous
-  const clubEl = document.getElementById('helper-form-club');
-  if (clubEl) {
-    let clubDeleting = false;
-    clubEl.addEventListener('keydown', e => { clubDeleting = (e.key === 'Backspace' || e.key === 'Delete'); });
-    clubEl.addEventListener('input', () => {
-      const raw   = clubEl.value;
-      const typed = raw.trim();
-      if (!typed) { clubDeleting = false; return; }
-      const low = typed.toLowerCase();
-      const clubs = [...new Set(state.people.map(p => p.club).filter(Boolean))];
-      const matches = clubs.filter(c => c.toLowerCase().startsWith(low));
-      if (matches.length === 1 && !clubDeleting && !raw.endsWith(' ') && typed.length < matches[0].length) {
-        const s = clubEl.selectionStart;
-        clubEl.value = matches[0];
-        clubEl.setSelectionRange(s, matches[0].length);
-      }
-      clubDeleting = false;
-    });
-  }
+  wireClubTypeahead(document.getElementById('helper-form-club'));
 
-  // ---- Role field: auto-fill description; description edits update roles table ----
-  const roleEl     = document.getElementById('helper-form-role');
   const roleDescEl = document.getElementById('helper-form-role-desc');
+  wireRoleTypeahead(document.getElementById('helper-form-role'), {
+    onSelect: r => { if (roleDescEl) roleDescEl.value = r.description || ''; },
+  });
 
-  if (roleEl && roleDescEl) {
-    let roleDeleting = false;
-    roleEl.addEventListener('keydown', e => { roleDeleting = (e.key === 'Backspace' || e.key === 'Delete'); });
-    roleEl.addEventListener('input', () => {
-      const raw   = roleEl.value;
-      const typed = raw.trim();
-      if (!typed) { roleDescEl.value = ''; roleDeleting = false; return; }
-      const low = typed.toLowerCase();
-      const matches = state.roles.filter(r => r.role.toLowerCase().startsWith(low));
-      if (matches.length === 1 && !roleDeleting && !raw.endsWith(' ') && typed.length < matches[0].role.length) {
-        const s = roleEl.selectionStart;
-        roleEl.value = matches[0].role;
-        roleEl.setSelectionRange(s, matches[0].role.length);
-        roleDescEl.value = matches[0].description || '';
-      } else {
-        const exact = matches.find(r => r.role.toLowerCase() === low);
-        if (exact) roleDescEl.value = exact.description || '';
-        else if (!matches.length) roleDescEl.value = '';
-      }
-      roleDeleting = false;
-    });
-
+  if (roleDescEl) {
     roleDescEl.addEventListener('change', async () => {
-      const roleName = roleEl.value.trim();
+      const roleName = document.getElementById('helper-form-role')?.value.trim();
       const desc = roleDescEl.value.trim();
       if (!roleName) return;
       const found = state.roles.find(r => r.role.toLowerCase() === roleName.toLowerCase());

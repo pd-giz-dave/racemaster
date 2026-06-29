@@ -350,6 +350,18 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .form-field { display: flex; flex-direction: column; gap: 3px; }
 .form-field label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
 
+/* ---- Entry form top row (pairs-aware) ---- */
+#entry-form-toprow { display: grid; grid-template-columns: repeat(3, calc(3ch + 1rem)); gap: 10px 16px; margin-bottom: 8px; align-items: end; }
+#entry-form-toprow.has-type { grid-template-columns: calc(7ch + 1rem) repeat(3, calc(3ch + 1rem)); }
+#entry-form-toprow select { width: 100%; }
+#entry-form-toprow input { width: 100%; }
+#view-entries.pair-active .split-layout { grid-template-columns: 460px 1fr; }
+
+/* ---- Pair person columns ---- */
+#entry-person-section { margin-bottom: 8px; }
+.entry-form-pair #entry-person-section { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.entry-col-label { font-size: 0.72rem; font-weight: 700; color: var(--accent); margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
 input[type="text"],
 input[type="password"],
 input[type="date"],
@@ -405,7 +417,8 @@ input:focus, select:focus, textarea:focus {
 .results-cat-separator td { padding: 0; border-bottom: 2px solid var(--border); }
 .col-sep { border-left: 2px solid var(--border) !important; }
 .data-table th[colspan] { text-align: center; }
-.prizes-cat-sep td { padding: 1px 0; background: var(--row-sep) !important; border-bottom: none; }
+.prizes-cat-sep td, .prize-cat-sep td { padding: 1px 0; background: var(--row-sep) !important; border-bottom: none; }
+.prize-section-row td { font-weight: bold; padding: 0.3em 0.5em; background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 #prizes-table { width: auto; }
 #prizes-hint { flex-shrink: 0; padding: 4px 0; margin: 0; }
 #view-results:not([hidden]),

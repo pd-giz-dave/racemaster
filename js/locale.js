@@ -56,6 +56,7 @@ export const TOOLTIPS = {
   // Entries
   'btn-export-entries-si':       'Export the entry list as a CSV for importing into the SI Timing system (for when using dibbers)',
   'btn-clear-all-entries':       'Delete all entries — cannot be undone',
+  'entry-form-type':             'Solo entry or pair (two competitors sharing one bib and dibber)',
   'entry-form-peno':             'Pre-entry reference number — auto-fills details from the pre-entries list; or just type a name',
   'entry-form-bib':              'Bib number — assigned automatically in sequence; edit to override',
   'entry-form-dibber':           'SI card (dibber) short code — assigned automatically in sequence; edit to override',
@@ -177,7 +178,7 @@ export const TOOLTIPS = {
 export const HELP = {
   'view-home': `
     <p>The <strong>Home</strong> page shows a summary of the current event. Before you can do anything, 
-        click <strong>Select Data File</strong> in the header to open an existing event file or create a new one.</p>
+        open <strong>Datasets</strong> page to log-in and select an existing event file or create a new one.</p>
     <p>Follow the <strong>Getting Started</strong> steps in order — they cover the typical workflow from setup through to results.</p>
     <p>It is recommended you create a <strong>master</strong> dataset to use as a template for all events,
         then after the race is over and all results published save it as a new dataset with a name that reflects the name and date of the event.
@@ -449,9 +450,8 @@ export const TABLES = {
     { label: 'On-day bib',  title: 'Bib assigned if they entered on the day without linking to their pre-entry' },
   ],
   'results-senior': [
-    { label: 'Course',  title: 'Senior or junior course' },
-    { label: 'Bib',     title: 'Race number' },
     { label: 'Pos',     title: 'Overall finishing position' },
+    { label: 'Bib',     title: 'Race number' },
     { label: 'In Cat',  title: 'Position within age category' },
     { label: 'Name',    title: "Competitor's name" },
     { label: 'Club',    title: 'Running club' },
@@ -461,7 +461,6 @@ export const TABLES = {
     { label: 'Behind',  title: 'Time behind the leader' },
   ],
   'results-junior': [
-    { label: 'Course', title: 'Senior or junior course' },
     { label: 'Bib',    title: 'Race number' },
     { label: 'In Cat', title: 'Position within age category' },
     { label: 'Name',   title: "Competitor's name" },
@@ -482,6 +481,16 @@ export const TABLES = {
     { label: 'Club',       title: 'Running club' },
     { label: 'Cat',        title: 'Age category' },
     { label: 'Last Raced', title: 'Date this person last competed in a race' },
+  ],
+  'results-pairs': [
+    { label: 'Pos',      title: 'Overall finish position' },
+    { label: 'Bib',      title: 'Race bib number' },
+    { label: 'In Cat',   title: 'Position within pair category (Male/Female/Mixed, Junior/Senior)' },
+    { label: 'Person 1', title: 'First competitor' },
+    { label: 'Person 2', title: 'Second competitor' },
+    { label: 'Club',     title: 'Club(s)' },
+    { label: 'Cat',      title: 'Pair category and gender' },
+    { label: 'Time',     title: 'Finish time' },
   ],
   people: [
     { label: 'Name',         title: "Person's name" },

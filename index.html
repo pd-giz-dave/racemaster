@@ -22,7 +22,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.1-alpha)</button></h1>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.2-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <div style="flex:1"></div>
@@ -307,7 +307,7 @@
         <h2>Entries</h2>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="entry-senior-count">0</span></span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="entry-junior-count">0</span></span>
-        <button class="btn btn-secondary" id="btn-export-entries-si" style="margin-left:auto">Export to SI</button>
+        <button class="btn btn-secondary" id="btn-export-entries-si">Export to SI</button>
         <button class="btn btn-delete" id="btn-clear-all-entries">Clear All</button>
         <span id="entry-status-msg" class="entry-status view-status-msg" hidden></span>
       </div>
@@ -317,10 +317,17 @@
         <div class="card">
           <h3>Register Competitor</h3>
           <div id="entry-form-fields">
-            <div class="form-grid mb-8" style="grid-template-columns:2fr 1fr 1fr">
+            <div class="form-grid mb-8" id="entry-form-toprow">
+              <div class="form-field" id="entry-form-type-field" hidden>
+                <label for="entry-form-type">Type <span style="font-weight:400;color:var(--muted)">(or num or name)</span></label>
+                <select id="entry-form-type">
+                  <option value="solo">- Solo</option>
+                  <option value="pair">= Pair</option>
+                </select>
+              </div>
               <div class="form-field">
-                <label for="entry-form-peno">Pre-Entry No. <span style="font-weight:400;color:var(--muted)">(or type a name)</span></label>
-                <input type="text" id="entry-form-peno" autocomplete="off" inputmode="numeric" placeholder="Pre-entry number">
+                <label for="entry-form-peno">Pre-Entry Num <span style="font-weight:400;color:var(--muted)">(or name)</span></label>
+                <input type="text" id="entry-form-peno" autocomplete="off" inputmode="numeric">
               </div>
               <div class="form-field">
                 <label for="entry-form-bib">Bib <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
@@ -331,39 +338,71 @@
                 <input type="text" id="entry-form-dibber" tabindex="-1" inputmode="numeric" style="font-weight:700">
               </div>
             </div>
-            <div class="form-field mb-8">
-              <label for="entry-form-name">Name</label>
-              <input type="text" id="entry-form-name" autocomplete="off">
+            <div id="entry-person-section">
+              <div class="entry-pair-col">
+                <p class="entry-col-label" id="entry-p1-label" hidden>Person 1</p>
+                <div class="form-field mb-8">
+                  <label for="entry-form-name">Name</label>
+                  <input type="text" id="entry-form-name" autocomplete="off">
+                </div>
+                <div class="form-grid" style="grid-template-columns:1fr 1fr">
+                  <div class="form-field">
+                    <label for="entry-form-dob">Date of Birth (DD/MM/YY)</label>
+                    <input type="text" id="entry-form-dob" placeholder="DD/MM/YY" data-normalise="date">
+                  </div>
+                  <div class="form-field">
+                    <label for="entry-form-gender">Gender</label>
+                    <select id="entry-form-gender">
+                      <option value="">—</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-field mb-8">
+                  <label for="entry-form-club">Club</label>
+                  <input type="text" id="entry-form-club" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="entry-form-fra">FRA Number</label>
+                  <input type="text" id="entry-form-fra">
+                </div>
+              </div>
+              <div class="entry-pair-col" id="entry-pair-p2" hidden>
+                <p class="entry-col-label">Person 2</p>
+                <div class="form-field mb-8">
+                  <label for="entry-form-name2">Name</label>
+                  <input type="text" id="entry-form-name2" autocomplete="off">
+                </div>
+                <div class="form-grid" style="grid-template-columns:1fr 1fr">
+                  <div class="form-field">
+                    <label for="entry-form-dob2">Date of Birth (DD/MM/YY)</label>
+                    <input type="text" id="entry-form-dob2" placeholder="DD/MM/YY" data-normalise="date">
+                  </div>
+                  <div class="form-field">
+                    <label for="entry-form-gender2">Gender</label>
+                    <select id="entry-form-gender2">
+                      <option value="">—</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-field mb-8">
+                  <label for="entry-form-club2">Club</label>
+                  <input type="text" id="entry-form-club2" autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="entry-form-fra2">FRA Number</label>
+                  <input type="text" id="entry-form-fra2">
+                </div>
+              </div>
             </div>
             <div class="form-grid" style="grid-template-columns:1fr 1fr">
-              <div class="form-field">
-                <label for="entry-form-dob">Date of Birth (DD/MM/YYYY)</label>
-                <input type="text" id="entry-form-dob" placeholder="DD/MM/YYYY" data-normalise="date">
-              </div>
-              <div class="form-field">
-                <label for="entry-form-gender">Gender</label>
-                <select id="entry-form-gender">
-                  <option value="">—</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-field mb-8">
-              <label for="entry-form-club">Club</label>
-              <input type="text" id="entry-form-club" autocomplete="off" list="datalist-clubs">
-            </div>
-            <div class="form-grid" style="grid-template-columns:1fr 1fr">
-              <div class="form-field">
-                <label for="entry-form-fra">FRA Number</label>
-                <input type="text" id="entry-form-fra">
-              </div>
               <div class="form-field">
                 <label for="entry-form-category">Category</label>
                 <select id="entry-form-category"><option value="">— auto —</option></select>
               </div>
-            </div>
-            <div class="form-grid" style="grid-template-columns:1fr 1fr">
               <div class="form-field">
                 <label for="entry-form-course">Course</label>
                 <select id="entry-form-course">
@@ -428,11 +467,11 @@
             </div>
             <div class="form-field mb-8">
               <label for="helper-form-club">Club</label>
-              <input type="text" id="helper-form-club" autocomplete="off" list="datalist-clubs">
+              <input type="text" id="helper-form-club" autocomplete="off">
             </div>
             <div class="form-field mb-8">
               <label for="helper-form-role">Role</label>
-              <input type="text" id="helper-form-role" autocomplete="off" list="datalist-roles">
+              <input type="text" id="helper-form-role" autocomplete="off">
             </div>
             <div class="form-field mb-8">
               <label for="helper-form-role-desc">Role Description</label>
@@ -478,11 +517,27 @@
         </div>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead></thead>
-          <tbody id="pre-entries-tbody"></tbody>
-        </table>
+      <div class="tab-bar" id="pre-entries-tab-bar">
+        <button class="active" data-pe-tab="data">Data</button>
+        <button data-pe-tab="issues">Issues</button>
+      </div>
+
+      <div class="tab-panel active" id="pre-entries-tab-data">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="pre-entries-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="pre-entries-tab-issues">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Row</th><th>Name</th><th>Issue</th></tr></thead>
+            <tbody id="pre-entries-issues-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -494,7 +549,7 @@
         <h2>Finishers</h2>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Seniors <span id="finisher-senior-count">0 of 0</span></span>
         <span class="count-badge" style="font-size:0.8rem;padding:3px 8px">Juniors <span id="finisher-junior-count">0 of 0</span></span>
-        <button class="btn btn-delete" id="btn-clear-all-finishers" style="margin-left:auto">Clear All</button>
+        <button class="btn btn-danger" id="btn-clear-all-finishers">Clear All</button>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
 
@@ -518,7 +573,7 @@
             <div class="form-field mb-8">
               <label for="finisher-bib">Race / Bib No.</label>
               <input type="text" id="finisher-bib" autocomplete="off" inputmode="numeric"
-                     list="datalist-finisher-bibs" placeholder="number or special code">
+                     placeholder="number or special code">
             </div>
             <div class="form-field mb-8">
               <label for="finisher-prev-time">Previous Time</label>
@@ -643,14 +698,31 @@
       <div class="card">
         <div class="btn-row">
           <button class="btn" id="btn-import-si-results">Import SI Results CSV</button>
+          <button class="btn btn-danger" id="btn-clear-si-results">Clear All</button>
         </div>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table" id="si-results-table">
-          <thead><tr id="si-results-head"></tr></thead>
-          <tbody id="si-results-tbody"></tbody>
-        </table>
+      <div class="tab-bar" id="si-results-tab-bar">
+        <button class="active" data-si-tab="data">Data</button>
+        <button data-si-tab="issues">Issues</button>
+      </div>
+
+      <div class="tab-panel active" id="si-results-tab-data">
+        <div class="table-scroll">
+          <table class="data-table" id="si-results-table">
+            <thead><tr id="si-results-head"></tr></thead>
+            <tbody id="si-results-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="si-results-tab-issues">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Bib</th><th>Name</th><th>Issue</th></tr></thead>
+            <tbody id="si-results-issues-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -669,6 +741,7 @@
         <div class="tab-bar" id="results-tab-bar">
           <button class="active" data-results-tab="senior">Seniors</button>
           <button data-results-tab="junior">Juniors</button>
+          <button data-results-tab="pairs" id="results-tab-pairs-btn" hidden>Pairs</button>
           <button data-results-tab="prizes">Prizes</button>
           <button data-results-tab="helpers">Helpers</button>
         </div>
@@ -689,6 +762,15 @@
           <table class="data-table">
             <thead></thead>
             <tbody id="results-junior-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-results-pairs">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="results-pairs-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -1054,12 +1136,6 @@
         </div><!-- end df-panels-row -->
       </div>
     </div>
-
-    <!-- Datalists for typeahead autocomplete -->
-    <datalist id="datalist-names"></datalist>
-    <datalist id="datalist-clubs"></datalist>
-    <datalist id="datalist-roles"></datalist>
-    <datalist id="datalist-finisher-bibs"></datalist>
 
     <!-- About -->
     <div class="view" id="view-about" hidden>

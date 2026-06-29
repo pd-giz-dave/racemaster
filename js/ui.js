@@ -265,18 +265,26 @@ export function populateCategoryDropdown(selectId, currentVal) {
   // Deduplicate
   const seen = new Set();
   const opts = all.filter(o => { if (seen.has(o.value)) return false; seen.add(o.value); return true; });
-  el.innerHTML = `<option value="">— select —</option>` +
+  el.innerHTML = `<option value="">— auto —</option>` +
     opts.map(o => `<option value="${o.value}"${o.value === currentVal ? ' selected' : ''}>${o.label}</option>`).join('');
 }
 
-export function wireNameTypeahead(nameEl, { onSelect, onClear }) {
-  if (!nameEl) return;
+/**
+ * Generic typeahead for any input element.
+ * getItems(lowerTyped) → array of items matching the typed string
+ * getValue(item) → string value to put in the input
+ * renderItem(item) → HTML string for the dropdown row
+ * onSelect(item) → called when an item is chosen (optional)
+ * onClear() → called when the field is emptied (optional)
+ */
+export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = () => {}, onClear = () => {} }) {
+  if (!el) return;
   const dropdown = document.createElement('ul');
   dropdown.className = 'name-typeahead';
   dropdown.hidden = true;
-  const nameWrapper = nameEl.closest('.form-field');
-  nameWrapper.style.position = 'relative';
-  nameWrapper.appendChild(dropdown);
+  const wrapper = el.closest('.form-field') || el.parentElement;
+  wrapper.style.position = 'relative';
+  wrapper.appendChild(dropdown);
 
   let currentMatches = [];
   let deletingText   = false;
@@ -285,39 +293,33 @@ export function wireNameTypeahead(nameEl, { onSelect, onClear }) {
 
   const showDropdown = () => {
     if (currentMatches.length < 2) { closeDropdown(); return; }
-    dropdown.innerHTML = currentMatches.map((p, i) => {
-      const detail = [p.dob, p.club].filter(Boolean).join(' – ');
-      return `<li data-i="${i}" tabindex="-1">${escHtml(p.name)}${detail ? ` <span class="text-muted text-sm">(${escHtml(detail)})</span>` : ''}</li>`;
-    }).join('');
+    dropdown.innerHTML = currentMatches.map((item, i) =>
+      `<li data-i="${i}" tabindex="-1">${renderItem(item)}</li>`
+    ).join('');
     dropdown.hidden = false;
     dropdown.querySelectorAll('li').forEach(li =>
       li.addEventListener('mousedown', e => {
         e.preventDefault();
-        const p = currentMatches[+li.dataset.i];
-        nameEl.value = p.name;
-        onSelect(p);
+        const item = currentMatches[+li.dataset.i];
+        el.value = getValue(item);
+        onSelect(item);
         closeDropdown();
       })
     );
   };
 
-  nameEl.addEventListener('input', () => {
-    const raw   = nameEl.value;
+  el.addEventListener('input', () => {
+    const raw   = el.value;
     const typed = raw.trim();
-    if (!typed) {
-      currentMatches = [];
-      deletingText   = false;
-      closeDropdown();
-      onClear();
-      return;
-    }
+    if (!typed) { currentMatches = []; deletingText = false; closeDropdown(); onClear(); return; }
     const hasTrailingSpace = raw.endsWith(' ');
     const low = typed.toLowerCase();
-    currentMatches = state.people.filter(p => (p.name || '').toLowerCase().startsWith(low));
-    if (currentMatches.length === 1 && !deletingText && !hasTrailingSpace && typed.length < currentMatches[0].name.length) {
-      const s = nameEl.selectionStart;
-      nameEl.value = currentMatches[0].name;
-      nameEl.setSelectionRange(s, currentMatches[0].name.length);
+    currentMatches = getItems(low);
+    const v0 = currentMatches.length === 1 ? getValue(currentMatches[0]) : '';
+    if (currentMatches.length === 1 && !deletingText && !hasTrailingSpace && typed.length < v0.length) {
+      const s = el.selectionStart;
+      el.value = v0;
+      el.setSelectionRange(s, v0.length);
       onSelect(currentMatches[0]);
     } else if (currentMatches.length === 1 && !hasTrailingSpace) {
       onSelect(currentMatches[0]);
@@ -328,45 +330,66 @@ export function wireNameTypeahead(nameEl, { onSelect, onClear }) {
     showDropdown();
   });
 
-  nameEl.addEventListener('keydown', e => {
+  el.addEventListener('keydown', e => {
     deletingText = (e.key === 'Backspace' || e.key === 'Delete');
-    if (e.key === 'ArrowDown' && currentMatches.length > 1) {
-      e.preventDefault();
-      showDropdown();
-      dropdown.querySelector('li')?.focus();
-    }
+    if (e.key === 'ArrowDown' && currentMatches.length > 1) { e.preventDefault(); showDropdown(); dropdown.querySelector('li')?.focus(); }
+    else if (e.key === 'Escape' && !dropdown.hidden) { e.stopPropagation(); closeDropdown(); }
+    else if (e.key === 'Enter' && !dropdown.hidden) { closeDropdown(); }
   });
 
   dropdown.addEventListener('keydown', e => {
     const items = [...dropdown.querySelectorAll('li')];
-    const idx = items.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : nameEl.focus(); }
-    else if (e.key === 'Enter' && idx >= 0) {
-      e.preventDefault(); e.stopPropagation();
-      const p = currentMatches[idx];
-      nameEl.value = p.name;
-      onSelect(p);
-      closeDropdown();
-      nameEl.focus();
-    }
-    else if (e.key === 'Escape') { closeDropdown(); nameEl.focus(); }
+    const idx   = items.indexOf(document.activeElement);
+    if      (e.key === 'ArrowDown')           { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
+    else if (e.key === 'ArrowUp')             { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : el.focus(); }
+    else if (e.key === 'Enter' && idx >= 0)   { e.preventDefault(); e.stopPropagation(); const item = currentMatches[idx]; el.value = getValue(item); onSelect(item); closeDropdown(); el.focus(); }
+    else if (e.key === 'Escape')              { closeDropdown(); el.focus(); }
   });
 
-  nameEl.addEventListener('change', () => {
+  el.addEventListener('blur', () => setTimeout(() => {
+    if (dropdown.contains(document.activeElement)) return;
+    const typed = el.value.trim();
+    if (!typed) { onClear(); currentMatches = []; }
+    else if (currentMatches.length === 1) { el.value = getValue(currentMatches[0]); onSelect(currentMatches[0]); }
+    closeDropdown();
+  }, 150));
+}
+
+export function wireNameTypeahead(nameEl, { onSelect, onClear }) {
+  wireTypeahead(nameEl, {
+    getItems:   low => state.people.filter(p => (p.name || '').toLowerCase().startsWith(low)),
+    getValue:   p   => p.name,
+    renderItem: p   => {
+      const detail = [p.dob, p.club].filter(Boolean).join(' – ');
+      return `${escHtml(p.name)}${detail ? ` <span class="text-muted text-sm">(${escHtml(detail)})</span>` : ''}`;
+    },
+    onSelect,
+    onClear,
+  });
+  // Exact-match on change (e.g. paste or autofill)
+  nameEl?.addEventListener('change', () => {
     const typed = nameEl.value.trim();
     if (!typed) return;
     const exact = state.people.find(p => (p.name || '').toLowerCase() === typed.toLowerCase());
     if (exact) onSelect(exact);
   });
+}
 
-  nameEl.addEventListener('blur', () => setTimeout(() => {
-    if (dropdown.contains(document.activeElement)) return;
-    const typed = nameEl.value.trim();
-    if (!typed) { onClear(); currentMatches = []; }
-    else if (currentMatches.length === 1) { nameEl.value = currentMatches[0].name; onSelect(currentMatches[0]); }
-    closeDropdown();
-  }, 150));
+export function wireClubTypeahead(el) {
+  wireTypeahead(el, {
+    getItems:   low => [...new Set(state.people.map(p => p.club).filter(Boolean))].filter(c => c.toLowerCase().startsWith(low)),
+    getValue:   c   => c,
+    renderItem: c   => escHtml(c),
+  });
+}
+
+export function wireRoleTypeahead(el, { onSelect = () => {} } = {}) {
+  wireTypeahead(el, {
+    getItems:   low => state.roles.filter(r => (r.role || '').toLowerCase().startsWith(low)),
+    getValue:   r   => r.role,
+    renderItem: r   => `${escHtml(r.role)}${r.description ? ` <span class="text-muted text-sm">(${escHtml(r.description)})</span>` : ''}`,
+    onSelect,
+  });
 }
 
 export function clearRowEditing(tbodyId) {

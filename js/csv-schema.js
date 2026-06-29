@@ -53,7 +53,8 @@ export const CSV = {
   },
 
   results: {
-    seniors: ['course', 'bibNumber', 'position', 'inCatPos', 'name', 'club', 'category', 'time', 'pctLdrs', 'behindTime'],
-    juniors: ['course', 'bibNumber', 'inCatPos', 'name', 'club', 'category', 'time'],
+    seniors: ['position', 'bibNumber', 'inCatPos', 'name', 'club', 'category', 'time', 'pctLdrs', 'behindTime'],
+    juniors: ['bibNumber', 'inCatPos', 'name', 'club', 'category', 'time'],
+    pairs:   ['position', 'bibNumber', 'inCatPos', 'name', 'partnerName', 'club', 'category', 'time'],
   },
 };

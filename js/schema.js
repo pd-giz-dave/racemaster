@@ -22,8 +22,9 @@ export function createDibber({
 export function createEntry({
   bibNumber = 0, dibberNumber = 0, fraNumber = '', name = '', club = '',
   gender = '', dob = '', category = '', course = '', preEntry = '',
+  partner = null,  // { name, gender, dob, club, fraNumber } — null for solo entries
 } = {}) {
-  return { bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry };
+  return { bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, partner };
 }
 
 export function createHelper({
@@ -57,13 +58,13 @@ export function createEvent({
   timingMethod = 'Stopwatch', maleRecord = '', femaleRecord = '',
   prizeDepthOverall = 3, prizeDepthPerCategory = 1, juniorPrizeDepthPerCategory = 6,
   juniorLimit = 'None', juniorStartTime = '18:50:00', juniorEntryLimit = 100,
-  juniorTimingMethod = 'Stopwatch',
+  juniorTimingMethod = 'Stopwatch', hasPairs = false,
 } = {}) {
   return {
     name, distance, date, startTime,
     firstBibNumber, firstDibberNumber, categories, entryLimit,
     timingMethod, maleRecord, femaleRecord,
     prizeDepthOverall, prizeDepthPerCategory, juniorPrizeDepthPerCategory,
-    juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod,
+    juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod, hasPairs,
   };
 }

@@ -4,19 +4,19 @@ import { state } from '../state.js';
 import {
   findEntryByBib, findEntryByDibber, getEntry,
   submitEntry, updateEntry, clearAllEntries, deleteEntryAndRenumber, insertEntryAndRenumber,
-  getSortedEntries, exportSITimingCSV, isEntryBanned,
+  getSortedEntries, exportSITimingCSV, isEntryBanned, getEntryName,
 } from '../entries.js';
 import { SI } from '../si-schema.js';
 
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
-import { calculateCategory, calculateCourse } from '../categories.js';
+import { calculateCategory, calculateCourse, calculatePairCategory, derivePairGender } from '../categories.js';
 import { COURSE } from '../constants.js';
 import { cleanName, capitalise, showBusy, normaliseClub, normaliseGender } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog, escHtml,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
-  downloadText, sanitise, wireFormFocusTrap, clearRowEditing, wireNameTypeahead,
+  downloadText, sanitise, wireFormFocusTrap, clearRowEditing, wireNameTypeahead, wireClubTypeahead,
   renderTable,
 } from '../ui.js';
 import { TABLES } from '../locale.js';
@@ -26,10 +26,23 @@ const ENTRY_COLS = (() => {
   const m = TABLES.entries;
   return [
     { ...m[0], render: e => e.bibNumber },
-    { ...m[1], render: e => escHtml(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '') },
-    { ...m[2], render: e => escHtml(e.club || '') },
-    { ...m[3], render: e => e.dob || '' },
-    { ...m[4], render: e => e.category || '' },
+    { ...m[1], render: e => {
+      const primary = escHtml(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '');
+      if (!e.partner) return primary;
+      return `${primary}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(e.partner.name || '')}</span>`;
+    }},
+    { ...m[2], render: e => {
+      if (!e.partner || !e.partner.club || e.partner.club === e.club) return escHtml(e.club || '');
+      return `${escHtml(e.club || '')}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(e.partner.club)}</span>`;
+    }},
+    { ...m[3], render: e => {
+      if (!e.partner) return e.dob || '';
+      return `${e.dob || ''}<br><span style="color:var(--muted);font-size:0.85em">${e.partner.dob || ''}</span>`;
+    }},
+    { ...m[4], render: e => {
+      if (!e.partner) return e.category || '';
+      return `${e.category || ''} ${derivePairGender(e.gender, e.partner.gender)}`.trim();
+    }},
     { ...m[5], render: e => e.course || '' },
     { ...m[6], render: e => e.dibberNumber || '' },
     { ...m[7], render: e => e.preEntry || '' },
@@ -45,6 +58,24 @@ const ENTRY_COLS = (() => {
 export let editingBib  = 0;
 let insertingAtBib = 0;
 let overrideBan    = false;
+
+// ---- Pair mode helpers ----
+
+function isPairMode() {
+  return val('entry-form-type') === 'pair';
+}
+
+function updatePairMode() {
+  const pair = isPairMode();
+  document.getElementById('entry-form-fields')?.classList.toggle('entry-form-pair', pair);
+  document.getElementById('view-entries')?.classList.toggle('pair-active', pair);
+  const p2 = document.getElementById('entry-pair-p2');
+  if (p2) p2.hidden = !pair;
+  const p1label = document.getElementById('entry-p1-label');
+  if (p1label) p1label.hidden = !pair;
+  const catEl = document.getElementById('entry-form-category');
+  if (catEl) catEl.disabled = pair;
+}
 
 // ---- Render ----
 
@@ -66,6 +97,13 @@ export function renderEntries() {
   updateDatalistNames();
   updateDatalistClubs();
 
+  // Show / hide pair UI based on event setting
+  const hasPairs = !!state.event.hasPairs;
+  const typeField = document.getElementById('entry-form-type-field');
+  const topRow    = document.getElementById('entry-form-toprow');
+  if (typeField) typeField.hidden = !hasPairs;
+  if (topRow) topRow.classList.toggle('has-type', hasPairs);
+
   const bibEl = document.getElementById('entry-form-bib');
   if (bibEl && document.activeElement !== bibEl && !editingBib) bibEl.value = getNextBibNumber();
   const dibEl = document.getElementById('entry-form-dibber');
@@ -83,6 +121,22 @@ export function autoFillCategory() {
   const dob    = val('entry-form-dob');
   const gender = val('entry-form-gender');
   if (!dob || !gender) return;
+
+  if (isPairMode()) {
+    const dob2    = val('entry-form-dob2');
+    const gender2 = val('entry-form-gender2');
+    if (!dob2 || !gender2) return;
+    const { category } = calculatePairCategory(dob, gender, dob2, gender2);
+    if (category) {
+      const catEl = document.getElementById('entry-form-category');
+      if (catEl) catEl.value = category;
+      const courseEl = document.getElementById('entry-form-course');
+      if (courseEl) courseEl.value = calculateCourse(category, dob);
+      updateDibberField();
+    }
+    return;
+  }
+
   const cat = calculateCategory(dob, gender);
   if (cat) {
     const catEl = document.getElementById('entry-form-category');
@@ -104,6 +158,11 @@ export function fillFormForEdit(bib) {
   const e = getEntry(bib);
   if (!e) return;
   editingBib = bib;
+
+  const typeEl = document.getElementById('entry-form-type');
+  if (typeEl) typeEl.value = e.partner ? 'pair' : 'solo';
+  updatePairMode();
+
   fillForm('', {
     'entry-form-peno':     '',
     'entry-form-bib':      e.bibNumber,
@@ -116,11 +175,20 @@ export function fillFormForEdit(bib) {
     'entry-form-category': e.category  || '',
     'entry-form-course':   e.course    || '',
   });
+  if (e.partner) {
+    fillForm('', {
+      'entry-form-name2':   e.partner.name      || '',
+      'entry-form-gender2': e.partner.gender    || '',
+      'entry-form-dob2':    e.partner.dob       || '',
+      'entry-form-club2':   e.partner.club      || '',
+      'entry-form-fra2':    e.partner.fraNumber || '',
+    });
+  }
   document.getElementById('entry-form-bib')?.removeAttribute('tabindex');
   document.getElementById('entry-form-dibber')?.removeAttribute('tabindex');
   document.getElementById('btn-submit-entry').textContent = 'Update';
   document.getElementById('btn-cancel-edit').style.display = '';
-  document.getElementById('entry-form-peno')?.focus();
+  focusFirstEntryField();
   const editRow = document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`);
   editRow?.classList.add('row-editing');
   editRow?.scrollIntoView({ block: 'nearest' });
@@ -131,6 +199,13 @@ export function resetEntryForm() {
   insertingAtBib = 0;
   clearRowEditing('entries-tbody');
   clearForm('entry-form-fields');
+  const typeEl = document.getElementById('entry-form-type');
+  if (typeEl) typeEl.value = 'solo';
+  updatePairMode();
+  fillForm('', {
+    'entry-form-name2': '', 'entry-form-gender2': '',
+    'entry-form-dob2':  '', 'entry-form-club2':   '', 'entry-form-fra2': '',
+  });
   const bibEl = document.getElementById('entry-form-bib');
   if (bibEl) { bibEl.value = getNextBibNumber(); bibEl.setAttribute('tabindex', '-1'); }
   const dibEl = document.getElementById('entry-form-dibber');
@@ -139,6 +214,12 @@ export function resetEntryForm() {
   document.getElementById('btn-submit-entry').textContent = 'Register';
   const cancelBtn = document.getElementById('btn-cancel-edit');
   if (cancelBtn) { cancelBtn.style.display = 'none'; cancelBtn.textContent = 'Cancel Edit'; }
+  focusFirstEntryField();
+}
+
+function focusFirstEntryField() {
+  const id = state.event.hasPairs ? 'entry-form-type' : 'entry-form-peno';
+  document.getElementById(id)?.focus();
 }
 
 
@@ -148,6 +229,9 @@ function fillFormForInsert(bib) {
   const freeDibber = state.entries.find(e => +e.bibNumber === bib)?.dibberNumber || '';
   insertingAtBib = bib;
   clearForm('entry-form-fields');
+  const typeEl = document.getElementById('entry-form-type');
+  if (typeEl) typeEl.value = 'solo';
+  updatePairMode();
   const bibEl = document.getElementById('entry-form-bib');
   if (bibEl) { bibEl.value = bib; bibEl.setAttribute('tabindex', '-1'); }
   const dibEl = document.getElementById('entry-form-dibber');
@@ -155,7 +239,7 @@ function fillFormForInsert(bib) {
   document.getElementById('btn-submit-entry').textContent = 'Insert';
   const cancelBtn = document.getElementById('btn-cancel-edit');
   if (cancelBtn) { cancelBtn.style.display = ''; cancelBtn.textContent = 'Cancel Insert'; }
-  document.getElementById('entry-form-peno')?.focus();
+  focusFirstEntryField();
   document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.classList.add('row-editing');
 }
 
@@ -174,8 +258,9 @@ async function confirmInsertBefore(bib) {
 async function deleteEntryAndRenumberHandler(bib) {
   const e = getEntry(bib);
   if (!e) return;
+  const nameDisplay = getEntryName(e);
   if (!await showConfirmDialog(
-    `Delete bib ${bib} (${e.name}) and renumber all subsequent entries?`,
+    `Delete bib ${bib} (${nameDisplay}) and renumber all subsequent entries?`,
     'Delete & Renumber', true)) return;
   showBusy('Deleting…');
   const result = await deleteEntryAndRenumber(bib);
@@ -184,7 +269,7 @@ async function deleteEntryAndRenumberHandler(bib) {
   showStatus(`Bib ${bib} deleted; subsequent entries renumbered.`);
   renderEntries();
   renderHome();
-  document.getElementById('entry-form-peno')?.focus();
+  focusFirstEntryField();
 }
 
 // ---- Main submit ----
@@ -226,6 +311,8 @@ export async function submitEntryForm() {
     }
   }
 
+  if (isPairMode()) autoFillCategory();
+
   const formData = {
     name:        val('entry-form-name'),
     gender:      val('entry-form-gender'),
@@ -238,6 +325,13 @@ export async function submitEntryForm() {
     bibOverride:    +val('entry-form-bib')    || 0,
     dibberOverride: +val('entry-form-dibber') || 0,
     overrideBan,
+    partner: isPairMode() ? {
+      name:      val('entry-form-name2'),
+      gender:    val('entry-form-gender2'),
+      dob:       val('entry-form-dob2'),
+      club:      normaliseClub(val('entry-form-club2')),
+      fraNumber: val('entry-form-fra2'),
+    } : null,
   };
   overrideBan = false;
   const isEdit   = editingBib > 0;
@@ -268,7 +362,6 @@ export async function submitEntryForm() {
     const baseMsg = isEdit ? `Bib ${bib} updated.` : isInsert ? `Bib ${bib} inserted; subsequent entries renumbered.` : `Bib ${bib} registered.`;
     showStatus(result.lostWarning ? `${baseMsg} ${result.lostWarning}` : baseMsg, !!result.lostWarning);
     resetEntryForm();
-    document.getElementById('entry-form-peno')?.focus();
     renderEntries();
     document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.scrollIntoView({ block: 'nearest' });
     renderHome();
@@ -293,10 +386,14 @@ async function runExportSITiming() {
 
 function focusEntryErrorField(error) {
   let id = 'entry-form-name';
-  if      (/gender/i.test(error))    id = 'entry-form-gender';
-  else if (/birth|dob/i.test(error)) id = 'entry-form-dob';
-  else if (/\bbib\b/i.test(error))   id = 'entry-form-bib';
-  else if (/dibber/i.test(error))    id = 'entry-form-dibber';
+  if      (/partner name/i.test(error))          id = 'entry-form-name2';
+  else if (/partner gender/i.test(error))        id = 'entry-form-gender2';
+  else if (/partner date|partner.*birth/i.test(error)) id = 'entry-form-dob2';
+  else if (/partner/i.test(error))               id = 'entry-form-name2';
+  else if (/gender/i.test(error))                id = 'entry-form-gender';
+  else if (/birth|dob/i.test(error))             id = 'entry-form-dob';
+  else if (/\bbib\b/i.test(error))               id = 'entry-form-bib';
+  else if (/dibber/i.test(error))                id = 'entry-form-dibber';
   document.getElementById(id)?.focus();
 }
 
@@ -307,12 +404,10 @@ export function wireEntries() {
 
   on('btn-cancel-edit', 'click', () => {
     resetEntryForm();
-    document.getElementById('entry-form-peno')?.focus();
   });
 
   on('btn-reset-entry', 'click', () => {
     resetEntryForm();
-    document.getElementById('entry-form-peno')?.focus();
   });
 
   // SI Timing export
@@ -386,8 +481,24 @@ export function wireEntries() {
     onClear:   () => fillForm('', entryFields),
   });
 
+  const partnerFields = { 'entry-form-gender2': '', 'entry-form-dob2': '', 'entry-form-club2': '', 'entry-form-fra2': '' };
+  wireNameTypeahead(document.getElementById('entry-form-name2'), {
+    onSelect: p => {
+      fillForm('', {
+        'entry-form-gender2': normaliseGender(p.gender),
+        'entry-form-dob2':    p.dob       || '',
+        'entry-form-club2':   p.club      || '',
+        'entry-form-fra2':    p.fraNumber || '',
+      });
+      autoFillCategory();
+    },
+    onClear: () => fillForm('', partnerFields),
+  });
+  wireClubTypeahead(document.getElementById('entry-form-club'));
+  wireClubTypeahead(document.getElementById('entry-form-club2'));
+
   // Auto-capitalise name and club fields as the user types
-  for (const id of ['entry-form-name', 'entry-form-club']) {
+  for (const id of ['entry-form-name', 'entry-form-club', 'entry-form-name2', 'entry-form-club2']) {
     const el = document.getElementById(id);
     if (!el) continue;
     el.addEventListener('input', () => {
@@ -422,6 +533,31 @@ export function wireEntries() {
   on('entry-form-dob',    'change', autoFillCategory);
   on('entry-form-gender', 'change', autoFillCategory);
   on('entry-form-course', 'change', updateDibberField);
+  on('entry-form-dob2',    'change', autoFillCategory);
+  on('entry-form-gender2', 'change', autoFillCategory);
+  on('entry-form-type',    'change', () => { updatePairMode(); autoFillCategory(); });
+
+  document.getElementById('entry-form-type')?.addEventListener('keydown', e => {
+    const key = e.key;
+    const typeEl = document.getElementById('entry-form-type');
+    if (key === '-') {
+      e.preventDefault();
+      typeEl.value = 'solo';
+      typeEl.dispatchEvent(new Event('change'));
+    } else if (key === '=') {
+      e.preventDefault();
+      typeEl.value = 'pair';
+      typeEl.dispatchEvent(new Event('change'));
+    } else if (/^\d$/.test(key)) {
+      e.preventDefault();
+      const target = document.getElementById('entry-form-peno');
+      if (target) { target.focus(); target.value = key; target.dispatchEvent(new Event('input')); }
+    } else if (/^[a-zA-Z]$/.test(key) && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const target = document.getElementById('entry-form-name');
+      if (target) { target.focus(); target.value = key; target.dispatchEvent(new Event('input')); }
+    }
+  });
 
   // Entry form keyboard handling: Enter=submit, Esc=home if clean, Tab=wrap focus
   wireFormFocusTrap('entry-form-fields', submitEntryForm);

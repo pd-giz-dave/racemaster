@@ -53,6 +53,7 @@ async function loadEvent() {
   const rows = await readTable('event');
   if (rows.length > 0) {
     Object.assign(state.event, rows[0]);
+    state.event.hasPairs          = !!rows[0].hasPairs;
     state.event.distance          = +state.event.distance || 0;
     state.event.firstBibNumber    = +state.event.firstBibNumber || 1;
     state.event.entryLimit        = +state.event.entryLimit || 200;

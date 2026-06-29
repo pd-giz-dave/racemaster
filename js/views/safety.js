@@ -2,7 +2,8 @@
 
 import { state } from '../state.js';
 import { recordFinisher, deleteFinisher } from '../finishers.js';
-import { isEntryBanned } from '../entries.js';
+import { isEntryBanned, getEntryName } from '../entries.js';
+import { derivePairGender } from '../categories.js';
 import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { showBusy } from '../utils.js';
@@ -16,9 +17,12 @@ const SAFETY_OUT_COLS = (() => {
   const m = TABLES['safety-outstanding'];
   return [
     { ...m[0], render: e => e.bibNumber },
-    { ...m[1], render: e => (e.name || '') + (isEntryBanned(e) ? ' (banned)' : '') },
+    { ...m[1], render: e => getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : '') },
     { ...m[2], render: e => e.course || '' },
-    { ...m[3], render: e => e.category || '' },
+    { ...m[3], render: e => {
+      const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
+      return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
+    }},
     { ...m[4], render: () => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>` },
   ];
 })();

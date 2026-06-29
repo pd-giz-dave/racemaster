@@ -7,10 +7,11 @@ import {
   getSortedFinishers, buildSplitNumbers,
   getAllSpecials, lineLabel, getPrevTime, parseFinishTime,
 } from '../finishers.js';
-import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned } from '../entries.js';
+import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned, getEntryName } from '../entries.js';
 import { COURSE } from '../constants.js';
+import { derivePairGender } from '../categories.js';
 import { timeToSeconds, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable } from '../ui.js';
+import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable, wireTypeahead } from '../ui.js';
 import { TABLES } from '../locale.js';
 
 const FINISHER_COLS = (() => {
@@ -21,7 +22,12 @@ const FINISHER_COLS = (() => {
     { ...m[2], render: r => r.f.time || '' },
     { ...m[3], render: r => r.numDisplay },
     { ...m[4], render: r => r.nameDisplay },
-    { ...m[5], render: r => r.entry?.category || '' },
+    { ...m[5], render: r => {
+      const e = r.entry;
+      if (!e) return '';
+      const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
+      return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
+    }},
     { ...m[6], render: r => r.f.number > 0 ? (r.entry?.course || '') : '' },
     { ...m[7], render: () => `
       <button class="btn-sm btn-edit btn-edit-finisher" data-action="edit">Edit</button>
@@ -36,24 +42,19 @@ let editingIdx     = -1;   // index into state.finishers; -1 = adding new
 let timeTargetSidx = -1;   // index into state.finishers of the current time-mode target
 let editIsInsert   = false; // true when edit was opened via Ins↑; cancel should remove the line
 
-function updateDatalistFinisherBibs() {
-  const dl = document.getElementById('datalist-finisher-bibs');
-  if (!dl) return;
+function getBibItems(low) {
   const doneBibs = new Set(
     state.finishers
       .filter(f => f.action === 'Finish' || f.action === 'DNF')
-      .map(f => +f.number)
-      .filter(n => n > 0)
+      .map(f => +f.number).filter(n => n > 0)
   );
-  const specials = getAllSpecials().map(([v, label]) =>
-    `<option value="${v}">${escHtml(label)}</option>`).join('');
+  const specials = getAllSpecials()
+    .filter(([v]) => v.toLowerCase().startsWith(low))
+    .map(([v, label]) => ({ value: v, label }));
   const entries = getSortedEntries()
-    .filter(e => !doneBibs.has(+e.bibNumber))
-    .map(e => {
-      const label = [e.name, e.category, e.course].filter(Boolean).join(' · ');
-      return `<option value="${e.bibNumber}">${escHtml(label)}</option>`;
-    }).join('');
-  dl.innerHTML = specials + entries;
+    .filter(e => !doneBibs.has(+e.bibNumber) && String(e.bibNumber).startsWith(low))
+    .map(e => ({ value: String(e.bibNumber), label: [getEntryName(e), e.category, e.course].filter(Boolean).join(' · ') }));
+  return [...specials, ...entries];
 }
 
 function nextLineLabel() {
@@ -136,9 +137,10 @@ export function applyMode(mode) {
     document.querySelectorAll('#finishers-tbody .row-timing-target')
       .forEach(r => r.classList.remove('row-timing-target'));
     document.querySelector('#finishers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
-    if (bibEl) { bibEl.value = state.finishers.length === 0 && editingIdx < 0 ? 'Clock' : ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
     const lineEl = document.getElementById('finisher-line');
-    if (lineEl) lineEl.value = nextLineLabel();
+    const nextLine = nextLineLabel();
+    if (lineEl) lineEl.value = nextLine;
+    if (bibEl) { bibEl.value = nextLine === '0' && editingIdx < 0 ? 'Clock' : ''; bibEl.readOnly = false; bibEl.tabIndex = 0; }
     setTimeout(() => document.getElementById('finisher-bib')?.focus(), 0);
   }
 }
@@ -161,11 +163,14 @@ export function renderFinishers() {
   setHTML('finisher-senior-count', `${seniors.filter(isValidFinisher).length} of ${seniorExpected}`);
   setHTML('finisher-junior-count', `${juniors.filter(isValidFinisher).length} of ${juniorExpected}`);
 
-  updateDatalistFinisherBibs();
-
   // In bibs mode, line field shows next line number; in time mode it shows the target line
-  const lineEl = document.getElementById('finisher-line');
-  if (lineEl && getCurrentMode() !== 'time') lineEl.value = nextLineLabel();
+  if (getCurrentMode() !== 'time' && editingIdx < 0) {
+    const lineEl = document.getElementById('finisher-line');
+    const bibEl  = document.getElementById('finisher-bib');
+    const nextLine = nextLineLabel();
+    if (lineEl) lineEl.value = nextLine;
+    if (bibEl && !bibEl.readOnly) bibEl.value = nextLine === '0' ? 'Clock' : '';
+  }
 
   if (getCurrentMode() !== 'time') updatePrevTime();
 
@@ -192,7 +197,7 @@ export function renderFinishers() {
       : null;
     const nameDisplay = specialInfo
       ? specialInfo[1]
-      : escHtml((entry?.name || '') + (banned ? ' (banned)' : ''));
+      : escHtml((entry ? getEntryName(entry) : '') + (banned ? ' (banned)' : ''));
     return { f, sidx, numDisplay, lineDisplay, hasError, banned, nameDisplay, entry, eventLabel: eventLabel(f) };
   });
 
@@ -514,22 +519,11 @@ export function wireFinishers() {
   const modeEl = document.getElementById('finisher-mode');
   if (modeEl) modeEl.addEventListener('change', () => applyMode(modeEl.value));
 
-  // Special code auto-fill: when typed text uniquely matches one special code, complete it
-  const bibEl = document.getElementById('finisher-bib');
-  if (bibEl) {
-    bibEl.addEventListener('input', e => {
-      if (e.inputType?.startsWith('delete')) return;
-      const typed = bibEl.value;
-      if (!typed) return;
-      const low = typed.toLowerCase();
-      const matches = getAllSpecials().map(([v]) => v).filter(n => n.toLowerCase().startsWith(low));
-      if (matches.length === 1 && matches[0].toLowerCase() !== low) {
-        const pos = typed.length;
-        bibEl.value = matches[0];
-        bibEl.setSelectionRange(pos, matches[0].length);
-      }
-    });
-  }
+  wireTypeahead(document.getElementById('finisher-bib'), {
+    getItems:   low => getBibItems(low),
+    getValue:   item => item.value,
+    renderItem: item => `${escHtml(item.value)} <span class="text-muted text-sm">${escHtml(item.label)}</span>`,
+  });
 
   // Tab cycling and Enter submit within form
   wireFormFocusTrap('finisher-form-fields', submitFinisherForm);

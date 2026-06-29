@@ -2,7 +2,7 @@
 
 import { state, loadAll } from '../state.js';
 import {
-  getSession, setSession, clearSession,
+  getSession, setSession, clearSession, clearCredentials,
   getUsername, setUsername, getIsAdmin, setIsAdmin,
   setStandalone, isDirty, hasCachedData,
   apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset, apiChangeVisibility,
@@ -346,6 +346,7 @@ export function wireDatasets(onConnect) {
 
   getEl('df-btn-standalone').onclick = () => {
     clearSession();
+    clearCredentials();
     setStandalone(true);
     activeToken    = null;
     activeUsername = null;
@@ -439,6 +440,7 @@ export function wireDatasets(onConnect) {
 
   getEl('df-btn-logout').onclick = () => {
     clearSession();
+    clearCredentials();
     activeToken    = null;
     activeUsername = null;
     getEl('df-username').value = '';
@@ -450,7 +452,7 @@ export function wireDatasets(onConnect) {
 
 export function renderDatasets() {
   activeToken    = getSession()?.token || null;
-  activeUsername = getSession()?.dataset?.split('/')[0] || getUsername() || null;
+  activeUsername = getUsername() || null;
   isAdminUser    = getIsAdmin();
   if (activeToken) {
     loadDatasets();

@@ -3,7 +3,7 @@
 import { state, savePeople } from '../state.js';
 import { createPerson } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, updateDatalistClubs, renderTable } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable } from '../ui.js';
 import { TABLES } from '../locale.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
@@ -75,7 +75,7 @@ export function personEditCells(prefix, p) {
       <option value="P"${p.gender==='P'?' selected':''}>P</option>
     </select></td>
     <td><input id="${prefix}-dob"         type="date"   value="${toISODate(p.dob || '')}"></td>
-    <td><input id="${prefix}-club"        type="text"   value="${escHtml(p.club || '')}"           style="width:110px" list="datalist-clubs" autocomplete="off"></td>
+    <td><input id="${prefix}-club"        type="text"   value="${escHtml(p.club || '')}"           style="width:110px" autocomplete="off"></td>
     <td><input id="${prefix}-fra"         type="text"   value="${escHtml(p.fraNumber || '')}"      style="width:70px"></td>
     <td><input id="${prefix}-lastseen"    type="date"   value="${toISODate(p.lastSeen || '')}"></td>
     <td><input id="${prefix}-count"       type="number" value="${p.seenTotal || 0}"                style="width:50px" min="0"></td>
@@ -102,13 +102,13 @@ export function editPersonRow(idx) {
   if (!p) return;
   const row = document.getElementById(`person-row-${idx}`);
   if (!row) return;
-  updateDatalistClubs();
   const prefix = `per-${idx}`;
   row.innerHTML = `${personEditCells(prefix, p)}
     <td>
       <button class="btn-sm btn-save">Save</button>
       <button class="btn-sm btn-secondary">Cancel</button>
     </td>`;
+  wireClubTypeahead(document.getElementById(`${prefix}-club`));
   row.querySelector('.btn-save').addEventListener('click', () => savePersonRow(idx));
   row.querySelector('.btn-secondary').addEventListener('click', () => renderPeople());
   document.getElementById(`${prefix}-name`)?.focus();

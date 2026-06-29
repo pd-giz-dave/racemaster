@@ -170,15 +170,51 @@ export function genderFromCategory(category) {
   return '';
 }
 
-/** Return the sort priority of a category (lower = higher priority for prizes) */
+/** Return the age-band row index of a category (same for both genders, lower = younger) */
 export function getCategoryPriority(category) {
-  const n = state.categories.length;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < state.categories.length; i++) {
     const row = state.categories[i];
-    if (ciEq(row.femaleCat, category)) return i;
-    if (ciEq(row.maleCat,   category)) return i + n + 1;
+    if (ciEq(row.femaleCat, category) || ciEq(row.maleCat, category)) return i;
   }
   return 999999;
+}
+
+/** Derive pair gender label from two gender strings */
+export function derivePairGender(gender1, gender2) {
+  const f1 = (gender1 || '').charAt(0).toUpperCase() === 'F';
+  const f2 = (gender2 || '').charAt(0).toUpperCase() === 'F';
+  if (f1 && f2)   return 'Female';
+  if (!f1 && !f2) return 'Male';
+  return 'Mixed';
+}
+
+/**
+ * Calculate the combined category and pair gender for a pairs entry.
+ * Rule: if either competitor is a junior, use the younger one's category;
+ *       if both are senior, use the older one's category.
+ * Returns { category, pairGender } where pairGender is 'Male'/'Female'/'Mixed'.
+ */
+export function calculatePairCategory(dob1, gender1, dob2, gender2) {
+  const cat1 = calculateCategory(dob1, gender1);
+  const cat2 = calculateCategory(dob2, gender2);
+  const pg   = derivePairGender(gender1, gender2);
+  if (!cat1 && !cat2) return { category: '', pairGender: pg };
+  if (!cat1) return { category: cat2, pairGender: pg };
+  if (!cat2) return { category: cat1, pairGender: pg };
+
+  const p1 = getCategoryPriority(cat1);
+  const p2 = getCategoryPriority(cat2);
+  const isJunior = cat => /^U\d/i.test(cat || '');
+
+  let category;
+  if (isJunior(cat1) || isJunior(cat2)) {
+    // Use younger person (lower table index = smaller age = younger junior)
+    category = p1 <= p2 ? cat1 : cat2;
+  } else {
+    // Both senior — use older person (higher table index = higher age band)
+    category = p1 >= p2 ? cat1 : cat2;
+  }
+  return { category, pairGender: pg };
 }
 
 /** Calculate the course for an entrant based on their category or DoB */

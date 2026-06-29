@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { saveSIResults } from './state.js';
 import { normaliseTime } from './utils.js';
 import { parseSICSV } from './csv.js';
-import { getEntry } from './entries.js';
+import { getEntry, getEntryName } from './entries.js';
 import { SI } from './si-schema.js';
 
 
@@ -25,12 +25,17 @@ export async function importSIResults(csvText) {
 
   const issues = verifySIResults(rows);
   if (issues.length) {
-    return { imported: 0, errors: [`Verification failed — ${issues.length} of ${rows.length} bib(s) did not match entries. Have you selected the wrong file?`] };
+    return { imported: 0, issues, errors: [`Verification failed — ${issues.length} issue(s) across ${rows.length} bib(s). Have you selected the wrong file?`] };
   }
 
   state.siResults = rows;
   await saveSIResults();
-  return { imported: rows.length, errors: [] };
+  return { imported: rows.length, issues: [], errors: [] };
+}
+
+export async function clearSIResults() {
+  state.siResults = [];
+  await saveSIResults();
 }
 
 /**
@@ -52,9 +57,9 @@ export function verifySIResults(rows = state.siResults) {
     }
 
     const siName    = getSIName(r).toUpperCase().trim();
-    const entryName = (entry.name || '').toUpperCase().trim();
+    const entryName = getEntryName(entry).toUpperCase().trim();
     if (siName && entryName && siName !== entryName) {
-      issues.push({ bib, name: entry.name, issue: `Name mismatch: SI "${getSIName(r)}" vs entry "${entry.name}"` });
+      issues.push({ bib, name: entry.name, issue: `Name mismatch: SI "${getSIName(r)}" vs entry "${getEntryName(entry)}"` });
     }
 
     const siCourse    = getSICourse(r).toUpperCase().trim();

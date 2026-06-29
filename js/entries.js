@@ -6,7 +6,7 @@ import { SI } from './si-schema.js';
 import { saveEntries, savePeople } from './state.js';
 import { COURSE } from './constants.js';
 import { normaliseDate, cleanName, ciEq } from './utils.js';
-import { calculateCategory, calculateCourse } from './categories.js';
+import { calculateCategory, calculateCourse, calculatePairCategory } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
@@ -62,13 +62,41 @@ export function getEntry(bibNumber) {
   return idx >= 0 ? state.entries[idx] : null;
 }
 
+/** Check if a name+dob is already entered (checks both primary and partner fields). */
+function findDuplicate(name, dob, excludeBib = 0) {
+  const normName = cleanName(name).toUpperCase();
+  const normDob  = normaliseDate(dob);
+  return state.entries.find(e => {
+    if (excludeBib && +e.bibNumber === +excludeBib) return false;
+    if (cleanName(e.name || '').toUpperCase() === normName && (normDob ? normaliseDate(e.dob || '') === normDob : true)) return true;
+    if (e.partner) {
+      const p = e.partner;
+      if (cleanName(p.name || '').toUpperCase() === normName && (normDob ? normaliseDate(p.dob || '') === normDob : true)) return true;
+    }
+    return false;
+  });
+}
+
+/** Validate and normalise a partner object. Returns { partner, error }. */
+function normalisePartner(p, primaryName, primaryDob) {
+  const pName   = cleanName(p.name || '');
+  const pGender = p.gender || '';
+  const pDob    = normaliseDate(p.dob || '');
+  if (!pName)   return { error: 'Partner name is required' };
+  if (!pGender) return { error: 'Partner gender is required' };
+  if (!pDob)    return { error: 'Partner date of birth is required' };
+  if (pName.toUpperCase() === primaryName.toUpperCase() && pDob === primaryDob)
+    return { error: 'Partner cannot be the same person as the primary entrant' };
+  return { partner: { name: pName, gender: pGender, dob: pDob, club: cleanName(p.club || ''), fraNumber: p.fraNumber || '' } };
+}
+
 /**
  * Add or update a single entry.
  * Returns the index in state.entries, or -1 on validation failure.
  */
 export function addEntry({
   bibNumber, dibberNumber, fraNumber, name, club,
-  gender, dob, category, course, preEntry
+  gender, dob, category, course, preEntry, partner
 }) {
   if (!bibNumber || +bibNumber <= 0) return -1;
   const bib = +bibNumber;
@@ -90,6 +118,7 @@ export function addEntry({
   e.category     = category      !== undefined ? category    : (e.category     || '');
   e.course       = course        !== undefined ? course      : (e.course       || COURSE.SENIORS);
   e.preEntry     = preEntry      !== undefined ? preEntry    : (e.preEntry     || '');
+  e.partner      = partner       !== undefined ? (partner || null) : (e.partner ?? null);
 
   return idx;
 }
@@ -158,48 +187,82 @@ function shiftDibbersBackward(fromEntryIdx, releasedDibber) {
 
 /**
  * Submit a new entry from the registration form.
- * formData: {name, gender, dob, club, fraNumber, category, course, preEntry}
+ * formData: {name, gender, dob, club, fraNumber, category, course, preEntry, partner?}
+ * partner: { name, gender, dob, club, fraNumber } for pair entries, null/undefined for solo.
  * Allocates bib number and dibber if needed.
  * Returns {bibNumber, dibberNumber, error} — error is '' on success.
  */
-export async function submitEntry(formData) {
-  const name    = cleanName(formData.name || '');
-  const gender  = formData.gender || '';
-  const dob     = normaliseDate(formData.dob || '');
-  const club    = cleanName(formData.club || '');
-  const fra     = formData.fraNumber || '';
-  const preEntry = formData.preEntry || '';
+/**
+ * Validate and normalise formData for an entry.
+ * existingEntry: the current entry object when editing (supplies defaults for unset fields).
+ * excludeBib: bib to exclude from duplicate checks (the entry being edited).
+ * Returns { name, gender, dob, club, fra, preEntry, partner, category, course }
+ * or { error } or { bannedWarning }.
+ */
+function prepareEntry(formData, existingEntry = null, excludeBib = 0) {
+  const ex = existingEntry;
+  const name     = cleanName(formData.name     !== undefined ? formData.name     : (ex?.name     || ''));
+  const gender   =          (formData.gender   !== undefined ? formData.gender   : (ex?.gender   || ''));
+  const dob      = normaliseDate(formData.dob  !== undefined ? formData.dob      : (ex?.dob      || ''));
+  const club     = cleanName(formData.club     !== undefined ? formData.club     : (ex?.club     || ''));
+  const fra      =          (formData.fraNumber!== undefined ? formData.fraNumber: (ex?.fraNumber|| ''));
+  const preEntry =          (formData.preEntry !== undefined ? formData.preEntry : (ex?.preEntry || ''));
 
-  if (!name) return { error: 'Name is required' };
+  if (!name)   return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
-  if (!dob) return { error: 'Date of birth is required' };
+  if (!dob)    return { error: 'Date of birth is required' };
+
+  // Partner
+  let partner = ex?.partner ?? null;
+  if (formData.partner !== undefined) {
+    if (formData.partner) {
+      const pv = normalisePartner(formData.partner, name, dob);
+      if (pv.error) return { error: pv.error };
+      const partnerDup = findDuplicate(pv.partner.name, pv.partner.dob, excludeBib);
+      if (partnerDup) return { error: `${pv.partner.name} is already entered as bib ${partnerDup.bibNumber}` };
+      partner = pv.partner;
+    } else {
+      partner = null;
+    }
+  }
 
   const person = state.people.find(p => ciEq(p.name, name) && p.dob === dob);
   if (isBanned(person) && !formData.overrideBan) return { bannedWarning: person.banned };
 
-  let category = formData.category || '';
-  if (!category && dob) category = calculateCategory(dob, gender);
-  if (!category && dob && state.event.date) return { error: 'Too young to enter — below the minimum age for this event' };
+  let category = formData.category || ex?.category || '';
+  if (!category) {
+    if (partner) {
+      const { category: pc } = calculatePairCategory(dob, gender, partner.dob, partner.gender);
+      category = pc;
+    } else {
+      category = calculateCategory(dob, gender);
+      if (!category && dob && state.event.date) return { error: 'Too young to enter — below the minimum age for this event' };
+    }
+  }
 
-  let course = formData.course || '';
+  let course = formData.course || ex?.course || '';
   if (!course) course = calculateCourse(category, dob);
 
-  if (courseFull(course)) {
-    return { error: `${course} is full (limit ${getEntryLimit(course)})` };
-  }
+  const duplicate = findDuplicate(name, dob, excludeBib);
+  if (duplicate) return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
 
-  const normName = name.toUpperCase();
-  const duplicate = state.entries.find(e => {
-    if (cleanName(e.name || '').toUpperCase() !== normName) return false;
-    return dob ? normaliseDate(e.dob || '') === dob : true;
-  });
-  if (duplicate) {
-    return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
-  }
+  return { name, gender, dob, club, fra, preEntry, partner, category, course };
+}
+
+function savePeople2(name, gender, dob, club, fra, category, partner) {
+  addPerson(name, null, gender, dob, club, fra, category, false);
+  if (partner) addPerson(partner.name, null, partner.gender, partner.dob, partner.club, partner.fraNumber, category, false);
+}
+
+export async function submitEntry(formData) {
+  const prep = prepareEntry(formData);
+  if (prep.error || prep.bannedWarning) return prep;
+  const { name, gender, dob, club, fra, preEntry, partner, category, course } = prep;
+
+  if (courseFull(course)) return { error: `${course} is full (limit ${getEntryLimit(course)})` };
 
   const bibNumber = (formData.bibOverride && +formData.bibOverride > 0)
-    ? +formData.bibOverride
-    : getNextBibNumber();
+    ? +formData.bibOverride : getNextBibNumber();
 
   let dibberNumber = 0;
   let lostWarning  = '';
@@ -219,41 +282,34 @@ export async function submitEntry(formData) {
     }
   }
 
-  addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry });
-
-  // Update people and clubs lists
-  const nameId = null;
-  addPerson(name, nameId, gender, dob, club, fra, category, false);
-
+  addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry, partner });
+  savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
   await saveEntries();
   await savePeople();
-
   return { bibNumber, dibberNumber, error: '', lostWarning };
 }
 
-/**
- * Update an existing entry (edit mode).
- * Returns {error} — error is '' on success.
- */
 export async function updateEntry(bibNumber, formData) {
   const idx = findEntryByBib(bibNumber);
   if (idx < 0) return { error: `Bib ${bibNumber} not found` };
-
   const e = state.entries[idx];
-  let lostWarning = '';
 
-  // Bib change — clash-check against other entries
+  const prep = prepareEntry(formData, e, bibNumber);
+  if (prep.error || prep.bannedWarning) return prep;
+  const { name, gender, dob, club, fra, preEntry, partner, category, course: prepCourse } = prep;
+
+  // Bib change
   if (formData.bibOverride && +formData.bibOverride > 0 && +formData.bibOverride !== +bibNumber) {
     const newBib = +formData.bibOverride;
     if (findEntryByBib(newBib) >= 0) return { error: `Bib ${newBib} is already in use` };
     e.bibNumber = newBib;
   }
 
-  // Course-type change drives dibber resequencing; manual override handles same-type edits
-  const oldCourse = e.course;
-  const newCourse = formData.course !== undefined ? formData.course : oldCourse;
-  const wasUsingDibbers = usingDibbers(oldCourse);
+  // Dibber resequencing when course type changes
+  let lostWarning = '';
+  const newCourse = formData.course !== undefined ? formData.course : prepCourse;
+  const wasUsingDibbers = usingDibbers(e.course);
   const nowUsingDibbers = usingDibbers(newCourse);
 
   if (wasUsingDibbers && !nowUsingDibbers) {
@@ -282,13 +338,9 @@ export async function updateEntry(bibNumber, formData) {
     e.dibberNumber = newDibber;
   }
 
-  if (formData.name      !== undefined) e.name      = cleanName(formData.name);
-  if (formData.gender    !== undefined) e.gender    = formData.gender;
-  if (formData.dob       !== undefined) e.dob       = normaliseDate(formData.dob);
-  if (formData.club      !== undefined) e.club      = cleanName(formData.club);
-  if (formData.fraNumber !== undefined) e.fraNumber = formData.fraNumber;
-  if (formData.category  !== undefined) e.category  = formData.category;
-  if (formData.course    !== undefined) e.course    = newCourse;
+  e.name = name; e.gender = gender; e.dob = dob; e.club = club;
+  e.fraNumber = fra; e.preEntry = preEntry; e.partner = partner;
+  e.category = category; e.course = newCourse;
 
   await saveEntries();
   return { error: '', lostWarning };
@@ -297,36 +349,11 @@ export async function updateEntry(bibNumber, formData) {
 /**
  * Insert a new entry at atBib, shifting all existing entries from atBib upward
  * (bib +1 each, dibber slots shift forward by one), as if this entry had always been there.
- * Returns {bibNumber, dibberNumber, error}.
  */
 export async function insertEntryAndRenumber(atBib, formData) {
-  const name     = cleanName(formData.name || '');
-  const gender   = formData.gender || '';
-  const dob      = normaliseDate(formData.dob || '');
-  const club     = cleanName(formData.club || '');
-  const fra      = formData.fraNumber || '';
-  const preEntry = formData.preEntry || '';
-
-  if (!name)   return { error: 'Name is required' };
-  if (!gender) return { error: 'Gender is required' };
-  if (!dob) return { error: 'Date of birth is required' };
-
-  const person2 = state.people.find(p => ciEq(p.name, name) && p.dob === dob);
-  if (isBanned(person2) && !formData.overrideBan) return { bannedWarning: person2.banned };
-
-  let category = formData.category || '';
-  if (!category && dob) category = calculateCategory(dob, gender);
-  if (!category && dob && state.event.date) return { error: 'Too young to enter — below the minimum age for this event' };
-
-  let course = formData.course || '';
-  if (!course) course = calculateCourse(category, dob);
-
-  const normName = name.toUpperCase();
-  const duplicate = state.entries.find(e => {
-    if (cleanName(e.name || '').toUpperCase() !== normName) return false;
-    return dob ? normaliseDate(e.dob || '') === dob : true;
-  });
-  if (duplicate) return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
+  const prep = prepareEntry(formData);
+  if (prep.error || prep.bannedWarning) return prep;
+  const { name, gender, dob, club, fra, preEntry, partner, category, course } = prep;
 
   if (usingDibbers(course) && state.dibbers.length === 0)
     return { error: 'No dibbers loaded — load dibber numbers before registering this entry' };
@@ -335,9 +362,6 @@ export async function insertEntryAndRenumber(atBib, formData) {
   if (idx < 0) return { error: `Bib ${atBib} not found` };
 
   const useManualDibber = !!(formData.dibberOverride && +formData.dibberOverride > 0);
-
-  // Determine the dibber for the new entry and the list index at which to begin
-  // shifting subsequent dibber-using entries one slot forward.
   let dibberNumber = 0;
   let shiftListIdx = -1;
 
@@ -346,13 +370,13 @@ export async function insertEntryAndRenumber(atBib, formData) {
     const newListIdx = freeDibber > 0 ? dibberListIdx(freeDibber) : nextDibberListIdx(idx);
     if (newListIdx < 0 || newListIdx >= state.dibbers.length)
       return { error: 'No more dibber numbers available — load more dibber numbers' };
-    dibberNumber  = +state.dibbers[newListIdx].shortCode;
-    shiftListIdx  = newListIdx;
+    dibberNumber = +state.dibbers[newListIdx].shortCode;
+    shiftListIdx = newListIdx;
   } else if (useManualDibber) {
     dibberNumber = +formData.dibberOverride;
   }
 
-  // Shift all entries from atBib upward (bibs +1; dibbers advance one slot when shiftListIdx is set)
+  // Shift all entries from atBib upward
   let listIdx = shiftListIdx;
   for (let i = idx; i < state.entries.length; i++) {
     const e = state.entries[i];
@@ -363,16 +387,11 @@ export async function insertEntryAndRenumber(atBib, formData) {
     }
   }
 
-  state.entries.splice(idx, 0, {
-    bibNumber: atBib, dibberNumber, fraNumber: fra,
-    name, club, gender, dob, category, course, preEntry,
-  });
-
-  addPerson(name, null, gender, dob, club, fra, category, false);
+  state.entries.splice(idx, 0, { bibNumber: atBib, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry, partner: partner || null });
+  savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
   await saveEntries();
   await savePeople();
-
   return { bibNumber: atBib, dibberNumber, error: '' };
 }
 
@@ -437,6 +456,10 @@ export function getSortedEntries() {
  * dibberNumber is stored as shortCode; mapped to longCode here for CardNumbers.
  * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  */
+export function getEntryName(entry) {
+  return entry.partner ? `${entry.name} / ${entry.partner.name}` : (entry.name || '');
+}
+
 /** Export dibber entries as SI Timing CSV rows. */
 export function exportSITimingCSV(entries) {
   const rows = [];
@@ -446,24 +469,23 @@ export function exportSITimingCSV(entries) {
     if (!dibberEntry) throw new Error(`Bib ${e.bibNumber}: dibber ${e.dibberNumber} not found in dibbers list — reload dibbers and retry`);
     const dibberLong = dibberEntry.longCode;
     const genderPrefix = (e.gender || '').charAt(0).toUpperCase() === 'F' ? 'F' : 'M';
-    const nameParts    = (e.name || '').trim().split(/\s+/);
     const pe           = e.preEntry ? state.preEntries.find(p => p.participantNumber === e.preEntry) : null;
     const c = SI.timingExport;
     rows.push({
       [c.BIB_NUMBER]:           e.bibNumber,
       [c.NUM_ENTRANTS]:         '',
       [c.DIBBER_NUMBER]:        dibberLong,
-      [c.FRA_NUMBER]:           `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`,
-      [c.FORENAMES]:            nameParts[0] || '',
-      [c.SURNAMES]:             nameParts.slice(1).join(' '),
-      [c.NAME]:                 e.name || '',
+      [c.FRA_NUMBER]:           e.partner ? '' : `${pe?.siEntriesId || ''}&${e.fraNumber || ''}`,
+      [c.FORENAMES]:            '',
+      [c.SURNAMES]:             '',
+      [c.NAME]:                 getEntryName(e),
       [c.CATEGORY]:             e.category || '',
       [c.CLUB]:                 e.club || '',
       [c.COUNTRY]:              pe?.country || '',
       [c.COURSE]:               e.course || '',
-      [c.ENTRIES_ID]:           pe?.siEntriesId || '',
-      [c.ELIGIBILITY]:          pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : '',
-      [c.GENDER_DOB]:           e.dob ? `${genderPrefix}${e.dob}` : genderPrefix,
+      [c.ENTRIES_ID]:           e.partner ? '' : (pe?.siEntriesId || ''),
+      [c.ELIGIBILITY]:          e.partner ? '' : (pe?.eligibility?.trim().toLowerCase() === 'yes' ? 'E' : ''),
+      [c.GENDER_DOB]:           e.partner ? '' : (e.dob ? `${genderPrefix}${e.dob}` : genderPrefix),
     });
   }
   return rows;
