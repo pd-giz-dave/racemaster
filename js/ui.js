@@ -277,7 +277,7 @@ export function populateCategoryDropdown(selectId, currentVal) {
  * onSelect(item) → called when an item is chosen (optional)
  * onClear() → called when the field is emptied (optional)
  */
-export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = () => {}, onClear = () => {} }) {
+export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = () => {}, onClear = () => {}, showOnEmpty = false }) {
   if (!el) return;
   const dropdown = document.createElement('ul');
   dropdown.className = 'name-typeahead';
@@ -332,7 +332,10 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
 
   el.addEventListener('keydown', e => {
     deletingText = (e.key === 'Backspace' || e.key === 'Delete');
-    if (e.key === 'ArrowDown' && currentMatches.length > 1) { e.preventDefault(); showDropdown(); dropdown.querySelector('li')?.focus(); }
+    if (e.key === 'ArrowDown') {
+      if (showOnEmpty && !el.value.trim() && !currentMatches.length) currentMatches = getItems('');
+      if (currentMatches.length > 1) { e.preventDefault(); showDropdown(); dropdown.querySelector('li')?.focus(); }
+    }
     else if (e.key === 'Escape' && !dropdown.hidden) { e.stopPropagation(); closeDropdown(); }
     else if (e.key === 'Enter' && !dropdown.hidden) { closeDropdown(); }
   });
@@ -343,8 +346,16 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
     if      (e.key === 'ArrowDown')           { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
     else if (e.key === 'ArrowUp')             { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : el.focus(); }
     else if (e.key === 'Enter' && idx >= 0)   { e.preventDefault(); e.stopPropagation(); const item = currentMatches[idx]; el.value = getValue(item); onSelect(item); closeDropdown(); el.focus(); }
-    else if (e.key === 'Escape')              { closeDropdown(); el.focus(); }
+    else if (e.key === 'Escape')              { e.stopPropagation(); closeDropdown(); el.focus(); }
   });
+
+  if (showOnEmpty) {
+    el.addEventListener('click', () => {
+      if (el.value.trim() || !dropdown.hidden) return;
+      currentMatches = getItems('');
+      showDropdown();
+    });
+  }
 
   el.addEventListener('blur', () => setTimeout(() => {
     if (dropdown.contains(document.activeElement)) return;
@@ -385,15 +396,23 @@ export function wireClubTypeahead(el) {
 
 export function wireRoleTypeahead(el, { onSelect = () => {} } = {}) {
   wireTypeahead(el, {
-    getItems:   low => state.roles.filter(r => (r.role || '').toLowerCase().startsWith(low)),
-    getValue:   r   => r.role,
-    renderItem: r   => `${escHtml(r.role)}${r.description ? ` <span class="text-muted text-sm">(${escHtml(r.description)})</span>` : ''}`,
+    getItems:    low => state.roles.filter(r => (r.role || '').toLowerCase().startsWith(low)),
+    getValue:    r   => r.role,
+    renderItem:  r   => `${escHtml(r.role)}${r.description ? ` <span class="text-muted text-sm">(${escHtml(r.description)})</span>` : ''}`,
     onSelect,
+    showOnEmpty: true,
   });
 }
 
 export function clearRowEditing(tbodyId) {
   document.querySelectorAll(`#${tbodyId} .row-editing`).forEach(r => r.classList.remove('row-editing'));
+}
+
+export function tableColumns(defs, renders) {
+  return defs.flatMap(col => {
+    const render = renders[col.id];
+    return render ? [{ ...col, render }] : [];
+  });
 }
 
 export function renderThead(tbodyId, columns) {

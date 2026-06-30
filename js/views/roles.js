@@ -3,21 +3,18 @@
 import { state, saveRoles } from '../state.js';
 import { createRole } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable, tableColumns } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { BUILTIN_ROLES } from '../roles.js';
 
-const ROLE_COLS = (() => {
-  const m = TABLES.roles;
-  return [
-    { ...m[0], render: r => escHtml(r.role || '') },
-    { ...m[1], render: r => escHtml(r.description || '') },
-    { ...m[2], render: () => `
+const ROLE_COLS = tableColumns(TABLES.roles, {
+  role:        r => escHtml(r.role || ''),
+  description: r => escHtml(r.description || ''),
+  actions:     () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
-      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete" data-action="del">Del</button>`,
+});
 
 
 export function renderRoles() {

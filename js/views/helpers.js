@@ -6,24 +6,21 @@ import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, 
 import {
   val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
   updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead, wireClubTypeahead, wireRoleTypeahead,
-  renderTable,
+  renderTable, tableColumns,
 } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { TABLES } from '../strings.js';
 import { capitalise, ciEq, showBusy, normaliseClub, normaliseGender } from '../utils.js';
 import { isBanned } from '../entries.js';
 
-const HELPER_COLS = (() => {
-  const m = TABLES.helpers;
-  return [
-    { ...m[0], render: h => h.number },
-    { ...m[1], render: h => escHtml(h.name || '') + (isBanned(state.people.find(p => ciEq(p.name, h.name || ''))) ? ' (banned)' : '') },
-    { ...m[2], render: h => escHtml(h.club || '') },
-    { ...m[3], render: h => escHtml(h.role || '') },
-    { ...m[4], render: () => `
+const HELPER_COLS = tableColumns(TABLES.helpers, {
+  number:  h => h.number,
+  name:    h => escHtml(h.name || '') + (isBanned(state.people.find(p => ciEq(p.name, h.name || ''))) ? ' (banned)' : ''),
+  club:    h => escHtml(h.club || ''),
+  role:    h => escHtml(h.role || ''),
+  actions: () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
-      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete" data-action="del">Del</button>`,
+});
 
 // ---- Module state ----
 

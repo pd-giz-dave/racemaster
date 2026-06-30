@@ -516,6 +516,13 @@ const server = http.createServer(async (req, res) => {
       const dest = path.join(RESULTS_DIR, safe);
       if (!dest.startsWith(RESULTS_DIR + path.sep)) return jsonReply(res, 400, { error: 'Invalid filename' });
       fs.writeFileSync(dest, body.html || '', 'utf8');
+      for (const { src, name } of (body.copy || [])) {
+        const safeName = String(name || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const srcPath  = path.join(ROOT, String(src || ''));
+        const dstPath  = path.join(RESULTS_DIR, safeName);
+        if (safeName && srcPath.startsWith(ROOT + path.sep) && dstPath.startsWith(RESULTS_DIR + path.sep))
+          fs.copyFileSync(srcPath, dstPath);
+      }
       console.log(`Results published: ${safe} by ${username}`);
       return jsonReply(res, 200, { ok: true, url: `/results/${safe}` });
     }

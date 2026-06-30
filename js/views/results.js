@@ -3,11 +3,11 @@
 import { formatResults, computeAvgTop10 } from '../results.js';
 import { state } from '../state.js';
 import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderThead } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { TABLES } from '../strings.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
 import { CSV } from '../csv-schema.js';
-import { publishResultsHTML, buildSeniorsBodyHTML, buildJuniorsBodyHTML, buildPairsBodyHTML, buildHelpersBodyHTML } from '../forms/results-html.js';
+import { publishResultsHTML, makePublishedUrl, buildSeniorsBodyHTML, buildJuniorsBodyHTML, buildPairsBodyHTML, buildHelpersBodyHTML } from '../forms/results-html.js';
 import { buildPrizeRowsHTML } from '../forms/prize-list.js';
 
 let _seniors      = [];
@@ -120,6 +120,7 @@ function updateResultsButtons() {
 
   if (exportBtn)  exportBtn.disabled  = exportDisabled;
   if (publishBtn) publishBtn.disabled = !hasAnyResults;
+  void updateShowPublishedButton();
 }
 
 function exportResultsCSV() {
@@ -140,52 +141,58 @@ function exportResultsCSV() {
   }
 }
 
-const publishedUrls = {};
-
-function showEmbedCode() {
-  const entries = Object.entries(publishedUrls);
-  if (!entries.length) return;
-  if (entries.length === 1) {
-    void showInputDialog('Results URL for your website:', { defaultValue: entries[0][1], clipboard: true });
-    return;
+async function updateShowPublishedButton() {
+  const btn   = document.getElementById('btn-show-embed-code');
+  const field = document.getElementById('published-url-field');
+  const wrap  = field?.closest('.published-url-wrap');
+  const full  = `${window.location.origin}${makePublishedUrl()}`;
+  try {
+    const res = await fetch(makePublishedUrl(), { method: 'HEAD' });
+    const ok  = res.ok;
+    if (btn)  btn.disabled = !ok;
+    if (field) field.value = ok ? full : '';
+    if (wrap)  wrap.hidden = !ok;
+  } catch {
+    if (btn)  btn.disabled = true;
+    if (field) field.value = '';
+    if (wrap)  wrap.hidden = true;
   }
-  const labels = { combined: 'Single page', juniors: 'Juniors', seniors: 'Seniors', helpers: 'Helpers', pairs: 'Pairs' };
-  showChoiceDialog('Which results URL?', entries.map(([type]) => ({ label: labels[type], value: type })), { vertical: true })
-    .then(choice => {
-      if (choice) void showInputDialog('Results URL for your website:', { defaultValue: publishedUrls[choice], clipboard: true });
-    });
+}
+
+function showPublished() {
+  window.open(`${window.location.origin}${makePublishedUrl()}`, '_blank');
+  showStatus('Opened in new tab.');
 }
 
 async function publishResults() {
-  const options = [
-    { label: 'Single page (juniors + seniors + pairs + helpers)', value: 'combined' },
-    { label: 'Juniors only',                                       value: 'juniors'  },
-    { label: 'Seniors only',                                       value: 'seniors'  },
-    { label: 'Helpers only',                                       value: 'helpers'  },
-  ];
-  if (_pairsResults.length) options.push({ label: 'Pairs only', value: 'pairs' });
-  const choice = await showChoiceDialog('Publish results to server', options, { vertical: true });
-  if (!choice) return;
   showStatus('Publishing…');
-  let url;
   try {
-    url = await publishResultsHTML(choice);
+    await publishResultsHTML();
   } catch (err) {
     showStatus(err.message, true);
     return;
   }
-  const full = `${window.location.origin}${url}`;
-  publishedUrls[choice] = full;
-  document.getElementById('btn-show-embed-code').disabled = false;
-  showStatus('Published.');
-  await showInputDialog('Results URL — paste into your website CMS:', { defaultValue: full, clipboard: true });
+  const full = `${window.location.origin}${makePublishedUrl()}`;
+  window.open(full, '_blank');
+  showStatus('Published — opened in new tab.');
+  void updateShowPublishedButton();
 }
 
 export function wireResults() {
   on('btn-print-prize-list',    'click', printPrizeList);
   on('btn-export-results-csv',  'click', exportResultsCSV);
   on('btn-publish-results',     'click', publishResults);
-  on('btn-show-embed-code',     'click', showEmbedCode);
+  on('btn-show-embed-code',     'click', showPublished);
+  document.getElementById('published-url-field')?.addEventListener('click', async () => {
+    const field = document.getElementById('published-url-field');
+    if (!field?.value) return;
+    try {
+      await navigator.clipboard.writeText(field.value);
+      showStatus('URL copied to clipboard.');
+    } catch {
+      field.select();
+    }
+  });
   wireTabBar('results-tab-bar', 'tab-results-', 'data-results-tab');
   document.getElementById('results-tab-bar')?.addEventListener('click', updateResultsButtons);
 }

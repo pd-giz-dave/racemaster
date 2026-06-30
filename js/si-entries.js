@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { savePreEntries } from './state.js';
-import { GENDER } from './constants.js';
+import { GENDER } from './strings.js';
 import { normaliseDate, cleanName } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { SI } from './si-schema.js';

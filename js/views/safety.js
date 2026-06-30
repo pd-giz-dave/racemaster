@@ -4,8 +4,8 @@ import { state } from '../state.js';
 import { recordFinisher, deleteFinisher } from '../finishers.js';
 import { isEntryBanned, getEntryName } from '../entries.js';
 import { derivePairGender } from '../categories.js';
-import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable, tableColumns } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
 import {
@@ -13,67 +13,52 @@ import {
   getEarlyStarterRows, buildNoShows, getSafetyCounts,
 } from '../safety.js';
 
-const SAFETY_OUT_COLS = (() => {
-  const m = TABLES['safety-outstanding'];
-  return [
-    { ...m[0], render: e => e.bibNumber },
-    { ...m[1], render: e => getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : '') },
-    { ...m[2], render: e => e.course || '' },
-    { ...m[3], render: e => {
-      const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
-      return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
-    }},
-    { ...m[4], render: () => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>` },
-  ];
-})();
+const SAFETY_OUT_COLS = tableColumns(TABLES['safety-outstanding'], {
+  bib:     e => e.bibNumber,
+  name:    e => getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : ''),
+  course:  e => e.course || '',
+  cat:     e => {
+    const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
+    return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
+  },
+  actions: () => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>`,
+});
 
-const SAFETY_DNF_COLS = (() => {
-  const m = TABLES['safety-dnf'];
-  return [
-    { ...m[0], render: d => d.bib },
-    { ...m[1], render: d => d.name },
-    { ...m[2], render: d => d.course },
-    { ...m[3], render: d => d.category },
-    { ...m[4], render: d => d.idx >= 0
-        ? `<button class="btn-sm btn-secondary" data-action="unretire">Unretire</button>`
-        : '' },
-  ];
-})();
+const SAFETY_DNF_COLS = tableColumns(TABLES['safety-dnf'], {
+  bib:     d => d.bib,
+  name:    d => d.name,
+  course:  d => d.course,
+  cat:     d => d.category,
+  actions: d => d.idx >= 0
+    ? `<button class="btn-sm btn-secondary" data-action="unretire">Unretire</button>`
+    : '',
+});
 
-const SAFETY_FIN_COLS = (() => {
-  const m = TABLES['safety-finished'];
-  return [
-    { ...m[0], render: f => f.number },
-    { ...m[1], render: f => f.name },
-    { ...m[2], render: f => f.course },
-    { ...m[3], render: f => f.category },
-    { ...m[4], render: f => f.pos },
-    { ...m[5], render: f => f.time },
-  ];
-})();
+const SAFETY_FIN_COLS = tableColumns(TABLES['safety-finished'], {
+  bib:    f => f.number,
+  name:   f => f.name,
+  course: f => f.course,
+  cat:    f => f.category,
+  line:   f => f.pos,
+  time:   f => f.time,
+});
 
-const SAFETY_EARLY_COLS = (() => {
-  const m = TABLES['safety-early'];
-  return [
-    { ...m[0], render: f => f.number },
-    { ...m[1], render: f => f.name },
-    { ...m[2], render: f => f.course },
-    { ...m[3], render: f => f.category },
-    { ...m[4], render: f => f.startTime },
-  ];
-})();
+const SAFETY_EARLY_COLS = tableColumns(TABLES['safety-early'], {
+  bib:        f => f.number,
+  name:       f => f.name,
+  course:     f => f.course,
+  cat:        f => f.category,
+  start_time: f => f.startTime,
+});
 
-const SAFETY_NOSHOWS_COLS = (() => {
-  const m = TABLES['safety-noshows'];
-  return [
-    { ...m[0], render: r => r.name },
-    { ...m[1], render: r => r.dob },
-    { ...m[2], render: r => r.club },
-    { ...m[3], render: r => r.category },
-    { ...m[4], render: r => r.participantNumber },
-    { ...m[5], render: r => r.dupBib ?? '' },
-  ];
-})();
+const SAFETY_NOSHOWS_COLS = tableColumns(TABLES['safety-noshows'], {
+  name:       r => r.name,
+  dob:        r => r.dob,
+  club:       r => r.club,
+  cat:        r => r.category,
+  pre_no:     r => r.participantNumber,
+  on_day_bib: r => r.dupBib ?? '',
+});
 
 export function renderSafety() {
   renderTable('safety-outstanding-tbody', SAFETY_OUT_COLS, getOutstandingRows(), {

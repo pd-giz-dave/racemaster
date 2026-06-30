@@ -1,40 +1,34 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs, renderTable } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs, renderTable, tableColumns } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { isBanned } from '../entries.js';
 import { personEditCells, readPersonCells } from './people.js';
 import { getClubs, findDuplicateClubPairs } from '../clubs.js';
 
-const CLUBS_COLS = (() => {
-  const m = TABLES.clubs;
-  return [
-    { ...m[0], render: ([name]) => `<input type="checkbox" data-club="${escHtml(name)}"${selectedClubs.has(name) ? ' checked' : ''}>` },
-    { ...m[1], render: ([name]) => name ? escHtml(name) : '<em style="color:var(--muted)">(no club)</em>' },
-    { ...m[2], render: ([, d]) => d.count },
-    { ...m[3], render: ([, d]) => d.lastSeen || '' },
-  ];
-})();
+const CLUBS_COLS = tableColumns(TABLES.clubs, {
+  select:    ([name]) => `<input type="checkbox" data-club="${escHtml(name)}"${selectedClubs.has(name) ? ' checked' : ''}>`,
+  name:      ([name]) => name ? escHtml(name) : '<em style="color:var(--muted)">(no club)</em>',
+  people:    ([, d]) => d.count,
+  last_seen: ([, d]) => d.lastSeen || '',
+});
 
-const CLUB_MEMBER_COLS = (() => {
-  const m = TABLES.people;
-  return [
-    { ...m[0],  render: ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '') },
-    { ...m[1],  render: ({ p }) => p.gender || '' },
-    { ...m[2],  render: ({ p }) => p.dob || '' },
-    { ...m[3],  render: ({ p }) => escHtml(p.club || '') },
-    { ...m[4],  render: ({ p }) => p.fraNumber || '' },
-    { ...m[5],  render: ({ p }) => p.lastSeen || '' },
-    { ...m[6],  render: ({ p }) => p.seenTotal || 0 },
-    { ...m[7],  render: ({ p }) => p.lastHelped || '' },
-    { ...m[8],  render: ({ p }) => p.helpedTotal || 0 },
-    { ...m[9],  render: ({ p }) => p.banned || '' },
-    { ...m[10], render: () => `
+const CLUB_MEMBER_COLS = tableColumns(TABLES.people, {
+  name:         ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : ''),
+  gender:       ({ p }) => p.gender || '',
+  dob:          ({ p }) => p.dob || '',
+  club:         ({ p }) => escHtml(p.club || ''),
+  fra:          ({ p }) => p.fraNumber || '',
+  last_seen:    ({ p }) => p.lastSeen || '',
+  seen:         ({ p }) => p.seenTotal || '',
+  last_helped:  ({ p }) => p.lastHelped || '',
+  helped:       ({ p }) => p.helpedTotal || '',
+  banned_until: ({ p }) => p.banned || '',
+  actions:      () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
-      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete" data-action="del">Del</button>`,
+});
 
 const selectedClubs = new Set();
 

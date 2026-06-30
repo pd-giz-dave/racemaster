@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
-import { COURSE } from './constants.js';
+import { COURSE } from './strings.js';
 import { normaliseTime, timeToSeconds, secondsToTime, ciEq } from './utils.js';
 
 /** Returns the timing method string ('Stopwatch', 'Dibbers', or 'None') for a course. */

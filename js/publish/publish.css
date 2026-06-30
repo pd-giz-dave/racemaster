@@ -1,0 +1,92 @@
+/* ---- RaceMaster published results — standalone stylesheet ---- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --accent:          #1a6e3c;
+  --accent-light:    #d4edda;
+  --bg:              #f5f5f5;
+  --panel:           #ffffff;
+  --border:          #ccc;
+  --border-light:    #eee;
+  --text:            #222;
+  --muted:           #666;
+  --header-fg:       #fff;
+  --table-header-bg: #ecf0f1;
+  --table-hover:     #f8f9fa;
+}
+
+body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+       font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+/* ---- Banner ---- */
+.rm-banner {
+  background: var(--accent);
+  color: var(--header-fg);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  height: 48px;
+}
+.rm-icon  { width: 28px; height: 28px; flex-shrink: 0; }
+.rm-brand { font-size: 1.1rem; font-weight: 600; }
+.rm-event { font-size: 0.9rem; opacity: 0.85; }
+
+/* ---- Page wrapper ---- */
+.re-page    { max-width: 960px; margin: 0 auto; padding: 20px; }
+.re-summary { font-size: 0.8rem; color: var(--muted); margin: 8px 0; }
+.re-footer  { margin-top: 24px; font-size: 0.75rem; color: var(--muted); text-align: right; }
+
+/* ---- Collapsible sections ---- */
+details.re-section-details { margin-top: 20px; }
+details.re-section-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0 4px;
+  border-bottom: 2px solid var(--border);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+details.re-section-details > summary::-webkit-details-marker { display: none; }
+details.re-section-details > summary::after { content: '▶'; font-size: 0.75em; opacity: 0.5; }
+details.re-section-details[open] > summary::after { content: '▼'; }
+
+/* ---- Search ---- */
+.re-search-row { margin: 16px 0 4px; }
+#re-search {
+  width: 280px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: var(--panel);
+  color: var(--text);
+}
+#re-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+/* ---- Tables ---- */
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 8px; }
+.data-table th {
+  background: var(--table-header-bg);
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.data-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+.data-table tr:hover td { background: var(--table-hover); }
+.results-cat-separator td { padding: 0; border-bottom: 2px solid var(--border); }
+
+/* ---- Sortable column headers ---- */
+.re-sortable thead th { cursor: pointer; user-select: none; }
+.re-sortable thead th:hover { background: var(--accent-light); }
+.re-sortable thead th:not([data-sort="asc"]):not([data-sort="desc"])::after { content: ' ↕'; font-size: 1em; opacity: 1; }
+.re-sortable thead th[data-sort="asc"]::after  { content: ' ▲'; font-size: 0.7em; opacity: 0.8; }
+.re-sortable thead th[data-sort="desc"]::after { content: ' ▼'; font-size: 0.7em; opacity: 0.8; }

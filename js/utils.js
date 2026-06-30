@@ -1,6 +1,6 @@
 'use strict';
 
-import { GENDER } from './constants.js';
+import { GENDER } from './strings.js';
 
 /** Normalise a time string to HH:MM:SS. Returns '' on failure.
  *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.

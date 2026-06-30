@@ -6,7 +6,7 @@ import { getNumberOfHelpers } from '../helpers.js';
 import { getSortedFinishers, getOutstandingCount } from '../finishers.js';
 import { getLastBibNumber, getLastDibberNumber } from '../data.js';
 import { setHTML } from '../ui.js';
-import { COURSE } from '../constants.js';
+import { COURSE } from '../strings.js';
 
 function eventDetails(ev) {
   const rows = [];

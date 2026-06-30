@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { savePeople } from './state.js';
 import { createPerson, createDibber } from './schema.js';
 import { CSV } from './csv-schema.js';
-import { GENDER } from './constants.js';
+import { GENDER } from './strings.js';
 import { normaliseDate, cleanName, sortBy, today, normaliseGender, toISODate } from './utils.js';
 
 // ====================================

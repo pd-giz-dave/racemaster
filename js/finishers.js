@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { createFinisher } from './schema.js';
 import { saveFinishers } from './state.js';
-import { COURSE } from './constants.js';
+import { COURSE } from './strings.js';
 import { ciEq, normaliseTime } from './utils.js';
 import { getEntry } from './entries.js';
 

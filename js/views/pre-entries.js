@@ -3,37 +3,34 @@
 import { importSIEntries, verifySIEntries, clearSIEntries, getSortedPreEntries } from '../si-entries.js';
 import { mergeSIEntries } from '../data.js';
 import { cleanName, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, showConfirmDialog, escHtml, pickFile, renderTable, wireTabBar } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { on, setHTML, showStatus, showConfirmDialog, escHtml, pickFile, renderTable, tableColumns, wireTabBar } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { renderPeople } from './people.js';
 
-const PRE_ENTRY_COLS = (() => {
-  const m = TABLES['pre-entries'];
-  return [
-    { ...m[0],  render: pe => pe.participantNumber || '' },
-    { ...m[1],  render: pe => cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim()) },
-    { ...m[2],  render: pe => pe.gender || '' },
-    { ...m[3],  render: pe => pe.dob || '' },
-    { ...m[4],  render: pe => pe.club || '' },
-    { ...m[5],  render: pe => pe.category || '' },
-    { ...m[6],  render: pe => pe.fraNumber || '' },
-    { ...m[7],  render: pe => pe.siEntriesId || '' },
-    { ...m[8],  render: pe => pe.eligibility || '' },
-    { ...m[9],  render: pe => pe.email || '' },
-    { ...m[10], render: pe => pe.address1 || '' },
-    { ...m[11], render: pe => pe.address2 || '' },
-    { ...m[12], render: pe => pe.town || '' },
-    { ...m[13], render: pe => pe.county || '' },
-    { ...m[14], render: pe => pe.postcode || '' },
-    { ...m[15], render: pe => pe.country || '' },
-    { ...m[16], render: pe => pe.telephone || '' },
-    { ...m[17], render: pe => pe.mobile || '' },
-    { ...m[18], render: pe => pe.contactName || '' },
-    { ...m[19], render: pe => pe.contactTelephone || '' },
-    { ...m[20], render: pe => pe.medical || '' },
-    { ...m[21], render: pe => pe.carReg || '' },
-  ];
-})();
+const PRE_ENTRY_COLS = tableColumns(TABLES['pre-entries'], {
+  ref:           pe => pe.participantNumber || '',
+  name:          pe => cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim()),
+  gender:        pe => pe.gender || '',
+  dob:           pe => pe.dob || '',
+  club:          pe => pe.club || '',
+  cat:           pe => pe.category || '',
+  fra:           pe => pe.fraNumber || '',
+  si_id:         pe => pe.siEntriesId || '',
+  eligibility:   pe => pe.eligibility || '',
+  email:         pe => pe.email || '',
+  addr1:         pe => pe.address1 || '',
+  addr2:         pe => pe.address2 || '',
+  town:          pe => pe.town || '',
+  county:        pe => pe.county || '',
+  postcode:      pe => pe.postcode || '',
+  country:       pe => pe.country || '',
+  telephone:     pe => pe.telephone || '',
+  mobile:        pe => pe.mobile || '',
+  emerg_contact: pe => pe.contactName || '',
+  emerg_tel:     pe => pe.contactTelephone || '',
+  medical:       pe => pe.medical || '',
+  car_reg:       pe => pe.carReg || '',
+});
 
 export function renderPreEntries() {
   const preEntries = getSortedPreEntries();

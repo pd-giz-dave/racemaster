@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { createEntry } from './schema.js';
 import { SI } from './si-schema.js';
 import { saveEntries, savePeople } from './state.js';
-import { COURSE } from './constants.js';
+import { COURSE } from './strings.js';
 import { normaliseDate, cleanName, ciEq } from './utils.js';
 import { calculateCategory, calculateCourse, calculatePairCategory } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';

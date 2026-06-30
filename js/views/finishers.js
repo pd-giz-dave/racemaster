@@ -8,33 +8,30 @@ import {
   getAllSpecials, lineLabel, getPrevTime, parseFinishTime,
 } from '../finishers.js';
 import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned, getEntryName } from '../entries.js';
-import { COURSE } from '../constants.js';
+import { COURSE } from '../strings.js';
 import { derivePairGender } from '../categories.js';
 import { timeToSeconds, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable, wireTypeahead } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable, tableColumns, wireTypeahead } from '../ui.js';
+import { TABLES } from '../strings.js';
 
-const FINISHER_COLS = (() => {
-  const m = TABLES.finishers;
-  return [
-    { ...m[0], render: r => r.lineDisplay },
-    { ...m[1], render: r => r.eventLabel },
-    { ...m[2], render: r => r.f.time || '' },
-    { ...m[3], render: r => r.numDisplay },
-    { ...m[4], render: r => r.nameDisplay },
-    { ...m[5], render: r => {
-      const e = r.entry;
-      if (!e) return '';
-      const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
-      return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
-    }},
-    { ...m[6], render: r => r.f.number > 0 ? (r.entry?.course || '') : '' },
-    { ...m[7], render: () => `
+const FINISHER_COLS = tableColumns(TABLES.finishers, {
+  line:    r => r.lineDisplay,
+  event:   r => r.eventLabel,
+  clock:   r => r.f.time || '',
+  bib:     r => r.numDisplay,
+  name:    r => r.nameDisplay,
+  cat:     r => {
+    const e = r.entry;
+    if (!e) return '';
+    const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
+    return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
+  },
+  course:  r => r.f.number > 0 ? (r.entry?.course || '') : '',
+  actions: () => `
       <button class="btn-sm btn-edit btn-edit-finisher" data-action="edit">Edit</button>
       <button class="btn-sm btn-insert-above-finisher" data-action="ins">Ins ↑</button>
-      <button class="btn-sm btn-delete-entry btn-del-finisher" data-action="del">Del</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete-entry btn-del-finisher" data-action="del">Del</button>`,
+});
 
 // ---- Module state ----
 
@@ -523,6 +520,7 @@ export function wireFinishers() {
     getItems:   low => getBibItems(low),
     getValue:   item => item.value,
     renderItem: item => `${escHtml(item.value)} <span class="text-muted text-sm">${escHtml(item.label)}</span>`,
+    showOnEmpty: true,
   });
 
   // Tab cycling and Enter submit within form

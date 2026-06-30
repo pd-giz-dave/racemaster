@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
-import { COURSE, GENDER } from './constants.js';
+import { COURSE, GENDER } from './strings.js';
 import { ciEq, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
 import { calculateCategory, getCategoryPriority, genderFromCategory, derivePairGender } from './categories.js';
 import { getEntry, getSortedEntries, isEntryBanned, getEntryName } from './entries.js';

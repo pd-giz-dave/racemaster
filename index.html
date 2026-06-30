@@ -22,7 +22,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.2-alpha)</button></h1>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.3-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <div style="flex:1"></div>
@@ -447,7 +447,7 @@
       <div class="view-header">
         <h2>Helpers</h2>
         <span class="count-badge" id="helper-count-display">0</span>
-        <button class="btn btn-delete" id="btn-clear-all-helpers" style="margin-left:auto">Clear All</button>
+        <button class="btn btn-delete" id="btn-clear-all-helpers">Clear All</button>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
 
@@ -469,8 +469,8 @@
                 </select>
               </div>
               <div class="form-field">
-                <label for="helper-form-dob">Date of Birth (DD/MM/YYYY)</label>
-                <input type="text" id="helper-form-dob" placeholder="DD/MM/YYYY" data-normalise="date">
+                <label for="helper-form-dob">Date of Birth (DD/MM/YY)</label>
+                <input type="text" id="helper-form-dob" placeholder="DD/MM/YY" data-normalise="date">
               </div>
             </div>
             <div class="form-field mb-8">
@@ -627,7 +627,7 @@
     <!-- ======================================================
          SAFETY CHECK
          ====================================================== -->
-    <div class="view" id="view-safety" hidden>
+    <div class="view view-list" id="view-safety" hidden>
       <div class="view-header">
         <h2>Safety Check</h2>
         <span style="font-size:0.75rem;color:var(--muted);margin-left:1rem">Outstanding:</span>
@@ -744,7 +744,11 @@
           <button class="btn btn-secondary" id="btn-print-prize-list" disabled>Print Prize List</button>
           <button class="btn btn-secondary" id="btn-export-results-csv">Export CSV</button>
           <button class="btn btn-secondary" id="btn-publish-results">Publish Results</button>
-          <button class="btn btn-secondary" id="btn-show-embed-code" disabled>Show Embed Code</button>
+          <button class="btn btn-secondary" id="btn-show-embed-code" disabled>Show Published</button>
+          <div class="published-url-wrap" hidden>
+            <label class="published-url-label" for="published-url-field">Published URL</label>
+            <input type="url" id="published-url-field" class="published-url-field" readonly>
+          </div>
         </div>
         <div class="tab-bar" id="results-tab-bar">
           <button class="active" data-results-tab="senior">Seniors</button>
@@ -933,7 +937,7 @@
     <!-- ======================================================
          ROLES
          ====================================================== -->
-    <div class="view" id="view-roles" hidden>
+    <div class="view view-list" id="view-roles" hidden>
       <div class="view-header">
         <h2>Roles</h2>
         <span class="count-badge" id="roles-count">0</span>

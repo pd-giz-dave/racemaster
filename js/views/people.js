@@ -3,32 +3,29 @@
 import { state, savePeople } from '../state.js';
 import { createPerson } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable, tableColumns } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
 import { isBanned } from '../entries.js';
 import { laterDate, normalisePeopleRows } from '../data.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
-const PEOPLE_COLS = (() => {
-  const m = TABLES.people;
-  return [
-    { ...m[0],  render: ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : '') },
-    { ...m[1],  render: ({ p }) => p.gender || '' },
-    { ...m[2],  render: ({ p }) => p.dob || '' },
-    { ...m[3],  render: ({ p }) => escHtml(p.club || '') },
-    { ...m[4],  render: ({ p }) => p.fraNumber || '' },
-    { ...m[5],  render: ({ p }) => p.lastSeen || '' },
-    { ...m[6],  render: ({ p }) => p.seenTotal || 0 },
-    { ...m[7],  render: ({ p }) => p.lastHelped || '' },
-    { ...m[8],  render: ({ p }) => p.helpedTotal || 0 },
-    { ...m[9],  render: ({ p }) => p.banned || '' },
-    { ...m[10], render: () => `
+const PEOPLE_COLS = tableColumns(TABLES.people, {
+  name:         ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : ''),
+  gender:       ({ p }) => p.gender || '',
+  dob:          ({ p }) => p.dob || '',
+  club:         ({ p }) => escHtml(p.club || ''),
+  fra:          ({ p }) => p.fraNumber || '',
+  last_seen:    ({ p }) => p.lastSeen || '',
+  seen:         ({ p }) => p.seenTotal || '',
+  last_helped:  ({ p }) => p.lastHelped || '',
+  helped:       ({ p }) => p.helpedTotal || '',
+  banned_until: ({ p }) => p.banned || '',
+  actions:      () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
-      <button class="btn-sm btn-delete" data-action="del">Del</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete" data-action="del">Del</button>`,
+});
 
 let peopleFilter    = '';
 let showBannedOnly  = false;

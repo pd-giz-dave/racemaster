@@ -4,23 +4,20 @@ import { state, saveDibbers } from '../state.js';
 import { createDibber } from '../schema.js';
 import { CSV } from '../csv-schema.js';
 import { normaliseDibberRows } from '../data.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
 
-const DIBBER_COLS = (() => {
-  const m = TABLES.dibbers;
-  return [
-    { ...m[0], render: ({ d }) => d.shortCode || '' },
-    { ...m[1], render: ({ d }) => d.longCode  || '' },
-    { ...m[2], render: ({ d }) => d.owner || '' },
-    { ...m[3], render: ({ d }) => d.lost ? `<span style="color:var(--danger)">${escHtml(d.lost)}</span>` : '' },
-    { ...m[4], render: ({ d }) => escHtml(d.notes || '') },
-    { ...m[5], render: () => `
+const DIBBER_COLS = tableColumns(TABLES.dibbers, {
+  short_code: ({ d }) => d.shortCode || '',
+  long_code:  ({ d }) => d.longCode  || '',
+  owner:      ({ d }) => d.owner || '',
+  lost:       ({ d }) => d.lost ? `<span style="color:var(--danger)">${escHtml(d.lost)}</span>` : '',
+  notes:      ({ d }) => escHtml(d.notes || ''),
+  actions:    () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
-      <button class="btn-sm btn-delete-entry" data-action="del">Del from here</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete-entry" data-action="del">Del from here</button>`,
+});
 
 export function renderDibbers() {
   const rows = state.dibbers.map((d, i) => ({ d, i }));

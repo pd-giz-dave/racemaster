@@ -2,9 +2,16 @@
 
 // ----------------------------------------------------------------
 // All user-visible text strings for the UI.
-// Edit this file to change button tooltips and page help text.
+// Edit this file to change button tooltips, page help text, and
+// table column names and order.
 // TOOLTIPS: element id → tooltip string (shown on hover)
 // HELP:     view id   → HTML shown in the collapsible help panel
+// PAGES:    page id   → HTML shown in static help pages
+// TABLES:   table id  → array of { id, label, title } column defs
+//   id    — stable identifier used by call sites to wire render fns;
+//            never change this
+//   label — column header text shown in the UI; safe to rename
+//   title — tooltip shown on the column header
 // ----------------------------------------------------------------
 
 export const TOOLTIPS = {
@@ -24,7 +31,7 @@ export const TOOLTIPS = {
   'ev-distance':                 'Race distance in kilometres',
   'ev-categories':               'Age category scheme — FRA uses 5-year bands, WFRA uses 10-year bands',
   'ev-first-bib':                'Bib numbers are assigned sequentially starting from this number',
-  'ev-first-dibber':             'Dibber (SI card) short codes are allocated starting from this number — useful when cards 1–N are reserved or lost',
+  'ev-first-dibber':             'Dibber (SI card) short codes are allocated starting from this number',
   'ev-has-pairs':                'Tick if the race includes pairs (two competitors sharing a single bib and/or dibber)',
   'ev-start-time':               'Expected mass start time for seniors (info only, the actual time is recorded in the finishers list)',
   'ev-entry-limit':              'Maximum number of senior entries allowed (0 = no limit)',
@@ -42,10 +49,14 @@ export const TOOLTIPS = {
   'ev-clear-previous':           'Tick before saving to wipe all entries, pre-entries, finisher and results data and start fresh for a new race',
   'btn-save-event':              'Save all event settings',
 
+  // Pre-entries
+  'btn-import-si-entries':       'Import a pre-entry CSV file from SportIdent or EntryCentral or anything that provides entry-number, name, gender and date-of-birth columns',
+  'btn-clear-pre-entries':       'Clear all pre-entries',
+
   // Paperwork
-  'btn-print-entry-form':          'Print blank entry forms for competitors to fill in at registration',
+  'btn-print-entry-form':          'Print blank entry forms for (solo) competitors to fill in at registration',
   'btn-print-pre-entry-forms':     'Print entry forms pre-filled with pre-entry details — load pre-entries first',
-  'btn-print-pairs-entry-forms':            'Print blank pairs entry forms with two runner sections and two signature lines',
+  'btn-print-pairs-entry-forms':            'Print blank pairs entry forms with two entrant sections and two signature lines',
   'btn-print-pre-entry-pairs-entry-forms':  'Print pairs entry forms pre-filled with pre-entry details — load pre-entries first',
   'btn-print-helpers-list':        'Print a blank helpers list for the RO to record names and roles on race day',
   'btn-print-finish-senior':     'Print a blank senior finish sheet for recording finish order',
@@ -85,10 +96,6 @@ export const TOOLTIPS = {
   'btn-reset-helper':            'Clear the form',
   'btn-cancel-helper-edit':      'Cancel editing',
 
-  // Pre-entries
-  'btn-import-si-entries':       'Import a pre-entry CSV file from SportIdent or EntryCentral or anything that provides ?? columns',
-  'btn-clear-pre-entries':       'Clear all pre-entries',
-
   // Finishers
   'btn-clear-all-finishers':     'Delete all finisher records — cannot be undone',
   'finisher-mode':               'Bibs mode: enter bib numbers as competitors finish; Time mode: enter times against already-recorded bibs',
@@ -104,12 +111,14 @@ export const TOOLTIPS = {
 
   // SI Results
   'btn-import-si-results':       'Import an SI Timing (processable) results CSV file to load finish times when using dibbers',
+  'btn-clear-si-results':        'Delete all imported SI results — cannot be undone',
 
   // Results
   'btn-print-prize-list':        'Print the prize list for the presentation',
   'btn-export-results-csv':      'Export results as a CSV spreadsheet for publication or DIY manipulation',
   'btn-publish-results':         'Publish results online',
-  'btn-show-embed-code':         'Show the URL to embed the last published results in your website',
+  'btn-show-embed-code':         'Open the published results page in a new tab',
+  'published-url-field':        'Click to copy this URL to the clipboard',
 
   // People
   'people-filter':               'Filter the people list by name or club',
@@ -190,17 +199,28 @@ export const HELP = {
     <p>Set up the race details before printing paperwork or registering competitors.</p> 
     <p>The <strong>distance</strong> is used to split entrants into juniors or seniors according the FRA distance rules for juniors.</p>
     <p>The <strong>category scheme</strong> (FRA 5-year or WFRA 10-year) controls which age bands are used for results and prizes.</p>
-    <p>The <string>timing method</string> determines how finishers are recorded.</p> 
+    <p>The <strong>timing method</strong> determines how finishers are recorded.</p> 
     <p>All fields can be updated at any point. However, be wary of the <strong>Clear previous event</strong> checkbox, 
-        which will reset all data and settings ready for a new event.</p>
+        which will reset all data and settings ready for a new event. 
+        Use this once as you setup for a new race to clear all previous event specific data.</p>
+   <p>The <strong>Has pairs</strong> option when checked enables pairs races.
+        A pair in this context is two people racing together under the same bib (and dibber) number. 
+        In Shropshire an example pairs race is the <strong>Time Trial</strong> held each year in November.</p>
+  `,
+  'view-pre-entries': `
+    <p>Import a pre-entry list from a CSV file. Pre-entered competitors can have their details pre-printed on entry forms from the <strong>Paperwork</strong> page.</p>
+    <p>Pre-entries can be imported from any source that provides the minimum information required for entries, 
+        the minimum is: entrant number, first name, last name, gender and date of birth (SI Entries and Entry Central, at least, meet this requirement).</p>
   `,
   'view-forms': `
-    <p>The <strong>Paperwork</strong> page provides facilities to print all the pre-race paperwork as well as some other useful forms/notices.</p>
+    <p>The <strong>Paperwork</strong> page provides facilities to print all the pre-race paperwork.</p>
     <p>Use <strong>Print Blank Entry Forms</strong> to generate one A4 page containing two entry forms, 
-        print that as many times as required then guillotine into A5 sheets with one form per sheet.</p>
+        print that as many times as required then guillotine into A5 sheets with one form per sheet.
+        These are for solo races. Use <strong>Print Blank Pairs Entry Forms</strong> for pairs races.</p>
     <p>Use <strong>Print Pre-Entry Forms</strong> to generate multiple A4 pages with filled in entry forms, one for each pre-entry.
         They are generated two per A4 page in alphabetical order of surname in such a way that guillotining the whole 
-        printed stack into A5 sheets maintains the order when the two half stacks are combined.</p>
+        printed stack into A5 sheets maintains the order when the two half stacks are combined.
+        These are for solo races. Use <strong>Print Pre-Entry Pairs Entry Forms</strong> for pairs races.</p>
     <p>The blank entry forms and the pre-filled ones have identical format and comply with FRA guidelines for both senior and junior races.</p>    
     <p>Use <strong>Print Helpers List</strong> to print a form intended to be given to the RO to record the names and roles of helpers. 
         They can be later registered as helpers for the race and thereby acknowledged in the results.</p>    
@@ -221,27 +241,38 @@ export const HELP = {
         The form will auto reset for the next entry.</p>
     <p>Use <strong>Export to SI</strong> to create a CSV file in a format that can be imported into SI Timing. This is only relevant when using dibber timing.</p>
     <p><strong>Clear All</strong> removes every entry and should only be used to start over.</p>
+    <p>If you have enabled pairs in the event settings, this form will show a <strong>Type</strong> field that is either <strong>- Solo</strong> or <strong>= Pair</strong>.
+        Typing '-' or '=' will change the selection.</p>
+    <p>In all cases, when starting a new entry, typing a number or a name will do the appropriate thing, no need to tab to a specific field.</p>
   `,
   'view-helpers': `
-    <p>Record officials, marshals and volunteers. Helpers appear in the results report as an acknowledgement of their contribution to the event.</p>
-    <p>As with entries, typing a name that has been seen before will auto fill the rest of the form.</p>
+    <p>Record officials, marshals and volunteers. Helpers can appear in the results report as an acknowledgement of their contribution to the event.</p>
+    <p>As with entries, typing a name that has been seen before will autofill the rest of the form.</p>
     <p>Assign a <strong>role</strong> to each helper (e.g. Timekeeper, Marshal) so the report shows who did what. Roles are managed on the Roles page.</p>
   `,
   'view-finishers': `
     <p>When timing is via a stopwatch, record finishing positions and times. This is done in two stages: first record bib numbers in finishing order, 
         then in a subsequent pass assign their finishing times. The <strong>mode</strong> field determines which stage is being recorded.
         In <strong>Bibs</strong> mode fill the <strong>Race / Bib No.</strong> field and press return. 
-        That bib is then recorded along with its clock split number (which auto increments) and the form reset for the next bib number.
-        In <strong>Time</strong> mode enter the time the entrant crossed the finish line. 
-        In this mode the form auto moves to the next record that has not got a time.</p>
+        That bib is then recorded along with its clock split number (which auto increments), the form then resets ready for the next bib number.
+        In <strong>Time</strong> mode enter the time the entrant (or pair) crossed the finish line. 
+        In this mode, on pressing return, the form auto moves to the next record that has not got a time.</p>
     <p>In <strong>Bibs</strong> mode there are special codes that can be entered in the <strong>Race / Bib No.</strong> field.
-        Select the drop-down on the field to see a list along with a brief description of each.</p> 
+        Click on the <strong>Race/Bib No.</strong> field to see the list along with a brief description of each.</p> 
     <p>One particular special code is always present as Bib No. 0 - <strong>Clock</strong>: This specifes the time reference for all other times.
         If a stopwatch is being used in a conventional way the time associated with this record is 0. 
         If the stopwatch was started late (after runners had already started) the time specifies how late (up to an hour).
         If the stopwatch is being used in <strong>time-of-day</strong> mode the time specifies the time of day the stopwatch was started. 
-        All subsequent times are then interpreted as time-of-day rather than split times.</p>    
-    <p>This form, like entries, is very keyboard centric.</p>
+        All later times are then interpreted as time-of-day rather than split times.</p>    
+    <p><div>
+        This form, like entries, is very keyboard-centric.
+        In particular, when <strong>entering a time</strong>, it can be done by:
+        <ul style="margin-left:2em">
+            <li>entering 3 numbers: hours and minutes and seconds with anything in between (space is easiest),</li>
+            <li>or by 2 numbers: minutes then seconds, in this case the hours is inherited from the previous time,</li> 
+            <li>or by 1 number: seconds, in this case the hours and minutes are inherited from the previous time.</li>
+        </ul>
+    </div></p>
     <p>If an entrant started early or late, record their individual start time by entering their BIb No and 
         checking the <strong>This is a start event</strong> option before pressing return. 
         This adds a special record where its time will be interpreted as the time the entrant actually started. 
@@ -251,34 +282,34 @@ export const HELP = {
         This adds a special record that indicates the entrant has finished but is excluded from the results (except as a DNF).
         These records do not get a split number.</p>
   `,
-  'view-pre-entries': `
-    <p>Import a pre-entry list from a CSV file. Pre-entered competitors can have their details pre-printed on entry forms from the <strong>Paperwork</strong> page.</p>
-    <p>Pre-entries can be imported from any source that provides the minimum information required for entries, 
-        the minimum is: entrant number, first name, last name, gender and date of birth (SI Entries and Entry Central, at least, meet this requirement).</p>
-  `,
   'view-safety': `
-    <p>In the <strong>Outstanding</strong> tab, shows all entrants who have <strong>not yet been recorded as finishers</strong>. 
+    <p>In the <strong>Outstanding</strong> tab, shows all entrants who have <strong>not yet been recorded as finishers or retired</strong>. 
         Use this at the end of the race to confirm that everyone is accounted for.</p>
-    <p>When the list is empty, all entrants have either finished or been marked as DNF.</p>
+    <p>When the list is empty, all entrants have either finished or been marked as DNF. Use the other tabs to get more specific lists.</p>
   `,
   'view-si-results': `
-    <p>Import finish times from an SI Timing (processable) results export. The import matches competitors by dibber number, then by bib number. 
-        Unmatched records are shown and can be assigned manually.</p>
-    <p>Run this <strong>before</strong> generating results on the <strong>Results & Prize List<strong> page. 
+    <p>Import finish times from an SI Timing (processable) results export. The import matches competitors by bib number. 
+        Unmatched records and other errors can be seen in the <strong>Issues</strong> tab.</p>
+    <p>Run this <strong>before</strong> to populate the <strong>Results & Prize List</strong> page. 
         You can re-import if more data arrives later.</p>
   `,
   'view-results': `
     <p>Results, prizes and helpers are calculated automatically when you open this page.
-        Switch between the <strong>Seniors</strong>, <strong>Juniors</strong>, <strong>Prizes</strong> and <strong>Helpers</strong> tabs to review the output.</p>
+        Switch between the <strong>Seniors</strong>, <strong>Juniors</strong>, <strong>Pairs</strong>, 
+        <strong>Prizes</strong> and <strong>Helpers</strong> tabs to review the output.</p>
     <p>Use <strong>Export CSV</strong> to save a results spreadsheet for publication, 
         or <strong>Print Prize List</strong> to print overall and category winners for the presentation.</p>
-    <p>Use <strong>Publish Results</strong> to publish results to a website.</p>
+    <p>Use <strong>Publish Results</strong> to publish results as one or more HTML pages that can be linked to from your website.
+        The URL generated can be copied to the clipboard and pasted into a browser for direct viewing. 
+        Use the <strong>Show Published URL</strong> button to be re-shown the last URL published.</p>
   `,
   'view-people': `
     <p>The master database of competitors. Records here can be persisted between events so names, 
         clubs and other relevant information accumulate to facilitate auto-complete during entry registration. 
         You can search, add and edit people directly on this page.</p>
     <p>People are also added automatically when a new name is entered during race-day registration.</p>
+    <p>Use <strong>Find Duplicates</strong> to identify likely duplicated records and merge them.</p>
+    <p>Use <strong>Merge...</strong> to merge people from another dataset into the list here.</p>
   `,
   'view-clubs': `
     <p>The master list of clubs used for auto-complete during entry. 
@@ -287,6 +318,7 @@ export const HELP = {
   'view-dibbers': `
     <p>Records the dibbers available for allocation during race-day registration.
         The short-code is used during registration and mapped to its corresponding long code when exporting entries to SI Timing.</p>
+    <p>If the <strong>Lost</strong> column has a date, it indicates the dibber is no longer available and will not be allocated.</p>
     <p>Use <strong>Import CSV</strong> to import a dibber list, new short codes are added, existing ones are updated. 
         The CSV must include at least columns of "Short Code" and "Long Code".</p>
   `,
@@ -336,11 +368,20 @@ export const PAGES = {
     <p>All data is held in JSON files on the local server and cached in the browser.
        Use <em>Datasets</em> to back up, restore, or switch between events.</p>
     <h3>Feedback &amp; issues</h3>
-    <p>Report problems or suggestions to the race organiser running this server.</p>
+    <p>Report problems or suggestions to the race organiser for the event.</p>
   `,
 
   'whats-new': `
-    <h3>v0.0.1-alpha — current version</h3>
+    <h3>v0.0.3-alpha - current version</h3>
+    <ul>
+      <li>Add consolidated results publishing with search and sort capabilities</li>
+    </ul>
+    <h3>v0.0.2-alpha</h3>
+    <ul>
+      <li>Add pairs capability</li>
+      <li>UI improvements</li>
+    </ul>
+    <h3>v0.0.1-alpha</h3>
     <ul>
       <li><strong>About / What's New</strong> — this page and the ? button in the header</li>
       <li><strong>Optimistic locking</strong> — version counter detects simultaneous edits; header shows version and dirty indicator</li>
@@ -355,175 +396,179 @@ export const PAGES = {
   `,
 };
 
-// ----------------------------------------------------------------
-// Table column definitions.
-// Each entry is an array of { label, title, align? } descriptors.
-// View files merge these with render functions to call renderTable().
-// ----------------------------------------------------------------
-
 export const TABLES = {
   entries: [
-    { label: 'Bib',     title: 'Race number' },
-    { label: 'Name',    title: "Competitor's name" },
-    { label: 'Club',    title: 'Running club' },
-    { label: 'DoB',     title: 'Date of birth' },
-    { label: 'Cat',     title: 'Age category' },
-    { label: 'Course',  title: 'Senior or junior course' },
-    { label: 'Dibber',  title: 'SportIdent card short number' },
-    { label: 'Pre-No',  title: 'Pre-entry reference number' },
-    { label: 'Actions', title: 'Edit or delete this entry' },
+    { id: 'bib',     label: 'Bib',     title: 'Race number' },
+    { id: 'name',    label: 'Name',    title: "Competitor's name" },
+    { id: 'club',    label: 'Club',    title: 'Running club' },
+    { id: 'dob',     label: 'DoB',     title: 'Date of birth' },
+    { id: 'cat',     label: 'Cat',     title: 'Age category' },
+    { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
+    { id: 'dibber',  label: 'Dibber',  title: 'SportIdent card short number' },
+    { id: 'pre_no',  label: 'Pre-No',  title: 'Pre-entry reference number' },
+    { id: 'actions', label: 'Actions', title: 'Edit or delete this entry' },
   ],
   helpers: [
-    { label: '#',       title: 'Helper number' },
-    { label: 'Name',    title: "Helper's name" },
-    { label: 'Club',    title: 'Running club' },
-    { label: 'Role',    title: "Helper's role" },
-    { label: 'Actions', title: 'Edit or delete' },
+    { id: 'number',  label: '#',       title: 'Helper number' },
+    { id: 'name',    label: 'Name',    title: "Helper's name" },
+    { id: 'club',    label: 'Club',    title: 'Running club' },
+    { id: 'role',    label: 'Role',    title: "Helper's role" },
+    { id: 'actions', label: 'Actions', title: 'Edit or delete' },
   ],
   'pre-entries': [
-    { label: 'Ref',           title: 'Pre-entry reference number' },
-    { label: 'Name',          title: "Competitor's name" },
-    { label: 'G',             title: 'Gender' },
-    { label: 'DoB',           title: 'Date of birth' },
-    { label: 'Club',          title: 'Running club' },
-    { label: 'Cat',           title: 'Age category' },
-    { label: 'FRA#',          title: 'FRA registration number' },
-    { label: 'SI ID',         title: 'SportIdent member number' },
-    { label: 'Eligibility',   title: 'Race eligibility notes' },
-    { label: 'Email',         title: 'Email address' },
-    { label: 'Address 1',     title: 'Address line 1' },
-    { label: 'Address 2',     title: 'Address line 2' },
-    { label: 'Town',          title: 'Town' },
-    { label: 'County',        title: 'County' },
-    { label: 'Postcode',      title: 'Postcode' },
-    { label: 'Country',       title: 'Country' },
-    { label: 'Telephone',     title: 'Telephone number' },
-    { label: 'Mobile',        title: 'Mobile number' },
-    { label: 'Emerg. Contact', title: 'Emergency contact name' },
-    { label: 'Emerg. Tel',    title: 'Emergency contact telephone' },
-    { label: 'Medical',       title: 'Medical information' },
-    { label: 'Car Reg',       title: 'Car registration' },
+    { id: 'ref',           label: 'Ref',           title: 'Pre-entry reference number' },
+    { id: 'name',          label: 'Name',          title: "Competitor's name" },
+    { id: 'gender',        label: 'G',             title: 'Gender' },
+    { id: 'dob',           label: 'DoB',           title: 'Date of birth' },
+    { id: 'club',          label: 'Club',          title: 'Running club' },
+    { id: 'cat',           label: 'Cat',           title: 'Age category' },
+    { id: 'fra',           label: 'FRA#',          title: 'FRA registration number' },
+    { id: 'si_id',         label: 'SI ID',         title: 'SportIdent member number' },
+    { id: 'eligibility',   label: 'Eligibility',   title: 'Race eligibility notes' },
+    { id: 'email',         label: 'Email',         title: 'Email address' },
+    { id: 'addr1',         label: 'Address 1',     title: 'Address line 1' },
+    { id: 'addr2',         label: 'Address 2',     title: 'Address line 2' },
+    { id: 'town',          label: 'Town',          title: 'Town' },
+    { id: 'county',        label: 'County',        title: 'County' },
+    { id: 'postcode',      label: 'Postcode',      title: 'Postcode' },
+    { id: 'country',       label: 'Country',       title: 'Country' },
+    { id: 'telephone',     label: 'Telephone',     title: 'Telephone number' },
+    { id: 'mobile',        label: 'Mobile',        title: 'Mobile number' },
+    { id: 'emerg_contact', label: 'Emerg. Contact', title: 'Emergency contact name' },
+    { id: 'emerg_tel',     label: 'Emerg. Tel',    title: 'Emergency contact telephone' },
+    { id: 'medical',       label: 'Medical',       title: 'Medical information' },
+    { id: 'car_reg',       label: 'Car Reg',       title: 'Car registration' },
   ],
   finishers: [
-    { label: 'Line',    title: 'Stopwatch split number' },
-    { label: 'Event',   title: 'Type of event (Finish, Start, Retire)' },
-    { label: 'Clock',   title: 'Recorded time' },
-    { label: 'Bib',     title: 'Race number' },
-    { label: 'Name',    title: "Competitor's name" },
-    { label: 'Cat',     title: 'Age category' },
-    { label: 'Course',  title: 'Senior or junior course' },
-    { label: 'Actions', title: 'Edit or delete' },
+    { id: 'line',    label: 'Line',    title: 'Stopwatch split number' },
+    { id: 'event',   label: 'Event',   title: 'Type of event (Finish, Start, Retire)' },
+    { id: 'clock',   label: 'Clock',   title: 'Recorded time' },
+    { id: 'bib',     label: 'Bib',     title: 'Race number' },
+    { id: 'name',    label: 'Name',    title: "Competitor's name" },
+    { id: 'cat',     label: 'Cat',     title: 'Age category' },
+    { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
+    { id: 'actions', label: 'Actions', title: 'Edit or delete' },
   ],
   'safety-outstanding': [
-    { label: 'Bib',     title: 'Race number' },
-    { label: 'Name',    title: "Competitor's name" },
-    { label: 'Course',  title: 'Senior or junior course' },
-    { label: 'Cat',     title: 'Age category' },
-    { label: 'Actions', title: 'Mark as DNF or take action' },
+    { id: 'bib',     label: 'Bib',     title: 'Race number' },
+    { id: 'name',    label: 'Name',    title: "Competitor's name" },
+    { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
+    { id: 'cat',     label: 'Cat',     title: 'Age category' },
+    { id: 'actions', label: 'Actions', title: 'Mark as DNF or take action' },
   ],
   'safety-dnf': [
-    { label: 'Bib',     title: 'Race number' },
-    { label: 'Name',    title: "Competitor's name" },
-    { label: 'Course',  title: 'Senior or junior course' },
-    { label: 'Cat',     title: 'Age category' },
-    { label: 'Actions', title: 'Edit or delete' },
+    { id: 'bib',     label: 'Bib',     title: 'Race number' },
+    { id: 'name',    label: 'Name',    title: "Competitor's name" },
+    { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
+    { id: 'cat',     label: 'Cat',     title: 'Age category' },
+    { id: 'actions', label: 'Actions', title: 'Edit or delete' },
   ],
   'safety-finished': [
-    { label: 'Bib',    title: 'Race number' },
-    { label: 'Name',   title: "Competitor's name" },
-    { label: 'Course', title: 'Senior or junior course' },
-    { label: 'Cat',    title: 'Age category' },
-    { label: 'Line',   title: 'Finishing split line number in the finishers list' },
-    { label: 'Time',   title: 'Finish time' },
+    { id: 'bib',    label: 'Bib',    title: 'Race number' },
+    { id: 'name',   label: 'Name',   title: "Competitor's name" },
+    { id: 'course', label: 'Course', title: 'Senior or junior course' },
+    { id: 'cat',    label: 'Cat',    title: 'Age category' },
+    { id: 'line',   label: 'Line',   title: 'Finishing split line number in the finishers list' },
+    { id: 'time',   label: 'Time',   title: 'Finish time' },
   ],
   'safety-early': [
-    { label: 'Bib',        title: 'Race number' },
-    { label: 'Name',       title: "Competitor's name" },
-    { label: 'Course',     title: 'Senior or junior course' },
-    { label: 'Cat',        title: 'Age category' },
-    { label: 'Start Time', title: 'Individual start time recorded for this competitor' },
+    { id: 'bib',        label: 'Bib',        title: 'Race number' },
+    { id: 'name',       label: 'Name',       title: "Competitor's name" },
+    { id: 'course',     label: 'Course',     title: 'Senior or junior course' },
+    { id: 'cat',        label: 'Cat',        title: 'Age category' },
+    { id: 'start_time', label: 'Start Time', title: 'Individual start time recorded for this competitor' },
   ],
   'safety-noshows': [
-    { label: 'Name',        title: 'Pre-entry name' },
-    { label: 'DOB',         title: 'Date of birth from pre-entry' },
-    { label: 'Club',        title: "Competitor's club" },
-    { label: 'Cat',         title: 'Age category from pre-entry' },
-    { label: 'Pre-entry #', title: 'SI Entries participant number' },
-    { label: 'On-day bib',  title: 'Bib assigned if they entered on the day without linking to their pre-entry' },
+    { id: 'name',       label: 'Name',        title: 'Pre-entry name' },
+    { id: 'dob',        label: 'DOB',         title: 'Date of birth from pre-entry' },
+    { id: 'club',       label: 'Club',        title: "Competitor's club" },
+    { id: 'cat',        label: 'Cat',         title: 'Age category from pre-entry' },
+    { id: 'pre_no',     label: 'Pre-entry #', title: 'SI Entries participant number' },
+    { id: 'on_day_bib', label: 'On-day bib',  title: 'Bib assigned if they entered on the day without linking to their pre-entry' },
   ],
   'results-senior': [
-    { label: 'Pos',     title: 'Overall finishing position' },
-    { label: 'Bib',     title: 'Race number' },
-    { label: 'In Cat',  title: 'Position within age category' },
-    { label: 'Name',    title: "Competitor's name" },
-    { label: 'Club',    title: 'Running club' },
-    { label: 'Cat',     title: 'Age category' },
-    { label: 'Time',    title: 'Finish time (R = course record)' },
-    { label: '%Ldrs',   title: "Finish time as a percentage of the winner's time", align: 'right' },
-    { label: 'Behind',  title: 'Time behind the leader' },
+    { id: 'pos',      label: 'Pos',     title: 'Overall finishing position' },
+    { id: 'bib',      label: 'Bib',     title: 'Race number' },
+    { id: 'in_cat',   label: 'In Cat',  title: 'Position within age category' },
+    { id: 'name',     label: 'Name',    title: "Competitor's name" },
+    { id: 'club',     label: 'Club',    title: 'Running club' },
+    { id: 'cat',      label: 'Cat',     title: 'Age category' },
+    { id: 'time',     label: 'Time',    title: 'Finish time (R = course record)' },
+    { id: 'pct_ldrs', label: '%Ldrs',   title: "Finish time as a percentage of the winner's time", align: 'right' },
+    { id: 'behind',   label: 'Behind',  title: 'Time behind the leader' },
   ],
   'results-junior': [
-    { label: 'Bib',    title: 'Race number' },
-    { label: 'In Cat', title: 'Position within age category' },
-    { label: 'Name',   title: "Competitor's name" },
-    { label: 'Club',   title: 'Running club' },
-    { label: 'Cat',    title: 'Age category' },
-    { label: 'Time',   title: 'Finish time' },
+    { id: 'bib',    label: 'Bib',    title: 'Race number' },
+    { id: 'in_cat', label: 'In Cat', title: 'Position within age category' },
+    { id: 'name',   label: 'Name',   title: "Competitor's name" },
+    { id: 'club',   label: 'Club',   title: 'Running club' },
+    { id: 'cat',    label: 'Cat',    title: 'Age category' },
+    { id: 'time',   label: 'Time',   title: 'Finish time' },
   ],
   prizes: [
-    { label: 'Pos',    title: 'Overall finishing position' },
-    { label: 'Cat',    title: 'Age category' },
-    { label: 'In Cat', title: 'Position within age category' },
-    { label: 'Time',   title: 'Finish time (R = course record, J = junior)' },
-    { label: 'Name',   title: 'Competitor\'s name (* = winner in multiple categories)' },
+    { id: 'pos',    label: 'Pos',    title: 'Overall finishing position' },
+    { id: 'cat',    label: 'Cat',    title: 'Age category' },
+    { id: 'in_cat', label: 'In Cat', title: 'Position within age category' },
+    { id: 'time',   label: 'Time',   title: 'Finish time (R = course record, J = junior)' },
+    { id: 'name',   label: 'Name',   title: 'Competitor\'s name (* = winner in multiple categories)' },
   ],
   'results-helpers': [
-    { label: 'Role',       title: "Helper's role" },
-    { label: 'Name',       title: "Helper's name" },
-    { label: 'Club',       title: 'Running club' },
-    { label: 'Cat',        title: 'Age category' },
-    { label: 'Last Raced', title: 'Date this person last competed in a race' },
+    { id: 'role',       label: 'Role',       title: "Helper's role" },
+    { id: 'name',       label: 'Name',       title: "Helper's name" },
+    { id: 'club',       label: 'Club',       title: 'Running club' },
+    { id: 'cat',        label: 'Cat',        title: 'Age category' },
+    { id: 'last_raced', label: 'Last Raced', title: 'Date this person last competed in a race' },
   ],
   'results-pairs': [
-    { label: 'Pos',      title: 'Overall finish position' },
-    { label: 'Bib',      title: 'Race bib number' },
-    { label: 'In Cat',   title: 'Position within pair category (Male/Female/Mixed, Junior/Senior)' },
-    { label: 'Person 1', title: 'First competitor' },
-    { label: 'Person 2', title: 'Second competitor' },
-    { label: 'Club',     title: 'Club(s)' },
-    { label: 'Cat',      title: 'Pair category and gender' },
-    { label: 'Time',     title: 'Finish time' },
+    { id: 'pos',     label: 'Pos',      title: 'Overall finish position' },
+    { id: 'bib',     label: 'Bib',      title: 'Race bib number' },
+    { id: 'in_cat',  label: 'In Cat',   title: 'Position within pair category (Male/Female/Mixed, Junior/Senior)' },
+    { id: 'person1', label: 'Person 1', title: 'First competitor' },
+    { id: 'person2', label: 'Person 2', title: 'Second competitor' },
+    { id: 'club',    label: 'Club',     title: 'Club(s)' },
+    { id: 'cat',     label: 'Cat',      title: 'Pair category and gender' },
+    { id: 'time',    label: 'Time',     title: 'Finish time' },
   ],
   people: [
-    { label: 'Name',         title: "Person's name" },
-    { label: 'G',            title: 'Gender' },
-    { label: 'DoB',          title: 'Date of birth' },
-    { label: 'Club',         title: 'Running club' },
-    { label: 'FRA',          title: 'FRA registration number' },
-    { label: 'Last Seen',    title: 'Date last registered in a race' },
-    { label: 'Seen',         title: 'Number of times raced' },
-    { label: 'Last Helped',  title: 'Date last recorded as a helper' },
-    { label: 'Helped',       title: 'Number of times helped at events' },
-    { label: 'Banned Until', title: 'Banned from competition until this date' },
-    { label: 'Actions',      title: 'Edit or delete' },
+    { id: 'name',         label: 'Name',         title: "Person's name" },
+    { id: 'gender',       label: 'G',            title: 'Gender' },
+    { id: 'dob',          label: 'DoB',          title: 'Date of birth' },
+    { id: 'club',         label: 'Club',         title: 'Running club' },
+    { id: 'fra',          label: 'FRA',          title: 'FRA registration number' },
+    { id: 'last_seen',    label: 'Last Seen',    title: 'Date last registered in a race' },
+    { id: 'seen',         label: 'Seen',         title: 'Number of times raced' },
+    { id: 'last_helped',  label: 'Last Helped',  title: 'Date last recorded as a helper' },
+    { id: 'helped',       label: 'Helped',       title: 'Number of times helped at events' },
+    { id: 'banned_until', label: 'Banned Until', title: 'Banned from competition until this date' },
+    { id: 'actions',      label: 'Actions',      title: 'Edit or delete' },
   ],
   clubs: [
-    { label: 'S',         title: 'Select for merge' },
-    { label: 'Name',      title: 'Club name' },
-    { label: 'People',    title: 'Number of people from this club' },
-    { label: 'Last Seen', title: 'Most recent race date for any club member' },
+    { id: 'select',    label: 'S',         title: 'Select for merge' },
+    { id: 'name',      label: 'Name',      title: 'Club name' },
+    { id: 'people',    label: 'People',    title: 'Number of people from this club' },
+    { id: 'last_seen', label: 'Last Seen', title: 'Most recent race date for any club member' },
   ],
   roles: [
-    { label: 'Role',        title: 'Role name (e.g. Timekeeper, Marshal)' },
-    { label: 'Description', title: 'Description of what this role involves' },
-    { label: 'Actions',     title: 'Edit or delete' },
+    { id: 'role',        label: 'Role',        title: 'Role name (e.g. Timekeeper, Marshal)' },
+    { id: 'description', label: 'Description', title: 'Description of what this role involves' },
+    { id: 'actions',     label: 'Actions',     title: 'Edit or delete' },
   ],
   dibbers: [
-    { label: 'Short Code', title: 'Short (3-digit) SI card number' },
-    { label: 'Long Code',  title: 'Full SI card number' },
-    { label: 'Owner',      title: 'Who owns this card' },
-    { label: 'Lost',       title: 'Date this dibber was lost — lost dibbers are excluded from allocation' },
-    { label: 'Notes',      title: 'Additional notes' },
-    { label: 'Actions',    title: 'Edit or delete' },
+    { id: 'short_code', label: 'Short Code', title: 'Short (3-digit) SI card number' },
+    { id: 'long_code',  label: 'Long Code',  title: 'Full SI card number' },
+    { id: 'owner',      label: 'Owner',      title: 'Who owns this card' },
+    { id: 'lost',       label: 'Lost',       title: 'Date this dibber was lost — lost dibbers are excluded from allocation' },
+    { id: 'notes',      label: 'Notes',      title: 'Additional notes' },
+    { id: 'actions',    label: 'Actions',    title: 'Edit or delete' },
   ],
+};
+
+export const GENDER = {
+  FEMALE: 'Female',
+  MALE:   'Male',
+};
+
+export const COURSE = {
+  JUNIORS: 'Juniors',
+  SENIORS: 'Seniors',
 };

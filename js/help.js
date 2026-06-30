@@ -1,6 +1,6 @@
 'use strict';
 
-import { TOOLTIPS, HELP, PAGES } from './locale.js';
+import { TOOLTIPS, HELP, PAGES } from './strings.js';
 
 export function wireTooltips() {
   for (const [id, tip] of Object.entries(TOOLTIPS)) {

@@ -336,7 +336,10 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .btn-delete-entry, .btn-del-helper, .btn-delete { background: var(--danger); }
 .btn-save   { background: var(--accent); }
 
-.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.published-url-wrap  { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 200px; }
+.published-url-label { font-size: 0.7rem; color: var(--muted); font-weight: 500; }
+.published-url-field { font-size: 0.8rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel-alt); color: var(--text); cursor: pointer; width: 100%; }
 
 /* ---- Forms ---- */
 .form-grid {
@@ -604,8 +607,15 @@ button.df-badge-connected:hover { background: var(--danger); }
   height: 100%;
 }
 #view-si-results .view-header,
-#view-si-results .card {
+#view-si-results .card,
+#view-si-results .tab-bar {
   flex-shrink: 0;
+}
+#view-si-results .tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 #view-si-results .table-scroll {
   flex: 1 1 auto;
@@ -625,8 +635,15 @@ button.df-badge-connected:hover { background: var(--danger); }
   height: 100%;
 }
 #view-pre-entries .view-header,
-#view-pre-entries .card {
+#view-pre-entries .card,
+#view-pre-entries .tab-bar {
   flex-shrink: 0;
+}
+#view-pre-entries .tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 #view-pre-entries .table-scroll {
   flex: 1 1 auto;
@@ -642,9 +659,10 @@ button.df-badge-connected:hover { background: var(--danger); }
 /* ---- Simple list views: flex column, table fills remaining space ---- */
 .view-list:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
 .view-list .view-header,
+.view-list .tab-bar,
 .view-list .btn-row,
 .view-list .card         { flex-shrink: 0; }
-.view-list .table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.view-list .table-scroll { flex: 1 1 auto; min-height: 0; overflow-x: auto; overflow-y: auto; }
 /* tab panels inside view-list must also stretch so their table-scroll can scroll */
 .view-list .tab-panel.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 /* duplicates panels replace the main table; flex layout only when visible */

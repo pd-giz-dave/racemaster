@@ -10,48 +10,45 @@ import { SI } from '../si-schema.js';
 
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse, calculatePairCategory, derivePairGender } from '../categories.js';
-import { COURSE } from '../constants.js';
+import { COURSE } from '../strings.js';
 import { cleanName, capitalise, showBusy, normaliseClub, normaliseGender } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog, escHtml,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
   downloadText, sanitise, wireFormFocusTrap, clearRowEditing, wireNameTypeahead, wireClubTypeahead,
-  renderTable,
+  renderTable, tableColumns,
 } from '../ui.js';
-import { TABLES } from '../locale.js';
+import { TABLES } from '../strings.js';
 import { renderHome } from './home.js';
 
-const ENTRY_COLS = (() => {
-  const m = TABLES.entries;
-  return [
-    { ...m[0], render: e => e.bibNumber },
-    { ...m[1], render: e => {
-      const primary = escHtml(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '');
-      if (!e.partner) return primary;
-      return `${primary}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(e.partner.name || '')}</span>`;
-    }},
-    { ...m[2], render: e => {
-      if (!e.partner || !e.partner.club || e.partner.club === e.club) return escHtml(e.club || '');
-      return `${escHtml(e.club || '')}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(e.partner.club)}</span>`;
-    }},
-    { ...m[3], render: e => {
-      if (!e.partner) return e.dob || '';
-      return `${e.dob || ''}<br><span style="color:var(--muted);font-size:0.85em">${e.partner.dob || ''}</span>`;
-    }},
-    { ...m[4], render: e => {
-      if (!e.partner) return e.category || '';
-      return `${e.category || ''} ${derivePairGender(e.gender, e.partner.gender)}`.trim();
-    }},
-    { ...m[5], render: e => e.course || '' },
-    { ...m[6], render: e => e.dibberNumber || '' },
-    { ...m[7], render: e => e.preEntry || '' },
-    { ...m[8], render: () => `
+const ENTRY_COLS = tableColumns(TABLES.entries, {
+  bib:     e => e.bibNumber,
+  name:    e => {
+    const primary = escHtml(e.name || '') + (isEntryBanned(e) ? ' (banned)' : '');
+    if (!e.partner) return primary;
+    return `${primary}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(e.partner.name || '')}</span>`;
+  },
+  club:    e => {
+    if (!e.partner || !e.partner.club || e.partner.club === e.club) return escHtml(e.club || '');
+    return `${escHtml(e.club || '')}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(e.partner.club)}</span>`;
+  },
+  dob:     e => {
+    if (!e.partner) return e.dob || '';
+    return `${e.dob || ''}<br><span style="color:var(--muted);font-size:0.85em">${e.partner.dob || ''}</span>`;
+  },
+  cat:     e => {
+    if (!e.partner) return e.category || '';
+    return `${e.category || ''} ${derivePairGender(e.gender, e.partner.gender)}`.trim();
+  },
+  course:  e => e.course || '',
+  dibber:  e => e.dibberNumber || '',
+  pre_no:  e => e.preEntry || '',
+  actions: () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
       <button class="btn-sm btn-insert-above-entry" data-action="ins">Ins ↑</button>
-      <button class="btn-sm btn-delete-entry" data-action="del">Del</button>` },
-  ];
-})();
+      <button class="btn-sm btn-delete-entry" data-action="del">Del</button>`,
+});
 
 // ---- Module state ----
 

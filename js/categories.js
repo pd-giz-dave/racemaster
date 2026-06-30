@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from './state.js';
-import { GENDER, COURSE } from './constants.js';
+import { GENDER, COURSE } from './strings.js';
 import { normaliseDate, parseDate, ciEq } from './utils.js';
 
 // [maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist]
