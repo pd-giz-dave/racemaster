@@ -369,6 +369,9 @@ export const PAGES = {
        Use <em>Datasets</em> to back up, restore, or switch between events.</p>
     <h3>Feedback &amp; issues</h3>
     <p>Report problems or suggestions to the race organiser for the event.</p>
+    <h3>Source code</h3>
+    <p>RaceMaster is open source. The repository is at
+       <a href="https://github.com/pd-giz-dave/racemaster" target="_blank" rel="noopener">github.com/pd-giz-dave/racemaster</a>.</p>
   `,
 
   'whats-new': `
