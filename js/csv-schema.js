@@ -49,7 +49,7 @@ export const CSV = {
   categories: {
     // widths must stay parallel to fields — one entry per column
     fields:  Object.keys(createCategory()),
-    widths:  ['46px', '60px', '46px', '52px', '46px', '60px', '46px', '52px'],
+    widths:  ['52px', '60px', '60px', '46px', '52px'],
   },
 
   results: {

@@ -427,7 +427,16 @@ input:focus, select:focus, textarea:focus {
 #view-results:not([hidden]),
 #view-categories:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
 #results-sticky-top,
+.role-tags-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.role-tags-wrap:empty { margin: 0; }
+.role-input-row { display: flex; gap: 4px; align-items: center; }
+.role-input-row input { flex: 1 1 auto; min-width: 0; }
+.role-tag { display: inline-flex; align-items: center; gap: 2px; background: var(--accent-light); border: 1px solid var(--accent); border-radius: 12px; padding: 2px 8px 2px 10px; font-size: 0.8rem; line-height: 1.4; }
+.role-tag-x { background: none; border: none; cursor: pointer; color: var(--accent); font-weight: 700; font-size: 1rem; line-height: 1; padding: 0 0 0 2px; }
+
 #cat-tab-bar { flex-shrink: 0; }
+#cat-tab-bar .cat-active-scheme::after { content: 'active'; font-size: 0.65rem; margin-left: 6px; background: var(--success); color: #fff; padding: 1px 6px; border-radius: 10px; font-weight: 600; vertical-align: middle; }
+#cat-scheme-info { font-size: 0.85rem; padding: 6px 10px; margin-bottom: 8px; background: var(--accent-light); border-left: 3px solid var(--accent); border-radius: 0 4px 4px 0; }
 #view-results .tab-panel.active,
 #view-categories .tab-panel.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 #view-results .tab-panel > p,

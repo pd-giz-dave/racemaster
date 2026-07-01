@@ -1,19 +1,20 @@
 'use strict';
 
-import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults } from '../state.js';
-import { applyFRAPreset, applyWFRAPreset, categoryFromDistance } from '../categories.js';
+import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults, applyCustomCategories } from '../state.js';
+import { applyFRAPreset, applyWFRAPreset, builtinFRARows, builtinWFRARows, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
 import { showBusy, toISODate, fromISODate } from '../utils.js';
 import { renderHome } from './home.js';
-import { renderCategories } from './categories.js';
 
 function populateJuniorLimitDropdown() {
   const el = document.getElementById('ev-junior-limit');
   if (!el) return;
   const catSel = (document.getElementById('ev-categories')?.value || 'FRA').toUpperCase();
-  const preset = catSel === 'WFRA' ? state.wfraPreset : state.fraPreset;
+  const preset = catSel === 'WFRA' ? builtinWFRARows()
+               : catSel === 'CUSTOM' ? state.customCategories
+               : builtinFRARows();
   const current = el.value;
   const seen = new Set();
   const opts = preset
@@ -75,11 +76,21 @@ export async function saveEventForm() {
     }
   }
 
+  // Validate: Custom requires non-empty custom categories
+  if (newCategories === 'Custom' && state.customCategories.length === 0) {
+    showStatus('Custom categories are empty — add some on the Categories page first.', true);
+    return;
+  }
+
   // Build confirmation message
   const lines = [`Save settings for "${newName || '(unnamed event)'}"?`];
 
   if (newCategories !== oldCategories) {
-    lines.push(`\nCategories will change from ${oldCategories} to ${newCategories} — active categories will be updated and all existing entry categories will be recalculated.`);
+    if (newCategories === 'Custom') {
+      lines.push(`\nCategories will change from ${oldCategories} to Custom — your custom categories will be used.`);
+    } else {
+      lines.push(`\nCategories will change from ${oldCategories} to ${newCategories} — active categories will be updated and all existing entry categories will be recalculated.`);
+    }
   }
 
   if (doClear) {
@@ -126,6 +137,7 @@ export async function saveEventForm() {
   // Apply category preset if changed, then re-evaluate all entry categories
   if (newCategories !== oldCategories) {
     if (newCategories === 'WFRA') applyWFRAPreset();
+    else if (newCategories === 'Custom') applyCustomCategories();
     else applyFRAPreset();
     await saveCategories();
     await reapplyEntryCategories();
@@ -151,20 +163,8 @@ export async function saveEventForm() {
   setTimeout(() => window.dispatchEvent(new CustomEvent('rm:navigate', { detail: 'home' })), 2000);
 }
 
-export function applyCatPreset(preset) {
-  return async () => {
-    if (preset === 'FRA') applyFRAPreset();
-    else applyWFRAPreset();
-    await saveCategories();
-    renderCategories();
-    showStatus(`${preset} categories applied.`);
-  };
-}
-
 export function wireEvent() {
   on('btn-save-event',  'click', saveEventForm);
-  on('btn-apply-fra',   'click', applyCatPreset('FRA'));
-  on('btn-apply-wfra',  'click', applyCatPreset('WFRA'));
   on('ev-categories',   'change', populateJuniorLimitDropdown);
 
   const distEl = document.getElementById('ev-distance');
@@ -176,5 +176,4 @@ export function wireEvent() {
       if (limitEl) limitEl.value = categoryFromDistance(dist);
     });
   }
-
 }

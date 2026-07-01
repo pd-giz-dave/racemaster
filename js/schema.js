@@ -46,10 +46,9 @@ export function createRole({
 }
 
 export function createCategory({
-  maleMinAge = '', maleCat = '', maleRef = '', maleMaxDist = '',
-  femaleMinAge = '', femaleCat = '', femaleRef = '', femaleMaxDist = '',
+  minAge = '', maleCat = '', femaleCat = '', ref = '', maxDist = '',
 } = {}) {
-  return { maleMinAge, maleCat, maleRef, maleMaxDist, femaleMinAge, femaleCat, femaleRef, femaleMaxDist };
+  return { minAge, maleCat, femaleCat, ref, maxDist };
 }
 
 export function createEvent({

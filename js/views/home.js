@@ -93,7 +93,7 @@ function eventStatistics() {
 
   const catRows = [...state.categories]
     .filter(r => r.maleCat && r.maleCat !== '-' && r.maleCat.toLowerCase() !== 'none')
-    .sort((a, b) => (+a.maleMinAge || 0) - (+b.maleMinAge || 0))
+    .sort((a, b) => (+a.minAge || 0) - (+b.minAge || 0))
     .filter(r => {
       const m = entryCatMap[(r.maleCat   || '').toUpperCase()] || 0;
       const f = entryCatMap[(r.femaleCat || '').toUpperCase()] || 0;

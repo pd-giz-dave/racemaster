@@ -25,6 +25,37 @@ const HELPER_COLS = tableColumns(TABLES.helpers, {
 // ---- Module state ----
 
 export let editingNumber = 0;
+let selectedRoles = [];
+
+// ---- Role tag chips ----
+
+function renderRoleTags() {
+  const wrap = document.getElementById('helper-role-tags');
+  if (!wrap) return;
+  wrap.innerHTML = selectedRoles.map(r =>
+    `<span class="role-tag">${escHtml(r)}<button type="button" class="role-tag-x" data-role="${escHtml(r)}" tabindex="-1">×</button></span>`
+  ).join('');
+  wrap.querySelectorAll('.role-tag-x').forEach(btn =>
+    btn.addEventListener('click', () => {
+      selectedRoles = selectedRoles.filter(r => r !== btn.dataset.role);
+      renderRoleTags();
+    })
+  );
+}
+
+function addRoleFromInput() {
+  const input = document.getElementById('helper-form-role');
+  if (!input) return;
+  const name = input.value.replace(/,/g, '').trim();
+  if (!name) return;
+  const lower = name.toLowerCase();
+  if (!selectedRoles.some(r => r.toLowerCase() === lower)) {
+    const known = state.roles.find(r => r.role.toLowerCase() === lower);
+    selectedRoles.push(known ? known.role : name);
+    renderRoleTags();
+  }
+  input.value = '';
+}
 
 // ---- Render ----
 
@@ -47,14 +78,16 @@ function fillFormForEdit(num) {
   const h = getHelper(num);
   if (!h) return;
   editingNumber = num;
+  selectedRoles = (h.role || '').split(',').map(r => r.trim()).filter(Boolean);
+  renderRoleTags();
   setHTML('helper-form-number', `#${num}`);
   fillForm('', {
     'helper-form-name':      h.name   || '',
     'helper-form-gender':    h.gender || '',
     'helper-form-dob':       h.dob    || '',
     'helper-form-club':      h.club   || '',
-    'helper-form-role':      h.role   || '',
-    'helper-form-role-desc': state.roles.find(r => r.role === h.role)?.description || '',
+    'helper-form-role':      '',
+    'helper-form-role-desc': '',
   });
   document.getElementById('btn-submit-helper').textContent = 'Update';
   document.getElementById('btn-cancel-helper-edit').style.display = '';
@@ -66,6 +99,8 @@ function fillFormForEdit(num) {
 
 function resetHelperForm() {
   editingNumber = 0;
+  selectedRoles = [];
+  renderRoleTags();
   clearRowEditing('helpers-tbody');
   clearForm('helper-form-fields');
   setHTML('helper-form-number', `#${getNextHelperNumber()}`);
@@ -85,36 +120,41 @@ export async function submitHelperForm() {
     return;
   }
 
-  const role     = val('helper-form-role').trim();
-  if (!role) {
-    showStatus('Please enter a role.', true);
+  // Auto-add whatever is still typed in the role input
+  addRoleFromInput();
+
+  if (!selectedRoles.length) {
+    showStatus('Please enter at least one role.', true);
     document.getElementById('helper-form-role')?.focus();
     return;
   }
 
-  const knownRole = state.roles.find(r => r.role.toLowerCase() === role.toLowerCase());
-  const canonicalRole = knownRole ? knownRole.role : role;
-
+  // Auto-add any unrecognised roles to the roles table
   const roleDesc = val('helper-form-role-desc').trim();
-  if (!knownRole && !roleDesc) {
-    showStatus('Please enter a description for the new role.', true);
-    document.getElementById('helper-form-role-desc')?.focus();
-    return;
+  let rolesChanged = false;
+  for (const roleName of selectedRoles) {
+    if (!state.roles.find(r => r.role.toLowerCase() === roleName.toLowerCase())) {
+      state.roles.push(createRole({ role: roleName, description: roleDesc }));
+      rolesChanged = true;
+    }
   }
-
-  // Auto-add new role if not already in roles table
-  if (!isEdit && !knownRole) {
-    state.roles.push(createRole({ role: canonicalRole, description: roleDesc }));
+  if (rolesChanged) {
     await saveRoles();
     updateDatalistRoles();
   }
+
+  // Build canonical role string using exact casing from the roles table
+  const roleString = selectedRoles.map(rName => {
+    const found = state.roles.find(r => r.role.toLowerCase() === rName.toLowerCase());
+    return found ? found.role : rName;
+  }).join(', ');
 
   const formData = {
     name:   val('helper-form-name'),
     gender: val('helper-form-gender'),
     dob:    val('helper-form-dob'),
     club:   normaliseClub(val('helper-form-club')),
-    role:   canonicalRole,
+    role:   roleString,
   };
 
   showBusy(isEdit ? 'Updating…' : 'Adding helper…');
@@ -165,6 +205,13 @@ export function wireHelpers() {
     showStatus('All helpers cleared.');
   });
 
+  // ---- Role chip input ----
+  const roleInput = document.getElementById('helper-form-role');
+  roleInput?.addEventListener('keydown', e => {
+    if (e.key === ',') { e.preventDefault(); addRoleFromInput(); }
+  });
+  on('btn-add-role-chip', 'click', () => { addRoleFromInput(); roleInput?.focus(); });
+
   // ---- Name typeahead against people database ----
   const helperFields = { 'helper-form-gender': '', 'helper-form-dob': '', 'helper-form-club': '' };
   const fillHelperFromPerson = p => fillForm('', {
@@ -191,13 +238,16 @@ export function wireHelpers() {
   wireClubTypeahead(document.getElementById('helper-form-club'));
 
   const roleDescEl = document.getElementById('helper-form-role-desc');
-  wireRoleTypeahead(document.getElementById('helper-form-role'), {
-    onSelect: r => { if (roleDescEl) roleDescEl.value = r.description || ''; },
+  wireRoleTypeahead(roleInput, {
+    onSelect: r => {
+      if (roleDescEl) roleDescEl.value = r.description || '';
+      addRoleFromInput();
+    },
   });
 
   if (roleDescEl) {
     roleDescEl.addEventListener('change', async () => {
-      const roleName = document.getElementById('helper-form-role')?.value.trim();
+      const roleName = roleInput?.value.trim();
       const desc = roleDescEl.value.trim();
       if (!roleName) return;
       const found = state.roles.find(r => r.role.toLowerCase() === roleName.toLowerCase());

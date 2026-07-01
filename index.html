@@ -22,7 +22,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.3-alpha)</button></h1>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.4-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <div style="flex:1"></div>
@@ -129,6 +129,7 @@
             <select id="ev-categories">
               <option value="FRA">FRA (5 year)</option>
               <option value="WFRA">WFRA (10 year)</option>
+              <option value="Custom">Custom</option>
             </select>
           </div>
           <div class="form-field">
@@ -478,12 +479,16 @@
               <input type="text" id="helper-form-club" autocomplete="off">
             </div>
             <div class="form-field mb-8">
-              <label for="helper-form-role">Role</label>
-              <input type="text" id="helper-form-role" autocomplete="off">
+              <label for="helper-form-role">Roles</label>
+              <div id="helper-role-tags" class="role-tags-wrap"></div>
+              <div class="role-input-row">
+                <input type="text" id="helper-form-role" autocomplete="off" placeholder="Type role, press comma or Add">
+                <button type="button" class="btn-sm" id="btn-add-role-chip" tabindex="-1">Add</button>
+              </div>
             </div>
             <div class="form-field mb-8">
-              <label for="helper-form-role-desc">Role Description</label>
-              <input type="text" id="helper-form-role-desc" placeholder="Auto-filled for known roles; enter for new roles">
+              <label for="helper-form-role-desc">New Role Description</label>
+              <input type="text" id="helper-form-role-desc" placeholder="Description for unrecognised roles">
             </div>
             <div class="btn-row" style="margin-top:8px">
               <button class="btn" id="btn-submit-helper" style="flex:1">Add Helper</button>
@@ -943,18 +948,37 @@
         <span class="count-badge" id="roles-count">0</span>
         <span class="entry-status view-status-msg" hidden></span>
       </div>
-      <div class="btn-row">
-        <button class="btn" id="btn-add-role">Add Role</button>
-        <button class="btn btn-secondary" id="btn-export-roles">Export CSV</button>
-        <button class="btn btn-secondary" id="btn-import-roles">Import CSV</button>
-        <button class="btn btn-secondary" id="btn-reset-roles">Reset to Built-in</button>
-        <button class="btn btn-delete" id="btn-clear-roles">Clear All</button>
+
+      <div class="tab-bar" id="roles-tab-bar">
+        <button class="active" data-roles-tab="custom">Custom</button>
+        <button data-roles-tab="builtin">Built-in</button>
       </div>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead></thead>
-          <tbody id="roles-tbody"></tbody>
-        </table>
+
+      <!-- Custom roles (editable) -->
+      <div class="tab-panel active" id="roles-tab-custom">
+        <div class="btn-row">
+          <button class="btn" id="btn-add-role">Add Role</button>
+          <button class="btn btn-secondary" id="btn-export-roles">Export CSV</button>
+          <button class="btn btn-secondary" id="btn-import-roles">Import CSV</button>
+          <button class="btn btn-secondary" id="btn-reset-roles">Reset to Built-in</button>
+          <button class="btn btn-delete" id="btn-clear-roles">Clear All</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="roles-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Built-in roles (read-only) -->
+      <div class="tab-panel" id="roles-tab-builtin">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="builtin-roles-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -987,52 +1011,40 @@
     <div class="view" id="view-categories" hidden>
       <div class="view-header"><h2>Categories</h2><span class="entry-status view-status-msg" hidden></span></div>
 
+      <p id="cat-scheme-info"></p>
+
       <div class="tab-bar" id="cat-tab-bar">
-        <button class="active" data-cat-tab="active">Active</button>
-        <button data-cat-tab="fra">FRA Preset</button>
-        <button data-cat-tab="wfra">WFRA Preset</button>
+        <button data-cat-tab="fra">FRA</button>
+        <button data-cat-tab="wfra">WFRA</button>
+        <button class="active" data-cat-tab="custom">Custom</button>
       </div>
 
-      <!-- Active categories (per-race, ad-hoc) -->
-      <div class="tab-panel active" id="cat-tab-active">
+      <!-- Custom categories (user-defined, editable) -->
+      <div class="tab-panel active" id="cat-tab-custom">
         <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-load-fra-preset">Load FRA Preset</button>
+          <button class="btn btn-secondary" id="btn-load-wfra-preset">Load WFRA Preset</button>
+          <button class="btn btn-secondary" id="btn-import-categories-csv">Import CSV</button>
+          <button class="btn btn-secondary" id="btn-export-categories-csv">Export CSV</button>
           <button class="btn" id="btn-add-category">Add Row</button>
-          <button class="btn btn-secondary" id="btn-apply-fra">Apply FRA Preset</button>
-          <button class="btn btn-secondary" id="btn-apply-wfra">Apply WFRA Preset</button>
+          <button class="btn btn-danger" id="btn-clear-categories">Clear All</button>
         </div>
         <div class="table-scroll">
-          <table class="data-table"><thead>
-            <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th title="Minimum age for this category">MinAge</th><th title="Category code (e.g. MV40)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Minimum age for this category">MinAge</th><th title="Category code (e.g. FV50)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Edit or delete">Actions</th></tr>
-          </thead><tbody id="categories-tbody"></tbody></table>
+          <table class="data-table"><thead></thead><tbody id="custom-categories-tbody"></tbody></table>
         </div>
       </div>
 
-      <!-- FRA preset (editable template) -->
+      <!-- FRA preset (read-only built-in) -->
       <div class="tab-panel" id="cat-tab-fra">
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="btn-reset-fra">Reset to Built-in</button>
-          <button class="btn" id="btn-add-fra-row">Add Row</button>
-        </div>
         <div class="table-scroll">
-          <table class="data-table"><thead>
-            <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th title="Minimum age for this category">MinAge</th><th title="Category code (e.g. MV40)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Minimum age for this category">MinAge</th><th title="Category code (e.g. FV50)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Edit or delete">Actions</th></tr>
-          </thead><tbody id="fra-preset-tbody"></tbody></table>
+          <table class="data-table"><thead></thead><tbody id="fra-categories-tbody"></tbody></table>
         </div>
       </div>
 
-      <!-- WFRA preset (editable template) -->
+      <!-- WFRA preset (read-only built-in) -->
       <div class="tab-panel" id="cat-tab-wfra">
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="btn-reset-wfra">Reset to Built-in</button>
-          <button class="btn" id="btn-add-wfra-row">Add Row</button>
-        </div>
         <div class="table-scroll">
-          <table class="data-table"><thead>
-            <tr><th colspan="4">Male</th><th colspan="4" class="col-sep">Female</th><th></th></tr>
-            <tr><th title="Minimum age for this category">MinAge</th><th title="Category code (e.g. MV40)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Minimum age for this category">MinAge</th><th title="Category code (e.g. FV50)">Cat</th><th title="Short reference used in results">Ref</th><th title="Maximum race distance for this category (km)">MaxDist</th><th class="col-sep" title="Edit or delete">Actions</th></tr>
-          </thead><tbody id="wfra-preset-tbody"></tbody></table>
+          <table class="data-table"><thead></thead><tbody id="wfra-categories-tbody"></tbody></table>
         </div>
       </div>
     </div>

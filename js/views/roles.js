@@ -3,7 +3,7 @@
 import { state, saveRoles } from '../state.js';
 import { createRole } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable, tableColumns } from '../ui.js';
+import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable, tableColumns, wireTabBar } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { BUILTIN_ROLES } from '../roles.js';
@@ -16,10 +16,16 @@ const ROLE_COLS = tableColumns(TABLES.roles, {
       <button class="btn-sm btn-delete" data-action="del">Del</button>`,
 });
 
+const BUILTIN_ROLE_COLS = tableColumns(
+  TABLES.roles.filter(c => c.id !== 'actions'),
+  {
+    role:        r => escHtml(r.role || ''),
+    description: r => escHtml(r.description || ''),
+  }
+);
+
 
 export function renderRoles() {
-  const tbody = document.getElementById('roles-tbody');
-  if (!tbody) return;
   const sorted = [...state.roles]
     .map((r, i) => ({ ...r, _si: i }))
     .sort((a, b) => (a.role || '').localeCompare(b.role || ''));
@@ -27,6 +33,8 @@ export function renderRoles() {
     rowAttrs: r => ({ id: `role-row-${r._si}`, 'data-idx': r._si }),
   });
   setHTML('roles-count', `${sorted.length} roles`);
+  renderTable('builtin-roles-tbody', BUILTIN_ROLE_COLS,
+    [...BUILTIN_ROLES].sort((a, b) => (a.role || '').localeCompare(b.role || '')));
 }
 
 function roleEditCells(prefix, r) {
@@ -160,6 +168,8 @@ async function resetToBuiltin() {
 }
 
 export function wireRoles() {
+  wireTabBar('roles-tab-bar', 'roles-tab-', 'data-roles-tab');
+
   on('btn-add-role',     'click', showAddRoleRow);
   on('btn-export-roles', 'click', exportRoles);
   on('btn-import-roles', 'click', importRoles);

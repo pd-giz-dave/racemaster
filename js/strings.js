@@ -157,13 +157,12 @@ export const TOOLTIPS = {
   'btn-clear-dibbers':           'Delete all dibber records - cannot be undone',
 
   // Categories
-  'btn-add-category':            'Add a new category row to the active set',
-  'btn-apply-fra':               'Replace the current active categories with the FRA preset (overrides event settings)',
-  'btn-apply-wfra':              'Replace the current active categories with the WFRA preset (overrides event settings)',
-  'btn-reset-fra':               'Reset the FRA preset table to the built-in defaults',
-  'btn-add-fra-row':             'Add a row to the FRA preset',
-  'btn-reset-wfra':              'Reset the WFRA preset table to the built-in defaults',
-  'btn-add-wfra-row':            'Add a row to the WFRA preset',
+  'btn-add-category':            'Add a new row to the custom categories',
+  'btn-load-fra-preset':         'Copy the built-in FRA categories into the custom list (replaces any existing custom categories)',
+  'btn-load-wfra-preset':        'Copy the built-in WFRA categories into the custom list (replaces any existing custom categories)',
+  'btn-import-categories-csv':   'Import custom categories from a CSV file (replaces any existing custom categories)',
+  'btn-export-categories-csv':   'Export custom categories to a CSV file',
+  'btn-clear-categories':        'Delete all custom categories',
 
   // Data file / auth
   'df-username':                 'Your RaceMaster username — use only letters, numbers and hyphens',
@@ -323,14 +322,15 @@ export const HELP = {
         The CSV must include at least columns of "Short Code" and "Long Code".</p>
   `,
   'view-categories': `
-    <p>The age categories for this event. The <strong>FRA</strong> (5-year age groups) and 
-        <strong>WFRA</strong> (10-year age groups) schemes are pre-configured and selected in Event Settings.</p>
-    <p>Custom categories can be added here if the standard schemes do not cover your event.</p>
+    <p>The <strong>FRA</strong> (5-year age groups) and <strong>WFRA</strong> (10-year age groups)
+        tabs show the built-in schemes (read-only). Select either scheme in Event Settings to use it.</p>
+    <p>Use the <strong>Custom</strong> tab to define your own categories — load a preset as a starting
+        point, then edit freely. Select <em>Custom</em> in Event Settings to activate your custom list.</p>
   `,
   'view-roles': `
     <p>The list of helper roles (e.g. Timekeeper, Start Marshal, Registration).
         Assign roles when recording helpers on the Helpers page so the helpers report shows who did what.</p>
-    <p>Add roles here before recording helpers, or type them directly into the helpers form.</p>
+    <p>Add roles here before recording helpers, or type them directly into the helpers form, or load the <strong>Built-in</strong> roles.</p>
   `,
   'view-datafile': `
     <p>Datasets are stored on the RaceMaster server. Sign in to view, create, and connect to your datasets.
@@ -372,7 +372,12 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.3-alpha - current version</h3>
+    <h3>v0.0.4-alpha - current version</h3>
+    <ul>
+      <li>Add a custom categories facility, with import/export capabilities</li>
+      <li>Add multi-role assignment to helpers</li>
+    </ul>
+    <h3>v0.0.3-alpha/h3>
     <ul>
       <li>Add consolidated results publishing with search and sort capabilities</li>
     </ul>
@@ -552,6 +557,14 @@ export const TABLES = {
     { id: 'role',        label: 'Role',        title: 'Role name (e.g. Timekeeper, Marshal)' },
     { id: 'description', label: 'Description', title: 'Description of what this role involves' },
     { id: 'actions',     label: 'Actions',     title: 'Edit or delete' },
+  ],
+  categories: [
+    { id: 'minAge',    label: 'MinAge',     title: 'Minimum age for this category' },
+    { id: 'maleCat',   label: 'Male Cat',   title: 'Male category code (e.g. MSEN, M40)' },
+    { id: 'femaleCat', label: 'Female Cat', title: 'Female category code (e.g. WSEN, W40)' },
+    { id: 'ref',       label: 'Ref',        title: 'Age reference: EOY = end of race year, NOW = actual age on race date' },
+    { id: 'maxDist',   label: 'MaxDist',    title: 'Maximum race distance (km) allowed for this category' },
+    { id: 'actions',   label: 'Actions',    title: 'Edit or delete' },
   ],
   dibbers: [
     { id: 'short_code', label: 'Short Code', title: 'Short (3-digit) SI card number' },

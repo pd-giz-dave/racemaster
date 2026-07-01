@@ -1,147 +1,202 @@
 'use strict';
 
-import { state, saveCategories, saveFraPreset, saveWfraPreset } from '../state.js';
+import { state, saveCategories, saveCustomCategories, applyCustomCategories } from '../state.js';
 import { CSV } from '../csv-schema.js';
-import { resetFRAPreset, resetWFRAPreset } from '../categories.js';
-import { on, escHtml, showStatus, showConfirmDialog, wireTabBar } from '../ui.js';
+import { builtinFRARows, builtinWFRARows } from '../categories.js';
+import { createCategory } from '../schema.js';
+import { parseCSV, formatCSV } from '../csv.js';
+import { on, escHtml, showStatus, showConfirmDialog, wireTabBar, renderThead, pickFile, downloadText } from '../ui.js';
+import { TABLES } from '../strings.js';
 import { normaliseTime } from '../utils.js';
 
-// Config for each of the three category tables
-const CAT_TABLE = {
-  active: { tbodyId: 'categories-tbody', getArr: () => state.categories, saveFn: saveCategories, label: 'category',   fields: CSV.categories.fields, widths: CSV.categories.widths, femaleSepIdx: 4 },
-  fra:    { tbodyId: 'fra-preset-tbody', getArr: () => state.fraPreset,  saveFn: saveFraPreset,  label: 'FRA preset', fields: CSV.categories.fields, widths: CSV.categories.widths, femaleSepIdx: 4 },
-  wfra:   { tbodyId: 'wfra-preset-tbody',getArr: () => state.wfraPreset, saveFn: saveWfraPreset, label: 'WFRA preset',fields: CSV.categories.fields, widths: CSV.categories.widths, femaleSepIdx: 4 },
-};
+const FIELDS = CSV.categories.fields;
+const WIDTHS = CSV.categories.widths;
 
 // ---- Render ----
 
 export function renderCategories() {
-  renderCategoryTable('active');
-  renderCategoryTable('fra');
-  renderCategoryTable('wfra');
+  renderCategoryTable();
+  renderReadonlyTable('fra-categories-tbody', builtinFRARows());
+  renderReadonlyTable('wfra-categories-tbody', builtinWFRARows());
+  activateSchemeTab();
 }
 
-export function renderCategoryTable(key) {
-  const cfg = CAT_TABLE[key];
-  if (!cfg) return;
-  const arr = cfg.getArr();
-  const tbody = document.getElementById(cfg.tbodyId);
+function activateSchemeTab() {
+  const scheme = (state.event.categories || 'FRA').toLowerCase();
+  const label = { fra: 'FRA', wfra: 'WFRA', custom: 'Custom' }[scheme] ?? scheme.toUpperCase();
+  const bar = document.getElementById('cat-tab-bar');
+  if (!bar) return;
+  bar.querySelectorAll('[data-cat-tab]').forEach(btn => {
+    btn.classList.toggle('cat-active-scheme', btn.dataset.catTab === scheme);
+  });
+  bar.querySelector(`[data-cat-tab="${scheme}"]`)?.click();
+  const info = document.getElementById('cat-scheme-info');
+  if (info) info.textContent = `Active scheme for this event: ${label} — the tab marked "active" shows the categories in use.`;
+}
+
+export function renderCategoryTable() {
+  const tbody = document.getElementById('custom-categories-tbody');
   if (!tbody) return;
-  tbody.innerHTML = arr.map((c, i) => `
-    <tr id="${key}-cat-row-${i}">
-      ${cfg.fields.map((f, i) => `<td${i === cfg.femaleSepIdx ? ' class="col-sep"' : ''}>${c[f] ?? ''}</td>`).join('')}
-      <td class="col-sep">
-        <button class="btn-sm btn-edit"         data-key="${key}" data-idx="${i}">Edit</button>
-        <button class="btn-sm btn-delete-entry" data-key="${key}" data-idx="${i}">Del</button>
+  renderThead('custom-categories-tbody', TABLES.categories);
+  tbody.innerHTML = state.customCategories.map((c, i) => `
+    <tr id="custom-cat-row-${i}">
+      ${FIELDS.map(f => `<td>${escHtml(String(c[f] ?? ''))}</td>`).join('')}
+      <td>
+        <button class="btn-sm btn-edit"         data-idx="${i}">Edit</button>
+        <button class="btn-sm btn-delete-entry" data-idx="${i}">Del</button>
       </td>
     </tr>`).join('');
   tbody.querySelectorAll('.btn-edit').forEach(b =>
-    b.addEventListener('click', () => editCategoryRow(b.dataset.key, +b.dataset.idx)));
+    b.addEventListener('click', () => editCategoryRow(+b.dataset.idx)));
   tbody.querySelectorAll('.btn-delete-entry').forEach(b =>
-    b.addEventListener('click', () => deleteCategoryRow(b.dataset.key, +b.dataset.idx)));
+    b.addEventListener('click', () => deleteCategoryRow(+b.dataset.idx)));
 }
 
-export function editCategoryRow(key, idx) {
-  const cfg = CAT_TABLE[key];
-  if (!cfg) return;
-  const c = cfg.getArr()[idx];
+function renderReadonlyTable(tbodyId, rows) {
+  const cols = TABLES.categories.filter(c => c.id !== 'actions');
+  renderThead(tbodyId, cols);
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = rows.map(c =>
+    `<tr>${FIELDS.map(f => `<td>${escHtml(String(c[f] ?? ''))}</td>`).join('')}</tr>`
+  ).join('');
+}
+
+// ---- Edit / Save / Delete ----
+
+export function editCategoryRow(idx) {
+  const c = state.customCategories[idx];
   if (!c) return;
-  const row = document.getElementById(`${key}-cat-row-${idx}`);
+  const row = document.getElementById(`custom-cat-row-${idx}`);
   if (!row) return;
-  row.innerHTML = cfg.fields.map((f, i) =>
-    `<td${i === cfg.femaleSepIdx ? ' class="col-sep"' : ''}><input id="${key}-cat-${idx}-${f}" type="text" value="${escHtml(String(c[f] ?? ''))}" style="width:${cfg.widths[i]}"></td>`
-  ).join('') + `<td class="col-sep">
+  row.innerHTML = FIELDS.map((f, i) =>
+    `<td><input id="custom-cat-${idx}-${f}" type="text" value="${escHtml(String(c[f] ?? ''))}" style="width:${WIDTHS[i]}"></td>`
+  ).join('') + `<td>
     <button class="btn-sm btn-save">Save</button>
     <button class="btn-sm btn-secondary">Cancel</button>
   </td>`;
-  row.querySelector('.btn-save').addEventListener('click', () => saveCategoryRow(key, idx));
-  row.querySelector('.btn-secondary').addEventListener('click', () => renderCategoryTable(key));
-  document.getElementById(`${key}-cat-${idx}-maleMinAge`)?.focus();
+  row.querySelector('.btn-save').addEventListener('click', () => saveCategoryRow(idx));
+  row.querySelector('.btn-secondary').addEventListener('click', () => renderCategoryTable());
+  document.getElementById(`custom-cat-${idx}-minAge`)?.focus();
 }
 
-export async function saveCategoryRow(key, idx) {
-  const cfg = CAT_TABLE[key];
-  if (!cfg) return;
-  const c = cfg.getArr()[idx];
+export async function saveCategoryRow(idx) {
+  const c = state.customCategories[idx];
   if (!c) return;
-  for (const f of cfg.fields) {
-    const v = document.getElementById(`${key}-cat-${idx}-${f}`)?.value.trim() ?? '';
+  for (const f of FIELDS) {
+    const v = document.getElementById(`custom-cat-${idx}-${f}`)?.value.trim() ?? '';
     c[f] = f.includes('Age') || f.includes('Dist') ? (+v === +v ? +v : c[f])
          : f.includes('Start') ? (normaliseTime(v) || '')
          : v;
   }
-  await cfg.saveFn();
-  showStatus(`${cfg.label} row ${idx + 1} saved.`);
-  renderCategoryTable(key);
+  await afterCustomChange();
+  showStatus(`Category row ${idx + 1} saved.`);
+  renderCategoryTable();
 }
 
-export async function deleteCategoryRow(key, idx) {
-  const cfg = CAT_TABLE[key];
-  if (!cfg) return;
-  const arr = cfg.getArr();
-  if (!await showConfirmDialog(`Delete ${cfg.label} row ${idx + 1} (${arr[idx]?.maleCat || ''})?`, 'Delete', true)) return;
+export async function deleteCategoryRow(idx) {
+  const arr = state.customCategories;
+  if (!await showConfirmDialog(`Delete category row ${idx + 1} (${arr[idx]?.maleCat || ''})?`, 'Delete', true)) return;
   arr.splice(idx, 1);
-  await cfg.saveFn();
-  showStatus(`${cfg.label} row deleted.`);
-  renderCategoryTable(key);
+  await afterCustomChange();
+  showStatus('Category row deleted.');
+  renderCategoryTable();
 }
 
-export function showAddCategoryRow(key) {
-  const cfg = CAT_TABLE[key];
-  if (!cfg) return;
-  const tbody = document.getElementById(cfg.tbodyId);
-  if (!tbody || document.getElementById(`${key}-cat-row-new`)) return;
+export function showAddCategoryRow() {
+  const tbody = document.getElementById('custom-categories-tbody');
+  if (!tbody || document.getElementById('custom-cat-row-new')) return;
   const tr = document.createElement('tr');
-  tr.id = `${key}-cat-row-new`;
-  tr.innerHTML = cfg.fields.map((f, i) =>
-    `<td${i === cfg.femaleSepIdx ? ' class="col-sep"' : ''}><input id="${key}-cat-new-${f}" type="text" value="" style="width:${cfg.widths[i]}"></td>`
-  ).join('') + `<td class="col-sep">
+  tr.id = 'custom-cat-row-new';
+  tr.innerHTML = FIELDS.map((f, i) =>
+    `<td><input id="custom-cat-new-${f}" type="text" value="" style="width:${WIDTHS[i]}"></td>`
+  ).join('') + `<td>
     <button class="btn-sm btn-save">Save</button>
     <button class="btn-sm btn-secondary">Cancel</button>
   </td>`;
   tbody.appendChild(tr);
-  tr.querySelector('.btn-save').addEventListener('click', () => saveNewCategoryRow(key));
+  tr.querySelector('.btn-save').addEventListener('click', () => saveNewCategoryRow());
   tr.querySelector('.btn-secondary').addEventListener('click', () => tr.remove());
   tr.querySelector('input')?.focus();
 }
 
-export async function saveNewCategoryRow(key) {
-  const cfg = CAT_TABLE[key];
-  if (!cfg) return;
+export async function saveNewCategoryRow() {
   const row = {};
-  for (const f of cfg.fields) {
-    const v = document.getElementById(`${key}-cat-new-${f}`)?.value.trim() || '';
+  for (const f of FIELDS) {
+    const v = document.getElementById(`custom-cat-new-${f}`)?.value.trim() || '';
     row[f] = f.includes('Age') || f.includes('Dist') ? +v || 0
            : f.includes('Start') ? (normaliseTime(v) || '')
            : v;
   }
-  cfg.getArr().push(row);
-  await cfg.saveFn();
-  showStatus(`${cfg.label} row added.`);
-  renderCategoryTable(key);
+  state.customCategories.push(row);
+  await afterCustomChange();
+  showStatus('Category row added.');
+  renderCategoryTable();
+}
+
+// ---- Load presets / CSV ----
+
+async function loadPreset(rows, label) {
+  if (!await showConfirmDialog(`Replace all custom categories with the ${label} preset? This cannot be undone.`, 'Load', true)) return;
+  state.customCategories = rows;
+  await afterCustomChange();
+  showStatus(`${label} preset loaded into custom categories.`);
+  renderCategoryTable();
+}
+
+async function importCategoriesCSV() {
+  const text = await pickFile('.csv');
+  if (!text) return;
+  const rows = parseCSV(text);
+  if (!rows.length) { showStatus('CSV is empty.', true); return; }
+  if (!('minAge' in rows[0]) && !('maleCat' in rows[0])) {
+    showStatus('CSV missing required columns — expected minAge, maleCat, femaleCat, ref, maxDist.', true);
+    return;
+  }
+  state.customCategories = rows.map(r => createCategory({
+    minAge:    r.minAge    ?? '',
+    maleCat:   r.maleCat   ?? '',
+    femaleCat: r.femaleCat ?? '',
+    ref:       r.ref       ?? '',
+    maxDist:   r.maxDist   ?? '',
+  }));
+  await afterCustomChange();
+  showStatus(`Imported ${state.customCategories.length} rows.`);
+  renderCategoryTable();
+}
+
+function exportCategoriesCSV() {
+  if (!state.customCategories.length) { showStatus('No custom categories to export.', true); return; }
+  downloadText(formatCSV(state.customCategories, FIELDS), 'custom_categories.csv');
+}
+
+async function clearAllCategories() {
+  if (!await showConfirmDialog('Delete all custom categories? This cannot be undone.', 'Clear All', true)) return;
+  state.customCategories = [];
+  await afterCustomChange();
+  showStatus('Custom categories cleared.');
+  renderCategoryTable();
+}
+
+// ---- Helpers ----
+
+async function afterCustomChange() {
+  await saveCustomCategories();
+  if ((state.event.categories || 'FRA') === 'Custom') {
+    applyCustomCategories();
+    await saveCategories();
+  }
 }
 
 // ---- Wire ----
 
 export function wireCategories() {
-  on('btn-add-category',  'click', () => showAddCategoryRow('active'));
-  on('btn-add-fra-row',   'click', () => showAddCategoryRow('fra'));
-  on('btn-add-wfra-row',  'click', () => showAddCategoryRow('wfra'));
-
-  on('btn-reset-fra', 'click', async () => {
-    if (!await showConfirmDialog('Reset FRA preset to built-in defaults? Any customisations will be lost.', 'Reset', true)) return;
-    resetFRAPreset();
-    await saveFraPreset();
-    showStatus('FRA preset reset to built-in defaults.');
-    renderCategoryTable('fra');
-  });
-  on('btn-reset-wfra', 'click', async () => {
-    if (!await showConfirmDialog('Reset WFRA preset to built-in defaults? Any customisations will be lost.', 'Reset', true)) return;
-    resetWFRAPreset();
-    await saveWfraPreset();
-    showStatus('WFRA preset reset to built-in defaults.');
-    renderCategoryTable('wfra');
-  });
+  on('btn-add-category',          'click', () => showAddCategoryRow());
+  on('btn-load-fra-preset',       'click', () => loadPreset(builtinFRARows(),  'FRA'));
+  on('btn-load-wfra-preset',      'click', () => loadPreset(builtinWFRARows(), 'WFRA'));
+  on('btn-import-categories-csv', 'click', importCategoriesCSV);
+  on('btn-export-categories-csv', 'click', exportCategoriesCSV);
+  on('btn-clear-categories',      'click', clearAllCategories);
 
   wireTabBar('cat-tab-bar', 'cat-tab-', 'data-cat-tab');
 }
