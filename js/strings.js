@@ -376,6 +376,7 @@ export const PAGES = {
     <ul>
       <li>Add a custom categories facility, with import/export capabilities</li>
       <li>Add multi-role assignment to helpers</li>
+      <li>Add sort capability and management facilities on the people page</li>
     </ul>
     <h3>v0.0.3-alpha/h3>
     <ul>
@@ -535,15 +536,17 @@ export const TABLES = {
     { id: 'time',    label: 'Time',     title: 'Finish time' },
   ],
   people: [
+    { id: 'select',       label: '',             title: 'Select for bulk delete' },
     { id: 'name',         label: 'Name',         title: "Person's name" },
     { id: 'gender',       label: 'G',            title: 'Gender' },
     { id: 'dob',          label: 'DoB',          title: 'Date of birth' },
     { id: 'club',         label: 'Club',         title: 'Running club' },
     { id: 'fra',          label: 'FRA',          title: 'FRA registration number' },
-    { id: 'last_seen',    label: 'Last Seen',    title: 'Date last registered in a race' },
-    { id: 'seen',         label: 'Seen',         title: 'Number of times raced' },
+    { id: 'last_seen',    label: 'Last Raced',   title: 'Date last registered in a race' },
+    { id: 'seen',         label: 'Raced',        title: 'Number of times raced' },
     { id: 'last_helped',  label: 'Last Helped',  title: 'Date last recorded as a helper' },
-    { id: 'helped',       label: 'Helped',       title: 'Number of times helped at events' },
+    { id: 'helped',           label: 'Helped',    title: 'Number of times helped at events' },
+    { id: 'last_seen_any',    label: 'Last Seen', title: 'Later of last raced and last helped — most recent contact with the club' },
     { id: 'banned_until', label: 'Banned Until', title: 'Banned from competition until this date' },
     { id: 'actions',      label: 'Actions',      title: 'Edit or delete' },
   ],

@@ -427,6 +427,11 @@ input:focus, select:focus, textarea:focus {
 #view-results:not([hidden]),
 #view-categories:not([hidden]) { display: flex; flex-direction: column; height: 100%; }
 #results-sticky-top,
+#people-main-table thead th.p-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+#people-main-table thead th.p-sortable::after { content: ' ↕'; opacity: 0.4; font-size: 0.75em; }
+#people-main-table thead th.p-sortable[data-sort-dir="asc"]::after { content: ' ▲'; opacity: 0.8; }
+#people-main-table thead th.p-sortable[data-sort-dir="desc"]::after { content: ' ▼'; opacity: 0.8; }
+
 .role-tags-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
 .role-tags-wrap:empty { margin: 0; }
 .role-input-row { display: flex; gap: 4px; align-items: center; }

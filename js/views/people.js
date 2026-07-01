@@ -3,7 +3,7 @@
 import { state, savePeople } from '../state.js';
 import { createPerson } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, showStatus, showConfirmDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable, tableColumns } from '../ui.js';
+import { on, escHtml, showStatus, showConfirmDialog, showInputDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
@@ -12,6 +12,7 @@ import { laterDate, normalisePeopleRows } from '../data.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
 const PEOPLE_COLS = tableColumns(TABLES.people, {
+  select:       () => '<input type="checkbox" class="person-select">',
   name:         ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : ''),
   gender:       ({ p }) => p.gender || '',
   dob:          ({ p }) => p.dob || '',
@@ -20,16 +21,31 @@ const PEOPLE_COLS = tableColumns(TABLES.people, {
   last_seen:    ({ p }) => p.lastSeen || '',
   seen:         ({ p }) => p.seenTotal || '',
   last_helped:  ({ p }) => p.lastHelped || '',
-  helped:       ({ p }) => p.helpedTotal || '',
-  banned_until: ({ p }) => p.banned || '',
-  actions:      () => `
-      <button class="btn-sm btn-edit" data-action="edit">Edit</button>
-      <button class="btn-sm btn-delete" data-action="del">Del</button>`,
+  helped:        ({ p }) => p.helpedTotal || '',
+  last_seen_any: ({ p }) => laterDate(p.lastSeen, p.lastHelped) || '',
+  banned_until:  ({ p }) => p.banned || '',
+  actions:      () => `<button class="btn-sm btn-edit" data-action="edit">Edit</button>`,
 });
 
 let peopleFilter    = '';
 let showBannedOnly  = false;
 let showAll         = false;
+let sortCol         = null;
+let sortDir         = 1;   // 1 = asc, -1 = desc
+
+const SORT_KEYS = {
+  name:         r => (r.p.name        || '').toLowerCase(),
+  gender:       r => (r.p.gender      || '').toLowerCase(),
+  dob:          r => toISODate(r.p.dob        || '') || '9999-99-99',
+  club:         r => (r.p.club        || '').toLowerCase(),
+  fra:          r => (r.p.fraNumber   || '').toLowerCase(),
+  last_seen:    r => toISODate(r.p.lastSeen   || '') || '',
+  seen:         r => +(r.p.seenTotal  || 0),
+  last_helped:   r => toISODate(r.p.lastHelped || '') || '',
+  helped:        r => +(r.p.helpedTotal || 0),
+  last_seen_any: r => toISODate(laterDate(r.p.lastSeen, r.p.lastHelped) || '') || '',
+  banned_until:  r => toISODate(r.p.banned     || '') || '',
+};
 
 export function renderPeople() {
   const tbody = document.getElementById('people-tbody');
@@ -47,12 +63,16 @@ export function renderPeople() {
     setHTML('people-count', `${total} people`);
     return;
   }
-  const visible = state.people.map((p, i) => ({ p, i })).filter(({ p }) => {
+  let visible = state.people.map((p, i) => ({ p, i })).filter(({ p }) => {
     if (showBannedOnly && !isBanned(p)) return false;
     if (!low) return true;
     return (p.name || '').toLowerCase().includes(low) ||
            (p.club || '').toLowerCase().includes(low);
   });
+  if (sortCol && SORT_KEYS[sortCol]) {
+    const key = SORT_KEYS[sortCol];
+    visible.sort((a, b) => { const av = key(a), bv = key(b); return av < bv ? -sortDir : av > bv ? sortDir : 0; });
+  }
   renderTable('people-tbody', PEOPLE_COLS, visible, {
     rowAttrs: ({ p, i }) => ({
       id: `person-row-${i}`,
@@ -61,6 +81,7 @@ export function renderPeople() {
     }),
   });
   setHTML('people-count', `${visible.length} of ${total} people`);
+  wirePeopleSort();
 }
 
 export function personEditCells(prefix, p) {
@@ -321,6 +342,43 @@ function openMergePanel() {
   });
 }
 
+async function removeOldPeople() {
+  const iso = await showInputDialog(
+    'Remove people not seen since (inclusive cutoff):',
+    { type: 'date' }
+  );
+  if (!iso) return;
+  const cutoff = iso;  // YYYY-MM-DD for direct comparison with toISODate output
+  const toRemove = state.people.filter(p => {
+    const last = toISODate(laterDate(p.lastSeen, p.lastHelped) || '');
+    return !last || last < cutoff;
+  });
+  if (!toRemove.length) { showStatus('No people to remove before that date.'); return; }
+  if (!await showConfirmDialog(
+    `Remove ${toRemove.length} people last seen before ${iso}? This cannot be undone.`,
+    'Remove', true
+  )) return;
+  const removeSet = new Set(toRemove);
+  state.people = state.people.filter(p => !removeSet.has(p));
+  await savePeople();
+  showStatus(`Removed ${toRemove.length} people.`);
+  renderPeople();
+}
+
+async function removeSelectedPeople() {
+  const checked = [...document.querySelectorAll('#people-tbody input.person-select:checked')];
+  if (!checked.length) { showStatus('No people selected.', true); return; }
+  const indices = new Set(checked.map(cb => +cb.closest('[data-idx]')?.dataset.idx));
+  if (!await showConfirmDialog(
+    `Delete ${indices.size} selected ${indices.size === 1 ? 'person' : 'people'}? This cannot be undone.`,
+    'Delete', true
+  )) return;
+  state.people = state.people.filter((_, i) => !indices.has(i));
+  await savePeople();
+  showStatus(`Deleted ${indices.size} ${indices.size === 1 ? 'person' : 'people'}.`);
+  renderPeople();
+}
+
 async function clearPeople() {
   if (!await showConfirmDialog(`Clear all ${state.people.length} people?`, 'Clear All', true)) return;
   state.people.length = 0;
@@ -329,10 +387,27 @@ async function clearPeople() {
   renderPeople();
 }
 
+function wirePeopleSort() {
+  const ths = [...document.querySelectorAll('#people-main-table thead th')];
+  PEOPLE_COLS.forEach((col, idx) => {
+    const th = ths[idx];
+    if (!th || !SORT_KEYS[col.id]) return;
+    th.classList.add('p-sortable');
+    th.dataset.sortDir = col.id === sortCol ? (sortDir === 1 ? 'asc' : 'desc') : '';
+    th.addEventListener('click', () => {
+      sortDir = sortCol === col.id ? -sortDir : 1;
+      sortCol = col.id;
+      renderPeople();
+    });
+  });
+}
+
 export function wirePeople() {
-  on('btn-export-people', 'click', exportPeople);
-  on('btn-import-people', 'click', importPeople);
-  on('btn-clear-people',  'click', clearPeople);
+  on('btn-export-people',      'click', exportPeople);
+  on('btn-import-people',      'click', importPeople);
+  on('btn-remove-old-people',      'click', removeOldPeople);
+  on('btn-remove-selected-people', 'click', removeSelectedPeople);
+  on('btn-clear-people',           'click', clearPeople);
 
   on('btn-show-all-people', 'click', () => {
     showAll = !showAll;
@@ -382,7 +457,6 @@ export function wirePeople() {
     if (!btn) return;
     const idx = +btn.closest('[data-idx]')?.dataset.idx;
     if (btn.dataset.action === 'edit') editPersonRow(idx);
-    else if (btn.dataset.action === 'del') deletePersonRow(idx);
   });
 
   document.addEventListener('keydown', e => {

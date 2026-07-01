@@ -127,7 +127,7 @@ export function showChoiceDialog(message, choices, { focusCancel = false, vertic
   });
 }
 
-export function showInputDialog(message, { defaultValue = '', placeholder = '', clipboard = false } = {}) {
+export function showInputDialog(message, { defaultValue = '', placeholder = '', clipboard = false, type = 'text' } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'choice-dialog-overlay';
@@ -141,7 +141,7 @@ export function showInputDialog(message, { defaultValue = '', placeholder = '', 
     box.appendChild(msg);
 
     const input = document.createElement('input');
-    input.type = 'text';
+    input.type = type;
     input.className = 'input-dialog-field';
     input.value = defaultValue;
     input.placeholder = placeholder;
