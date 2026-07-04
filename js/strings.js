@@ -375,7 +375,11 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.4-alpha - current version</h3>
+    <h3>v0.0.5-alpha - current version</h3>
+    <ul>
+      <li>Add server API to accept data from the Racemaster Mobile Android app</li>
+    </ul>
+    <h3>v0.0.4-alpha</h3>
     <ul>
       <li>Add a custom categories facility, with import/export capabilities</li>
       <li>Add multi-role assignment to helpers</li>

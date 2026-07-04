@@ -456,6 +456,91 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // POST /api/data/:owner/:fullName/mobile  —  append rows synced from a Mule BLE pickup.
+    //
+    // Lands in a wholly separate file, "<fullName>-mobile.json" (same owner directory,
+    // NOT the main "<fullName>.json" dataset) — the Mule app still picks a target from the
+    // ordinary dataset list (GET /api/datasets) exactly as before and is oblivious to
+    // whether a "-mobile" companion file exists; the suffix means getDatasetsForUser's
+    // "-private"/"-public" suffix check naturally skips it, so it never shows up as a
+    // pickable dataset of its own. This used to append into the main dataset's own
+    // `finishers` array, but that meant every mule push bumped the main dataset's
+    // `_version` — which is *correct* per the whole-blob PUT's optimistic-concurrency
+    // check (it stops the web UI's next autosave from silently clobbering newly-arrived
+    // mobile rows with a 409 instead) but meant a mule syncing while a race director has
+    // the results page open would routinely surface as a disruptive "reload to get the
+    // latest data" prompt in their browser. Writing to a separate file sidesteps that
+    // entirely: this endpoint never touches the main dataset file, so it can never
+    // conflict with a browser PUT and never forces a reload.
+    //
+    // ┌────────────────────────────────────────────────────────────────────────────────┐
+    // │ ⚠️  BIG FAT WARNING — DO NOT ADD `await` BETWEEN readDataset AND writeDataset   │
+    // │ BELOW. Multiple mules can legitimately push to the same "-mobile.json" file at │
+    // │ the same time. This is only safe because Node is single-threaded and the       │
+    // │ read → append → write below is 100% synchronous with no `await`/Promise/       │
+    // │ setTimeout/callback in between — so once a request reaches `readDataset` here, │
+    // │ it is GUARANTEED to run through to `writeDataset` with no other request's copy │
+    // │ of this same handler able to interleave and read a stale pre-write version of  │
+    // │ the file. Introduce so much as one `await` in this block (e.g. switching to    │
+    // │ `fs.promises`) and two concurrent mule pushes WILL race: both read the same    │
+    // │ "before" state, both append, and whichever writes last silently discards the   │
+    // │ other's rows. If this ever needs to run across multiple Node processes/workers │
+    // │ (it currently doesn't — one process, see docker-compose.yml), this whole       │
+    // │ argument breaks and real file locking would be needed instead.                 │
+    // └────────────────────────────────────────────────────────────────────────────────┘
+    if (pathname.startsWith('/api/data/') && pathname.endsWith('/mobile') && req.method === 'POST') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+
+      const inner = pathname.slice('/api/data/'.length, -'/mobile'.length);
+      const slash = inner.indexOf('/');
+      const owner    = slash < 0 ? '' : sanitiseName(inner.slice(0, slash));
+      const fullName = slash < 0 ? '' : sanitiseName(inner.slice(slash + 1));
+      if (!owner || !fullName || (!fullName.endsWith('-private') && !fullName.endsWith('-public'))) {
+        return jsonReply(res, 400, { error: 'Invalid path — expected /api/data/:owner/:name-{private|public}/mobile' });
+      }
+      if (owner !== username && !isAdmin(username)) {
+        return jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' });
+      }
+      if (!fs.existsSync(dataFilePath(owner, fullName))) {
+        return jsonReply(res, 404, { error: 'Dataset not found' });
+      }
+
+      let incoming;
+      try { incoming = JSON.parse(await readBody(req)); }
+      catch { return jsonReply(res, 400, { error: 'Invalid JSON' }); }
+      if (!Array.isArray(incoming)) return jsonReply(res, 400, { error: 'Expected a JSON array of mobile records' });
+
+      // Everything from here to writeDataset() must stay synchronous — see the warning above.
+      const mobileFullName = `${fullName}-mobile`;
+      const mobileFile = readDataset(owner, mobileFullName);
+      if (!Array.isArray(mobileFile.mobile)) mobileFile.mobile = [];
+      const existingUuids = new Set(mobileFile.mobile.map(f => f.recordUuid).filter(Boolean));
+
+      let added = 0;
+      for (const record of incoming) {
+        if (!record || typeof record.recordUuid !== 'string' || existingUuids.has(record.recordUuid)) continue;
+        mobileFile.mobile.push({
+          recordUuid: record.recordUuid,
+          action: String(record.action || 'Finish'),
+          number: record.number ?? '',
+          time: String(record.time || ''),
+          splitNumber: record.splitNumber ?? null,
+          note: record.note ?? null,
+          timestampMillis: Number.isFinite(record.timestampMillis) ? record.timestampMillis : null,
+        });
+        existingUuids.add(record.recordUuid);
+        added++;
+      }
+
+      if (added > 0) {
+        mobileFile._version = (mobileFile._version || 0) + 1;
+        writeDataset(owner, mobileFullName, mobileFile);
+        console.log(`[mule-sync] ${owner}/${mobileFullName}: appended ${added} mobile row(s) (of ${incoming.length} received)`);
+      }
+      return jsonReply(res, 200, { ok: true, added, received: incoming.length, version: mobileFile._version || 0 });
+    }
+
     // GET /api/users  — admin only, list all users
     if (pathname === '/api/users' && req.method === 'GET') {
       const username = getAuthUser(req);
