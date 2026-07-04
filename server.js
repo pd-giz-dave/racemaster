@@ -506,39 +506,59 @@ const server = http.createServer(async (req, res) => {
         return jsonReply(res, 404, { error: 'Dataset not found' });
       }
 
-      let incoming;
-      try { incoming = JSON.parse(await readBody(req)); }
+      let body;
+      try { body = JSON.parse(await readBody(req)); }
       catch { return jsonReply(res, 400, { error: 'Invalid JSON' }); }
-      if (!Array.isArray(incoming)) return jsonReply(res, 400, { error: 'Expected a JSON array of mobile records' });
+      const incomingTimes = Array.isArray(body?.times) ? body.times : [];
+      const incomingBibs = Array.isArray(body?.bibs) ? body.bibs : [];
+      if (!Array.isArray(body?.times) && !Array.isArray(body?.bibs)) {
+        return jsonReply(res, 400, { error: 'Expected {times: [...], bibs: [...]}' });
+      }
 
       // Everything from here to writeDataset() must stay synchronous — see the warning above.
       const mobileFullName = `${fullName}-mobile`;
       const mobileFile = readDataset(owner, mobileFullName);
-      if (!Array.isArray(mobileFile.mobile)) mobileFile.mobile = [];
-      const existingUuids = new Set(mobileFile.mobile.map(f => f.recordUuid).filter(Boolean));
+      if (!Array.isArray(mobileFile.times)) mobileFile.times = [];
+      if (!Array.isArray(mobileFile.bibs)) mobileFile.bibs = [];
 
-      let added = 0;
-      for (const record of incoming) {
-        if (!record || typeof record.recordUuid !== 'string' || existingUuids.has(record.recordUuid)) continue;
-        mobileFile.mobile.push({
-          recordUuid: record.recordUuid,
-          action: String(record.action || 'Finish'),
-          number: record.number ?? '',
-          time: String(record.time || ''),
-          splitNumber: record.splitNumber ?? null,
-          note: record.note ?? null,
-          timestampMillis: Number.isFinite(record.timestampMillis) ? record.timestampMillis : null,
-        });
-        existingUuids.add(record.recordUuid);
-        added++;
-      }
+      const appendRecords = (targetArray, incomingRecords) => {
+        const existingUuids = new Set(targetArray.map(r => r.recordUuid).filter(Boolean));
+        let added = 0;
+        for (const record of incomingRecords) {
+          if (!record || typeof record.recordUuid !== 'string' || existingUuids.has(record.recordUuid)) continue;
+          targetArray.push({
+            recordUuid: record.recordUuid,
+            action: String(record.action || 'Finish'),
+            number: record.number ?? '',
+            time: String(record.time || ''),
+            splitNumber: record.splitNumber ?? null,
+            note: record.note ?? null,
+            timestampMillis: Number.isFinite(record.timestampMillis) ? record.timestampMillis : null,
+          });
+          existingUuids.add(record.recordUuid);
+          added++;
+        }
+        return added;
+      };
+
+      const addedTimes = appendRecords(mobileFile.times, incomingTimes);
+      const addedBibs = appendRecords(mobileFile.bibs, incomingBibs);
+      const added = addedTimes + addedBibs;
 
       if (added > 0) {
         mobileFile._version = (mobileFile._version || 0) + 1;
         writeDataset(owner, mobileFullName, mobileFile);
-        console.log(`[mule-sync] ${owner}/${mobileFullName}: appended ${added} mobile row(s) (of ${incoming.length} received)`);
+        console.log(
+          `[mule-sync] ${owner}/${mobileFullName}: appended ${addedTimes} time row(s), ${addedBibs} bib row(s) ` +
+          `(of ${incomingTimes.length} + ${incomingBibs.length} received)`,
+        );
       }
-      return jsonReply(res, 200, { ok: true, added, received: incoming.length, version: mobileFile._version || 0 });
+      return jsonReply(res, 200, {
+        ok: true,
+        added,
+        received: incomingTimes.length + incomingBibs.length,
+        version: mobileFile._version || 0,
+      });
     }
 
     // GET /api/users  — admin only, list all users
