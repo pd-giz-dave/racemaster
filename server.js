@@ -10,6 +10,7 @@ const PORT        = process.env.PORT || 3000;
 const HOST        = process.env.HOST || '127.0.0.1';
 const ROOT        = __dirname;
 const DATA_DIR    = path.join(ROOT, 'data');
+const MOBILE_DIR  = path.join(ROOT, 'mobile');
 const RESULTS_DIR = path.join(ROOT, 'results');
 const USERS_FILE    = path.join(ROOT, 'users.txt');
 const ADMINS_FILE   = path.join(ROOT, 'admins.txt');
@@ -17,6 +18,7 @@ const SESSIONS_FILE = path.join(ROOT, 'sessions.txt');
 const SESSION_TTL  = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 if (!fs.existsSync(DATA_DIR))    fs.mkdirSync(DATA_DIR);
+if (!fs.existsSync(MOBILE_DIR))  fs.mkdirSync(MOBILE_DIR);
 if (!fs.existsSync(RESULTS_DIR)) fs.mkdirSync(RESULTS_DIR);
 
 // ---- Persistent logging ----
@@ -164,6 +166,35 @@ function writeDataset(owner, fullName, data) {
 
 function emptyDataset() {
   return { _version: 1 };
+}
+
+// ---- Mobile (Mule Mode) helpers ----
+//
+// Scoped per logged-in user, mirroring data/<owner>/ — data/mobile/<username>/<raceLabel>.json.
+// One file per race label; unlike the dataset files above, sections within it are wholly
+// replaced on every sync (no per-record dedup/merge, no _version optimistic-concurrency
+// check needed — a mule/phone just sends its current full set for its own phone+mode
+// section each time).
+
+function mobileUserDir(username) {
+  return path.join(MOBILE_DIR, username);
+}
+
+function mobileFilePath(username, raceLabel) {
+  return path.join(mobileUserDir(username), `${raceLabel}.json`);
+}
+
+function readMobileFile(username, raceLabel) {
+  const fp = mobileFilePath(username, raceLabel);
+  if (!fs.existsSync(fp)) return { raceLabel, updatedAtMillis: 0, phones: {} };
+  try { return JSON.parse(fs.readFileSync(fp, 'utf8')); }
+  catch { return { raceLabel, updatedAtMillis: 0, phones: {} }; }
+}
+
+function writeMobileFile(username, raceLabel, data) {
+  const dir = mobileUserDir(username);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(mobileFilePath(username, raceLabel), JSON.stringify(data, null, 2), 'utf8');
 }
 
 // Returns array of { owner, name, fullName, visibility, orphaned } visible to username.
@@ -456,109 +487,81 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // POST /api/data/:owner/:fullName/mobile  —  append rows synced from a Mule BLE pickup.
+    // POST /api/mobile/:raceLabel  —  Android App Mule Mode's context-agnostic sync target.
     //
-    // Lands in a wholly separate file, "<fullName>-mobile.json" (same owner directory,
-    // NOT the main "<fullName>.json" dataset) — the Mule app still picks a target from the
-    // ordinary dataset list (GET /api/datasets) exactly as before and is oblivious to
-    // whether a "-mobile" companion file exists; the suffix means getDatasetsForUser's
-    // "-private"/"-public" suffix check naturally skips it, so it never shows up as a
-    // pickable dataset of its own. This used to append into the main dataset's own
-    // `finishers` array, but that meant every mule push bumped the main dataset's
-    // `_version` — which is *correct* per the whole-blob PUT's optimistic-concurrency
-    // check (it stops the web UI's next autosave from silently clobbering newly-arrived
-    // mobile rows with a 409 instead) but meant a mule syncing while a race director has
-    // the results page open would routinely surface as a disruptive "reload to get the
-    // latest data" prompt in their browser. Writing to a separate file sidesteps that
-    // entirely: this endpoint never touches the main dataset file, so it can never
-    // conflict with a browser PUT and never forces a reload.
+    // Lands in data/mobile/<username>/<raceLabel>.json — scoped to the *pushing* user's
+    // own folder (username comes from the bearer token, never a path/body parameter), not
+    // any particular dataset. There is no dataset/ownership selection in this path at all:
+    // any authenticated user may push to any race label under their own folder, and
+    // sections are wholly replaced (last-write-wins) rather than merged/deduped by
+    // recordUuid — a phone just sends its current full record set for its own
+    // (deviceId, deviceRole) section every time. Associating a race-label file with a real
+    // dataset is a separate web-app concern (not handled here).
     //
-    // ┌────────────────────────────────────────────────────────────────────────────────┐
-    // │ ⚠️  BIG FAT WARNING — DO NOT ADD `await` BETWEEN readDataset AND writeDataset   │
-    // │ BELOW. Multiple mules can legitimately push to the same "-mobile.json" file at │
-    // │ the same time. This is only safe because Node is single-threaded and the       │
-    // │ read → append → write below is 100% synchronous with no `await`/Promise/       │
-    // │ setTimeout/callback in between — so once a request reaches `readDataset` here, │
-    // │ it is GUARANTEED to run through to `writeDataset` with no other request's copy │
-    // │ of this same handler able to interleave and read a stale pre-write version of  │
-    // │ the file. Introduce so much as one `await` in this block (e.g. switching to    │
-    // │ `fs.promises`) and two concurrent mule pushes WILL race: both read the same    │
-    // │ "before" state, both append, and whichever writes last silently discards the   │
-    // │ other's rows. If this ever needs to run across multiple Node processes/workers │
-    // │ (it currently doesn't — one process, see docker-compose.yml), this whole       │
-    // │ argument breaks and real file locking would be needed instead.                 │
-    // └────────────────────────────────────────────────────────────────────────────────┘
-    if (pathname.startsWith('/api/data/') && pathname.endsWith('/mobile') && req.method === 'POST') {
+    // ┌─────────────────────────────────────────────────────────────────────────────────┐
+    // │ ⚠️  BIG FAT WARNING — DO NOT ADD `await` BETWEEN readMobileFile AND              │
+    // │ writeMobileFile BELOW. Multiple phones/mules can legitimately push to the same  │
+    // │ race-label file at the same time. This is only safe because Node is             │
+    // │ single-threaded and the read → replace-sections → write below is 100%           │
+    // │ synchronous with no `await`/Promise/setTimeout/callback in between.             │
+    // └─────────────────────────────────────────────────────────────────────────────────┘
+    if (pathname.startsWith('/api/mobile/') && req.method === 'POST') {
       const username = getAuthUser(req);
       if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
 
-      const inner = pathname.slice('/api/data/'.length, -'/mobile'.length);
-      const slash = inner.indexOf('/');
-      const owner    = slash < 0 ? '' : sanitiseName(inner.slice(0, slash));
-      const fullName = slash < 0 ? '' : sanitiseName(inner.slice(slash + 1));
-      if (!owner || !fullName || (!fullName.endsWith('-private') && !fullName.endsWith('-public'))) {
-        return jsonReply(res, 400, { error: 'Invalid path — expected /api/data/:owner/:name-{private|public}/mobile' });
-      }
-      if (owner !== username && !isAdmin(username)) {
-        return jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' });
-      }
-      if (!fs.existsSync(dataFilePath(owner, fullName))) {
-        return jsonReply(res, 404, { error: 'Dataset not found' });
-      }
+      const raceLabel = sanitiseName(decodeURIComponent(pathname.slice('/api/mobile/'.length)));
+      if (!raceLabel) return jsonReply(res, 400, { error: 'Invalid race label' });
 
       let body;
       try { body = JSON.parse(await readBody(req)); }
       catch { return jsonReply(res, 400, { error: 'Invalid JSON' }); }
-      const incomingTimes = Array.isArray(body?.times) ? body.times : [];
-      const incomingBibs = Array.isArray(body?.bibs) ? body.bibs : [];
-      if (!Array.isArray(body?.times) && !Array.isArray(body?.bibs)) {
-        return jsonReply(res, 400, { error: 'Expected {times: [...], bibs: [...]}' });
+      const sections = Array.isArray(body?.sections) ? body.sections : null;
+      if (!sections) return jsonReply(res, 400, { error: 'Expected {sections: [...]}' });
+
+      // Everything from here to writeMobileFile() must stay synchronous — see the warning above.
+      const file = readMobileFile(username, raceLabel);
+      if (typeof file.phones !== 'object' || file.phones === null) file.phones = {};
+      file.raceLabel = raceLabel;
+
+      const updated = [];
+      for (const section of sections) {
+        const deviceId = typeof section?.deviceId === 'string' ? section.deviceId.slice(0, 128) : '';
+        const deviceRole = section?.deviceRole === 'BIBS' ? 'BIBS' : section?.deviceRole === 'TIME' ? 'TIME' : '';
+        if (!deviceId || !deviceRole) continue;
+        const deviceName = typeof section?.deviceName === 'string' ? section.deviceName.slice(0, 64) : '';
+        const records = Array.isArray(section?.records) ? section.records : [];
+
+        const coerced = records.map(r => ({
+          recordUuid: typeof r?.recordUuid === 'string' ? r.recordUuid : '',
+          action: String(r?.action || 'Finish'),
+          number: r?.number ?? '',
+          time: String(r?.time || ''),
+          splitNumber: r?.splitNumber ?? null,
+          note: r?.note ?? null,
+          timestampMillis: Number.isFinite(r?.timestampMillis) ? r.timestampMillis : null,
+        }));
+
+        if (!file.phones[deviceId]) file.phones[deviceId] = { deviceName, modes: {} };
+        file.phones[deviceId].deviceName = deviceName || file.phones[deviceId].deviceName || '';
+        file.phones[deviceId].modes[deviceRole] = { updatedAtMillis: Date.now(), records: coerced };
+        updated.push({ deviceId, deviceRole, count: coerced.length });
       }
 
-      // Everything from here to writeDataset() must stay synchronous — see the warning above.
-      const mobileFullName = `${fullName}-mobile`;
-      const mobileFile = readDataset(owner, mobileFullName);
-      if (!Array.isArray(mobileFile.times)) mobileFile.times = [];
-      if (!Array.isArray(mobileFile.bibs)) mobileFile.bibs = [];
-
-      const appendRecords = (targetArray, incomingRecords) => {
-        const existingUuids = new Set(targetArray.map(r => r.recordUuid).filter(Boolean));
-        let added = 0;
-        for (const record of incomingRecords) {
-          if (!record || typeof record.recordUuid !== 'string' || existingUuids.has(record.recordUuid)) continue;
-          targetArray.push({
-            recordUuid: record.recordUuid,
-            action: String(record.action || 'Finish'),
-            number: record.number ?? '',
-            time: String(record.time || ''),
-            splitNumber: record.splitNumber ?? null,
-            note: record.note ?? null,
-            timestampMillis: Number.isFinite(record.timestampMillis) ? record.timestampMillis : null,
-          });
-          existingUuids.add(record.recordUuid);
-          added++;
-        }
-        return added;
-      };
-
-      const addedTimes = appendRecords(mobileFile.times, incomingTimes);
-      const addedBibs = appendRecords(mobileFile.bibs, incomingBibs);
-      const added = addedTimes + addedBibs;
-
-      if (added > 0) {
-        mobileFile._version = (mobileFile._version || 0) + 1;
-        writeDataset(owner, mobileFullName, mobileFile);
-        console.log(
-          `[mule-sync] ${owner}/${mobileFullName}: appended ${addedTimes} time row(s), ${addedBibs} bib row(s) ` +
-          `(of ${incomingTimes.length} + ${incomingBibs.length} received)`,
-        );
+      if (updated.length > 0) {
+        file.updatedAtMillis = Date.now();
+        writeMobileFile(username, raceLabel, file);
+        console.log(`[mobile-sync] ${username}/${raceLabel}: updated ${updated.length} section(s)`);
       }
-      return jsonReply(res, 200, {
-        ok: true,
-        added,
-        received: incomingTimes.length + incomingBibs.length,
-        version: mobileFile._version || 0,
-      });
+      return jsonReply(res, 200, { ok: true, raceLabel, updated });
+    }
+
+    // GET /api/mobile/:raceLabel  —  read back this user's own mobile file for a race label.
+    if (pathname.startsWith('/api/mobile/') && req.method === 'GET') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      const raceLabel = sanitiseName(decodeURIComponent(pathname.slice('/api/mobile/'.length)));
+      if (!raceLabel) return jsonReply(res, 400, { error: 'Invalid race label' });
+      return jsonReply(res, 200, readMobileFile(username, raceLabel));
     }
 
     // GET /api/users  — admin only, list all users
@@ -675,6 +678,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`\nRaceMaster server → http://${HOST}:${PORT}`);
   console.log(  `Data directory    → ${DATA_DIR}`);
+  console.log(  `Mobile directory  → ${MOBILE_DIR}`);
   console.log(  `Results directory → ${RESULTS_DIR}`)
   console.log(  `Users file        → ${USERS_FILE}`);
   console.log(  `Admins file       → ${ADMINS_FILE}`);
