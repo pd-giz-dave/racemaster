@@ -23,7 +23,24 @@
       // Open collapsed sections when they contain a search match.
       if (q !== '' && sectionHasMatch) details.open = true;
     });
+
+    // Flat listing pages (e.g. the published-results index) — rows carry a
+    // precomputed data-search attribute rather than living inside a <details> section.
+    const searchableRows = document.querySelectorAll('[data-search]');
+    if (searchableRows.length) {
+      let visible = 0;
+      searchableRows.forEach(row => {
+        const match = q === '' || row.dataset.search.includes(q);
+        row.hidden = !match;
+        if (match) visible++;
+      });
+      const empty = document.getElementById('re-empty');
+      if (empty) empty.hidden = visible !== 0;
+      const count = document.getElementById('re-count');
+      if (count) count.textContent = `${visible} of ${searchableRows.length} result${searchableRows.length === 1 ? '' : 's'}`;
+    }
   }
+  applySearch(); // initial count/empty-state for flat listing pages
 
   // ---- Sort ----
   // Click once: sort ascending. Click again: descending. Click again: restore original order.

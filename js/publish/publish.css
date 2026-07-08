@@ -32,6 +32,14 @@ body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
 .rm-icon  { width: 28px; height: 28px; flex-shrink: 0; }
 .rm-brand { font-size: 1.1rem; font-weight: 600; }
 .rm-event { font-size: 0.9rem; opacity: 0.85; }
+.rm-all-link {
+  font-size: 0.85rem;
+  color: var(--header-fg);
+  text-decoration: underline;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.rm-all-link:hover { opacity: 1; }
 
 /* ---- Page wrapper ---- */
 .re-page    { max-width: 960px; margin: 0 auto; padding: 20px; }

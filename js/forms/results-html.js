@@ -25,6 +25,7 @@ function wrap(title, body) {
   <img src="favicon.ico" class="rm-icon" alt="">
   <span class="rm-brand">RaceMaster</span>
   <span class="rm-event">${bannerEvent}</span>
+  <a href="/results" class="rm-all-link">All Results</a>
 </header>
 <div class="re-page">
 <div class="re-search-row"><input type="search" id="re-search" placeholder="Search results…" autocomplete="off"></div>

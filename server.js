@@ -137,6 +137,12 @@ function sanitiseName(s) {
   return (s || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64).toLowerCase();
 }
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 // Dataset names must not contain "public" or "private" (reserved as suffixes)
 function containsVisibility(name) {
   return /public|private/i.test(name);
@@ -149,6 +155,30 @@ function dataFilePath(owner, fullName) {
 
 function ownerDir(owner) {
   return path.join(DATA_DIR, owner);
+}
+
+// Every published result copies publish.css/publish.js from js/publish/ into results/
+// at publish time (see /api/publish-results), so that's the single source of truth for
+// them going forward. If the source has since moved on (a deploy) and no result has been
+// republished, results/ still holds the stale copies every published page links to —
+// this brings them back in sync whenever the results listing is loaded.
+const PUBLISH_ASSET_NAMES = ['publish.css', 'publish.js'];
+
+function syncPublishAssetsIfStale() {
+  for (const name of PUBLISH_ASSET_NAMES) {
+    const srcPath = path.join(ROOT, 'js', 'publish', name);
+    let srcContent;
+    try { srcContent = fs.readFileSync(srcPath); } catch { continue; } // no source to sync from
+
+    const destPath = path.join(RESULTS_DIR, name);
+    let destContent = null;
+    try { destContent = fs.readFileSync(destPath); } catch { /* missing — treat as stale */ }
+
+    if (destContent === null || !srcContent.equals(destContent)) {
+      fs.writeFileSync(destPath, srcContent);
+      console.log(`[results] synced stale asset into results/: ${name}`);
+    }
+  }
 }
 
 function readDataset(owner, fullName) {
@@ -633,6 +663,70 @@ const server = http.createServer(async (req, res) => {
       }
       console.log(`Results published: ${safe} by ${username}`);
       return jsonReply(res, 200, { ok: true, url: `/results/${safe}` });
+    }
+
+    // GET /results — public, searchable listing of every published results page.
+    // No auth: publishing already makes a result world-readable at /results/<file>,
+    // this just makes the set of them discoverable without knowing filenames.
+    if (pathname === '/results' && req.method === 'GET') {
+      syncPublishAssetsIfStale();
+
+      let files = [];
+      try { files = fs.readdirSync(RESULTS_DIR); } catch { /* dir missing — empty list */ }
+
+      const entries = files
+        .map(f => ({ file: f, m: f.match(/^(.*)_(\d{4}-\d{2}-\d{2})_results\.html$/) }))
+        .filter(({ m }) => m)
+        .map(({ file: f, m }) => {
+          const name = m[1].replace(/_/g, ' ').trim();
+          const date = m[2];
+          let mtimeMs = 0;
+          try { mtimeMs = fs.statSync(path.join(RESULTS_DIR, f)).mtimeMs; } catch { /* skip */ }
+          return { file: f, name, date, mtimeMs };
+        })
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.mtimeMs - a.mtimeMs);
+
+      const rows = entries.map(e => {
+        const searchKey = escapeHtml(`${e.name} ${e.date}`.toLowerCase());
+        return `<tr data-search="${searchKey}">
+          <td>${escapeHtml(e.name)}</td>
+          <td>${escapeHtml(e.date)}</td>
+          <td><a href="/results/${encodeURIComponent(e.file)}">View results</a></td>
+        </tr>`;
+      }).join('\n');
+
+      const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RaceMaster — Published Results</title>
+<link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="48x48">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/results/publish.css">
+</head>
+<body>
+<header class="rm-banner">
+  <img src="/favicon.ico" class="rm-icon" alt="">
+  <span class="rm-brand">RaceMaster</span>
+  <span class="rm-event">Published Results</span>
+</header>
+<div class="re-page">
+  <div class="re-search-row"><input type="search" id="re-search" placeholder="Search by event name or date…" autocomplete="off" autofocus></div>
+  <p class="re-summary" id="re-count"></p>
+  <table class="data-table">
+    <thead><tr><th>Event</th><th>Date</th><th></th></tr></thead>
+    <tbody id="results-tbody">${rows}</tbody>
+  </table>
+  <p class="re-summary" id="re-empty" hidden>No matching results.</p>
+</div>
+<script src="/results/publish.js"></script>
+</body>
+</html>`;
+
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+      res.end(html);
+      return;
     }
 
     // GET /sw.js — generated dynamically so PRECACHE and cache name stay current
