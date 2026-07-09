@@ -354,8 +354,8 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .form-field label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
 
 /* ---- Entry form top row (pairs-aware) ---- */
-#entry-form-toprow { display: grid; grid-template-columns: repeat(3, calc(3ch + 1rem)); gap: 10px 16px; margin-bottom: 8px; align-items: end; }
-#entry-form-toprow.has-type { grid-template-columns: calc(7ch + 1rem) repeat(3, calc(3ch + 1rem)); }
+#entry-form-toprow { display: grid; grid-template-columns: repeat(3, calc(4ch + 1rem)); gap: 10px 16px; margin-bottom: 8px; align-items: end; }
+#entry-form-toprow.has-type { grid-template-columns: calc(7ch + 1rem) repeat(3, calc(4ch + 1rem)); }
 #entry-form-toprow select { width: 100%; }
 #entry-form-toprow input { width: 100%; }
 #view-entries.pair-active .split-layout { grid-template-columns: 460px 1fr; }

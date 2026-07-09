@@ -375,7 +375,11 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.5-alpha - current version</h3>
+    <h3>v0.0.6-alpha - current version</h3>
+    <ul>
+      <li>Add link to all results on published results pages</li>
+    </ul>
+    <h3>v0.0.5-alpha</h3>
     <ul>
       <li>Add server API to accept data from the Racemaster Mobile Android app</li>
     </ul>
