@@ -5,7 +5,7 @@ import { applyFRAPreset, applyWFRAPreset, builtinFRARows, builtinWFRARows, categ
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
-import { showBusy, toISODate, fromISODate } from '../utils.js';
+import { showBusy, normaliseDate } from '../utils.js';
 import { renderHome } from './home.js';
 
 function populateJuniorLimitDropdown() {
@@ -33,7 +33,7 @@ export function renderEvent() {
   populateJuniorLimitDropdown();
   fillForm('event-form', {
     'ev-name':               ev.name,
-    'ev-date':               toISODate(ev.date),
+    'ev-date':               ev.date,
     'ev-distance':           ev.distance,
     'ev-start-time':         ev.startTime,
     'ev-categories':         ev.categories || 'FRA',
@@ -82,6 +82,15 @@ export async function saveEventForm() {
     return;
   }
 
+  // Validate: event date, if entered, must be a real date (D/M/YY or D/M/YYYY)
+  const rawDate = val('ev-date').trim();
+  const newDate = rawDate ? normaliseDate(rawDate) : '';
+  if (rawDate && !newDate) {
+    showStatus('Event date is not a valid date — enter it as D/M/YY or D/M/YYYY.', true);
+    document.getElementById('ev-date')?.focus();
+    return;
+  }
+
   // Build confirmation message
   const lines = [`Save settings for "${newName || '(unnamed event)'}"?`];
 
@@ -113,7 +122,7 @@ export async function saveEventForm() {
   // Apply fields
   ev.name                       = newName;
   ev.categories                 = newCategories;
-  ev.date                       = fromISODate(val('ev-date'));
+  ev.date                       = newDate;
   ev.distance                   = +val('ev-distance');
   ev.startTime                  = val('ev-start-time');
   ev.juniorStartTime            = val('ev-junior-start-time');

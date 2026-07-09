@@ -350,7 +350,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
   align-items: end;
 }
 
-.form-field { display: flex; flex-direction: column; gap: 3px; }
+.form-field:not([hidden]) { display: flex; flex-direction: column; gap: 3px; }
 .form-field label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
 
 /* ---- Entry form top row (pairs-aware) ---- */

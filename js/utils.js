@@ -24,6 +24,17 @@ export function normaliseTime(t) {
 /** Normalise a date string to DD/MM/YYYY. Returns '' on failure.
  *  Accepts any separator and leading-zero suppression, e.g. 1/1/90, 01-01-1990, 1.1.2000.
  */
+// JS's Date constructor silently rolls overflowing days/months forward (e.g. 31 Feb
+// becomes 3 Mar) instead of rejecting them, so isNaN() alone can't detect an invalid
+// calendar date — this also confirms the constructed date didn't drift, and uses
+// setFullYear() rather than new Date(yyyy, ...) so a small numeric year (e.g. from a
+// mistyped "0026") never triggers the legacy 1900+year two-digit-year special case.
+function isValidYMD(yyyy, mm, dd) {
+  const dt = new Date(0);
+  dt.setFullYear(+yyyy, +mm - 1, +dd);
+  return dt.getMonth() === +mm - 1 && dt.getDate() === +dd;
+}
+
 export function normaliseDate(d) {
   if (!d) return '';
   const s = String(d).trim();
@@ -31,16 +42,14 @@ export function normaliseDate(d) {
   let m = s.match(/^(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})$/);
   if (m) {
     const [,yyyy,mm,dd] = m;
-    const dt = new Date(+yyyy, +mm-1, +dd);
-    if (isNaN(dt)) return '';
+    if (!isValidYMD(yyyy, mm, dd)) return '';
     return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
   }
   // Try DD?MM?YYYY (any separator, with or without leading zeros)
   m = s.match(/^(\d{1,2})[^\d](\d{1,2})[^\d](\d{4})$/);
   if (m) {
     const [,dd,mm,yyyy] = m;
-    const dt = new Date(+yyyy, +mm-1, +dd);
-    if (isNaN(dt)) return '';
+    if (!isValidYMD(yyyy, mm, dd)) return '';
     return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
   }
   // Try DD?MM?YY (any separator) — expand 2-digit year: if 2000+yy is in the future use 1900+yy
@@ -49,8 +58,7 @@ export function normaliseDate(d) {
     const [,dd,mm,yy] = m;
     const century = (2000 + +yy) > new Date().getFullYear() ? 1900 : 2000;
     const yyyy = String(century + +yy);
-    const dt = new Date(+yyyy, +mm-1, +dd);
-    if (isNaN(dt)) return '';
+    if (!isValidYMD(yyyy, mm, dd)) return '';
     return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
   }
   // Fallback to Date constructor (handles "1 Jan 2000" etc.)
@@ -91,7 +99,13 @@ export function parseDate(d) {
   const s = normaliseDate(d);
   if (!s) return null;
   const [dd, mm, yyyy] = s.split('/').map(Number);
-  return new Date(yyyy, mm-1, dd);
+  // new Date(yyyy, ...) treats a numeric year 0-99 as 1900+year (a JS Date
+  // constructor quirk) — setFullYear() has no such special case, so this stays
+  // correct even for a stored year like "0026" (2026 mistyped/truncated).
+  const dt = new Date(0);
+  dt.setFullYear(yyyy, mm - 1, dd);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
 }
 
 /** Format today's date as DD/MM/YYYY */

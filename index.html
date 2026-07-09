@@ -117,8 +117,8 @@
             <input type="text" id="ev-name" placeholder="e.g. Coniston Fell Race">
           </div>
           <div class="form-field">
-            <label for="ev-date">Date</label>
-            <input type="date" id="ev-date">
+            <label for="ev-date">Date (DD/MM/YY)</label>
+            <input type="text" id="ev-date" placeholder="DD/MM/YY" data-normalise="date" autocomplete="off">
           </div>
           <div class="form-field">
             <label for="ev-distance">Distance (km)</label>
@@ -335,7 +335,7 @@
                 </select>
               </div>
               <div class="form-field">
-                <label for="entry-form-peno">Pre-Entry Num <span style="font-weight:400;color:var(--muted)">(or name)</span></label>
+                <label for="entry-form-peno">Entry Num <span style="font-weight:400;color:var(--muted)"></span></label>
                 <input type="text" id="entry-form-peno" autocomplete="off" inputmode="numeric">
               </div>
               <div class="form-field">

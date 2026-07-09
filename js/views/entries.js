@@ -59,7 +59,7 @@ let overrideBan    = false;
 // ---- Pair mode helpers ----
 
 function isPairMode() {
-  return val('entry-form-type') === 'pair';
+  return !!state.event.hasPairs && val('entry-form-type') === 'pair';
 }
 
 function updatePairMode() {
@@ -165,7 +165,7 @@ export function fillFormForEdit(bib) {
     'entry-form-bib':      e.bibNumber,
     'entry-form-dibber':   e.dibberNumber || '',
     'entry-form-name':     e.name      || '',
-    'entry-form-gender':   e.gender    || '',
+    'entry-form-gender':   normaliseGender(e.gender),
     'entry-form-dob':      e.dob       || '',
     'entry-form-club':     e.club      || '',
     'entry-form-fra':      e.fraNumber || '',
@@ -175,7 +175,7 @@ export function fillFormForEdit(bib) {
   if (e.partner) {
     fillForm('', {
       'entry-form-name2':   e.partner.name      || '',
-      'entry-form-gender2': e.partner.gender    || '',
+      'entry-form-gender2': normaliseGender(e.partner.gender),
       'entry-form-dob2':    e.partner.dob       || '',
       'entry-form-club2':   e.partner.club      || '',
       'entry-form-fra2':    e.partner.fraNumber || '',
