@@ -3,7 +3,7 @@
 import { state } from '../state.js';
 import {
   recordFinisher, updateFinisher, deleteFinishersFrom, clearAllFinishers,
-  deleteFinisher, insertFinisherAbove,
+  deleteFinisher, insertFinisherAbove, insertTimeAbove,
   getSortedFinishers, buildSplitNumbers,
   getAllSpecials, lineLabel, getPrevTime, parseFinishTime,
 } from '../finishers.js';
@@ -38,6 +38,7 @@ const FINISHER_COLS = tableColumns(TABLES.finishers, {
 let editingIdx     = -1;   // index into state.finishers; -1 = adding new
 let timeTargetSidx = -1;   // index into state.finishers of the current time-mode target
 let editIsInsert   = false; // true when edit was opened via Ins↑; cancel should remove the line
+let insertTimeIdx  = -1;   // index into state.finishers being time-inserted via Ins↑ → Time
 
 function getBibItems(low) {
   const doneBibs = new Set(
@@ -161,7 +162,7 @@ export function renderFinishers() {
   setHTML('finisher-junior-count', `${juniors.filter(isValidFinisher).length} of ${juniorExpected}`);
 
   // In bibs mode, line field shows next line number; in time mode it shows the target line
-  if (getCurrentMode() !== 'time' && editingIdx < 0) {
+  if (getCurrentMode() !== 'time' && editingIdx < 0 && insertTimeIdx < 0) {
     const lineEl = document.getElementById('finisher-line');
     const bibEl  = document.getElementById('finisher-bib');
     const nextLine = nextLineLabel();
@@ -210,6 +211,8 @@ export function renderFinishers() {
 
   if (editingIdx >= 0) {
     document.querySelector(`#finishers-tbody tr[data-sidx="${editingIdx}"]`)?.classList.add('row-editing');
+  } else if (insertTimeIdx >= 0) {
+    document.querySelector(`#finishers-tbody tr[data-sidx="${insertTimeIdx}"]`)?.classList.add('row-editing');
   }
 }
 
@@ -266,9 +269,55 @@ function fillFormForEdit(sidx) {
   editRow?.scrollIntoView({ block: 'nearest' });
 }
 
+// Put the form into "insert a time above this line" mode: the bib/action at sidx (and
+// every other line) stays exactly where it is — only a new time is entered, which on
+// submit cascades every time from sidx onward down one line (see insertTimeAbove()).
+function startInsertTime(sidx) {
+  const f = state.finishers[sidx];
+  if (!f) return;
+
+  const modeEl = document.getElementById('finisher-mode');
+  if (modeEl && modeEl.value !== 'bibs') {
+    modeEl.value = 'bibs';
+    applyMode('bibs');
+  }
+
+  insertTimeIdx = sidx;
+
+  const lineEl = document.getElementById('finisher-line');
+  const bibEl  = document.getElementById('finisher-bib');
+  const timeEl = document.getElementById('finisher-time');
+  if (lineEl) lineEl.value = lineLabel(sidx);
+  if (bibEl) {
+    bibEl.value = f.number > 0 ? String(f.number) : (f.action || '');
+    bibEl.readOnly = true;
+    bibEl.tabIndex = -1;
+  }
+  if (timeEl) timeEl.value = '';
+
+  const timeField = timeEl?.closest('.form-field');
+  if (timeField) timeField.style.display = '';
+  const prevField = document.getElementById('finisher-prev-time')?.closest('.form-field');
+  if (prevField) prevField.style.display = '';
+  const prevEl = document.getElementById('finisher-prev-time');
+  if (prevEl) prevEl.value = getPrevTime(sidx);
+
+  const radioGroup = document.getElementById('finisher-radio-group');
+  if (radioGroup) radioGroup.style.display = 'none';
+
+  document.getElementById('btn-submit-finisher').textContent = 'Insert Time';
+  document.getElementById('btn-cancel-finisher-edit').style.display = '';
+
+  document.getElementById('finisher-time')?.focus();
+  const editRow = document.querySelector(`#finishers-tbody tr[data-sidx="${sidx}"]`);
+  editRow?.classList.add('row-editing');
+  editRow?.scrollIntoView({ block: 'nearest' });
+}
+
 function resetFinisherForm() {
   editIsInsert = false;
   editingIdx = -1;
+  insertTimeIdx = -1;
   const bibEl  = document.getElementById('finisher-bib');
   const timeEl = document.getElementById('finisher-time');
   if (bibEl)  bibEl.value  = '';
@@ -295,6 +344,32 @@ async function submitFinisherForm() {
   const radioValue = document.querySelector('input[name="finisher-event-type"]:checked')?.value;
   const isStart  = radioValue === 'start';
   const isRetire = radioValue === 'retire';
+
+  // ---- Insert-time mode (Ins ↑ → Time) ----
+  if (insertTimeIdx >= 0) {
+    if (!rawTime) { showStatus('Enter a time.', true); timeEl?.focus(); return; }
+    let parsedTime;
+    if (rawTime === '-') {
+      parsedTime = '-';
+    } else {
+      const prevEl = document.getElementById('finisher-prev-time');
+      parsedTime = parseFinishTime(rawTime, prevEl?.value || '');
+      if (!parsedTime) {
+        showStatus('Invalid time — use ss, mm:ss, hh:mm:ss, or - to skip', true);
+        timeEl?.focus();
+        return;
+      }
+    }
+    showBusy('Inserting time…');
+    const insertedAt = insertTimeIdx;
+    const result = await insertTimeAbove(insertedAt, parsedTime);
+    showBusy('');
+    if (result.error) { showStatus(result.error, true); return; }
+    showStatus(`Time inserted at line ${insertedAt}; that line's old time and every time below it shifted down one line.`);
+    resetFinisherForm();
+    renderFinishers();
+    return;
+  }
 
   // ---- Time mode ----
   if (getCurrentMode() === 'time') {
@@ -475,6 +550,16 @@ async function confirmDeleteFinisher(sidx) {
 
 async function confirmInsertAbove(sidx) {
   if (sidx < 0 || sidx >= state.finishers.length) return;
+  const choice = await showChoiceDialog(`Insert above line ${sidx} — insert a bib or a time?`, [
+    { label: 'Insert Bib',  value: 'bib' },
+    { label: 'Insert Time', value: 'time' },
+  ]);
+  if (!choice) return;
+  if (choice === 'bib') return confirmInsertBib(sidx);
+  startInsertTime(sidx);
+}
+
+async function confirmInsertBib(sidx) {
   if (!await showConfirmDialog(`Insert blank line above line ${sidx}?`, 'Insert')) return;
   showBusy('Inserting…');
   const result = await insertFinisherAbove(sidx);
@@ -529,7 +614,7 @@ export function wireFinishers() {
   // Keep line field in sync with action radio selection when in add mode
   document.querySelectorAll('input[name="finisher-event-type"]').forEach(r => {
     r.addEventListener('change', () => {
-      if (editingIdx >= 0 || getCurrentMode() === 'time') return;
+      if (editingIdx >= 0 || insertTimeIdx >= 0 || getCurrentMode() === 'time') return;
       const lineEl = document.getElementById('finisher-line');
       if (lineEl) lineEl.value = nextLineLabel();
     });

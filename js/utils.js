@@ -61,6 +61,14 @@ export function normaliseDate(d) {
     if (!isValidYMD(yyyy, mm, dd)) return '';
     return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
   }
+  // Try DD?MM?Y (single-digit year) — always 200Y, e.g. 8/7/6 -> 08/07/2006
+  m = s.match(/^(\d{1,2})[^\d](\d{1,2})[^\d](\d)$/);
+  if (m) {
+    const [,dd,mm,y] = m;
+    const yyyy = String(2000 + +y);
+    if (!isValidYMD(yyyy, mm, dd)) return '';
+    return `${String(+dd).padStart(2,'0')}/${String(+mm).padStart(2,'0')}/${yyyy}`;
+  }
   // Fallback to Date constructor (handles "1 Jan 2000" etc.)
   const dt = new Date(s);
   if (isNaN(dt)) return '';

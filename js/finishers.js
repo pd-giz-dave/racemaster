@@ -192,6 +192,23 @@ export async function insertFinisherAbove(stateIdx) {
   return { error: '', newIdx: stateIdx };
 }
 
+/**
+ * Insert newTime at stateIdx by cascading every time from stateIdx onward down one
+ * line — corrects for a stopwatch time accidentally skipped during entry, where the
+ * bib call-out order is right but every time recorded from that point on has been one
+ * line out ever since. No line is added or removed and bib numbers/actions never move;
+ * only the trailing line's time is displaced (it becomes untimed again).
+ */
+export async function insertTimeAbove(stateIdx, newTime) {
+  if (stateIdx < 0 || stateIdx >= state.finishers.length) return { error: 'Invalid index' };
+  for (let i = state.finishers.length - 1; i > stateIdx; i--) {
+    state.finishers[i].time = state.finishers[i - 1].time;
+  }
+  state.finishers[stateIdx].time = newTime;
+  await saveFinishers();
+  return { error: '' };
+}
+
 export function getCategorySpecials() {
   return [...new Set(state.entries.map(e => e.category).filter(Boolean))].sort()
     .map(c => [c, `Record start time for ${c} category`]);

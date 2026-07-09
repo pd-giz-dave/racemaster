@@ -378,6 +378,7 @@ export const PAGES = {
     <h3>v0.0.6-alpha - current version</h3>
     <ul>
       <li>Add link to all results on published results pages</li>
+      <li>Provide for inserting a missed time when linking finish times to bibs</li>
     </ul>
     <h3>v0.0.5-alpha</h3>
     <ul>

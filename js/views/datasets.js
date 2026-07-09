@@ -22,11 +22,25 @@ let _onConnect     = null;
 
 function getEl(id) { return document.getElementById(id); }
 
+// Reset the password field back to masked, regardless of whether the user peeked at
+// it — covers logging in, logging out back to the form, and freshly entering the view.
+function resetPasswordVisibility() {
+  const passwordInput    = getEl('df-password');
+  const togglePasswordBtn = getEl('df-toggle-password');
+  if (passwordInput)     passwordInput.type = 'password';
+  if (togglePasswordBtn) {
+    togglePasswordBtn.querySelector('.icon-eye')?.toggleAttribute('hidden', false);
+    togglePasswordBtn.querySelector('.icon-eye-off')?.toggleAttribute('hidden', true);
+    togglePasswordBtn.setAttribute('aria-label', 'Show password');
+  }
+}
+
 function showPanel(name, adminUser) {
   getEl('df-panel-auth').hidden        = (name !== 'auth');
   getEl('df-panel-loggedin').hidden    = (name !== 'datasets');
   getEl('df-panels-row').style.display = (name === 'datasets') ? 'flex' : 'none';
   getEl('df-panel-users').hidden       = (name !== 'datasets') || !adminUser;
+  resetPasswordVisibility();
 }
 
 function setStatus(id, msg, isError = false) {
@@ -285,7 +299,7 @@ function hideCopyForm() {
 function exportState() {
   const data = dumpState();
   const name = sanitise(state.event.name || 'racemaster');
-  downloadText(JSON.stringify(data, null, 2), `${name}_state.json`);
+  downloadText(JSON.stringify(data, null, 2), `racemaster-${name}_state.json`);
   showStatus('State exported.');
 }
 
@@ -344,12 +358,27 @@ export function wireDatasets(onConnect) {
   getEl('df-btn-create-account').onclick = () => handleLogin(true);
   getEl('df-password').onkeydown         = e => { if (e.key === 'Enter') handleLogin(false); };
 
+  const togglePasswordBtn = getEl('df-toggle-password');
+  const passwordInput     = getEl('df-password');
+  if (togglePasswordBtn && passwordInput) {
+    togglePasswordBtn.onclick = () => {
+      const willShow = passwordInput.type === 'password';
+      passwordInput.type = willShow ? 'text' : 'password';
+      // SVG elements don't reflect the .hidden property back to the attribute the way
+      // HTMLElement does, so toggle the attribute directly rather than the property.
+      togglePasswordBtn.querySelector('.icon-eye').toggleAttribute('hidden', willShow);
+      togglePasswordBtn.querySelector('.icon-eye-off').toggleAttribute('hidden', !willShow);
+      togglePasswordBtn.setAttribute('aria-label', willShow ? 'Hide password' : 'Show password');
+    };
+  }
+
   getEl('df-btn-standalone').onclick = () => {
     clearSession();
     clearCredentials();
     setStandalone(true);
     activeToken    = null;
     activeUsername = null;
+    resetPasswordVisibility();
     updateDataFileButton();
     _onConnect?.();
   };

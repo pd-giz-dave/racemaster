@@ -387,6 +387,32 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
 }
 
+/* ---- Password visibility toggle ---- */
+.password-field-wrap { position: relative; display: flex; }
+.password-field-wrap input { padding-right: 30px; }
+.btn-toggle-password {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.btn-toggle-password:hover, .btn-toggle-password:focus-visible { color: var(--text); }
+.btn-toggle-password svg { width: 17px; height: 17px; }
+/* The UA [hidden]{display:none} rule doesn't reliably apply to SVG elements, so the
+   two icon SVGs would otherwise render stacked on top of each other regardless of
+   which one has the hidden attribute. */
+.btn-toggle-password svg[hidden] { display: none; }
+
 /* ---- Tables ---- */
 .data-table {
   width: 100%;
