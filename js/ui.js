@@ -286,8 +286,10 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
   wrapper.style.position = 'relative';
   wrapper.appendChild(dropdown);
 
-  let currentMatches = [];
-  let deletingText   = false;
+  let currentMatches   = [];
+  let deletingText     = false;
+  let pendingGhost      = null;  // raw text typed before an unconfirmed inline auto-complete
+  let pendingGhostValue = null;  // the auto-completed value el.value was set to, for that ghost
 
   const closeDropdown = () => { dropdown.hidden = true; dropdown.innerHTML = ''; };
 
@@ -302,6 +304,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
         e.preventDefault();
         const item = currentMatches[+li.dataset.i];
         el.value = getValue(item);
+        pendingGhost = null;
         onSelect(item);
         closeDropdown();
       })
@@ -311,6 +314,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
   el.addEventListener('input', () => {
     const raw   = el.value;
     const typed = raw.trim();
+    pendingGhost = null;
     if (!typed) { currentMatches = []; deletingText = false; closeDropdown(); onClear(); return; }
     const hasTrailingSpace = raw.endsWith(' ');
     const low = typed.toLowerCase();
@@ -320,6 +324,8 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
       const s = el.selectionStart;
       el.value = v0;
       el.setSelectionRange(s, v0.length);
+      pendingGhost = typed;
+      pendingGhostValue = v0;
       onSelect(currentMatches[0]);
     } else if (currentMatches.length === 1 && !hasTrailingSpace) {
       onSelect(currentMatches[0]);
@@ -337,7 +343,14 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
       if (currentMatches.length > 1) { e.preventDefault(); showDropdown(); dropdown.querySelector('li')?.focus(); }
     }
     else if (e.key === 'Escape' && !dropdown.hidden) { e.stopPropagation(); closeDropdown(); }
-    else if (e.key === 'Enter' && !dropdown.hidden) { closeDropdown(); }
+    else if (e.key === 'Enter') {
+      // Enter accepts whatever's showing (e.g. a single-match ghost completion
+      // with no dropdown to click) — confirm it so it isn't wrongly reverted
+      // as "unconfirmed" the next time this field blurs.
+      pendingGhost = null;
+      pendingGhostValue = null;
+      if (!dropdown.hidden) closeDropdown();
+    }
   });
 
   dropdown.addEventListener('keydown', e => {
@@ -345,7 +358,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
     const idx   = items.indexOf(document.activeElement);
     if      (e.key === 'ArrowDown')           { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
     else if (e.key === 'ArrowUp')             { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : el.focus(); }
-    else if (e.key === 'Enter' && idx >= 0)   { e.preventDefault(); e.stopPropagation(); const item = currentMatches[idx]; el.value = getValue(item); onSelect(item); closeDropdown(); el.focus(); }
+    else if (e.key === 'Enter' && idx >= 0)   { e.preventDefault(); e.stopPropagation(); const item = currentMatches[idx]; el.value = getValue(item); pendingGhost = null; onSelect(item); closeDropdown(); el.focus(); }
     else if (e.key === 'Escape')              { e.stopPropagation(); closeDropdown(); el.focus(); }
   });
 
@@ -357,11 +370,29 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
     });
   }
 
+  // On leaving the field, only keep an auto-completed value if it's an exact
+  // match. A typed value that's merely a *prefix* of an existing item (e.g.
+  // typing "Dave Nichols" when "Dave Nicholson" already exists) is a distinct,
+  // legitimate new entry — revert any inline auto-complete to what was
+  // actually typed and clear whatever got pre-filled from the wrong match,
+  // rather than silently keeping someone else's data.
   el.addEventListener('blur', () => setTimeout(() => {
     if (dropdown.contains(document.activeElement)) return;
+    if (pendingGhost !== null) {
+      // Only revert if the field still holds the ghosted suggestion — if
+      // something else (e.g. a form reset) already changed it, leave that
+      // value alone rather than clobbering it with stale ghost state.
+      if (el.value === pendingGhostValue) { el.value = pendingGhost; onClear(); }
+      pendingGhost = null;
+      pendingGhostValue = null;
+      closeDropdown();
+      return;
+    }
     const typed = el.value.trim();
-    if (!typed) { onClear(); currentMatches = []; }
-    else if (currentMatches.length === 1) { el.value = getValue(currentMatches[0]); onSelect(currentMatches[0]); }
+    if (!typed) { onClear(); currentMatches = []; closeDropdown(); return; }
+    const exact = getItems(typed.toLowerCase()).find(item => getValue(item).toLowerCase() === typed.toLowerCase());
+    if (exact) { el.value = getValue(exact); onSelect(exact); }
+    else       { onClear(); }
     closeDropdown();
   }, 150));
 }

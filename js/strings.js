@@ -375,7 +375,12 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.6-alpha - current version</h3>
+    <h3>v0.0.7-alpha - current version</h3>
+    <ul>
+      <li>Resolve slow bib printing</li>
+      <li>Allow new names that partially match an existing name when registering entrants and helpers</li>
+    </ul>
+    <h3>v0.0.6-alpha</h3>
     <ul>
       <li>Add link to all results on published results pages</li>
       <li>Provide for inserting a missed time when linking finish times to bibs</li>
