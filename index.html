@@ -1008,8 +1008,23 @@
         <button class="btn" id="btn-add-dibber">Add Dibber</button>
         <button class="btn btn-secondary" id="btn-import-dibbers">Import CSV</button>
         <button class="btn btn-secondary" id="btn-export-dibbers">Export CSV</button>
+        <button class="btn btn-secondary" id="btn-merge-dibbers">Merge…</button>
         <button class="btn btn-delete" id="btn-clear-dibbers">Clear All</button>
       </div>
+
+      <div id="dibbers-merge-panel" hidden style="flex-shrink:0;padding:4px 0 2px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <strong style="font-size:0.875rem;white-space:nowrap">Merge dibbers from:</strong>
+          <div id="dibbers-merge-ds-row" hidden style="display:flex;gap:6px;align-items:center;flex:1;min-width:200px">
+            <select id="dibbers-merge-ds-select" aria-label="Dataset to merge from" style="flex:1;padding:4px 6px;min-width:140px"></select>
+            <button class="btn" id="btn-do-merge-ds-dibbers">Merge</button>
+          </div>
+          <button class="btn btn-secondary" id="btn-merge-from-file-dibbers">From File (JSON)…</button>
+          <button class="btn btn-secondary" id="btn-cancel-merge-dibbers">Cancel</button>
+          <span id="dibbers-merge-status" style="font-size:0.875rem;min-height:1.2em"></span>
+        </div>
+      </div>
+
       <div class="table-scroll">
         <table class="data-table">
           <thead></thead>

@@ -154,6 +154,10 @@ export const TOOLTIPS = {
   'btn-add-dibber':              'Add a dibber (SI card) record manually',
   'btn-import-dibbers':          'Import dibber records from a CSV file',
   'btn-export-dibbers':          'Export dibber records as a CSV file',
+  'btn-merge-dibbers':           'Merge dibber records from another dataset or JSON backup file',
+  'btn-do-merge-ds-dibbers':     'Merge dibbers from the selected dataset into this one',
+  'btn-merge-from-file-dibbers': 'Merge dibbers from a JSON file exported from another dataset',
+  'btn-cancel-merge-dibbers':    'Cancel the merge operation',
   'btn-clear-dibbers':           'Delete all dibber records - cannot be undone',
 
   // Categories
@@ -379,6 +383,7 @@ export const PAGES = {
     <ul>
       <li>Detect 2 browser tabs open on the same dataset and let user know</li>
       <li>Prevent data loss when conflicting sessions attempt to sync the same race to the server</li>
+      <li>Add dibber merge facility (so can grab a dibber set from some previous race/backup)</li>
     </ul>
     <h3>v0.0.7-alpha</h3>
     <ul>

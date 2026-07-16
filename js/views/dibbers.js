@@ -7,6 +7,7 @@ import { normaliseDibberRows } from '../data.js';
 import { on, escHtml, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
+import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
 const DIBBER_COLS = tableColumns(TABLES.dibbers, {
   short_code: ({ d }) => d.shortCode || '',
@@ -161,6 +162,107 @@ export async function importDibbersFromFile() {
   renderDibbers();
 }
 
+// ---- Merge from another dataset or JSON file ----
+
+async function applyDibbersMerge(rows) {
+  let added = 0, updated = 0;
+  for (const row of rows) {
+    const short = +row.shortCode;
+    if (!short || isNaN(short)) continue;
+    const existing = state.dibbers.find(d => +d.shortCode === short);
+    if (existing) {
+      const merged = {
+        longCode: row.longCode ? +row.longCode : existing.longCode,
+        owner:    row.owner || existing.owner,
+        lost:     row.lost  || existing.lost,
+        notes:    row.notes || existing.notes,
+      };
+      const changed = Object.keys(merged).some(k => {
+        const a = existing[k], b = merged[k];
+        return typeof b === 'number' ? a !== b : (a || '').toString().toLowerCase() !== (b || '').toString().toLowerCase();
+      });
+      Object.assign(existing, merged);
+      if (changed) updated++;
+    } else {
+      const long = +row.longCode;
+      if (!long || isNaN(long)) continue; // long code required for a new dibber
+      if (state.dibbers.find(d => +d.longCode === long)) continue; // long code already in use elsewhere
+      state.dibbers.push(createDibber({ shortCode: short, longCode: long, owner: row.owner || '', lost: row.lost || '', notes: row.notes || '' }));
+      added++;
+    }
+  }
+  state.dibbers.sort((a, b) => +a.shortCode - +b.shortCode);
+  await saveDibbers();
+  renderDibbers();
+  return { added, updated };
+}
+
+function setMergeStatus(msg, isError = false) {
+  const el = document.getElementById('dibbers-merge-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger)' : 'var(--success,#1a6e3c)';
+}
+
+async function mergeFromFile() {
+  const text = await pickFile('.json');
+  if (!text) return;
+  let data;
+  try { data = JSON.parse(text); } catch { setMergeStatus('Not valid JSON.', true); return; }
+  if (!Array.isArray(data?.dibbers)) { setMergeStatus('JSON file has no dibbers array.', true); return; }
+  setMergeStatus('Merging…');
+  const { added, updated } = await applyDibbersMerge(data.dibbers);
+  setMergeStatus(`Done: ${added} added, ${updated} updated.`);
+}
+
+async function mergeFromDataset(path) {
+  const session = getSession();
+  if (!session) { setMergeStatus('Not signed in.', true); return; }
+  setMergeStatus('Fetching…');
+  try {
+    const [owner, fullName] = path.split('/');
+    const data = await apiReadDataset(session.token, owner, fullName);
+    if (!Array.isArray(data?.dibbers)) { setMergeStatus('No dibbers in that dataset.', true); return; }
+    const { added, updated } = await applyDibbersMerge(data.dibbers);
+    setMergeStatus(`Done: ${added} added, ${updated} updated.`);
+  } catch (e) {
+    setMergeStatus('Error: ' + e.message, true);
+  }
+}
+
+function openMergePanel() {
+  const panel = document.getElementById('dibbers-merge-panel');
+  if (!panel) return;
+  panel.hidden = false;
+  setMergeStatus('');
+
+  const session = getSession();
+  const dsRow = document.getElementById('dibbers-merge-ds-row');
+  if (!dsRow) return;
+
+  if (!session) {
+    dsRow.hidden = true;
+    return;
+  }
+
+  dsRow.hidden = false;
+  const sel = document.getElementById('dibbers-merge-ds-select');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  sel.disabled = true;
+
+  apiListDatasets(session.token).then(datasets => {
+    const current = session.dataset;
+    const opts = datasets
+      .filter(d => `${d.owner}/${d.fullName}` !== current)
+      .map(d => `<option value="${escHtml(d.owner)}/${escHtml(d.fullName)}">${escHtml(d.name)} (${escHtml(d.owner)})</option>`);
+    sel.innerHTML = '<option value="">— select dataset —</option>' + opts.join('');
+    sel.disabled = false;
+  }).catch(() => {
+    sel.innerHTML = '<option value="">Could not load datasets</option>';
+    sel.disabled = true;
+  });
+}
+
 function exportDibbers() {
   const lines = [CSV.dibbers.fields.join(','),
     ...state.dibbers.map(d => `${d.shortCode},${d.longCode},${d.owner || ''},${d.lost || ''},${d.notes || ''}`)];
@@ -180,6 +282,15 @@ export function wireDibbers() {
   on('btn-export-dibbers', 'click', exportDibbers);
   on('btn-add-dibber',     'click', showAddDibberRow);
   on('btn-clear-dibbers',  'click', clearDibbers);
+
+  on('btn-merge-dibbers',       'click', openMergePanel);
+  on('btn-cancel-merge-dibbers', 'click', () => { document.getElementById('dibbers-merge-panel').hidden = true; });
+  on('btn-merge-from-file-dibbers', 'click', mergeFromFile);
+  on('btn-do-merge-ds-dibbers', 'click', () => {
+    const path = document.getElementById('dibbers-merge-ds-select')?.value;
+    if (!path) { setMergeStatus('Select a dataset first.', true); return; }
+    mergeFromDataset(path);
+  });
 
   document.getElementById('dibbers-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
