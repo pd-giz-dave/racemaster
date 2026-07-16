@@ -20,6 +20,7 @@ export function isBanned(p) {
 }
 
 export function isEntryBanned(entry) {
+  if (!entry) return false;
   const p = state.people.find(p => ciEq(p.name, entry.name || '') && p.dob === (entry.dob || ''));
   return isBanned(p);
 }
@@ -457,6 +458,7 @@ export function getSortedEntries() {
  * Returns an array of row objects keyed by SI_TIMING_COL_NAMES values.
  */
 export function getEntryName(entry) {
+  if (!entry) return '';
   return entry.partner ? `${entry.name} / ${entry.partner.name}` : (entry.name || '');
 }
 

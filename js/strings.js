@@ -375,7 +375,12 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.7-alpha - current version</h3>
+    <h3>v0.0.8-alpha - current version</h3>
+    <ul>
+      <li>Detect 2 browser tabs open on the same dataset and let user know</li>
+      <li>Prevent data loss when conflicting sessions attempt to sync the same race to the server</li>
+    </ul>
+    <h3>v0.0.7-alpha</h3>
     <ul>
       <li>Resolve slow bib printing</li>
       <li>Allow new names that partially match an existing name when registering entrants and helpers</li>

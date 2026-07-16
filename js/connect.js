@@ -1,6 +1,6 @@
 'use strict';
 
-import { getSession, isDirty, getVersion, isConflicted } from './storage.js';
+import { getSession, isDirty, getVersion, isConflicted, discardConflict } from './storage.js';
 import { showConfirmDialog } from './ui.js';
 
 export function startUpdateCheck() {
@@ -27,6 +27,7 @@ export function startConflictWatch() {
       'This dataset has been updated by another session — your changes may not have saved. Reload now to get the latest data?',
       'Reload'
     )) {
+      discardConflict(); // confirmed: discard unsynced local edits, pull the server's copy
       location.reload();
     } else {
       updateDataFileButton();

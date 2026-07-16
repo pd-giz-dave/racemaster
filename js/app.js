@@ -3,6 +3,7 @@
 import { state, loadAll } from './state.js';
 import { restoreDirectory, getSession, isStandalone } from './storage.js';
 import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch } from './connect.js';
+import { startPresenceWatch } from './presence.js';
 import { wireDatasets, renderDatasets } from './views/datasets.js';
 import { showBusy } from './utils.js';
 import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
@@ -40,6 +41,7 @@ export async function init() {
       await restoreDirectory();
       await loadAll();
       updateBannerEventName(state.event.name);
+      startPresenceWatch(session?.dataset || null);
       if (session) {
         showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
       } else {
@@ -48,9 +50,16 @@ export async function init() {
     } catch (e) {
       showStatus('Error loading data: ' + e.message, true);
     }
-    updateDataFileButton();
-    renderAll();
-    showView('home');
+    try {
+      updateDataFileButton();
+      renderAll();
+      showView('home');
+    } catch (e) {
+      // A rendering exception here (e.g. unexpected data shape) must never leave
+      // the busy overlay stuck forever — surface it and still clear the spinner.
+      console.error('Render failed:', e);
+      showStatus('Error rendering data: ' + e.message, true);
+    }
     showBusy('');
     setTimeout(focusSidebar, 0);
   }

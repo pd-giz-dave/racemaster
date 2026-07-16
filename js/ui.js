@@ -290,6 +290,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
   let deletingText     = false;
   let pendingGhost      = null;  // raw text typed before an unconfirmed inline auto-complete
   let pendingGhostValue = null;  // the auto-completed value el.value was set to, for that ghost
+  el._selectedItem = null; // the specific item explicitly picked — shared with wireNameTypeahead's change handler
 
   const closeDropdown = () => { dropdown.hidden = true; dropdown.innerHTML = ''; };
 
@@ -305,6 +306,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
         const item = currentMatches[+li.dataset.i];
         el.value = getValue(item);
         pendingGhost = null;
+        el._selectedItem = item;
         onSelect(item);
         closeDropdown();
       })
@@ -315,6 +317,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
     const raw   = el.value;
     const typed = raw.trim();
     pendingGhost = null;
+    el._selectedItem = null; // typing invalidates any prior explicit pick
     if (!typed) { currentMatches = []; deletingText = false; closeDropdown(); onClear(); return; }
     const hasTrailingSpace = raw.endsWith(' ');
     const low = typed.toLowerCase();
@@ -328,6 +331,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
       pendingGhostValue = v0;
       onSelect(currentMatches[0]);
     } else if (currentMatches.length === 1 && !hasTrailingSpace) {
+      el._selectedItem = currentMatches[0];
       onSelect(currentMatches[0]);
     } else if (!currentMatches.length) {
       onClear();
@@ -358,7 +362,7 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
     const idx   = items.indexOf(document.activeElement);
     if      (e.key === 'ArrowDown')           { e.preventDefault(); items[Math.min(idx + 1, items.length - 1)]?.focus(); }
     else if (e.key === 'ArrowUp')             { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : el.focus(); }
-    else if (e.key === 'Enter' && idx >= 0)   { e.preventDefault(); e.stopPropagation(); const item = currentMatches[idx]; el.value = getValue(item); pendingGhost = null; onSelect(item); closeDropdown(); el.focus(); }
+    else if (e.key === 'Enter' && idx >= 0)   { e.preventDefault(); e.stopPropagation(); const item = currentMatches[idx]; el.value = getValue(item); pendingGhost = null; el._selectedItem = item; onSelect(item); closeDropdown(); el.focus(); }
     else if (e.key === 'Escape')              { e.stopPropagation(); closeDropdown(); el.focus(); }
   });
 
@@ -390,8 +394,16 @@ export function wireTypeahead(el, { getItems, getValue, renderItem, onSelect = (
     }
     const typed = el.value.trim();
     if (!typed) { onClear(); currentMatches = []; closeDropdown(); return; }
+    // Already resolved to a specific item (dropdown click, Enter, or an unambiguous
+    // typed match) — don't re-derive by name text alone, which would pick whichever
+    // duplicate-named item happens to come first and silently swap out the one
+    // actually selected (e.g. one of two same-named people, only one with a DOB).
+    if (el._selectedItem && getValue(el._selectedItem).toLowerCase() === typed.toLowerCase()) {
+      closeDropdown();
+      return;
+    }
     const exact = getItems(typed.toLowerCase()).find(item => getValue(item).toLowerCase() === typed.toLowerCase());
-    if (exact) { el.value = getValue(exact); onSelect(exact); }
+    if (exact) { el.value = getValue(exact); el._selectedItem = exact; onSelect(exact); }
     else       { onClear(); }
     closeDropdown();
   }, 150));
@@ -408,12 +420,15 @@ export function wireNameTypeahead(nameEl, { onSelect, onClear }) {
     onSelect,
     onClear,
   });
-  // Exact-match on change (e.g. paste or autofill)
+  // Exact-match on change (e.g. paste or autofill bypassing the input/dropdown flow above)
   nameEl?.addEventListener('change', () => {
     const typed = nameEl.value.trim();
     if (!typed) return;
+    // Already resolved to a specific item above — don't re-derive by name text alone
+    // and risk picking a different same-named person (see wireTypeahead's blur handler).
+    if (nameEl._selectedItem && (nameEl._selectedItem.name || '').toLowerCase() === typed.toLowerCase()) return;
     const exact = state.people.find(p => (p.name || '').toLowerCase() === typed.toLowerCase());
-    if (exact) onSelect(exact);
+    if (exact) { nameEl._selectedItem = exact; onSelect(exact); }
   });
 }
 

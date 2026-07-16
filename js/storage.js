@@ -34,6 +34,18 @@ export const hasFSA = false;
 let _syncTimer    = null;
 let _conflicted   = false;
 
+// Fetch with a hard timeout — a stalled response (e.g. reconnecting after being
+// offline) must not hang the caller forever and leave the app stuck on "Loading…".
+async function fetchTimed(url, opts = {}, ms = 15000) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: abort.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---- Session management ----
 
 export function getSession() {
@@ -246,7 +258,7 @@ async function syncToServer(force = false, silent = false) {
   if (!session) return;
   try {
     const url = `/api/data/${session.dataset}${force ? '?force=true' : ''}`;
-    const res = await fetch(url, {
+    const res = await fetchTimed(url, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -289,10 +301,14 @@ export async function restoreDirectory() {
   if (!session) return true; // standalone — use localStorage cache
 
   if (localStorage.getItem(DIRTY_KEY) === 'true') {
-    await syncToServer(false, true); // silent — fresh GET follows regardless
+    await syncToServer(false); // not silent — a 409 here must surface to the user
+    // Conflict: another session already saved a newer version. Do NOT fall through
+    // to the GET below — that would silently overwrite these unsynced local edits.
+    // Leave the cache dirty and let the conflict dialog (connect.js) decide.
+    if (_conflicted) return true;
   }
   try {
-    const res = await fetch(`/api/data/${session.dataset}`, {
+    const res = await fetchTimed(`/api/data/${session.dataset}`, {
       headers: { 'Authorization': `Bearer ${session.token}` },
     });
     if (res.status === 401) {
@@ -304,9 +320,17 @@ export async function restoreDirectory() {
       _conflicted = false;
     }
   } catch {
-    // Server unreachable — use localStorage cache as-is
+    // Server unreachable (or timed out) — use localStorage cache as-is
   }
   return true;
+}
+
+/** Explicitly discard unsynced local edits after a conflict, so the next
+ *  restoreDirectory() pulls a clean copy from the server instead of retrying
+ *  a push that will just conflict again. */
+export function discardConflict() {
+  localStorage.removeItem(DIRTY_KEY);
+  _conflicted = false;
 }
 
 /**
