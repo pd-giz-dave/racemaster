@@ -91,6 +91,16 @@ export function getSIBib(r)        { return +getField(r, ...SI.resultsImport.bib
 export function getSIRaceTime(r)   { return normaliseTime(getField(r, ...SI.resultsImport.raceTime)) || ''; }
 export function getSICourse(r)     { return getField(r, ...SI.resultsImport.course); }
 export function getSIStatus(r)     { return getField(r, ...SI.resultsImport.status); }
+export function getSINumSplits(r)  { return +getField(r, 'NumSplits') || 0; }
+
+/**
+ * n is the 1-based split number. SI's export dedups repeated CSV headers by
+ * suffixing "_N" from the second occurrence on — split 1 is the bare
+ * 'ControlCode'/'Split' columns, split 2+ are 'ControlCode_2'/'Split_2' etc.
+ */
+export function getSISplitTime(r, n) {
+  return normaliseTime(getField(r, n === 1 ? 'Split' : `Split_${n}`)) || '';
+}
 
 /** Set of bibs accounted for in SI results (have a race time or a non-blank status). */
 export function getSIAccountedBibs() {

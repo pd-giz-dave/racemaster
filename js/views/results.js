@@ -1,13 +1,13 @@
 'use strict';
 
-import { formatResults, computeAvgTop10 } from '../results.js';
+import { formatResults, computeAvgTop10, getSplitsRows } from '../results.js';
 import { state } from '../state.js';
 import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderThead } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
 import { CSV } from '../csv-schema.js';
-import { publishResultsHTML, makePublishedUrl, buildSeniorsBodyHTML, buildJuniorsBodyHTML, buildPairsBodyHTML, buildHelpersBodyHTML } from '../forms/results-html.js';
+import { publishResultsHTML, makePublishedUrl, buildSeniorsBodyHTML, buildJuniorsBodyHTML, buildPairsBodyHTML, buildHelpersBodyHTML, buildSplitsColumns, buildSplitsBodyHTML } from '../forms/results-html.js';
 import { buildPrizeRowsHTML } from '../forms/prize-list.js';
 
 let _seniors      = [];
@@ -31,6 +31,10 @@ export function renderResults() {
   renderThead('results-pairs-tbody', TABLES['results-pairs']);
   const pairsTbody = document.getElementById('results-pairs-tbody');
   if (pairsTbody) pairsTbody.innerHTML = buildPairsBodyHTML(pairsResults);
+
+  // Splits tab — visible only when SI results carry split times
+  const { maxSplits, rows: splitsRows } = getSplitsRows(seniors, juniors);
+  renderSplitsTable(splitsRows, maxSplits);
 
   const printBtn = document.getElementById('btn-print-prize-list');
   if (printBtn) printBtn.disabled = prizes.length === 0;
@@ -58,6 +62,16 @@ export function renderJuniorsTable(tbodyId, results) {
   renderThead(tbodyId, TABLES['results-junior']);
   const tbody = document.getElementById(tbodyId);
   if (tbody) tbody.innerHTML = buildJuniorsBodyHTML(results);
+}
+
+function renderSplitsTable(rows, maxSplits) {
+  const splitsBtn = document.getElementById('results-tab-splits-btn');
+  if (splitsBtn) splitsBtn.hidden = maxSplits === 0;
+  if (!maxSplits) return;
+
+  renderThead('results-splits-tbody', buildSplitsColumns(maxSplits));
+  const tbody = document.getElementById('results-splits-tbody');
+  if (tbody) tbody.innerHTML = buildSplitsBodyHTML(rows, maxSplits);
 }
 
 export function renderPrizes(prizes, tbodyId = 'prizes-tbody') {

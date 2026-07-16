@@ -557,6 +557,17 @@ export const TABLES = {
     { id: 'cat',     label: 'Cat',      title: 'Pair category and gender' },
     { id: 'time',    label: 'Time',     title: 'Finish time' },
   ],
+  // 'split' is a proforma — the number of splits varies by event, so it isn't a real
+  // column. buildSplitsColumns() (forms/results-html.js) clones it once per split,
+  // appending "_N" to id/label/title, and splices the clones in at this position.
+  'results-splits': [
+    { id: 'pos',         label: 'Pos',    title: 'Overall finishing position' },
+    { id: 'bib',         label: 'Bib',    title: 'Race number' },
+    { id: 'name',        label: 'Name',   title: "Competitor's name" },
+    { id: 'cat',         label: 'Cat',    title: 'Age category' },
+    { id: 'split',       label: 'CP',     title: 'Cumulative (upper) / leg (lower) time to control' },
+    { id: 'finish_time', label: 'Finish', title: 'Total race time (upper) / last leg (lower) time to finish' },
+  ],
   people: [
     { id: 'select',       label: '',             title: 'Select for bulk delete' },
     { id: 'name',         label: 'Name',         title: "Person's name" },

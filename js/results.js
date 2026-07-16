@@ -7,7 +7,7 @@ import { calculateCategory, getCategoryPriority, genderFromCategory, derivePairG
 import { getEntry, getSortedEntries, isEntryBanned, getEntryName } from './entries.js';
 import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
-import { getSIBib, getSIRaceTime, getSICourse, getSIStatus } from './si-results.js';
+import { getSIBib, getSIRaceTime, getSICourse, getSIStatus, getSINumSplits, getSISplitTime } from './si-results.js';
 
 
 /** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, helpersReport }. */
@@ -346,6 +346,56 @@ function buildHelpersReport() {
       return { name: h.name || '', club, cat, role: h.role || '', lastRaced };
     })
     .sort((a, b) => (a.role || '').localeCompare(b.role || '') || (a.name || '').localeCompare(b.name || ''));
+}
+
+/**
+ * Build one row per SI result that carries split times, joined against the
+ * already-computed official results (for position/name/category). Rows with
+ * no matching finisher (DNF/DNS/unmatched bib) or no splits are skipped.
+ *
+ * SI's split times are cumulative (elapsed since the start), not leg times —
+ * each split/finish-time value is returned as { cumulative, delta }, where
+ * delta is the time since the previous control (or, for the finish, since
+ * the last control).
+ *
+ * Returns { maxSplits, rows } — maxSplits is 0 when no result has splits.
+ */
+export function getSplitsRows(seniors, juniors) {
+  const maxSplits = Math.max(0, ...state.siResults.map(getSINumSplits));
+  if (!maxSplits) return { maxSplits: 0, rows: [] };
+
+  const resultsByBib = new Map();
+  for (const r of [...seniors, ...juniors]) {
+    if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
+  }
+
+  const rows = [];
+  for (const si of state.siResults) {
+    const n = getSINumSplits(si);
+    if (!n) continue;
+    const bib = getSIBib(si);
+    const r = bib > 0 ? resultsByBib.get(bib) : null;
+    if (!r) continue;
+
+    const cumTimes = Array.from({ length: n }, (_, i) => getSISplitTime(si, i + 1));
+    const raceTime = getSIRaceTime(si) || r.time;
+
+    // index 0 = start (always valid, always 0); 1..n = controls; n+1 = finish.
+    // A zero-second leg (two controls reached in the same second) is legitimate
+    // data, not missing data — only a negative gap or an unparsed time is rejected.
+    const secs  = [0, ...cumTimes.map(timeToSeconds), timeToSeconds(raceTime)];
+    const valid = [true, ...cumTimes.map(t => timeToSeconds(t) > 0), timeToSeconds(raceTime) > 0];
+    const legDelta = i => (valid[i] && valid[i - 1] && secs[i] - secs[i - 1] >= 0)
+      ? secondsToTime(secs[i] - secs[i - 1])
+      : '';
+
+    const splits = cumTimes.map((cumulative, i) => ({ cumulative, delta: legDelta(i + 1) }));
+    const finishTime = { cumulative: raceTime, delta: legDelta(n + 1) };
+
+    rows.push({ position: r.position, bibNumber: bib, name: getEntryName(r), category: r.category, splits, finishTime });
+  }
+  rows.sort((a, b) => a.position - b.position);
+  return { maxSplits, rows };
 }
 
 /** Get results sorted by position for a course */

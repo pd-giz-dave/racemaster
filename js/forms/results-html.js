@@ -1,11 +1,12 @@
 'use strict';
 
 import { state }                           from '../state.js';
-import { formatResults, computeAvgTop10 } from '../results.js';
+import { formatResults, computeAvgTop10, getSplitsRows } from '../results.js';
 import { getEntryName } from '../entries.js';
 import { getCategoryPriority }             from '../categories.js';
 import { toISODate }           from '../utils.js';
 import { sanitise, escHtml }   from '../ui.js';
+import { TABLES }              from '../strings.js';
 
 function wrap(title, body) {
   const org  = escHtml(state.event.organisation || '');
@@ -104,6 +105,42 @@ export function buildHelpersBodyHTML(helpersReport) {
     <td>${escHtml(h.lastRaced||'')}</td></tr>`).join('');
 }
 
+/** results-splits columns from strings.js, with the 'split' proforma cloned once per
+ *  event split (id/label/title suffixed "_N") — shared by the on-screen table (via
+ *  renderThead) and the published HTML (via buildSplitsHeadHTML below), so both stay
+ *  in sync with a single set of labels. */
+export function buildSplitsColumns(maxSplits) {
+  const base      = TABLES['results-splits'];
+  const idx       = base.findIndex(c => c.id === 'split');
+  const proforma  = base[idx];
+  const splitCols = Array.from({ length: maxSplits }, (_, i) => {
+    const n = i + 1;
+    return { id: `${proforma.id}_${n}`, label: `${proforma.label} ${n}`, title: `${proforma.title} ${n}` };
+  });
+  return [...base.slice(0, idx), ...splitCols, ...base.slice(idx + 1)];
+}
+
+export function buildSplitsHeadHTML(maxSplits) {
+  return '<tr>' + buildSplitsColumns(maxSplits)
+    .map(c => `<th${c.title ? ` title="${escHtml(c.title)}"` : ''}>${escHtml(c.label)}</th>`).join('') + '</tr>';
+}
+
+// Cumulative time on top, leg time (since the previous control) below — same
+// two-line pattern used elsewhere for pair rows (e.g. views/entries.js).
+function splitCellHTML({ cumulative, delta } = {}) {
+  const cum = escHtml(cumulative || '');
+  return delta ? `${cum}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(delta)}</span>` : cum;
+}
+
+export function buildSplitsBodyHTML(rows, maxSplits) {
+  return rows.map(r => {
+    const splitCells = Array.from({ length: maxSplits }, (_, i) => `<td>${splitCellHTML(r.splits[i])}</td>`).join('');
+    return `<tr><td>${r.position}</td><td>${escHtml(r.bibNumber||'')}</td>
+      <td>${escHtml(r.name||'')}</td><td>${escHtml(r.category||'')}</td>${splitCells}
+      <td>${splitCellHTML(r.finishTime)}</td></tr>`;
+  }).join('');
+}
+
 // ---- Publish section builders (wrap row HTML in full table markup) ----
 
 function section(label, count, content) {
@@ -145,9 +182,17 @@ function helpersSection(helpersReport) {
 </table>`);
 }
 
+function splitsSection(splitsRows, maxSplits) {
+  if (!maxSplits || !splitsRows.length) return '';
+  return section('Splits', splitsRows.length, `<table class="data-table re-sortable">
+  <thead>${buildSplitsHeadHTML(maxSplits)}</thead>
+  <tbody>${buildSplitsBodyHTML(splitsRows, maxSplits)}</tbody>
+</table>`);
+}
+
 const SECTIONS = {
-  combined: ({ seniors, juniors, pairsResults, helpersReport }) =>
-    juniorsSection(juniors) + seniorsSection(seniors) + pairsSection(pairsResults) + helpersSection(helpersReport),
+  combined: ({ seniors, juniors, pairsResults, helpersReport, splitsRows, maxSplits }) =>
+    juniorsSection(juniors) + seniorsSection(seniors) + pairsSection(pairsResults) + helpersSection(helpersReport) + splitsSection(splitsRows, maxSplits),
   juniors:  ({ juniors })         => juniorsSection(juniors),
   seniors:  ({ seniors })         => seniorsSection(seniors),
   helpers:  ({ helpersReport })   => helpersSection(helpersReport),
@@ -174,8 +219,9 @@ export function makePublishedUrl() {
 
 export async function publishResultsHTML() {
   const data     = formatResults();
+  const splits   = getSplitsRows(data.seniors, data.juniors);
   const filename = makeFilename();
-  const html     = wrap(TITLES.combined(), SECTIONS.combined(data));
+  const html     = wrap(TITLES.combined(), SECTIONS.combined({ ...data, splitsRows: splits.rows, maxSplits: splits.maxSplits }));
   const token    = localStorage.getItem('racemaster-token');
   const res = await fetch('/api/publish-results', {
     method:  'POST',
