@@ -574,6 +574,12 @@ const server = http.createServer(async (req, res) => {
         action: String(r?.action || 'Finish'),
         bibNumber: r?.bibNumber ?? null,
         splitTime: r?.splitTime ?? null,
+        // Which physical point on the course this record came from (e.g. "Finish", "Start",
+        // "Checkpoint 2") — the Android app's RaceEntity.location, repeated on every record
+        // since there's no separate per-race metadata channel on this wire protocol to send
+        // it through just once. Defaults to "Finish" to match that field's own default, for
+        // any record that predates this field existing.
+        location: typeof r?.location === 'string' && r.location ? r.location : 'Finish',
         splitNumber: r?.splitNumber ?? null,
         // Permanent, ascending history position — see the Android app's RaceEntity.nextLineNumber.
         // What the merge logic below (and the /status route) key off for delta-sync.
@@ -584,7 +590,9 @@ const server = http.createServer(async (req, res) => {
         // event log in order.
         refLineNumber: Number.isFinite(r?.refLineNumber) ? r.refLineNumber : null,
         note: r?.note ?? null,
-        timestampMillis: Number.isFinite(r?.timestampMillis) ? r.timestampMillis : null,
+        // "yyyy/MM/dd HH:mm:ss" (the device's own local time), not a raw epoch value — the
+        // Android app formats this before sending; passed through as-is.
+        timestampMillis: typeof r?.timestampMillis === 'string' && r.timestampMillis ? r.timestampMillis : null,
       });
 
       // Everything from here to writeMobileDeviceFile() must stay synchronous — see the warning above.
