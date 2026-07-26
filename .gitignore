@@ -1,7 +1,11 @@
 data/
+mobile/
 results/
 downloads/
 users.txt
 admins.txt
 sessions.txt
 server.log
+server-dev.log
+.claude/
+.idea/

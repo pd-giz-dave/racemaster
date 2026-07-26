@@ -1,11 +1,12 @@
 'use strict';
 
 import { getSession, getIsAdmin, apiListMobileFiles, apiDeleteMobileFile } from '../storage.js';
-import { escHtml, showConfirmDialog, showStatus } from '../ui.js';
+import { escHtml, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
+import { TABLES } from '../strings.js';
 
 function getEl(id) { return document.getElementById(id); }
 
-let currentRaces = [];
+let currentRows = []; // flattened, one entry per device — see flattenDevices()
 
 function formatRaceDate(raceDate) {
   if (!raceDate) return '<span style="color:var(--muted)">Unknown</span>';
@@ -39,8 +40,8 @@ function foldLatestVisible(rows) {
 
 function bySplitNumber(a, b) { return (a.splitNumber ?? 0) - (b.splitNumber ?? 0); }
 
-function formatCount(visible, raw) {
-  return raw === 0 ? '' : `${visible} (from ${raw})`;
+function formatCount(visible) {
+  return visible === 0 ? '' : String(visible);
 }
 
 function buildSegmentView(lines) {
@@ -151,74 +152,70 @@ function showRawModal(owner, raceLabel, deviceName, lines) {
 
 // ---- List (one row per device) ----
 
+// Flattens races → one row per device, precomputing everything the columns need so the
+// column render functions below stay trivial reads, same as every other list view's *_COLS.
 function flattenDevices(races) {
   const rows = [];
   for (const race of races) {
     for (const device of race.devices) {
-      rows.push({ owner: race.owner, raceLabel: race.raceLabel, raceDate: race.raceDate, device });
+      const { timeSegment, bibsSegment } = buildSegmentView(device.lines);
+      rows.push({
+        idx: rows.length,
+        owner: race.owner,
+        raceLabel: race.raceLabel,
+        raceDate: race.raceDate,
+        device,
+        location: locationSummary([...timeSegment, ...bibsSegment]),
+        bibsVisible: bibsSegment.length,
+        timeVisible: timeSegment.length,
+      });
     }
   }
   return rows;
 }
 
-function renderRaceList(races, isAdminUser) {
-  const list = getEl('mobile-files-list');
-  if (!list) return;
-  const rows = flattenDevices(races);
-  if (!rows.length) {
-    list.innerHTML = '<p style="color:var(--muted)">No mobile files uploaded yet.</p>';
-    return;
-  }
-  const trs = rows.map((r, i) => {
-    const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
-    const rawBibs = r.device.lines.filter(l => l.splitTime == null).length;
-    const rawTime = r.device.lines.filter(l => l.splitTime != null).length;
-    return `<tr>
-      <td><input type="checkbox" class="mobile-file-select" data-idx="${i}" aria-label="Select ${escHtml(r.device.name)}"></td>
-      ${isAdminUser ? `<td>${escHtml(r.owner)}</td>` : ''}
-      <td>${escHtml(r.raceLabel)}</td>
-      <td>${formatRaceDate(r.raceDate)}</td>
-      <td>${escHtml(r.device.name)}</td>
-      <td>${formatCount(bibsSegment.length, rawBibs)}</td>
-      <td>${formatCount(timeSegment.length, rawTime)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn-sm mobile-file-view" data-idx="${i}">View</button>
-        <button class="btn-sm mobile-file-raw" data-idx="${i}">Raw</button>
-        <button class="btn-sm btn-delete mobile-file-delete" data-idx="${i}">Delete</button>
-      </td>
-    </tr>`;
-  }).join('');
-  list.innerHTML = `<table class="data-table">
-    <thead><tr>
-      <th></th>
-      ${isAdminUser ? '<th>Owner</th>' : ''}
-      <th>Race</th><th>Race Date</th><th>Device</th><th>Bibs</th><th>Time</th><th>Actions</th>
-    </tr></thead>
-    <tbody>${trs}</tbody>
-  </table>`;
+function buildColumns(isAdminUser) {
+  return tableColumns(TABLES['mobile-files'], {
+    select:    r => `<input type="checkbox" class="mobile-file-select" aria-label="Select ${escHtml(r.device.name)}">`,
+    owner:     isAdminUser ? r => escHtml(r.owner) : undefined,
+    raceLabel: r => escHtml(r.raceLabel),
+    raceDate:  r => formatRaceDate(r.raceDate),
+    device:    r => escHtml(r.device.name),
+    location:  r => r.location,
+    bibs:      r => formatCount(r.bibsVisible),
+    time:      r => formatCount(r.timeVisible),
+    actions:   () => `
+      <button class="btn-sm" data-action="view">View</button>
+      <button class="btn-sm" data-action="raw">Raw</button>
+      <button class="btn-sm btn-delete" data-action="delete">Delete</button>`,
+  });
+}
 
-  list.querySelectorAll('.mobile-file-view').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const r = rows[+btn.dataset.idx];
-      showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
-    });
+function renderRaceList(races, isAdminUser) {
+  currentRows = flattenDevices(races);
+  renderTable('mobile-files-tbody', buildColumns(isAdminUser), currentRows, {
+    rowAttrs: r => ({ 'data-idx': r.idx }),
   });
-  list.querySelectorAll('.mobile-file-raw').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const r = rows[+btn.dataset.idx];
-      showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
-    });
-  });
-  list.querySelectorAll('.mobile-file-delete').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const r = rows[+btn.dataset.idx];
-      if (!await showConfirmDialog(`Delete "${r.device.name}" from "${r.raceLabel}"? This cannot be undone.`, 'Delete', true)) return;
-      const session = getSession();
-      const result = await apiDeleteMobileFile(session.token, r.owner, r.raceLabel, r.device.name);
-      if (result.error) { showStatus(result.error, true); return; }
-      showStatus(`"${r.device.name}" deleted.`);
-      renderMobileFiles();
-    });
+}
+
+async function deleteRow(r) {
+  if (!await showConfirmDialog(`Delete "${r.device.name}" from "${r.raceLabel}"? This cannot be undone.`, 'Delete', true)) return;
+  const session = getSession();
+  const result = await apiDeleteMobileFile(session.token, r.owner, r.raceLabel, r.device.name);
+  if (result.error) { showStatus(result.error, true); return; }
+  showStatus(`"${r.device.name}" deleted.`);
+  renderMobileFiles();
+}
+
+export function wireMobileFiles() {
+  document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const r = currentRows[+btn.closest('[data-idx]')?.dataset.idx];
+    if (!r) return;
+    if (btn.dataset.action === 'view')        showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    else if (btn.dataset.action === 'raw')    showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    else if (btn.dataset.action === 'delete') deleteRow(r);
   });
 }
 
@@ -228,7 +225,6 @@ export function renderMobileFiles() {
   const count   = getEl('mobile-files-count');
   if (!session) {
     if (status) status.textContent = 'Sign in on the Datasets page to view mobile files.';
-    currentRaces = [];
     renderRaceList([], false);
     if (count) count.textContent = '0';
     return;
@@ -236,10 +232,10 @@ export function renderMobileFiles() {
   const isAdminUser = getIsAdmin();
   if (status) status.textContent = 'Loading…';
   apiListMobileFiles(session.token).then(races => {
-    currentRaces = Array.isArray(races) ? races : [];
-    if (status) status.textContent = '';
-    if (count) count.textContent = `${currentRaces.length} race${currentRaces.length === 1 ? '' : 's'}`;
-    renderRaceList(currentRaces, isAdminUser);
+    const list = Array.isArray(races) ? races : [];
+    if (count) count.textContent = `${list.length} race${list.length === 1 ? '' : 's'}`;
+    renderRaceList(list, isAdminUser);
+    if (status) status.textContent = list.length ? '' : 'No mobile files uploaded yet.';
   }).catch(() => {
     if (status) status.textContent = 'Could not load mobile files.';
   });

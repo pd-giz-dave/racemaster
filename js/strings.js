@@ -615,6 +615,17 @@ export const TABLES = {
     { id: 'notes',      label: 'Notes',      title: 'Additional notes' },
     { id: 'actions',    label: 'Actions',    title: 'Edit or delete' },
   ],
+  'mobile-files': [
+    { id: 'select',    label: '',          title: 'Select for bulk actions' },
+    { id: 'owner',     label: 'Owner',     title: 'Account this file was uploaded under (admins only)' },
+    { id: 'raceLabel', label: 'Race',      title: 'Race label as recorded on the phone' },
+    { id: 'raceDate',  label: 'Race Date', title: 'Race date parsed from the race label' },
+    { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },
+    { id: 'location',  label: 'Location',  title: 'Course location stamped on this device\'s currently-visible lines — every line should agree' },
+    { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset)' },
+    { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset)' },
+    { id: 'actions',   label: 'Actions',   title: 'View, view raw, or delete this file' },
+  ],
 };
 
 export const GENDER = {
