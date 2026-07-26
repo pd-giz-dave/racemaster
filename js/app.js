@@ -23,6 +23,7 @@ import { renderDibbers, wireDibbers }       from './views/dibbers.js';
 import { renderCategories, wireCategories } from './views/categories.js';
 import { renderForms, wireForms }           from './views/forms.js';
 import { renderSIResults, wireSIResults }   from './views/si-results.js';
+import { renderMobileFiles }                from './views/mobile-files.js';
 import { wireViewHelp, wireTooltips, wireStaticPages } from './help.js';
 
 // ============================================================
@@ -211,6 +212,7 @@ function renderView(v) {
     case 'forms':        renderForms();        break;
     case 'si-results':   renderSIResults();    break;
     case 'datafile':     renderDatasets(); break;
+    case 'mobile-files': renderMobileFiles(); break;
   }
 }
 

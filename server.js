@@ -248,6 +248,71 @@ function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
   fs.writeFileSync(mobileDeviceFilePath(username, raceLabel, deviceName), JSON.stringify(lines, null, 2), 'utf8');
 }
 
+// raceLabel ends "…-dd-mm-yy" (the race date, as typed/picked on the phone) — pull that out
+// for sorting. Returns { dd, mm, yy } (strings) or null if the label doesn't end that way.
+function parseRaceLabelDate(raceLabel) {
+  const m = /-(\d{2})-(\d{2})-(\d{2})$/.exec(raceLabel || '');
+  return m ? { dd: m[1], mm: m[2], yy: m[3] } : null;
+}
+
+// Returns array of { owner, raceLabel, raceDate, devices: [{name, records, lines}], recordCount },
+// newest race date first (by yy, then mm, then dd — races whose label has no trailing date
+// sort last). adminAccess=true returns every user's races; otherwise only `username`'s own.
+// `lines` is each device's full raw record array (see readMobileDeviceFile) — sent up front,
+// same as the counts, so the Mobile Files page can render a device's segment view (View button)
+// without a second round trip; these files are small per-device logs, never bulk data.
+function getMobileRacesForUser(username, adminAccess = false) {
+  const results = [];
+  let owners;
+  try { owners = fs.readdirSync(MOBILE_DIR); }
+  catch { return results; }
+
+  for (const owner of owners) {
+    if (!adminAccess && owner !== username) continue;
+    const ownerPath = path.join(MOBILE_DIR, owner);
+    try { if (!fs.statSync(ownerPath).isDirectory()) continue; }
+    catch { continue; }
+
+    let raceLabels;
+    try { raceLabels = fs.readdirSync(ownerPath); }
+    catch { continue; }
+
+    for (const raceLabel of raceLabels) {
+      const raceDirPath = path.join(ownerPath, raceLabel);
+      try { if (!fs.statSync(raceDirPath).isDirectory()) continue; }
+      catch { continue; }
+
+      let files;
+      try { files = fs.readdirSync(raceDirPath); }
+      catch { continue; }
+
+      const devices = [];
+      let recordCount = 0;
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        const deviceName = file.slice(0, -'.json'.length);
+        const records = readMobileDeviceFile(owner, raceLabel, deviceName);
+        recordCount += records.length;
+        devices.push({ name: deviceName, records: records.length, lines: records });
+      }
+      devices.sort((a, b) => a.name.localeCompare(b.name));
+
+      results.push({ owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel) });
+    }
+  }
+
+  return results.sort((a, b) => {
+    if (a.raceDate && b.raceDate) {
+      return b.raceDate.yy !== a.raceDate.yy ? b.raceDate.yy.localeCompare(a.raceDate.yy)
+        : b.raceDate.mm !== a.raceDate.mm ? b.raceDate.mm.localeCompare(a.raceDate.mm)
+        : b.raceDate.dd.localeCompare(a.raceDate.dd);
+    }
+    if (a.raceDate) return -1;
+    if (b.raceDate) return 1;
+    return a.raceLabel.localeCompare(b.raceLabel);
+  });
+}
+
 // Returns array of { owner, name, fullName, visibility, orphaned } visible to username.
 // adminAccess=true shows all datasets including other users' private ones.
 function getDatasetsForUser(username, adminAccess = false) {
@@ -592,8 +657,10 @@ const server = http.createServer(async (req, res) => {
         refLineNumber: Number.isFinite(r?.refLineNumber) ? r.refLineNumber : null,
         note: r?.note ?? null,
         // "yyyy/MM/dd HH:mm:ss" (the device's own local time), not a raw epoch value — the
-        // Android app formats this before sending; passed through as-is.
-        timestampMillis: typeof r?.timestampMillis === 'string' && r.timestampMillis ? r.timestampMillis : null,
+        // Android app formats this before sending; passed through as-is. Renamed from
+        // timestampMillis (which it never actually was, on this side of the wire — a
+        // formatted string, not a millis count) to timestamp.
+        timestamp: typeof r?.timestamp === 'string' && r.timestamp ? r.timestamp : null,
       });
 
       // Everything from here to writeMobileDeviceFile() must stay synchronous — see the warning above.
@@ -621,6 +688,29 @@ const server = http.createServer(async (req, res) => {
       return jsonReply(res, 200, { ok: true, added, received, version: 1 });
     }
 
+    // DELETE /api/mobile/:owner/:raceLabel/:deviceName  —  Mobile Files page's Delete button.
+    // Owner or admin only. Also removes the raceLabel/owner directories once they're left empty.
+    if (/^\/api\/mobile\/[^/]+\/[^/]+\/[^/]+$/.test(pathname) && req.method === 'DELETE') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+
+      const [owner, raceLabel, deviceName] = pathname.slice('/api/mobile/'.length).split('/').map(decodeURIComponent).map(sanitiseName);
+      if (!owner || !raceLabel || !deviceName) return jsonReply(res, 400, { error: 'Invalid path' });
+      if (owner !== username && !isAdmin(username)) return jsonReply(res, 403, { error: 'Cannot delete another user\'s mobile file' });
+
+      const fp = mobileDeviceFilePath(owner, raceLabel, deviceName);
+      if (!fs.existsSync(fp)) return jsonReply(res, 404, { error: 'Not found' });
+      fs.unlinkSync(fp);
+
+      const raceDir = mobileRaceDir(owner, raceLabel);
+      try { if (fs.readdirSync(raceDir).length === 0) fs.rmdirSync(raceDir); } catch { /* not empty, or already gone */ }
+      const ownerDir = path.join(MOBILE_DIR, owner);
+      try { if (fs.readdirSync(ownerDir).length === 0) fs.rmdirSync(ownerDir); } catch { /* not empty, or already gone */ }
+
+      console.log(`[mobile-files] ${username} deleted ${owner}/${raceLabel}/${deviceName}`);
+      return jsonReply(res, 200, { ok: true });
+    }
+
     // GET /api/mobile/:raceLabel/status  —  lets a phone ask what the server already has,
     // per device, for this race before pushing — so it only needs to send the lineNumber
     // delta rather than resending everything every time. Scoped to the requesting user's
@@ -646,6 +736,13 @@ const server = http.createServer(async (req, res) => {
         result[deviceName] = maxLineNumber(readMobileDeviceFile(username, raceLabel, deviceName));
       }
       return jsonReply(res, 200, result);
+    }
+
+    // GET /api/mobile  — races/devices under mobile/. Own races only, unless admin (all users').
+    if (pathname === '/api/mobile' && req.method === 'GET') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      return jsonReply(res, 200, getMobileRacesForUser(username, isAdmin(username)));
     }
 
     // GET /api/users  — admin only, list all users

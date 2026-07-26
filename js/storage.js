@@ -169,6 +169,22 @@ export async function apiDeleteDataset(token, owner, fullName) {
   return res.json();
 }
 
+export async function apiListMobileFiles(token) {
+  const res = await fetch('/api/mobile', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function apiDeleteMobileFile(token, owner, raceLabel, deviceName) {
+  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/${encodeURIComponent(deviceName)}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
 export async function apiListUsers(token) {
   const res = await fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } });
   return res.json();
