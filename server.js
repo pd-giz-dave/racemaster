@@ -67,6 +67,7 @@ const MIME = {
   '.png':         'image/png',
   '.ico':         'image/x-icon',
   '.svg':         'image/svg+xml',
+  '.apk':         'application/vnd.android.package-archive',
 };
 
 // ---- Authentication ----
