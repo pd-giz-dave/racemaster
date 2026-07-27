@@ -6,7 +6,10 @@ import {
 } from '../storage.js';
 import { on, escHtml, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
-import { isBluetoothAvailable, pullFromNearbyPhone } from '../mule-ble.js';
+import {
+  isBluetoothAvailable, connectToPhone as bleConnect, pullFromConnectedPhone,
+  disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
+} from '../mule-ble.js';
 
 function getEl(id) { return document.getElementById(id); }
 
@@ -276,12 +279,27 @@ async function discardPendingRow(r) {
   renderMobileFiles();
 }
 
-// Connects to a nearby phone over Bluetooth (racemaster-mobile's Mule Mode — see mule-ble.js),
-// pulls whatever history it's holding, and pushes each device straight to the server exactly
+function updateConnectButtonLabel() {
+  const btn = getEl('btn-connect-phone');
+  if (!btn) return;
+  btn.textContent = isConnected() ? `Disconnect from ${getConnectedDeviceName()}` : 'Connect to Phone…';
+}
+
+// Connects to a nearby phone over Bluetooth (racemaster-mobile's Mule Mode — see mule-ble.js)
+// and pulls whatever history it's holding, pushing each device straight to the server exactly
 // like a WiFi sync would. If the server can't be reached (the expected case out in the field,
 // with no internet), each pull is kept locally as "pending" instead — see
-// storage.js's savePendingMobileFile — until a Push action later succeeds.
-async function connectToPhone() {
+// storage.js's savePendingMobileFile — until a Push action later succeeds. The connection is
+// left open afterward (button becomes "Disconnect from <device>") so a second click just ends
+// the session rather than re-picking a device.
+async function onConnectButtonClick() {
+  if (isConnected()) {
+    disconnectPhone();
+    updateConnectButtonLabel();
+    showStatus('Disconnected from phone.');
+    return;
+  }
+
   const session  = getSession();
   const username = getUsername();
   if (!session || !username) { showStatus('Sign in on the Datasets page first.', true); return; }
@@ -290,11 +308,20 @@ async function connectToPhone() {
     return;
   }
   showStatus('Connecting…');
-  let pulled;
   try {
-    pulled = await pullFromNearbyPhone();
+    await bleConnect();
   } catch (e) {
     showStatus(e.message || 'Bluetooth connection failed.', true);
+    return;
+  }
+  updateConnectButtonLabel();
+  showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
+
+  let pulled;
+  try {
+    pulled = await pullFromConnectedPhone();
+  } catch (e) {
+    showStatus(e.message || 'Failed to pull history from the phone.', true);
     return;
   }
   let synced = 0, pending = 0;
@@ -314,7 +341,8 @@ async function connectToPhone() {
 
 export function wireMobileFiles() {
   on('btn-refresh-mobile-files', 'click', renderMobileFiles);
-  on('btn-connect-phone', 'click', connectToPhone);
+  on('btn-connect-phone', 'click', onConnectButtonClick);
+  onDisconnect(updateConnectButtonLabel);
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -334,6 +362,7 @@ export function renderMobileFiles() {
   const count    = getEl('mobile-files-count');
   const connectBtn = getEl('btn-connect-phone');
   if (connectBtn) connectBtn.hidden = !isBluetoothAvailable();
+  updateConnectButtonLabel();
   if (!session) {
     if (status) status.textContent = 'Sign in on the Datasets page to view mobile files.';
     renderRaceList([], false);

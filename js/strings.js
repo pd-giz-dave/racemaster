@@ -349,10 +349,27 @@ export const HELP = {
     <p><strong>Copy</strong> — duplicate an existing server dataset under a new name, without changing which one is connected.</p>
     <p><strong>Export / Import</strong> — save or restore a local JSON snapshot of all event data, independent of the server.</p>
     <p>Private datasets are only visible to their owner (and admins). Public datasets are visible to all signed-in users.</p>
-    <p>When not signed-in you will see a login panel, either sign-in to your existing account or 
+    <p>When not signed-in you will see a login panel, either sign-in to your existing account or
         create a new one (they are completely free with no-catches).
         If you do not want to use an account just select <strong>Continue without signing in</strong>.
         In that case you can you use the Export/Import buttons to work purely locally.</p>
+  `,
+  'view-mobile-files': `
+    <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app — one row per physical phone.
+        You see your own uploads; admins see everyone's.</p>
+    <p>Each device's file interleaves two independent record types: <strong>Bibs</strong> (bib-number entries, from Bibs or Checkpoint mode)
+        and <strong>Time</strong> (stopwatch splits, from Time mode). The counts shown are only what's currently <em>visible</em> —
+        the entries since that device's own last Reset — the same view the phone's own screen would show; a blank count means none of that type exist at all.</p>
+    <p>The <strong>Location</strong> column should read the same for every visible line on a device — if it shows
+        <strong>Inconsistent</strong>, the file has been mixed between two different course locations and needs checking.</p>
+    <p><strong>View</strong> shows the Bibs and Time entries side by side, aligned by split number, with the location
+        and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
+        useful for troubleshooting. <strong>Delete</strong> permanently removes a device's file from the server.</p>
+    <p>Use <strong>Refresh</strong> to reload the list from the server and from anything already pulled locally over Bluetooth.</p>
+    <p><strong>Connect to Phone…</strong> pulls a device's history directly over Bluetooth from a nearby phone running RaceMaster Mobile —
+        no network needed, for use out on the course. If the server is reachable it's pushed straight there, the same as a normal WiFi sync;
+        otherwise it's kept in this browser as <strong>pending upload</strong> until you push it (or discard it) once you're back in signal.
+        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session.</p>
   `,
 };
 
