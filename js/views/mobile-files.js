@@ -10,10 +10,21 @@ import {
   isBluetoothAvailable, connectToPhone as bleConnect, pullFromConnectedPhone,
   disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
 } from '../mule-ble.js';
+import { getEntry } from '../entries.js';
+import { recordFinisher, updateFinisher } from '../finishers.js';
+import { state } from '../state.js';
 
 function getEl(id) { return document.getElementById(id); }
 
 let currentRows = []; // flattened, one entry per device — see flattenDevices()
+
+// Ticked checkboxes, keyed by identity rather than row index — row indices are reassigned on
+// every render (races/devices can appear in a different order once sorted), so persisting
+// selection across a re-render (or navigating away from Mobile Files and back) needs a stable
+// key instead. Lives only in memory — resets on a full page reload, same as any other in-app
+// navigation state.
+const selectedKeys = new Set();
+function rowKey(r) { return `${r.owner} ${r.raceLabel} ${r.device.name}`; }
 
 function formatRaceDate(raceDate) {
   if (!raceDate) return '<span style="color:var(--muted)">Unknown</span>';
@@ -222,7 +233,7 @@ function flattenDevices(races) {
 
 function buildColumns(isAdminUser) {
   return tableColumns(TABLES['mobile-files'], {
-    select:    r => `<input type="checkbox" class="mobile-file-select" aria-label="Select ${escHtml(r.device.name)}">`,
+    select:    r => `<input type="checkbox" class="mobile-file-select" data-idx="${r.idx}" aria-label="Select ${escHtml(r.device.name)}"${selectedKeys.has(rowKey(r)) ? ' checked' : ''}>`,
     owner:     isAdminUser ? r => escHtml(r.owner) : undefined,
     raceLabel: r => escHtml(r.raceLabel),
     raceDate:  r => formatRaceDate(r.raceDate),
@@ -279,6 +290,172 @@ async function discardPendingRow(r) {
   renderMobileFiles();
 }
 
+// ---- Add to Finishers ----
+//
+// Maps a mobile Bibs-mode action onto the equivalent finishers.js action — "Pass" (Checkpoint
+// mode) is treated as a Finish, since it only makes sense here at all when the CP happened to
+// be the finish line. "Stop"/"Reset" are session-boundary markers with no finisher meaning —
+// left out of this map entirely so they're dropped rather than transferred.
+const BIBS_ACTION_TO_FINISHER = {
+  Start: 'Start', Finish: 'Finish', DNF: 'DNF', Pass: 'Finish',
+  Clock: 'Clock', Ignore: 'Ignore', Seniors: 'Seniors', Juniors: 'Juniors', Male: 'Male', Female: 'Female',
+};
+const TRANSFERABLE_BIBS_ACTIONS = new Set(Object.keys(BIBS_ACTION_TO_FINISHER));
+const BIB_REQUIRED_FINISHER_ACTIONS = new Set(['Start', 'Finish', 'DNF', 'Pass']);
+// finishers.js's own buildSplitNumbers() never assigns a real line/split number to these two
+// actions (matching the mobile app's own "Clock is a fixed marker outside the normal
+// sequence" convention) — needed below to predict what split number a new entry would land
+// at, so a repeat "Add to Finishers" on the same file recognizes splits it already added.
+const NO_SPLIT_FINISHER_ACTIONS = new Set(['DNF', 'Clock']);
+// Time mode's own "Stop"/"Reset"/"Undo" markers carry no split of their own — only Start (the
+// fixed t=0 marker) and ordinary Split rows pair with a bib.
+const TRANSFERABLE_TIME_ACTIONS = new Set(['Start', 'Split']);
+
+// "HH:MM:SS.CC" (elapsed, as stored in splitTime) → "HH:MM:SS" — finishers.js's own
+// parseFinishTime() splits on any non-digit run and rejects more than 3 numeric parts, so a
+// trailing ".CC" must be stripped before it's usable as a finisher time.
+function stripCentiseconds(splitTime) {
+  return (splitTime || '').split('.')[0];
+}
+
+function getSelectedRows() {
+  return [...document.querySelectorAll('#mobile-files-tbody input.mobile-file-select:checked')]
+    .map(cb => currentRows[+cb.dataset.idx])
+    .filter(Boolean);
+}
+
+// Same identity rule recordFinisher() itself uses for its duplicate check (Start vs Start,
+// Finish/DNF vs Finish/DNF) — mirrored here so a match can be found and updated in place
+// instead of just being rejected as a duplicate.
+function findExistingFinisherIndex(bib, action) {
+  const isStart = action === 'Start';
+  return state.finishers.findIndex(f => +f.number === bib
+    && (isStart ? f.action === 'Start' : (f.action === 'Finish' || f.action === 'DNF')));
+}
+
+// Duplicate split numbers within one bucket mean two independent recording streams got
+// selected together (e.g. two separate bibs-recording phones) — their split numbers aren't
+// comparable, so nothing here can be safely paired or transferred.
+function findDuplicateSplitNumbers(rows) {
+  const seen = new Set(), dupes = new Set();
+  for (const r of rows) {
+    if (seen.has(r.splitNumber)) dupes.add(r.splitNumber);
+    seen.add(r.splitNumber);
+  }
+  return [...dupes].sort((a, b) => a - b);
+}
+
+// Combines the selected files' current-segment Bibs/Time entries (each device's own segment
+// resolved independently first, exactly like showDeviceModal, since Reset boundaries and line
+// numbers are per-device), validates them, and — if valid — records one finisher per bib entry
+// via recordFinisher(), pairing it with the Time entry at the same split number if one exists.
+// Driven entirely by bibs: a split with no matching bib is just excess (never looked up, so
+// silently left behind — the bibs will catch up on a later sync) and a bib with no matching
+// split is still added, just untimed — and if that bib was already added untimed by an earlier
+// run (e.g. the bibs file arrived before the time file), a later run supplying the missing time
+// updates that existing record instead of being rejected as a duplicate. This is the exact same
+// entry point manual Finishers-page entry uses, so duplicate-bib and entries-list checks stay
+// in one place rather than being reimplemented here.
+async function addSelectedToFinishers() {
+  const selected = getSelectedRows();
+  if (!selected.length) { showStatus('Select one or more mobile files first.', true); return; }
+
+  const raceLabels = [...new Set(selected.map(r => r.raceLabel))];
+  if (raceLabels.length > 1) {
+    showStatus(`Cannot add to finishers — selected files are from different races: ${raceLabels.join(', ')}.`, true);
+    return;
+  }
+
+  const bibs = [], times = [];
+  for (const r of selected) {
+    const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
+    bibs.push(...bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action)));
+    times.push(...timeSegment.filter(t => TRANSFERABLE_TIME_ACTIONS.has(t.action)));
+  }
+
+  if (!bibs.length && !times.length) { showStatus('Selected file(s) have no transferable entries.', true); return; }
+
+  const dupBibSplits = findDuplicateSplitNumbers(bibs);
+  if (dupBibSplits.length) {
+    showStatus(`Cannot add to finishers — more than one bibs-recording phone selected (duplicate split number(s) ${dupBibSplits.join(', ')}).`, true);
+    return;
+  }
+  const dupTimeSplits = findDuplicateSplitNumbers(times);
+  if (dupTimeSplits.length) {
+    showStatus(`Cannot add to finishers — more than one time-recording phone selected (duplicate split number(s) ${dupTimeSplits.join(', ')}).`, true);
+    return;
+  }
+
+  const locations = [...new Set([...bibs, ...times].map(l => l.location))];
+  if (locations.length !== 1 || locations[0] !== 'Finish') {
+    showStatus(`Cannot add to finishers — location must be "Finish" (found: ${locations.join(', ') || 'none'}).`, true);
+    return;
+  }
+
+  const invalidBibs = [...new Set(
+    bibs.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action))
+      .map(b => +b.bibNumber)
+      .filter(n => !Number.isFinite(n) || n <= 0 || !getEntry(n))
+  )];
+  if (invalidBibs.length) {
+    showStatus(`Cannot add to finishers — bib number(s) not in entries: ${invalidBibs.join(', ')}.`, true);
+    return;
+  }
+
+  if (!await showConfirmDialog(`Add ${bibs.length} finisher record(s) from ${selected.length} file(s)?`, 'Add to Finishers')) return;
+
+  const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
+  bibs.sort(bySplitNumber);
+
+  let added = 0, timed = 0;
+  const errors = [];
+  let skipped = 0;
+  for (const b of bibs) {
+    const action = BIBS_ACTION_TO_FINISHER[b.action];
+    const bib = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action) ? +b.bibNumber : 0;
+    const time = timeBySplit.get(b.splitNumber);
+    const timeStr = time ? stripCentiseconds(time.splitTime) : '';
+
+    if (BIB_REQUIRED_FINISHER_ACTIONS.has(b.action)) {
+      // Already recorded (e.g. by an earlier run of just the bibs file)? Add the now-available
+      // time to that same record rather than being rejected as a duplicate by recordFinisher()
+      // — but only if it's genuinely still untimed; already-timed is a real duplicate, skip it.
+      const existingIdx = findExistingFinisherIndex(bib, action);
+      if (existingIdx >= 0) {
+        const existing = state.finishers[existingIdx];
+        if (!existing.time && timeStr) {
+          const result = await updateFinisher(existingIdx, { time: timeStr });
+          if (result.error) errors.push(result.error); else timed++;
+        } else {
+          skipped++;
+        }
+        continue;
+      }
+    } else if (action === 'Clock') {
+      // Bib-less specials have no bib to key a duplicate check off — Clock is a one-off
+      // marker (skip if one's already there), and the rest get a real split/line number, so
+      // it's added only if that number is still ahead of where the finishers list has
+      // already reached (behind it means this split was already transferred).
+      if (state.finishers.some(f => f.action === 'Clock')) { skipped++; continue; }
+    } else if (!NO_SPLIT_FINISHER_ACTIONS.has(action)) {
+      const nextSplit = state.finishers.filter(f => !NO_SPLIT_FINISHER_ACTIONS.has(f.action)).length + 1;
+      if (b.splitNumber < nextSplit) { skipped++; continue; }
+    }
+
+    const result = await recordFinisher(bib, timeStr, action);
+    if (result.error) errors.push(result.error);
+    else added++;
+  }
+
+  showStatus(
+    `Added ${added} finisher${added === 1 ? '' : 's'}`
+      + `${timed ? `, added a time to ${timed} already-recorded bib${timed === 1 ? '' : 's'}` : ''}`
+      + `${skipped ? `, skipped ${skipped} already added` : ''}`
+      + `${errors.length ? `, ${errors.length} error(s): ${errors.join('; ')}` : ''}.`,
+    errors.length > 0 && added === 0 && timed === 0
+  );
+}
+
 function updateConnectButtonLabel() {
   const btn = getEl('btn-connect-phone');
   if (!btn) return;
@@ -308,12 +485,24 @@ async function onConnectButtonClick() {
     return;
   }
   showStatus('Connecting…');
+  let deviceInfo;
   try {
-    await bleConnect();
+    deviceInfo = await bleConnect();
   } catch (e) {
     showStatus(e.message || 'Bluetooth connection failed.', true);
     return;
   }
+
+  // The browser's own device picker can't show a meaningful name (racemaster-mobile
+  // deliberately omits it from the advertisement), so this is the first point a real name is
+  // available at all — confirm here before doing anything else with the connection.
+  const name = deviceInfo.deviceName || deviceInfo.deviceId;
+  if (!await showConfirmDialog(`Connect to "${name}"?`, 'Connect')) {
+    disconnectPhone();
+    showStatus('Cancelled — disconnected.');
+    return;
+  }
+
   updateConnectButtonLabel();
   showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
 
@@ -342,6 +531,7 @@ async function onConnectButtonClick() {
 export function wireMobileFiles() {
   on('btn-refresh-mobile-files', 'click', renderMobileFiles);
   on('btn-connect-phone', 'click', onConnectButtonClick);
+  on('btn-add-to-finishers', 'click', addSelectedToFinishers);
   onDisconnect(updateConnectButtonLabel);
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
@@ -354,35 +544,41 @@ export function wireMobileFiles() {
     else if (btn.dataset.action === 'push')     pushPendingRow(r);
     else if (btn.dataset.action === 'discard')  discardPendingRow(r);
   });
+  document.getElementById('mobile-files-tbody')?.addEventListener('change', e => {
+    const cb = e.target.closest('input.mobile-file-select');
+    if (!cb) return;
+    const r = currentRows[+cb.dataset.idx];
+    if (!r) return;
+    if (cb.checked) selectedKeys.add(rowKey(r)); else selectedKeys.delete(rowKey(r));
+  });
 }
 
 export function renderMobileFiles() {
   const session  = getSession();
-  const status   = getEl('mobile-files-status');
   const count    = getEl('mobile-files-count');
   const connectBtn = getEl('btn-connect-phone');
   if (connectBtn) connectBtn.hidden = !isBluetoothAvailable();
   updateConnectButtonLabel();
   if (!session) {
-    if (status) status.textContent = 'Sign in on the Datasets page to view mobile files.';
+    showStatus('Sign in on the Datasets page to view mobile files.');
     renderRaceList([], false);
     if (count) count.textContent = '0';
     return;
   }
   const isAdminUser = getIsAdmin();
   const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
-  if (status) status.textContent = 'Loading…';
+  showStatus('Loading…');
   apiListMobileFiles(session.token).then(races => {
     const merged = mergePendingIntoRaces(Array.isArray(races) ? races : [], pending);
     if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
     renderRaceList(merged, isAdminUser);
-    if (status) status.textContent = merged.length ? '' : 'No mobile files uploaded yet.';
+    showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
   }).catch(() => {
     const merged = mergePendingIntoRaces([], pending);
     if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
     renderRaceList(merged, isAdminUser);
-    if (status) status.textContent = merged.length
+    showStatus(merged.length
       ? 'Server unreachable — showing locally-pulled files only.'
-      : 'Server unreachable, and no locally-pulled files yet.';
+      : 'Server unreachable, and no locally-pulled files yet.', !merged.length);
   });
 }

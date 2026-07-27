@@ -170,7 +170,8 @@ export const TOOLTIPS = {
 
   // Mobile Files
   'btn-refresh-mobile-files':    'Reload mobile files from the server and from anything pulled locally over Bluetooth',
-  'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Pushes straight to the server if reachable, otherwise saves locally to push later.",
+  'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
+  'btn-add-to-finishers':        'Add the selected mobile file(s) to the finishers list, as if entered manually — requires location "Finish", valid bib numbers, the same race, and no more than one bibs and one time phone selected',
 
   // Data file / auth
   'df-username':                 'Your RaceMaster username — use only letters, numbers and hyphens',
@@ -367,9 +368,20 @@ export const HELP = {
         useful for troubleshooting. <strong>Delete</strong> permanently removes a device's file from the server.</p>
     <p>Use <strong>Refresh</strong> to reload the list from the server and from anything already pulled locally over Bluetooth.</p>
     <p><strong>Connect to Phone…</strong> pulls a device's history directly over Bluetooth from a nearby phone running RaceMaster Mobile —
-        no network needed, for use out on the course. If the server is reachable it's pushed straight there, the same as a normal WiFi sync;
+        no network needed, for use out on the course. The browser's own device picker can't show a meaningful name, so once connected
+        you're asked to confirm the phone's own name before anything is pulled — a device not running RaceMaster Mobile at all is
+        rejected outright. If the server is reachable the pull is then pushed straight there, the same as a normal WiFi sync;
         otherwise it's kept in this browser as <strong>pending upload</strong> until you push it (or discard it) once you're back in signal.
         Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session.</p>
+    <p>Tick one or more files and use <strong>Add to Finishers</strong> to transfer them into the Finishers list, as if entered manually —
+        typically one file of bibs and one of time splits, paired up by split number, though a single file with both is fine too.
+        Selections are remembered if you navigate away and back. This is driven entirely by bibs: a bib with no matching split is
+        still added, just left untimed, while any split with no matching bib is simply ignored (the bibs will catch up on a later
+        sync) — and if a bib was already added untimed by an earlier run, a later run supplying the missing time fills it in rather
+        than duplicating the record. Safe to repeat generally — re-adding the same file skips whatever it already added.
+        Rejected if the location isn't <strong>Finish</strong>, if any bib number isn't in Entries, if the selected files aren't all
+        from the same race, or if more than one bibs-recording or more than one time-recording phone is selected at once (their
+        split numbers aren't comparable).</p>
   `,
 };
 
