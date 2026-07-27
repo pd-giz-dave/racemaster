@@ -20,6 +20,16 @@ let isAdminUser    = false;
 let copySource     = null;
 let _onConnect     = null;
 
+// True once handleLogin() has succeeded but before a dataset has been picked or created —
+// setSession() (which persists the token) only ever happens as part of connecting to a
+// dataset, so up to that point activeToken is only held here in memory. Leaving this view
+// without connecting to anything means the login never actually took effect (equivalent to
+// "Continue without signing in") — see app.js's confirmLeaveDatafile(), which warns the user
+// before navigating away while this is true.
+export function hasUnconfirmedLogin() {
+  return !!activeToken && !getSession();
+}
+
 function getEl(id) { return document.getElementById(id); }
 
 // Reset the password field back to masked, regardless of whether the user peeked at

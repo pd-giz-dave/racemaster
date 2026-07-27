@@ -168,6 +168,10 @@ export const TOOLTIPS = {
   'btn-export-categories-csv':   'Export custom categories to a CSV file',
   'btn-clear-categories':        'Delete all custom categories',
 
+  // Mobile Files
+  'btn-refresh-mobile-files':    'Reload mobile files from the server and from anything pulled locally over Bluetooth',
+  'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Pushes straight to the server if reachable, otherwise saves locally to push later.",
+
   // Data file / auth
   'df-username':                 'Your RaceMaster username — use only letters, numbers and hyphens',
   'df-password':                 'Your RaceMaster password — use anything, its encrypted on the server',

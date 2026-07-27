@@ -185,6 +185,49 @@ export async function apiDeleteMobileFile(token, owner, raceLabel, deviceName) {
   return res.json();
 }
 
+// Same endpoint a phone's own WiFi sync posts to (server.js's POST /api/mobile/:raceLabel) —
+// used to push a Bluetooth-pulled device file (see mule-ble.js) into the server exactly as if
+// the phone had sent it directly.
+export async function apiPushMobileSync(token, raceLabel, deviceName, lines) {
+  const res = await fetch(`/api/mobile/${encodeURIComponent(raceLabel)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ devices: { [deviceName]: lines } }),
+  });
+  return res.json();
+}
+
+// ---- Bluetooth-pulled files pending an eventual server push (field use, no network) ----
+//
+// Keyed by owner (the signed-in user at pull time) + raceLabel + deviceName, same identity a
+// server-stored file has, so a pending entry and its eventually-pushed server copy are never
+// mistaken for two different files. Lives entirely in this browser — there is deliberately no
+// server counterpart until it's actually pushed.
+
+const PENDING_MOBILE_KEY = 'racemaster-pending-mobile';
+
+function loadPendingMobileFiles() {
+  try { return JSON.parse(localStorage.getItem(PENDING_MOBILE_KEY) || '[]'); } catch { return []; }
+}
+
+function storePendingMobileFiles(list) {
+  localStorage.setItem(PENDING_MOBILE_KEY, JSON.stringify(list));
+}
+
+export function getPendingMobileFiles() {
+  return loadPendingMobileFiles();
+}
+
+export function savePendingMobileFile(owner, raceLabel, deviceName, lines) {
+  const list = loadPendingMobileFiles().filter(f => !(f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName));
+  list.push({ owner, raceLabel, deviceName, lines, pulledAt: new Date().toISOString() });
+  storePendingMobileFiles(list);
+}
+
+export function removePendingMobileFile(owner, raceLabel, deviceName) {
+  storePendingMobileFiles(loadPendingMobileFiles().filter(f => !(f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName)));
+}
+
 export async function apiListUsers(token) {
   const res = await fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } });
   return res.json();

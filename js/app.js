@@ -4,7 +4,7 @@ import { state, loadAll } from './state.js';
 import { restoreDirectory, getSession, isStandalone } from './storage.js';
 import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch } from './connect.js';
 import { startPresenceWatch } from './presence.js';
-import { wireDatasets, renderDatasets } from './views/datasets.js';
+import { wireDatasets, renderDatasets, hasUnconfirmedLogin } from './views/datasets.js';
 import { showBusy } from './utils.js';
 import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
 
@@ -108,15 +108,42 @@ function wireNavToggle() {
     ?.addEventListener('click', e => { if (e.target.matches('a[data-view]')) closeNavDrawer(); });
 }
 
+// True when leaving the Datasets view right now would silently drop an in-progress login —
+// handleLogin() succeeds before a dataset is picked/created, and only picking/creating one
+// actually persists the session (see datasets.js's hasUnconfirmedLogin doc).
+function shouldWarnBeforeLeavingDatafile(targetView) {
+  return currentView === 'datafile' && targetView !== 'datafile' && hasUnconfirmedLogin();
+}
+
+function confirmLeaveDatafile() {
+  return showConfirmDialog(
+    'You’re signed in but haven’t picked or created a dataset yet — leaving now means you will NOT be signed in (the same as choosing "Continue without signing in"). Leave anyway?',
+    'Leave', true
+  );
+}
+
 function wireNav() {
   wireNavToggle();
   document.querySelectorAll('[data-view]').forEach(el => {
-    el.addEventListener('click', e => {
+    el.addEventListener('click', async e => {
       e.preventDefault();
+      if (shouldWarnBeforeLeavingDatafile(el.dataset.view) && !await confirmLeaveDatafile()) return;
       showView(el.dataset.view);
     });
   });
-  window.addEventListener('rm:navigate', e => showView(e.detail));
+  window.addEventListener('rm:navigate', async e => {
+    if (shouldWarnBeforeLeavingDatafile(e.detail) && !await confirmLeaveDatafile()) return;
+    showView(e.detail);
+  });
+
+  // Closing/refreshing/navigating away from the tab entirely is the same silent-drop risk —
+  // the browser's own native confirmation is all that's allowed here (custom text is ignored
+  // by every modern browser), but it's still the right guard for this case.
+  window.addEventListener('beforeunload', e => {
+    if (!hasUnconfirmedLogin()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
 
   // Arrow-key navigation within the sidebar
   const sidebar = document.querySelector('.app-sidebar');
@@ -134,14 +161,19 @@ function wireNav() {
     });
   }
 
-  // Escape: navigate to home; confirm first if the current view contains input fields
+  // Escape: navigate to home; confirm first if the current view contains input fields (or,
+  // on the Datasets view specifically, if leaving now would silently drop an in-progress login)
   document.addEventListener('keydown', async e => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.name-typeahead:not([hidden])')) return;
     e.preventDefault();
-    const viewEl = document.getElementById(`view-${currentView}`);
-    const hasInputs = !!viewEl?.querySelector('input');
-    if (hasInputs && !await showConfirmDialog('Leave this view and go to Home?', 'Leave')) return;
+    if (shouldWarnBeforeLeavingDatafile('home')) {
+      if (!await confirmLeaveDatafile()) return;
+    } else {
+      const viewEl = document.getElementById(`view-${currentView}`);
+      const hasInputs = !!viewEl?.querySelector('input');
+      if (hasInputs && !await showConfirmDialog('Leave this view and go to Home?', 'Leave')) return;
+    }
     showView('home');
     setTimeout(focusSidebar, 0);
   });

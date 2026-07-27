@@ -1,8 +1,12 @@
 'use strict';
 
-import { getSession, getIsAdmin, apiListMobileFiles, apiDeleteMobileFile } from '../storage.js';
-import { escHtml, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
+import {
+  getSession, getIsAdmin, getUsername, apiListMobileFiles, apiDeleteMobileFile,
+  apiPushMobileSync, getPendingMobileFiles, savePendingMobileFile, removePendingMobileFile,
+} from '../storage.js';
+import { on, escHtml, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
+import { isBluetoothAvailable, pullFromNearbyPhone } from '../mule-ble.js';
 
 function getEl(id) { return document.getElementById(id); }
 
@@ -11,6 +15,44 @@ let currentRows = []; // flattened, one entry per device — see flattenDevices(
 function formatRaceDate(raceDate) {
   if (!raceDate) return '<span style="color:var(--muted)">Unknown</span>';
   return `${raceDate.dd}/${raceDate.mm}/${raceDate.yy}`;
+}
+
+// Mirrors server.js's parseRaceLabelDate/sort exactly — needed client-side because a
+// Bluetooth-pulled, not-yet-pushed file has no server entry to derive/sort a race date from.
+function parseRaceLabelDate(raceLabel) {
+  const m = /-(\d{2})-(\d{2})-(\d{2})$/.exec(raceLabel || '');
+  return m ? { dd: m[1], mm: m[2], yy: m[3] } : null;
+}
+
+function sortRaces(races) {
+  return [...races].sort((a, b) => {
+    if (a.raceDate && b.raceDate) {
+      return b.raceDate.yy !== a.raceDate.yy ? b.raceDate.yy.localeCompare(a.raceDate.yy)
+        : b.raceDate.mm !== a.raceDate.mm ? b.raceDate.mm.localeCompare(a.raceDate.mm)
+        : b.raceDate.dd.localeCompare(a.raceDate.dd);
+    }
+    if (a.raceDate) return -1;
+    if (b.raceDate) return 1;
+    return a.raceLabel.localeCompare(b.raceLabel);
+  });
+}
+
+// Folds this browser's not-yet-pushed Bluetooth pulls into the server's own race list, so a
+// pending file shows up in exactly the same place it will once it's actually pushed — same
+// race grouping, same date-sort position. A pending device replaces any server device of the
+// same name in that race (we just re-pulled it fresh, so it's the more current copy).
+function mergePendingIntoRaces(races, pending) {
+  const merged = races.map(race => ({ ...race, devices: [...race.devices] }));
+  for (const p of pending) {
+    let race = merged.find(r => r.owner === p.owner && r.raceLabel === p.raceLabel);
+    if (!race) {
+      race = { owner: p.owner, raceLabel: p.raceLabel, raceDate: parseRaceLabelDate(p.raceLabel), devices: [] };
+      merged.push(race);
+    }
+    race.devices = race.devices.filter(d => d.name !== p.deviceName);
+    race.devices.push({ name: p.deviceName, lines: p.lines, pending: true });
+  }
+  return sortRaces(merged);
 }
 
 // ---- Segment view (mirrors racemaster-mobile's observeCurrentSegment + foldLatestVisible) ----
@@ -165,6 +207,7 @@ function flattenDevices(races) {
         raceLabel: race.raceLabel,
         raceDate: race.raceDate,
         device,
+        pending: !!device.pending,
         location: locationSummary([...timeSegment, ...bibsSegment]),
         bibsVisible: bibsSegment.length,
         timeVisible: timeSegment.length,
@@ -180,11 +223,17 @@ function buildColumns(isAdminUser) {
     owner:     isAdminUser ? r => escHtml(r.owner) : undefined,
     raceLabel: r => escHtml(r.raceLabel),
     raceDate:  r => formatRaceDate(r.raceDate),
-    device:    r => escHtml(r.device.name),
+    device:    r => escHtml(r.device.name) + (r.pending
+      ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
+      : ''),
     location:  r => r.location,
     bibs:      r => formatCount(r.bibsVisible),
     time:      r => formatCount(r.timeVisible),
-    actions:   () => `
+    actions:   r => r.pending ? `
+      <button class="btn-sm" data-action="view">View</button>
+      <button class="btn-sm" data-action="raw">Raw</button>
+      <button class="btn-sm btn-save" data-action="push">Push</button>
+      <button class="btn-sm btn-delete" data-action="discard">Discard</button>` : `
       <button class="btn-sm" data-action="view">View</button>
       <button class="btn-sm" data-action="raw">Raw</button>
       <button class="btn-sm btn-delete" data-action="delete">Delete</button>`,
@@ -207,22 +256,84 @@ async function deleteRow(r) {
   renderMobileFiles();
 }
 
+async function pushPendingRow(r) {
+  const session = getSession();
+  if (!session) { showStatus('Sign in first.', true); return; }
+  const result = await apiPushMobileSync(session.token, r.raceLabel, r.device.name, r.device.lines);
+  if (result.error) { showStatus(result.error, true); return; }
+  removePendingMobileFile(r.owner, r.raceLabel, r.device.name);
+  showStatus(`"${r.device.name}" pushed to the server.`);
+  renderMobileFiles();
+}
+
+async function discardPendingRow(r) {
+  if (!await showConfirmDialog(
+    `Discard the locally-pulled "${r.device.name}" from "${r.raceLabel}"? This only removes it from this browser — you can pull it from the phone again later.`,
+    'Discard', true
+  )) return;
+  removePendingMobileFile(r.owner, r.raceLabel, r.device.name);
+  showStatus(`"${r.device.name}" discarded.`);
+  renderMobileFiles();
+}
+
+// Connects to a nearby phone over Bluetooth (racemaster-mobile's Mule Mode — see mule-ble.js),
+// pulls whatever history it's holding, and pushes each device straight to the server exactly
+// like a WiFi sync would. If the server can't be reached (the expected case out in the field,
+// with no internet), each pull is kept locally as "pending" instead — see
+// storage.js's savePendingMobileFile — until a Push action later succeeds.
+async function connectToPhone() {
+  const session  = getSession();
+  const username = getUsername();
+  if (!session || !username) { showStatus('Sign in on the Datasets page first.', true); return; }
+  if (!isBluetoothAvailable()) {
+    showStatus('Bluetooth is not available in this browser — use Chrome or Edge over HTTPS (or localhost).', true);
+    return;
+  }
+  showStatus('Connecting…');
+  let pulled;
+  try {
+    pulled = await pullFromNearbyPhone();
+  } catch (e) {
+    showStatus(e.message || 'Bluetooth connection failed.', true);
+    return;
+  }
+  let synced = 0, pending = 0;
+  for (const { raceLabel, deviceName, lines } of pulled) {
+    try {
+      const result = await apiPushMobileSync(session.token, raceLabel, deviceName, lines);
+      if (result.error) throw new Error(result.error);
+      synced++;
+    } catch {
+      savePendingMobileFile(username, raceLabel, deviceName, lines);
+      pending++;
+    }
+  }
+  showStatus(`Pulled ${pulled.length} device file${pulled.length === 1 ? '' : 's'}: ${synced} synced to the server, ${pending} saved locally.`);
+  renderMobileFiles();
+}
+
 export function wireMobileFiles() {
+  on('btn-refresh-mobile-files', 'click', renderMobileFiles);
+  on('btn-connect-phone', 'click', connectToPhone);
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const r = currentRows[+btn.closest('[data-idx]')?.dataset.idx];
     if (!r) return;
-    if (btn.dataset.action === 'view')        showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
-    else if (btn.dataset.action === 'raw')    showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
-    else if (btn.dataset.action === 'delete') deleteRow(r);
+    if (btn.dataset.action === 'view')          showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    else if (btn.dataset.action === 'raw')      showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    else if (btn.dataset.action === 'delete')   deleteRow(r);
+    else if (btn.dataset.action === 'push')     pushPendingRow(r);
+    else if (btn.dataset.action === 'discard')  discardPendingRow(r);
   });
 }
 
 export function renderMobileFiles() {
-  const session = getSession();
-  const status  = getEl('mobile-files-status');
-  const count   = getEl('mobile-files-count');
+  const session  = getSession();
+  const status   = getEl('mobile-files-status');
+  const count    = getEl('mobile-files-count');
+  const connectBtn = getEl('btn-connect-phone');
+  if (connectBtn) connectBtn.hidden = !isBluetoothAvailable();
   if (!session) {
     if (status) status.textContent = 'Sign in on the Datasets page to view mobile files.';
     renderRaceList([], false);
@@ -230,13 +341,19 @@ export function renderMobileFiles() {
     return;
   }
   const isAdminUser = getIsAdmin();
+  const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
   if (status) status.textContent = 'Loading…';
   apiListMobileFiles(session.token).then(races => {
-    const list = Array.isArray(races) ? races : [];
-    if (count) count.textContent = `${list.length} race${list.length === 1 ? '' : 's'}`;
-    renderRaceList(list, isAdminUser);
-    if (status) status.textContent = list.length ? '' : 'No mobile files uploaded yet.';
+    const merged = mergePendingIntoRaces(Array.isArray(races) ? races : [], pending);
+    if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
+    renderRaceList(merged, isAdminUser);
+    if (status) status.textContent = merged.length ? '' : 'No mobile files uploaded yet.';
   }).catch(() => {
-    if (status) status.textContent = 'Could not load mobile files.';
+    const merged = mergePendingIntoRaces([], pending);
+    if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
+    renderRaceList(merged, isAdminUser);
+    if (status) status.textContent = merged.length
+      ? 'Server unreachable — showing locally-pulled files only.'
+      : 'Server unreachable, and no locally-pulled files yet.';
   });
 }
