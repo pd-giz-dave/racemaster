@@ -9,9 +9,10 @@ import { TABLES } from '../strings.js';
 import {
   isBluetoothAvailable, connectToPhone as bleConnect, pullFromConnectedPhone,
   disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
+  resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
-import { recordFinisher, updateFinisher } from '../finishers.js';
+import { recordFinisher, clearAllFinishers } from '../finishers.js';
 import { state } from '../state.js';
 
 function getEl(id) { return document.getElementById(id); }
@@ -30,6 +31,35 @@ let lastKnownRaces = [];
 // navigation state.
 const selectedKeys = new Set();
 function rowKey(r) { return `${r.owner} ${r.raceLabel} ${r.device.name}`; }
+
+// ---- "New since last Add to Finishers" tracking ----
+//
+// Every line in a device's file — a new bib/split, an edit-echo, an Undo marker, a Reset marker —
+// gets a brand new, permanent, never-reused lineNumber (see racemaster-mobile's own
+// RaceEntity.nextLineNumber). So "has anything changed since the last Add to Finishers run for
+// this device" reduces to one number: the highest lineNumber present now, compared against
+// whatever it was the last time this device was included in a run. Persisted (not just in
+// memory) so the red/green marker survives a page reload the same way selection itself doesn't
+// need to — this genuinely needs to.
+const LAST_SYNCED_KEY = 'racemaster-mobile-last-synced';
+
+function loadLastSynced() {
+  try { return JSON.parse(localStorage.getItem(LAST_SYNCED_KEY) || '{}'); } catch { return {}; }
+}
+function saveLastSynced(map) {
+  try { localStorage.setItem(LAST_SYNCED_KEY, JSON.stringify(map)); } catch { /* storage unavailable/full — best effort only */ }
+}
+function getLastSyncedLineNumber(r) {
+  return loadLastSynced()[rowKey(r)] || 0;
+}
+function setLastSyncedLineNumber(r) {
+  const map = loadLastSynced();
+  map[rowKey(r)] = maxLineNumber(r.device.lines);
+  saveLastSynced(map);
+}
+function maxLineNumber(lines) {
+  return lines.reduce((max, l) => Math.max(max, l.lineNumber ?? 0), 0);
+}
 
 function formatRaceDate(raceDate) {
   if (!raceDate) return '<span style="color:var(--muted)">Unknown</span>';
@@ -58,8 +88,13 @@ function sortRaces(races) {
 
 // Folds this browser's not-yet-pushed Bluetooth pulls into the server's own race list, so a
 // pending file shows up in exactly the same place it will once it's actually pushed — same
-// race grouping, same date-sort position. A pending device replaces any server device of the
-// same name in that race (we just re-pulled it fresh, so it's the more current copy).
+// race grouping, same date-sort position. p.lines is only ever the *delta* since this device's
+// own last successful BLE pull (see mule-ble.js's delta-sync), never the whole file — so a
+// pending device's lines are merged into whatever the server already knows about that same
+// device (deduping by recordUuid, same convention as storage.js's own savePendingMobileFile),
+// not used to replace it outright. Replacing outright used to be correct back when a pull always
+// returned everything, but doing that now would make the server's already-known lines vanish
+// the moment a single new delta line arrives while offline.
 function mergePendingIntoRaces(races, pending) {
   const merged = races.map(race => ({ ...race, devices: [...race.devices] }));
   for (const p of pending) {
@@ -68,8 +103,12 @@ function mergePendingIntoRaces(races, pending) {
       race = { owner: p.owner, raceLabel: p.raceLabel, raceDate: parseRaceLabelDate(p.raceLabel), devices: [] };
       merged.push(race);
     }
+    const known = race.devices.find(d => d.name === p.deviceName);
+    const knownLines = known ? known.lines : [];
+    const seenUuids = new Set(knownLines.map(l => l.recordUuid).filter(Boolean));
+    const lines = [...knownLines, ...p.lines.filter(l => l.recordUuid && !seenUuids.has(l.recordUuid))];
     race.devices = race.devices.filter(d => d.name !== p.deviceName);
-    race.devices.push({ name: p.deviceName, lines: p.lines, pending: true });
+    race.devices.push({ name: p.deviceName, deviceId: p.deviceId, lines, pending: true });
   }
   return sortRaces(merged);
 }
@@ -105,6 +144,11 @@ function formatCount(visible) {
   return visible === 0 ? '' : String(visible);
 }
 
+// A Reset or an Undo on the phone is already fully reflected here — currentSegment() drops
+// everything at/before the family's last Reset, and foldLatestVisible() drops anything whose
+// latest state is an Undo marker. Add to Finishers (see below) exploits this: since the segment
+// is always the true, current picture, syncing to Finishers never needs to diff against or patch
+// around what's already there — it just wipes Finishers and rebuilds from the segment.
 function buildSegmentView(lines) {
   const timeRows = lines.filter(r => r.splitTime != null);
   const bibsRows = lines.filter(r => r.splitTime == null);
@@ -143,28 +187,30 @@ function showDeviceModal(owner, raceLabel, deviceName, lines) {
       <td>${bib ? escHtml(bib.action) : ''}</td>
       <td>${bib ? escHtml(bib.bibNumber ?? '') : ''}</td>
       <td>${bib ? whenOf(bib) : ''}</td>
+      <td>${bib ? escHtml(bib.note ?? '') : ''}</td>
       <td>${time ? escHtml(time.action) : ''}</td>
       <td>${time ? escHtml(time.splitTime ?? '') : ''}</td>
       <td>${time ? whenOf(time) : ''}</td>
+      <td>${time ? escHtml(time.note ?? '') : ''}</td>
     </tr>`;
   }).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
-    <div class="modal-box" style="width:640px">
+    <div class="modal-box" style="width:820px">
       <h2>${escHtml(deviceName)} — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
       <p style="margin:0 0 12px;font-size:0.875rem">Location: ${locationSummary(visibleRows)}</p>
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
             <th rowspan="2">Split #</th>
-            <th colspan="3">Bibs</th>
-            <th colspan="3">Time</th>
+            <th colspan="4">Bibs</th>
+            <th colspan="4">Time</th>
           </tr><tr>
-            <th>Action</th><th>Bib</th><th>When</th><th>Action</th><th>Split Time</th><th>When</th>
+            <th>Action</th><th>Bib</th><th>When</th><th>Note</th><th>Action</th><th>Split Time</th><th>When</th><th>Note</th>
           </tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" style="color:var(--muted)">No entries in the current segment.</td></tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="9" style="color:var(--muted)">No entries in the current segment.</td></tr>'}</tbody>
         </table>
       </div>
       <div class="modal-actions">
@@ -220,16 +266,16 @@ function flattenDevices(races) {
   for (const race of races) {
     for (const device of race.devices) {
       const { timeSegment, bibsSegment } = buildSegmentView(device.lines);
+      const r = { owner: race.owner, raceLabel: race.raceLabel, device };
       rows.push({
         idx: rows.length,
-        owner: race.owner,
-        raceLabel: race.raceLabel,
+        ...r,
         raceDate: race.raceDate,
-        device,
         pending: !!device.pending,
         location: locationSummary([...timeSegment, ...bibsSegment]),
         bibsVisible: bibsSegment.length,
         timeVisible: timeSegment.length,
+        incorporationStatus: computeIncorporationStatus(r),
       });
     }
   }
@@ -262,27 +308,54 @@ function buildColumns(isAdminUser) {
 function renderRaceList(races, isAdminUser) {
   currentRows = flattenDevices(races);
   renderTable('mobile-files-tbody', buildColumns(isAdminUser), currentRows, {
-    rowAttrs: r => ({ 'data-idx': r.idx }),
+    rowAttrs: r => ({
+      'data-idx': r.idx,
+      class: r.incorporationStatus === 'outstanding' ? 'row-outstanding'
+        : r.incorporationStatus === 'incorporated' ? 'row-incorporated'
+        : '',
+    }),
   });
 }
 
+// Each of these three re-renders the list *before* announcing its own outcome, not after —
+// renderMobileFiles() does its own server fetch and shows its own status ("Loading…", then
+// "Server unreachable…" if that fails, the expected case out in the field with no network),
+// which would otherwise immediately overwrite the specific confirmation below it.
 async function deleteRow(r) {
   if (!await showConfirmDialog(`Delete "${r.device.name}" from "${r.raceLabel}"? This cannot be undone.`, 'Delete', true)) return;
   const session = getSession();
-  const result = await apiDeleteMobileFile(session.token, r.owner, r.raceLabel, r.device.name);
+  let result;
+  try {
+    result = await apiDeleteMobileFile(session.token, r.owner, r.raceLabel, r.device.name);
+  } catch {
+    // Server unreachable (e.g. offline in the field, or the Datasets "Hide Server" test toggle)
+    // — fetch() itself rejects rather than resolving with an {error} shape, and this row has no
+    // local-only fallback the way a pending row's Discard does, so there's genuinely nothing
+    // more to do here than tell the operator to try again once the server's back.
+    showStatus('Server unreachable — cannot delete right now, try again once back online.', true);
+    return;
+  }
   if (result.error) { showStatus(result.error, true); return; }
+  await renderMobileFiles();
   showStatus(`"${r.device.name}" deleted.`);
-  renderMobileFiles();
 }
 
 async function pushPendingRow(r) {
   const session = getSession();
   if (!session) { showStatus('Sign in first.', true); return; }
-  const result = await apiPushMobileSync(session.token, r.raceLabel, r.device.name, r.device.lines);
+  let result;
+  try {
+    result = await apiPushMobileSync(session.token, r.raceLabel, r.device.name, r.device.lines);
+  } catch {
+    // Server unreachable — fetch() itself rejects. The file stays right where it is, still
+    // pending, so this is just "not yet", not a failure — Push again once back online.
+    showStatus('Server unreachable — still saved locally, try Push again once back online.', true);
+    return;
+  }
   if (result.error) { showStatus(result.error, true); return; }
   removePendingMobileFile(r.owner, r.raceLabel, r.device.name);
+  await renderMobileFiles();
   showStatus(`"${r.device.name}" pushed to the server.`);
-  renderMobileFiles();
 }
 
 async function discardPendingRow(r) {
@@ -291,8 +364,16 @@ async function discardPendingRow(r) {
     'Discard', true
   )) return;
   removePendingMobileFile(r.owner, r.raceLabel, r.device.name);
+  // Without this, mule-ble.js's own delta cursor stays advanced past the very data just
+  // thrown away, so the next Bluetooth pull from this device would only fetch what's new
+  // since then instead of the whole file again — "pull it from the phone again later" above
+  // would otherwise be a lie for anything already synced past the discarded copy. A pending
+  // entry saved before deviceId was tracked at all has no precise cursor to target, so falls
+  // back to clearing every cursor rather than silently doing nothing.
+  if (r.device.deviceId) resetLastPulledLineNumber(r.device.deviceId, r.raceLabel);
+  else resetAllLastPulledLineNumbers();
+  await renderMobileFiles();
   showStatus(`"${r.device.name}" discarded.`);
-  renderMobileFiles();
 }
 
 // ---- Add to Finishers ----
@@ -307,11 +388,6 @@ const BIBS_ACTION_TO_FINISHER = {
 };
 const TRANSFERABLE_BIBS_ACTIONS = new Set(Object.keys(BIBS_ACTION_TO_FINISHER));
 const BIB_REQUIRED_FINISHER_ACTIONS = new Set(['Start', 'Finish', 'DNF', 'Pass']);
-// finishers.js's own buildSplitNumbers() never assigns a real line/split number to these two
-// actions (matching the mobile app's own "Clock is a fixed marker outside the normal
-// sequence" convention) — needed below to predict what split number a new entry would land
-// at, so a repeat "Add to Finishers" on the same file recognizes splits it already added.
-const NO_SPLIT_FINISHER_ACTIONS = new Set(['DNF', 'Clock']);
 // Time mode's own "Stop"/"Reset"/"Undo" markers carry no split of their own — only Start (the
 // fixed t=0 marker) and ordinary Split rows pair with a bib.
 const TRANSFERABLE_TIME_ACTIONS = new Set(['Start', 'Split']);
@@ -329,13 +405,35 @@ function getSelectedRows() {
     .filter(Boolean);
 }
 
-// Same identity rule recordFinisher() itself uses for its duplicate check (Start vs Start,
-// Finish/DNF vs Finish/DNF) — mirrored here so a match can be found and updated in place
-// instead of just being rejected as a duplicate.
-function findExistingFinisherIndex(bib, action) {
-  const isStart = action === 'Start';
-  return state.finishers.findIndex(f => +f.number === bib
-    && (isStart ? f.action === 'Start' : (f.action === 'Finish' || f.action === 'DNF')));
+// Derives what Finishers *should* contain for one file's current segment — bib-driven (a split
+// with no matching bib is just excess, never looked up; a bib with no matching split is still
+// included, just untimed), pairing each bib with the Time entry at the same split number if one
+// exists. Retirees never carry a split time (finishers.js's own NO_SPLIT_ACTIONS convention);
+// Clock's own "time" is its offset/time-of-day value from its note field, not a paired split.
+// This is the single source of truth both the red/green status check and the actual rebuild
+// below are computed from, so they can never disagree with each other.
+function expectedFinisherEntries(bibs, times) {
+  const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
+  return [...bibs].sort(bySplitNumber).map(b => {
+    const action = BIBS_ACTION_TO_FINISHER[b.action];
+    const number = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action) ? +b.bibNumber : 0;
+    const paired = timeBySplit.get(b.splitNumber);
+    const time = action === 'DNF' ? ''
+      : action === 'Clock' ? (b.note || '')
+      : (paired ? stripCentiseconds(paired.splitTime) : '');
+    return { action, number, time };
+  });
+}
+
+// Deliberately has nothing to do with Finishers' own content — comparing against it line by line
+// kept breaking on one edge case after another (corrections, retirees, Clock notes, Undo, Reset…).
+// All that actually matters to the operator is "has this file changed since I last ran Add to
+// Finishers on it" — answered purely from the file's own lineNumbers (see the tracking block
+// near rowKey above). Only meaningful for a currently-selected file; an unselected one is always
+// left uncoloured, since it's not what a click of Add to Finishers would even touch right now.
+function computeIncorporationStatus(r) {
+  if (!selectedKeys.has(rowKey(r))) return 'none';
+  return maxLineNumber(r.device.lines) > getLastSyncedLineNumber(r) ? 'outstanding' : 'incorporated';
 }
 
 // Duplicate split numbers within one bucket mean two independent recording streams got
@@ -352,15 +450,15 @@ function findDuplicateSplitNumbers(rows) {
 
 // Combines the selected files' current-segment Bibs/Time entries (each device's own segment
 // resolved independently first, exactly like showDeviceModal, since Reset boundaries and line
-// numbers are per-device), validates them, and — if valid — records one finisher per bib entry
-// via recordFinisher(), pairing it with the Time entry at the same split number if one exists.
-// Driven entirely by bibs: a split with no matching bib is just excess (never looked up, so
-// silently left behind — the bibs will catch up on a later sync) and a bib with no matching
-// split is still added, just untimed — and if that bib was already added untimed by an earlier
-// run (e.g. the bibs file arrived before the time file), a later run supplying the missing time
-// updates that existing record instead of being rejected as a duplicate. This is the exact same
-// entry point manual Finishers-page entry uses, so duplicate-bib and entries-list checks stay
-// in one place rather than being reimplemented here.
+// numbers are per-device), validates them, and — if valid — deletes every existing finisher and
+// rebuilds the list from scratch via expectedFinisherEntries()/recordFinisher(). Line-by-line
+// diffing against whatever Finishers already held (patching in corrections, retracting entries
+// the phone had since undone or reset away, etc.) turned out to be a losing battle with every new
+// edge case the phone's own history could produce — a full rebuild sidesteps all of that: the
+// current segment (see buildSegmentView) is already the true, final picture, Reset/Undo included,
+// so there's nothing left to diff. This is the exact same entry point manual Finishers-page entry
+// uses, so duplicate-bib and entries-list checks stay in one place rather than being reimplemented
+// here.
 async function addSelectedToFinishers() {
   // Refresh first so validation runs against the latest data — renderMobileFiles() already
   // shows its own status message if the fetch fails, falling back to whatever's currently
@@ -412,57 +510,35 @@ async function addSelectedToFinishers() {
     return;
   }
 
-  if (!await showConfirmDialog(`Add ${bibs.length} finisher record(s) from ${selected.length} file(s)?`, 'Add to Finishers')) return;
+  const expected = expectedFinisherEntries(bibs, times);
+  const existingCount = state.finishers.length;
+  const confirmMsg = existingCount
+    ? `This deletes all ${existingCount} existing finisher record(s) and rebuilds ${expected.length} from ${selected.length} selected file(s). Continue?`
+    : `Add ${expected.length} finisher record(s) from ${selected.length} file(s)?`;
+  if (!await showConfirmDialog(confirmMsg, 'Add to Finishers')) return;
 
-  const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
-  bibs.sort(bySplitNumber);
+  await clearAllFinishers();
 
-  let added = 0, timed = 0;
+  let added = 0;
   const errors = [];
-  let skipped = 0;
-  for (const b of bibs) {
-    const action = BIBS_ACTION_TO_FINISHER[b.action];
-    const bib = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action) ? +b.bibNumber : 0;
-    const time = timeBySplit.get(b.splitNumber);
-    const timeStr = time ? stripCentiseconds(time.splitTime) : '';
-
-    if (BIB_REQUIRED_FINISHER_ACTIONS.has(b.action)) {
-      // Already recorded (e.g. by an earlier run of just the bibs file)? Add the now-available
-      // time to that same record rather than being rejected as a duplicate by recordFinisher()
-      // — but only if it's genuinely still untimed; already-timed is a real duplicate, skip it.
-      const existingIdx = findExistingFinisherIndex(bib, action);
-      if (existingIdx >= 0) {
-        const existing = state.finishers[existingIdx];
-        if (!existing.time && timeStr) {
-          const result = await updateFinisher(existingIdx, { time: timeStr });
-          if (result.error) errors.push(result.error); else timed++;
-        } else {
-          skipped++;
-        }
-        continue;
-      }
-    } else if (action === 'Clock') {
-      // Bib-less specials have no bib to key a duplicate check off — Clock is a one-off
-      // marker (skip if one's already there), and the rest get a real split/line number, so
-      // it's added only if that number is still ahead of where the finishers list has
-      // already reached (behind it means this split was already transferred).
-      if (state.finishers.some(f => f.action === 'Clock')) { skipped++; continue; }
-    } else if (!NO_SPLIT_FINISHER_ACTIONS.has(action)) {
-      const nextSplit = state.finishers.filter(f => !NO_SPLIT_FINISHER_ACTIONS.has(f.action)).length + 1;
-      if (b.splitNumber < nextSplit) { skipped++; continue; }
-    }
-
-    const result = await recordFinisher(bib, timeStr, action);
-    if (result.error) errors.push(result.error);
-    else added++;
+  for (const exp of expected) {
+    const result = await recordFinisher(exp.number, exp.time, exp.action);
+    if (result.error) errors.push(result.error); else added++;
   }
 
+  // Mark every selected file as "seen as of now" — this run covered whatever these files held at
+  // this moment, regardless of any per-entry errors above, so the red/green marker should reset
+  // right along with it. See the tracking block near rowKey for why a lineNumber is enough.
+  for (const r of selected) setLastSyncedLineNumber(r);
+
+  // Re-render so each transferred file's row immediately reflects its new incorporation status
+  // (red/green) rather than waiting for the next Refresh/pull — see the ordering note above
+  // deleteRow() for why this comes before the specific outcome message, not after.
+  await renderMobileFiles();
   showStatus(
-    `Added ${added} finisher${added === 1 ? '' : 's'}`
-      + `${timed ? `, added a time to ${timed} already-recorded bib${timed === 1 ? '' : 's'}` : ''}`
-      + `${skipped ? `, skipped ${skipped} already added` : ''}`
+    `Rebuilt the finishers list: ${added} record${added === 1 ? '' : 's'} added`
       + `${errors.length ? `, ${errors.length} error(s): ${errors.join('; ')}` : ''}.`,
-    errors.length > 0 && added === 0 && timed === 0
+    errors.length > 0 && added === 0
   );
 }
 
@@ -472,17 +548,110 @@ function updateConnectButtonLabel() {
   btn.textContent = isConnected() ? `Disconnect from ${getConnectedDeviceName()}` : 'Connect to Phone…';
 }
 
-// Connects to a nearby phone over Bluetooth (racemaster-mobile's Mule Mode — see mule-ble.js)
-// and pulls whatever history it's holding, pushing each device straight to the server exactly
-// like a WiFi sync would. If the server can't be reached (the expected case out in the field,
-// with no internet), each pull is kept locally as "pending" instead — see
-// storage.js's savePendingMobileFile — until a Push action later succeeds. The connection is
-// left open afterward (button becomes "Disconnect from <device>") so a second click just ends
-// the session rather than re-picking a device.
+// Re-pulls every ~10s while connected, mirroring racemaster-mobile's own phone-to-phone Mule
+// auto-sync interval (MuleSyncEngine.AUTO_SYNC_INTERVAL) — without this, a connected phone only
+// ever got pulled once, at the moment "Connect to Phone…" was clicked, so any splits/bibs
+// recorded afterward just sat on the phone unsynced until the operator manually disconnected
+// and reconnected (re-opening the browser's native device picker each time).
+const AUTO_PULL_INTERVAL_MS = 10_000;
+let autoPullTimer = null;
+
+// Guards against overlapping pulls — a slow BLE transfer (large history, weak signal) could
+// still be in flight when the next timer tick or a manual Refresh click fires.
+let pullInProgress = false;
+
+function startAutoPull() {
+  stopAutoPull();
+  autoPullTimer = setInterval(() => { pullAndSyncConnectedPhone({ silent: true }); }, AUTO_PULL_INTERVAL_MS);
+}
+
+function stopAutoPull() {
+  if (autoPullTimer !== null) {
+    clearInterval(autoPullTimer);
+    autoPullTimer = null;
+  }
+}
+
+function onBleDisconnected() {
+  stopAutoPull();
+  updateConnectButtonLabel();
+}
+
+// Pulls whatever history the currently-connected phone is holding, pushing each device
+// straight to the server exactly like a WiFi sync would. If the server can't be reached (the
+// expected case out in the field, with no internet), each pull is kept locally as "pending"
+// instead — see storage.js's savePendingMobileFile — until a Push action later succeeds.
+// [silent] suppresses the status toast/re-render when there's nothing new — used by the
+// background auto-pull tick above so it doesn't spam a toast every 10s when the phone simply
+// hasn't recorded anything new since the last pull; an explicit Connect/Refresh click always
+// reports, even when the result is empty, so the operator gets confirmation the action ran.
+async function pullAndSyncConnectedPhone({ silent = false } = {}) {
+  if (pullInProgress) return;
+  if (!isConnected()) {
+    // Real, reproducible case: the phone can drop the GATT link while sitting idle (e.g.
+    // Android backgrounding it while the operator is still looking at the "Connect to X?"
+    // confirm dialog below) — onDisconnect's own listener already reverted the button, but
+    // without this the caller was left showing "Connected… pulling history…" forever with no
+    // further feedback, since this returned with nothing at all.
+    if (!silent) showStatus('Lost the Bluetooth connection — click Connect to Phone… again.', true);
+    return;
+  }
+  const session  = getSession();
+  const username = getUsername();
+  if (!session || !username) { if (!silent) showStatus('Sign in on the Datasets page first.', true); return; }
+
+  pullInProgress = true;
+  try {
+    let pulled;
+    try {
+      pulled = await pullFromConnectedPhone();
+    } catch (e) {
+      if (!silent) showStatus(e.message || 'Failed to pull history from the phone.', true);
+      return;
+    }
+    const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
+    if (silent && totalLines === 0) return;
+
+    let synced = 0, pending = 0;
+    for (const { raceLabel, deviceName, deviceId, lines } of pulled) {
+      let pushed;
+      try {
+        const result = await apiPushMobileSync(session.token, raceLabel, deviceName, lines);
+        pushed = !result.error;
+      } catch {
+        pushed = false; // e.g. server unreachable — the expected case out in the field
+      }
+      if (pushed) {
+        synced++;
+      } else {
+        savePendingMobileFile(username, raceLabel, deviceName, deviceId, lines);
+        pending++;
+      }
+    }
+    // renderMobileFiles() does its own server fetch and announces its own outcome ("Loading…",
+    // then "Server unreachable…" if that fetch fails, which is the expected case out in the
+    // field with no network) — awaited and ordered before our own summary below so that one
+    // doesn't get shown only to be immediately overwritten by this, but the other way round.
+    await renderMobileFiles();
+    showStatus(silent
+      // The background auto-pull tick found something new on its own, with no action from the
+      // operator — worth calling out distinctly from a manual Connect/Refresh result so it
+      // doesn't read as something they just did themselves.
+      ? `Auto-sync: pulled ${totalLines} new record${totalLines === 1 ? '' : 's'} from ${getConnectedDeviceName()} (${synced} synced to the server, ${pending} saved locally).`
+      : `Pulled ${pulled.length} device file${pulled.length === 1 ? '' : 's'}: ${synced} synced to the server, ${pending} saved locally.`);
+  } finally {
+    pullInProgress = false;
+  }
+}
+
+// Connects to a nearby phone over Bluetooth (racemaster-mobile's Mule Mode — see mule-ble.js),
+// pulls its history via pullAndSyncConnectedPhone above, then leaves the connection open with
+// startAutoPull() running (button becomes "Disconnect from <device>") so a second click just
+// ends the session rather than re-picking a device.
 async function onConnectButtonClick() {
   if (isConnected()) {
     disconnectPhone();
-    updateConnectButtonLabel();
+    onBleDisconnected();
     showStatus('Disconnected from phone.');
     return;
   }
@@ -505,49 +674,40 @@ async function onConnectButtonClick() {
 
   // The browser's own device picker can't show a meaningful name (racemaster-mobile
   // deliberately omits it from the advertisement), so this is the first point a real name is
-  // available at all — confirm here before doing anything else with the connection.
+  // available at all — confirm here before doing anything else with the connection. This is a
+  // real wait on a human, during which the phone's own OS can drop an idle BLE link (Android
+  // backgrounding it, screen timeout, etc.) — checked for explicitly below rather than just
+  // ploughing on and reporting "Connected" to something that's already gone.
   const name = deviceInfo.deviceName || deviceInfo.deviceId;
   if (!await showConfirmDialog(`Connect to "${name}"?`, 'Connect')) {
     disconnectPhone();
     showStatus('Cancelled — disconnected.');
     return;
   }
+  if (!isConnected()) {
+    showStatus(`Lost the Bluetooth connection to "${name}" while waiting for confirmation — click Connect to Phone… again.`, true);
+    return;
+  }
 
   updateConnectButtonLabel();
   showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
+  await pullAndSyncConnectedPhone();
+  startAutoPull();
+}
 
-  let pulled;
-  try {
-    pulled = await pullFromConnectedPhone();
-  } catch (e) {
-    showStatus(e.message || 'Failed to pull history from the phone.', true);
-    return;
+async function onRefreshButtonClick() {
+  if (isConnected()) {
+    await pullAndSyncConnectedPhone();
+  } else {
+    renderMobileFiles();
   }
-  let synced = 0, pending = 0;
-  for (const { raceLabel, deviceName, lines } of pulled) {
-    let pushed;
-    try {
-      const result = await apiPushMobileSync(session.token, raceLabel, deviceName, lines);
-      pushed = !result.error;
-    } catch {
-      pushed = false; // e.g. server unreachable — the expected case out in the field
-    }
-    if (pushed) {
-      synced++;
-    } else {
-      savePendingMobileFile(username, raceLabel, deviceName, lines);
-      pending++;
-    }
-  }
-  showStatus(`Pulled ${pulled.length} device file${pulled.length === 1 ? '' : 's'}: ${synced} synced to the server, ${pending} saved locally.`);
-  renderMobileFiles();
 }
 
 export function wireMobileFiles() {
-  on('btn-refresh-mobile-files', 'click', renderMobileFiles);
+  on('btn-refresh-mobile-files', 'click', onRefreshButtonClick);
   on('btn-connect-phone', 'click', onConnectButtonClick);
   on('btn-add-to-finishers', 'click', addSelectedToFinishers);
-  onDisconnect(updateConnectButtonLabel);
+  onDisconnect(onBleDisconnected);
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -565,6 +725,15 @@ export function wireMobileFiles() {
     const r = currentRows[+cb.dataset.idx];
     if (!r) return;
     if (cb.checked) selectedKeys.add(rowKey(r)); else selectedKeys.delete(rowKey(r));
+    // Colour is selection-driven now — reflect the change immediately rather than waiting for
+    // the next full re-render (a fresh fetch or a Refresh/Add to Finishers click).
+    r.incorporationStatus = computeIncorporationStatus(r);
+    const tr = cb.closest('tr');
+    if (tr) {
+      tr.classList.remove('row-outstanding', 'row-incorporated');
+      if (r.incorporationStatus === 'outstanding') tr.classList.add('row-outstanding');
+      else if (r.incorporationStatus === 'incorporated') tr.classList.add('row-incorporated');
+    }
   });
 }
 

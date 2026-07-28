@@ -218,9 +218,29 @@ export function getPendingMobileFiles() {
   return loadPendingMobileFiles();
 }
 
-export function savePendingMobileFile(owner, raceLabel, deviceName, lines) {
-  const list = loadPendingMobileFiles().filter(f => !(f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName));
-  list.push({ owner, raceLabel, deviceName, lines, pulledAt: new Date().toISOString() });
+// Append-merges [lines] into any existing pending entry for this device (deduped by
+// recordUuid), rather than replacing it outright — mule-ble.js's Bluetooth pulls now request
+// only the delta since last time (see its own getLastPulledLineNumber), so a failed push after
+// a second pull must not overwrite (and so silently lose) records from an earlier pull that
+// never made it to the server yet. Same append-merge semantics as server.js's own POST
+// /api/mobile/:raceLabel, which this is standing in for while the server's unreachable.
+//
+// deviceId (the true origin device's own stable id from mule-ble.js's pull result, never the
+// connected Mule's for a relayed entry) is carried alongside purely so a later Discard can call
+// mule-ble.js's resetLastPulledLineNumber — without it, discarding this copy would leave that
+// delta cursor advanced past the very data just thrown away, and the next pull would only
+// fetch what's new since then instead of the whole file again.
+export function savePendingMobileFile(owner, raceLabel, deviceName, deviceId, lines) {
+  const list = loadPendingMobileFiles();
+  const existing = list.find(f => f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName);
+  if (existing) {
+    const seenUuids = new Set(existing.lines.map(l => l.recordUuid).filter(Boolean));
+    existing.lines = [...existing.lines, ...lines.filter(l => l.recordUuid && !seenUuids.has(l.recordUuid))];
+    existing.deviceId = deviceId;
+    existing.pulledAt = new Date().toISOString();
+  } else {
+    list.push({ owner, raceLabel, deviceName, deviceId, lines, pulledAt: new Date().toISOString() });
+  }
   storePendingMobileFiles(list);
 }
 

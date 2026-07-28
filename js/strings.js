@@ -412,7 +412,15 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.8-alpha - current version</h3>
+    <h3>v0.0.9-alpha - current version</h3>
+    <ul>
+      <li>Add <strong>Mobile Files</strong> page — lists timing data uploaded from the RaceMaster Mobile app, one row per phone, with the same Bibs/Time current-segment view the phone itself shows, plus a raw listing and delete</li>
+      <li><strong>Connect to Phone…</strong> — pull a phone's history directly over Bluetooth with no network needed, for use out on the course; confirms the phone's name before connecting and rejects anything not running RaceMaster Mobile; pushes to the server if reachable, otherwise queues locally until it is</li>
+      <li><strong>Add to Finishers</strong> — transfer selected mobile files straight into the Finishers list as if entered manually, pairing bibs and time splits by split number; checks location, valid bib numbers, matching race, and no conflicting phones selected; safe to re-run without duplicating, and fills in a time later if the bibs arrived first</li>
+      <li>Warn before leaving the Datasets page with a sign-in that hasn't been confirmed by picking or creating a dataset yet</li>
+      <li>Add a "Hide Server" testing toggle to simulate the server being unreachable, for verifying offline/field behaviour</li>
+    </ul>
+    <h3>v0.0.8-alpha</h3>
     <ul>
       <li>Detect 2 browser tabs open on the same dataset and let user know</li>
       <li>Prevent data loss when conflicting sessions attempt to sync the same race to the server</li>

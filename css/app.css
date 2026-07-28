@@ -54,6 +54,7 @@
   --table-hover: #f8f9fa;
   --row-error-bg: #fde8e8;
   --row-banned-fg: #a93226;
+  --row-success-bg: #e3f5e9;
   --row-timing-bg: #fff3cd;
   --row-editing-bg: #cfe2ff;
   --row-sep: #d0d0d0;
@@ -443,6 +444,8 @@ input:focus, select:focus, textarea:focus {
 .row-banned td { background: var(--row-error-bg) !important; color: var(--row-banned-fg) !important; }
 .row-timing-target td { background: var(--row-timing-bg) !important; }
 .row-editing td       { background: var(--row-editing-bg) !important; }
+.row-outstanding td   { background: var(--row-error-bg) !important; }
+.row-incorporated td  { background: var(--row-success-bg) !important; }
 .results-cat-separator td { padding: 0; border-bottom: 2px solid var(--border); }
 .col-sep { border-left: 2px solid var(--border) !important; }
 .data-table th[colspan] { text-align: center; }
