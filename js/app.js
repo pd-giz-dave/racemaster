@@ -25,6 +25,7 @@ import { renderForms, wireForms }           from './views/forms.js';
 import { renderSIResults, wireSIResults }   from './views/si-results.js';
 import { renderMobileFiles, wireMobileFiles } from './views/mobile-files.js';
 import { wireViewHelp, wireTooltips, wireStaticPages } from './help.js';
+import { installServerHideInterceptor } from './server-hide.js';
 
 // ============================================================
 // Application bootstrap and UI wiring
@@ -33,6 +34,7 @@ import { wireViewHelp, wireTooltips, wireStaticPages } from './help.js';
 let currentView = 'home';
 
 export async function init() {
+  installServerHideInterceptor();
   showBusy('Loading…');
 
   async function connectAndLoad() {

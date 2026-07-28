@@ -26,7 +26,7 @@ if (!fs.existsSync(RESULTS_DIR)) fs.mkdirSync(RESULTS_DIR);
 
 const { format: utilFormat } = require('util');
 const LOG_FILE  = path.join(ROOT, 'server.log');
-const LOG_MAX   = 1 * 1024 * 1024;
+const LOG_MAX   = 1024 * 1024;
 
 function writeLog(level, args) {
   const line = `[${new Date().toISOString()}] [${level}] ${utilFormat(...args)}\n`;
@@ -425,9 +425,13 @@ const server = http.createServer(async (req, res) => {
 
   try {
 
-    // GET /api/ping  — liveness check, no auth
+    // GET /api/ping  — liveness check, no auth. `sink: true` is this server's own explicit
+    // "I am a genuine data destination" declaration — mobile-sync data pushed here (see
+    // POST /api/mobile/:raceLabel below) is what the Android app's own sync coloring treats as
+    // fully confirmed (green), same status a Bluetooth destination that identifies as a sink
+    // gets (see mule-ble.js's own ack write).
     if (pathname === '/api/ping' && req.method === 'GET') {
-      return jsonReply(res, 200, { ok: true });
+      return jsonReply(res, 200, { ok: true, sink: true });
     }
 
     // POST /api/auth/login

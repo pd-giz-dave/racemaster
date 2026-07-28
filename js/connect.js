@@ -35,39 +35,44 @@ export function startConflictWatch() {
   });
 }
 
-export function startServerPing() {
-  async function ping() {
-    const el = document.getElementById('header-server-status');
-    if (!el) return;
-    try {
-      const abort = new AbortController();
-      const timer = setTimeout(() => abort.abort(), 8000);
-      const res  = await fetch('/api/ping', { cache: 'no-store', signal: abort.signal });
-      clearTimeout(timer);
-      if (!res.ok) {
-        el.textContent    = '● offline';
-        el.style.color      = '#333';
-        el.style.background = 'var(--header-warn)';
-      } else {
-        el.textContent    = '● online';
-        el.style.color      = 'var(--header-fg-dim)';
-        el.style.background = '';
-        el.title            = '';
-      }
-    } catch {
+// Checks /api/ping and updates the header status dot — exported on its own (not just wired
+// into the interval below) so anything that already knows the server's reachability just
+// changed (e.g. the Datasets page's "Hide Server" testing toggle) can force an immediate
+// re-check instead of leaving the banner showing stale state for up to the next 30s tick.
+export async function pingServerNow() {
+  const el = document.getElementById('header-server-status');
+  if (!el) return;
+  try {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 8000);
+    const res  = await fetch('/api/ping', { cache: 'no-store', signal: abort.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
       el.textContent    = '● offline';
       el.style.color      = '#333';
       el.style.background = 'var(--header-warn)';
+    } else {
+      el.textContent    = '● online';
+      el.style.color      = 'var(--header-fg-dim)';
+      el.style.background = '';
+      el.title            = '';
     }
+  } catch {
+    el.textContent    = '● offline';
+    el.style.color      = '#333';
+    el.style.background = 'var(--header-warn)';
   }
+}
+
+export function startServerPing() {
   async function checkSwUpdate() {
     const reg = await navigator.serviceWorker?.getRegistration();
     reg?.update();
   }
-  ping();
+  pingServerNow();
   checkSwUpdate();
-  setInterval(() => { ping(); checkSwUpdate(); }, 30_000);
-  window.addEventListener('online', ping);
+  setInterval(() => { pingServerNow(); checkSwUpdate(); }, 30_000);
+  window.addEventListener('online', pingServerNow);
 }
 
 export function updateDataFileButton() {

@@ -18,6 +18,11 @@ function getEl(id) { return document.getElementById(id); }
 
 let currentRows = []; // flattened, one entry per device — see flattenDevices()
 
+// The last successfully-fetched server race list — kept so a transient failed refresh (the
+// server going offline, e.g. via the Datasets page's "Hide Server" toggle) falls back to it
+// instead of wiping the list down to only locally-pulled pending files.
+let lastKnownRaces = [];
+
 // Ticked checkboxes, keyed by identity rather than row index — row indices are reassigned on
 // every render (races/devices can appear in a different order once sorted), so persisting
 // selection across a re-render (or navigating away from Mobile Files and back) needs a stable
@@ -357,6 +362,11 @@ function findDuplicateSplitNumbers(rows) {
 // entry point manual Finishers-page entry uses, so duplicate-bib and entries-list checks stay
 // in one place rather than being reimplemented here.
 async function addSelectedToFinishers() {
+  // Refresh first so validation runs against the latest data — renderMobileFiles() already
+  // shows its own status message if the fetch fails, falling back to whatever's currently
+  // loaded (server unreachable is the expected case out in the field) rather than blocking.
+  await renderMobileFiles();
+
   const selected = getSelectedRows();
   if (!selected.length) { showStatus('Select one or more mobile files first.', true); return; }
 
@@ -515,11 +525,16 @@ async function onConnectButtonClick() {
   }
   let synced = 0, pending = 0;
   for (const { raceLabel, deviceName, lines } of pulled) {
+    let pushed;
     try {
       const result = await apiPushMobileSync(session.token, raceLabel, deviceName, lines);
-      if (result.error) throw new Error(result.error);
-      synced++;
+      pushed = !result.error;
     } catch {
+      pushed = false; // e.g. server unreachable — the expected case out in the field
+    }
+    if (pushed) {
+      synced++;
+    } else {
       savePendingMobileFile(username, raceLabel, deviceName, lines);
       pending++;
     }
@@ -553,7 +568,12 @@ export function wireMobileFiles() {
   });
 }
 
-export function renderMobileFiles() {
+// Genuinely awaitable (not fire-and-forget) so a caller — e.g. addSelectedToFinishers()
+// wanting the latest data before validating a transfer — can wait for it to finish. Resolves
+// true if the server fetch succeeded, false if it fell back to a local/offline view (with its
+// own status message already shown either way, so callers don't need to notify separately on
+// top of it).
+export async function renderMobileFiles() {
   const session  = getSession();
   const count    = getEl('mobile-files-count');
   const connectBtn = getEl('btn-connect-phone');
@@ -563,22 +583,28 @@ export function renderMobileFiles() {
     showStatus('Sign in on the Datasets page to view mobile files.');
     renderRaceList([], false);
     if (count) count.textContent = '0';
-    return;
+    return false;
   }
   const isAdminUser = getIsAdmin();
   const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
   showStatus('Loading…');
-  apiListMobileFiles(session.token).then(races => {
-    const merged = mergePendingIntoRaces(Array.isArray(races) ? races : [], pending);
+  try {
+    const races = await apiListMobileFiles(session.token);
+    lastKnownRaces = Array.isArray(races) ? races : [];
+    const merged = mergePendingIntoRaces(lastKnownRaces, pending);
     if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
     renderRaceList(merged, isAdminUser);
     showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
-  }).catch(() => {
-    const merged = mergePendingIntoRaces([], pending);
+    return true;
+  } catch {
+    // Server unreachable — keep showing whatever was last successfully loaded rather than
+    // wiping the list down to only locally-pulled pending files.
+    const merged = mergePendingIntoRaces(lastKnownRaces, pending);
     if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
     renderRaceList(merged, isAdminUser);
     showStatus(merged.length
-      ? 'Server unreachable — showing locally-pulled files only.'
+      ? 'Server unreachable — showing the last known list plus anything pulled locally.'
       : 'Server unreachable, and no locally-pulled files yet.', !merged.length);
-  });
+    return false;
+  }
 }

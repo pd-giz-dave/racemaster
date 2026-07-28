@@ -205,13 +205,18 @@ export async function pullFromConnectedPhone() {
   }
 
   // Best-effort ack, so the phone's own UI can show these lines as synced — not required
-  // for the pull itself to have succeeded, so a failure here is never fatal.
+  // for the pull itself to have succeeded, so a failure here is never fatal. isSink: true is
+  // what turns that into a genuine green "reached a sink" confirmation rather than just an
+  // intermediate orange "relayed to somebody" one (see AckPayload's own doc in
+  // ~/racemaster-mobile's MuleGattProfile.kt) — this connection's whole purpose is bringing
+  // data home to the racemaster server, so it always identifies as a sink.
   try {
     const ackChar = await service.getCharacteristic(ACK_CHAR_UUID);
     await ackChar.writeValueWithResponse(encodeJson({
       deviceId: 'racemaster-web',
       recordUuids: results.flatMap(r => r.lines.map(l => l.recordUuid)),
       deviceName: 'RaceMaster (web)',
+      isSink: true,
     }));
   } catch { /* non-fatal */ }
 

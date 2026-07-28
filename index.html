@@ -1132,6 +1132,18 @@
           </div>
         </div>
 
+        <!-- Field-use testing: simulate the server being completely unreachable -->
+        <div class="card" style="min-width:240px;max-width:300px;flex-shrink:0">
+          <h3 style="margin:0 0 8px;font-size:1rem">Field-Use Testing</h3>
+          <p style="margin:0 0 10px;font-size:0.8rem;color:var(--muted)">
+            Simulates the server being completely unreachable — exactly as it would be out on the course with no
+            signal — without needing to actually go offline. Use it to check the app really does keep working the
+            way it's meant to with no connection at all: cached data, the local sync queue, and Bluetooth pulls
+            into Mobile Files.
+          </p>
+          <button class="btn btn-secondary" id="btn-toggle-server-hidden" style="width:100%">Hide Server</button>
+        </div>
+
         <!-- Datasets area -->
         <div id="df-panels-row" style="display:none;gap:1rem;align-items:flex-start;flex:1;flex-wrap:wrap">
 

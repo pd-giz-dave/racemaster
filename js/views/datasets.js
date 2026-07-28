@@ -11,14 +11,16 @@ import {
 } from '../storage.js';
 import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise } from '../ui.js';
 import { showBusy } from '../utils.js';
-import { updateDataFileButton } from '../connect.js';
+import { updateDataFileButton, pingServerNow } from '../connect.js';
 import { renderAll, showView } from '../app.js';
+import { isServerHidden, setServerHidden } from '../server-hide.js';
 
 let activeToken    = null;
 let activeUsername = null;
 let isAdminUser    = false;
 let copySource     = null;
 let _onConnect     = null;
+let lastKnownDatasets = []; // last successfully-fetched list — see loadDatasets()'s catch branch
 
 // True once handleLogin() has succeeded but before a dataset has been picked or created —
 // setSession() (which persists the token) only ever happens as part of connecting to a
@@ -43,6 +45,12 @@ function resetPasswordVisibility() {
     togglePasswordBtn.querySelector('.icon-eye-off')?.toggleAttribute('hidden', true);
     togglePasswordBtn.setAttribute('aria-label', 'Show password');
   }
+}
+
+function updateServerHiddenButton() {
+  const btn = getEl('btn-toggle-server-hidden');
+  if (!btn) return;
+  btn.textContent = isServerHidden() ? 'Unhide Server' : 'Hide Server';
 }
 
 function showPanel(name, adminUser) {
@@ -74,12 +82,15 @@ function loadDatasets() {
   const userEl = getEl('df-logged-in-user');
   if (userEl) userEl.textContent = activeUsername ? `Signed in as ${activeUsername}` : '';
   setStatus('df-dataset-status', 'Loading…');
-  getEl('df-dataset-list').innerHTML = '';
   apiListDatasets(activeToken).then(datasets => {
+    lastKnownDatasets = datasets;
     setStatus('df-dataset-status', '');
     renderDatasetList(datasets);
   }).catch(() => {
-    setStatus('df-dataset-status', 'Could not load datasets.', true);
+    // Server unreachable (e.g. hidden for testing, or a transient blip out in the field) —
+    // keep showing the last known list rather than wiping it down to empty.
+    setStatus('df-dataset-status', 'Could not reach the server — showing the last known list.', true);
+    renderDatasetList(lastKnownDatasets);
   });
   if (isAdminUser) loadUsers();
 }
@@ -337,6 +348,21 @@ export function wireDatasets(onConnect) {
   getEl('btn-export-state').onclick = exportState;
   getEl('btn-import-state').onclick = importState;
 
+  getEl('btn-toggle-server-hidden').onclick = () => {
+    const hidden = !isServerHidden();
+    setServerHidden(hidden);
+    updateServerHiddenButton();
+    showStatus(hidden
+      ? 'Server hidden — every server request will now fail as if genuinely unreachable.'
+      : 'Server unhidden — back to normal.');
+    // The header status dot otherwise only re-checks on its own 30s timer — force an
+    // immediate re-check so toggling this gives instant feedback instead of a stale banner.
+    pingServerNow();
+    // Same for the dataset list on this page — refresh it too rather than leaving it
+    // showing whatever it last happened to load.
+    if (activeToken) loadDatasets();
+  };
+
   function handleLogin(isCreate) {
     const username = getEl('df-username').value.trim();
     const password = getEl('df-password').value;
@@ -490,6 +516,7 @@ export function wireDatasets(onConnect) {
 }
 
 export function renderDatasets() {
+  updateServerHiddenButton();
   activeToken    = getSession()?.token || null;
   activeUsername = getUsername() || null;
   isAdminUser    = getIsAdmin();
