@@ -4,12 +4,13 @@ import {
   getSession, getIsAdmin, getUsername, apiListMobileFiles, apiDeleteMobileFile,
   apiPushMobileSync, getPendingMobileFiles, savePendingMobileFile, removePendingMobileFile,
 } from '../storage.js';
-import { on, escHtml, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
+import { on, escHtml, showConfirmDialog, showChoiceDialog, showStatus, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
 import {
   isBluetoothAvailable, connectToPhone as bleConnect, pullFromConnectedPhone,
   disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
-  resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
+  resetLastPulledLineNumber, resetAllLastPulledLineNumbers, getRecommendedPollIntervalMs,
+  isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
 import { recordFinisher, clearAllFinishers } from '../finishers.js';
@@ -336,6 +337,15 @@ async function deleteRow(r) {
     return;
   }
   if (result.error) { showStatus(result.error, true); return; }
+  // Without this, mule-ble.js's own delta cursor stays advanced past the data just deleted from
+  // the server, so a later Bluetooth pull from this same device would only fetch what's new
+  // since then — silently skipping everything that used to be there, even though the server no
+  // longer has it either. A server-known device row never carries its own protocol deviceId
+  // (that's only ever tracked for a BLE-pulled pending file — see savePendingMobileFile), so
+  // there's no way to target just this one device's cursor; clearing every cursor is the same
+  // fallback discardPendingRow() uses for the equivalent no-deviceId case.
+  if (r.device.deviceId) resetLastPulledLineNumber(r.device.deviceId, r.raceLabel);
+  else resetAllLastPulledLineNumbers();
   await renderMobileFiles();
   showStatus(`"${r.device.name}" deleted.`);
 }
@@ -410,6 +420,11 @@ function getSelectedRows() {
 // included, just untimed), pairing each bib with the Time entry at the same split number if one
 // exists. Retirees never carry a split time (finishers.js's own NO_SPLIT_ACTIONS convention);
 // Clock's own "time" is its offset/time-of-day value from its note field, not a paired split.
+// This relies on racemaster-mobile not allocating a splitNumber to DNF rows at all (so they
+// never consume a slot the Time-mode side didn't also produce) — without that, a retiree
+// partway through a race would permanently offset every later bib's splitNumber against its
+// true corresponding Time split.
+//
 // This is the single source of truth both the red/green status check and the actual rebuild
 // below are computed from, so they can never disagree with each other.
 function expectedFinisherEntries(bibs, times) {
@@ -542,18 +557,33 @@ async function addSelectedToFinishers() {
   );
 }
 
+// Gated the same way mule-ble.js's own bleLog is — routine tracing only, off by default.
+function debugLog(...args) { if (isBleLoggingEnabled()) console.log(...args); }
+
 function updateConnectButtonLabel() {
   const btn = getEl('btn-connect-phone');
   if (!btn) return;
   btn.textContent = isConnected() ? `Disconnect from ${getConnectedDeviceName()}` : 'Connect to Phone…';
+  // Echoes getRecommendedPollIntervalMs() so it's visible whether auto-sync is even running and
+  // at what cadence, rather than something only inferable from timestamps in the console.
+  const pollEl = getEl('mobile-files-poll-interval');
+  if (pollEl) {
+    if (isConnected()) {
+      pollEl.textContent = `Auto-polling every ${Math.round(getRecommendedPollIntervalMs() / 1000)}s`;
+      pollEl.hidden = false;
+    } else {
+      pollEl.hidden = true;
+    }
+  }
 }
 
-// Re-pulls every ~10s while connected, mirroring racemaster-mobile's own phone-to-phone Mule
-// auto-sync interval (MuleSyncEngine.AUTO_SYNC_INTERVAL) — without this, a connected phone only
-// ever got pulled once, at the moment "Connect to Phone…" was clicked, so any splits/bibs
-// recorded afterward just sat on the phone unsynced until the operator manually disconnected
-// and reconnected (re-opening the browser's native device picker each time).
-const AUTO_PULL_INTERVAL_MS = 10_000;
+// Re-pulls periodically while connected — without this, a connected phone only ever got pulled
+// once, at the moment "Connect to Phone…" was clicked, so any splits/bibs recorded afterward just
+// sat on the phone unsynced until the operator manually disconnected and reconnected (re-opening
+// the browser's native device picker each time). The cadence itself isn't ours to pick: the phone
+// reports it via getRecommendedPollIntervalMs() (DeviceInfo.pollIntervalMs), so this stays in
+// step with whatever racemaster-mobile's own MuleGattProfile.RECOMMENDED_POLL_INTERVAL_MS is,
+// rather than a second hardcoded copy here drifting out of sync with it.
 let autoPullTimer = null;
 
 // Guards against overlapping pulls — a slow BLE transfer (large history, weak signal) could
@@ -562,7 +592,12 @@ let pullInProgress = false;
 
 function startAutoPull() {
   stopAutoPull();
-  autoPullTimer = setInterval(() => { pullAndSyncConnectedPhone({ silent: true }); }, AUTO_PULL_INTERVAL_MS);
+  const intervalMs = getRecommendedPollIntervalMs();
+  debugLog(`[mobile-files] starting auto-pull every ${intervalMs}ms`);
+  autoPullTimer = setInterval(() => {
+    debugLog('[mobile-files] auto-pull tick');
+    pullAndSyncConnectedPhone({ silent: true });
+  }, intervalMs);
 }
 
 function stopAutoPull() {
@@ -572,9 +607,24 @@ function stopAutoPull() {
   }
 }
 
+// Set immediately before every deliberate disconnectPhone() call in this file, so the listener
+// below can tell "we know why this just happened" apart from a genuinely unexpected drop (phone
+// out of range, GATT hiccup) — the latter otherwise stopped auto-sync with zero visible sign of
+// it beyond the button quietly reverting, which is exactly what looked like "polling silently
+// not working" with nothing to explain why.
+let expectingDisconnect = false;
+
 function onBleDisconnected() {
   stopAutoPull();
   updateConnectButtonLabel();
+  if (expectingDisconnect) {
+    debugLog('[mobile-files] disconnected (expected)');
+  } else {
+    // Never gated behind the logging toggle — same reasoning as mule-ble.js's own bleError: a
+    // real problem needs to be visible even if that toggle was left off.
+    console.error('[mobile-files] Bluetooth connection lost unexpectedly — auto-sync has stopped');
+    showStatus('Lost the Bluetooth connection — auto-sync has stopped. Click Connect to Phone… to reconnect.', true);
+  }
 }
 
 // Pulls whatever history the currently-connected phone is holding, pushing each device
@@ -586,19 +636,25 @@ function onBleDisconnected() {
 // hasn't recorded anything new since the last pull; an explicit Connect/Refresh click always
 // reports, even when the result is empty, so the operator gets confirmation the action ran.
 async function pullAndSyncConnectedPhone({ silent = false } = {}) {
-  if (pullInProgress) return;
+  debugLog(`[mobile-files] pull requested (silent=${silent})`);
+  if (pullInProgress) { debugLog('[mobile-files] pull skipped — a pull is already in progress'); return; }
   if (!isConnected()) {
     // Real, reproducible case: the phone can drop the GATT link while sitting idle (e.g.
     // Android backgrounding it while the operator is still looking at the "Connect to X?"
     // confirm dialog below) — onDisconnect's own listener already reverted the button, but
     // without this the caller was left showing "Connected… pulling history…" forever with no
     // further feedback, since this returned with nothing at all.
+    debugLog('[mobile-files] pull skipped — not connected');
     if (!silent) showStatus('Lost the Bluetooth connection — click Connect to Phone… again.', true);
     return;
   }
   const session  = getSession();
   const username = getUsername();
-  if (!session || !username) { if (!silent) showStatus('Sign in on the Datasets page first.', true); return; }
+  if (!session || !username) {
+    debugLog('[mobile-files] pull skipped — not signed in');
+    if (!silent) showStatus('Sign in on the Datasets page first.', true);
+    return;
+  }
 
   pullInProgress = true;
   try {
@@ -650,6 +706,7 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
 // ends the session rather than re-picking a device.
 async function onConnectButtonClick() {
   if (isConnected()) {
+    expectingDisconnect = true;
     disconnectPhone();
     onBleDisconnected();
     showStatus('Disconnected from phone.');
@@ -663,32 +720,53 @@ async function onConnectButtonClick() {
     showStatus('Bluetooth is not available in this browser — use Chrome or Edge over HTTPS (or localhost).', true);
     return;
   }
+  // A remembered phone (one already connected to and verified before) can be reconnected
+  // directly, skipping the browser's own anonymous picker entirely — see getKnownDevices()'s
+  // own doc for why that picker can never show a real name on its own.
+  const known = await getKnownDevices();
+  let chosenDevice = null;
+  if (known.length) {
+    const choices = known.map(k => ({ label: `Reconnect to ${k.name}`, value: k.device }));
+    choices.push({ label: 'Pick a different phone…', value: 'other' });
+    const picked = await showChoiceDialog('Connect to which phone?', choices, { vertical: true });
+    if (picked === null) { showStatus('Cancelled.'); return; }
+    if (picked !== 'other') chosenDevice = picked;
+  }
+
   showStatus('Connecting…');
   let deviceInfo;
   try {
-    deviceInfo = await bleConnect();
+    // Passing showStatus straight through as the progress callback keeps the status bar
+    // refreshed at each real step — its own 10s auto-clear otherwise fires regardless of
+    // whether the connect attempt is actually done, making a still-in-progress retry look like
+    // it silently gave up.
+    deviceInfo = chosenDevice ? await reconnectToKnownDevice(chosenDevice, showStatus) : await bleConnect(showStatus);
   } catch (e) {
     showStatus(e.message || 'Bluetooth connection failed.', true);
     return;
   }
 
-  // The browser's own device picker can't show a meaningful name (racemaster-mobile
-  // deliberately omits it from the advertisement), so this is the first point a real name is
-  // available at all — confirm here before doing anything else with the connection. This is a
-  // real wait on a human, during which the phone's own OS can drop an idle BLE link (Android
-  // backgrounding it, screen timeout, etc.) — checked for explicitly below rather than just
-  // ploughing on and reporting "Connected" to something that's already gone.
-  const name = deviceInfo.deviceName || deviceInfo.deviceId;
-  if (!await showConfirmDialog(`Connect to "${name}"?`, 'Connect')) {
-    disconnectPhone();
-    showStatus('Cancelled — disconnected.');
-    return;
-  }
-  if (!isConnected()) {
-    showStatus(`Lost the Bluetooth connection to "${name}" while waiting for confirmation — click Connect to Phone… again.`, true);
-    return;
+  // A device fresh from the browser's own anonymous picker still needs its real name confirmed
+  // — this is the first point one is available at all. A remembered device was already chosen
+  // by that same real name a moment ago, so there's nothing left here to confirm for it.
+  if (!chosenDevice) {
+    const name = deviceInfo.deviceName || deviceInfo.deviceId;
+    if (!await showConfirmDialog(`Connect to "${name}"?`, 'Connect')) {
+      expectingDisconnect = true;
+      disconnectPhone();
+      showStatus('Cancelled — disconnected.');
+      return;
+    }
+    // This is a real wait on a human, during which the phone's own OS can drop an idle BLE
+    // link (Android backgrounding it, screen timeout, etc.) — checked for explicitly rather
+    // than just ploughing on and reporting "Connected" to something that's already gone.
+    if (!isConnected()) {
+      showStatus(`Lost the Bluetooth connection to "${name}" while waiting for confirmation — click Connect to Phone… again.`, true);
+      return;
+    }
   }
 
+  expectingDisconnect = false;
   updateConnectButtonLabel();
   showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
   await pullAndSyncConnectedPhone();
@@ -708,6 +786,11 @@ export function wireMobileFiles() {
   on('btn-connect-phone', 'click', onConnectButtonClick);
   on('btn-add-to-finishers', 'click', addSelectedToFinishers);
   onDisconnect(onBleDisconnected);
+  const loggingCb = document.getElementById('btn-ble-logging');
+  if (loggingCb) {
+    loggingCb.checked = isBleLoggingEnabled();
+    loggingCb.addEventListener('change', () => setBleLoggingEnabled(loggingCb.checked));
+  }
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;

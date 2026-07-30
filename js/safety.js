@@ -29,10 +29,10 @@ function entryInfo(bib) {
   };
 }
 
-export function getOutstandingRows() {
+export function getOutstandingRows(course) {
   const finishedBibs = getFinishedBibs();
   return [...state.entries]
-    .filter(e => { const b = +e.bibNumber; return b > 0 && !finishedBibs.has(b); })
+    .filter(e => { const b = +e.bibNumber; return b > 0 && !finishedBibs.has(b) && (!course || e.course === course); })
     .sort((a, b) => +a.bibNumber - +b.bibNumber);
 }
 

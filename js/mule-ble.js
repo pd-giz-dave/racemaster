@@ -24,6 +24,26 @@ export function isBluetoothAvailable() {
   return typeof navigator !== 'undefined' && !!navigator.bluetooth;
 }
 
+// ---- Logging (default off, persisted) ----
+//
+// Routine tracing (bleLog/bleWarn — chunk counts, retry attempts, request details) is gated
+// behind this so a normal field session's console stays quiet by default, but persisted (not
+// just an in-memory flag) so switching it on survives navigating away from Mobile Files or
+// reloading the page mid-investigation. A genuine failure (bleError) is never gated behind it,
+// though — a connect attempt that actually failed needs to be visible in the console regardless
+// of whether this happened to be ticked beforehand, or every failure looks like a silent one.
+const BLE_LOGGING_KEY = 'racemaster-ble-logging';
+
+export function isBleLoggingEnabled() {
+  return localStorage.getItem(BLE_LOGGING_KEY) === '1';
+}
+export function setBleLoggingEnabled(enabled) {
+  try { localStorage.setItem(BLE_LOGGING_KEY, enabled ? '1' : '0'); } catch { /* storage unavailable — best effort only */ }
+}
+function bleLog(...args)   { if (isBleLoggingEnabled()) console.log(...args); }
+function bleWarn(...args)  { if (isBleLoggingEnabled()) console.warn(...args); }
+function bleError(...args) { console.error(...args); }
+
 // Mirrors server.js's own sanitiseName() exactly. A phone reports its raceLabel/deviceName
 // as free text (whatever the operator typed) — server.js re-sanitises whatever it receives on
 // every push regardless, so the race/device this pull is about must be identified the same way
@@ -49,6 +69,17 @@ export function isConnected() {
 
 export function getConnectedDeviceName() {
   return connectedInfo ? (connectedInfo.deviceName || connectedInfo.deviceId) : null;
+}
+
+// The phone reports how often it wants to be re-polled (DeviceInfo.pollIntervalMs — see
+// MuleGattProfile.RECOMMENDED_POLL_INTERVAL_MS on the racemaster-mobile side), so that cadence
+// lives in exactly one place instead of being separately hardcoded/guessed here too. Falls back
+// to the same 10s default an old, already-installed phone build predates this field with —
+// DeviceInfo is JSON, so a missing field just comes through as undefined, never a parse error.
+const DEFAULT_POLL_INTERVAL_MS = 10_000;
+
+export function getRecommendedPollIntervalMs() {
+  return connectedInfo?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 }
 
 // Registers a callback fired whenever the connection ends, whether from disconnectPhone()
@@ -182,7 +213,7 @@ function collectDataStream(dataChar) {
     const timer = setTimeout(() => {
       dataChar.removeEventListener('characteristicvaluechanged', onValue);
       const gotBytes = chunks.reduce((n, c) => n + c.length, 0);
-      console.error(`[mule-ble] pull timed out after ${PULL_TIMEOUT_MS}ms — received ${chunkCount} chunk(s), ${gotBytes} byte(s) before giving up`);
+      bleError(`[mule-ble] pull timed out after ${PULL_TIMEOUT_MS}ms — received ${chunkCount} chunk(s), ${gotBytes} byte(s) before giving up`);
       reject(new Error('No data arrived from the phone — it may not have a race currently open (Bluetooth sync only serves an active race), or may have gone out of range.'));
     }, PULL_TIMEOUT_MS);
 
@@ -197,7 +228,7 @@ function collectDataStream(dataChar) {
         try {
           const text = new TextDecoder('utf-8').decode(total);
           const records = text ? JSON.parse(text) : [];
-          console.log(`[mule-ble] pull complete — ${chunkCount} chunk(s), ${total.length} byte(s), ${records.length} record(s)`);
+          bleLog(`[mule-ble] pull complete — ${chunkCount} chunk(s), ${total.length} byte(s), ${records.length} record(s)`);
           resolve(records);
         } catch (e) { reject(e); }
         return;
@@ -232,13 +263,13 @@ async function sendSinkAck(service, recordUuids) {
         deviceName: 'RaceMaster (web)',
         isSink: true,
       }));
-      console.log(`[mule-ble] sent sink ack for ${batch.length} record(s)`);
+      bleLog(`[mule-ble] sent sink ack for ${batch.length} record(s)`);
     } catch (e) {
       // Previously swallowed with zero logging — non-fatal to the pull itself (the caller
       // already has the data either way), but a silently-failing ack write here is exactly
       // what "records reach the web app fine but never turn green on the phone" looks like,
       // so this needs to be visible rather than invisible-by-design.
-      console.error(`[mule-ble] sink ack write failed for batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
+      bleError(`[mule-ble] sink ack write failed for batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
     }
   }
 }
@@ -249,7 +280,7 @@ async function pullOne(service, pullRequest) {
   const streamPromise = collectDataStream(dataChar);
   await dataChar.startNotifications();
   await new Promise(r => setTimeout(r, NOTIFY_SETTLE_MS));
-  console.log('[mule-ble] sending pull request', pullRequest);
+  bleLog('[mule-ble] sending pull request', pullRequest);
   await controlChar.writeValueWithResponse(encodeJson(pullRequest));
   try {
     const records = await streamPromise;
@@ -259,20 +290,69 @@ async function pullOne(service, pullRequest) {
   }
 }
 
-// Opens the browser's device picker for a nearby phone advertising racemaster-mobile's Mule
-// Mode service, connects, and reads its DeviceInfo — leaving the connection open (see
-// disconnectPhone()/onDisconnect() above) rather than pulling and disconnecting in one shot.
-// No pairing/bonding is required by this protocol. Returns the DeviceInfo read at connect
-// time, so the caller can echo the phone's own name back for confirmation before doing
-// anything else with it — the browser's own picker can't show one (see PeripheralSyncService:
-// the advertisement deliberately omits the device name, only the service UUID is in it), so
-// with several Bluetooth devices nearby it's otherwise a guess which one to pick.
+// ---- Known-device memory ----
+//
+// The browser's own picker can't show a meaningful name for any of these phones (see
+// PeripheralSyncService: the advertisement deliberately omits the device name — BLE's legacy
+// advertising payload is capped at 31 bytes total and the 128-bit service UUID needed to filter
+// the picker down to genuine RaceMaster Mobile phones already consumes most of that, leaving no
+// room for a name too). Once connected, though, a genuine phone's real name IS known (via
+// DeviceInfo) — remembered here (browser-assigned device.id → that name) so a later connect can
+// offer a direct "Reconnect to <name>" that skips the anonymous picker entirely for a phone
+// that's been through it before. Persisted (not just in-memory) so this survives a page reload.
+const KNOWN_DEVICES_KEY = 'racemaster-ble-known-devices';
+
+function loadKnownDevices() {
+  try { return JSON.parse(localStorage.getItem(KNOWN_DEVICES_KEY) || '{}'); } catch { return {}; }
+}
+function rememberDevice(id, name) {
+  try {
+    const map = loadKnownDevices();
+    map[id] = name;
+    localStorage.setItem(KNOWN_DEVICES_KEY, JSON.stringify(map));
+  } catch { /* storage unavailable — best effort only */ }
+}
+function forgetKnownDevice(id) {
+  try {
+    const map = loadKnownDevices();
+    if (!(id in map)) return;
+    delete map[id];
+    localStorage.setItem(KNOWN_DEVICES_KEY, JSON.stringify(map));
+  } catch { /* storage unavailable — best effort only */ }
+}
+
+// navigator.bluetooth.getDevices() is a Chromium extension to the Web Bluetooth spec (not
+// supported in every Web-Bluetooth-capable browser) returning every device this origin still
+// holds a persistent permission grant for — cross-referenced against rememberDevice() above so
+// only ones already verified as genuine RaceMaster Mobile phones are offered, never a stale or
+// unrelated grant. Returns [] (never throws) wherever getDevices() isn't available, so callers
+// can treat "no known devices" and "can't check" identically and just fall back to the picker.
+export async function getKnownDevices() {
+  if (!isBluetoothAvailable() || typeof navigator.bluetooth.getDevices !== 'function') return [];
+  let granted;
+  try {
+    granted = await navigator.bluetooth.getDevices();
+  } catch (e) {
+    bleWarn('[mule-ble] getDevices() failed', e);
+    return [];
+  }
+  const known = loadKnownDevices();
+  return granted.filter(d => known[d.id]).map(d => ({ device: d, name: known[d.id] }));
+}
+
+// Connects to an already-selected BluetoothDevice (either fresh from requestDevice()'s picker,
+// or a remembered one from getKnownDevices() bypassing it) and reads its DeviceInfo — leaving
+// the connection open (see disconnectPhone()/onDisconnect() above) rather than pulling and
+// disconnecting in one shot. No pairing/bonding is required by this protocol. Returns the
+// DeviceInfo read at connect time, so a fresh-picker caller can echo the phone's own name back
+// for confirmation before doing anything else with it (a known-device caller already knows the
+// name — that's the whole point of remembering it — so has no need to).
 //
 // The requestDevice() filter already restricts the picker to devices advertising our service
 // UUID, but that's an advertisement-layer claim, not a guarantee — reading DeviceInfo here is
 // what actually confirms this is a genuine RaceMaster Mobile peripheral; anything that fails
-// that gets disconnected immediately and rejected with a clear reason rather than a raw
-// browser exception.
+// that gets disconnected immediately, forgotten if it was a remembered device, and rejected
+// with a clear reason rather than a raw browser exception.
 //
 // Retried a few times rather than rejected on the first failure: service/characteristic
 // discovery right after gatt.connect() resolves is a known source of spurious failures on some
@@ -283,41 +363,146 @@ async function pullOne(service, pullRequest) {
 const DEVICE_INFO_ATTEMPTS = 3;
 const DEVICE_INFO_RETRY_DELAY_MS = 400;
 
-export async function connectToPhone() {
-  if (!isBluetoothAvailable()) {
-    throw new Error('Web Bluetooth is not available — use Chrome or Edge over HTTPS (or localhost).');
+// gatt.connect() has no spec-guaranteed timeout of its own — against a device that's no longer
+// reachable under the identity Chrome remembers it by (out of range, turned off, or its
+// underlying BLE address rotated, e.g. after an app update/restart on the phone), it's been
+// observed to simply hang rather than reject, leaving the caller with no error and nothing to
+// show for it. Racing it against this gives every caller a definite answer either way — it
+// doesn't cancel the underlying browser-level attempt (Web Bluetooth has no such mechanism), it
+// just stops waiting on it.
+const GATT_CONNECT_TIMEOUT_MS = 12000;
+
+// A mid-verification reconnect (inside the DEVICE_INFO_ATTEMPTS loop below) uses a much shorter
+// timeout than the initial connect above — reusing the same 12s there meant a genuinely dead
+// connection could take up to 3 × 12s to actually give up, which just looks like "stopped
+// retrying" long before anyone's waited that long. By this point the device was reachable only
+// moments ago, so if a reconnect is going to succeed at all it does so quickly; if it doesn't,
+// better to fail this attempt fast and let the loop move on (or give up) within a sane budget.
+const GATT_RECONNECT_TIMEOUT_MS = 4000;
+
+// getPrimaryService()/getCharacteristic()/readValue() below have no spec-guaranteed timeout of
+// their own either — against a connection device.gatt.connected still calls "connected" but that
+// is, in practice, otherwise stuck, these have been observed to simply hang, same as
+// gatt.connect() itself (see GATT_CONNECT_TIMEOUT_MS above). Without this, that hang happens
+// *inside* the try block, so it never reaches the catch below at all — no retry, no log, no
+// status update, nothing — which looked exactly like the whole attempt had silently vanished.
+const DEVICE_INFO_READ_TIMEOUT_MS = 5000;
+
+async function readDeviceInfo(server) {
+  const service  = await server.getPrimaryService(SERVICE_UUID);
+  const infoChar = await service.getCharacteristic(DEVICE_INFO_CHAR_UUID);
+  return decodeJson(await infoChar.readValue());
+}
+
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
+// onProgress(message) is called at each real step so a caller showing it via ui.js's
+// showStatus() gets its 10s auto-clear timer refreshed along the way — that auto-clear fires
+// regardless of whether the work it was describing is actually done, so a single static
+// "Connecting…" left unrefreshed for longer than that reads as "gave up" even while this is
+// still genuinely retrying underneath it. Defaults to a no-op so callers that don't care about
+// progress (there are none currently, but this keeps the signature uniform) aren't forced to.
+async function connectAndVerify(device, onProgress = () => {}) {
+  const label = device.name || 'that device';
+  onProgress(`Connecting to "${label}"…`);
+  let server;
+  try {
+    server = await withTimeout(
+      device.gatt.connect(), GATT_CONNECT_TIMEOUT_MS,
+      `Timed out connecting to "${label}" — it may be out of range or turned off.`,
+    );
+  } catch (e) {
+    // Any failure here — including a remembered device that's no longer reachable under the
+    // identity it was recognised by, e.g. its BLE address rotated after an app update/restart —
+    // means this entry is stale. Forgetting it now (rather than only ever on a DeviceInfo
+    // failure further down) is what stops it lingering forever as a dead "Reconnect to X"
+    // choice once a fresh pick of the same phone gets remembered under a new id alongside it.
+    forgetKnownDevice(device.id);
+    bleError(`[mule-ble] GATT connect failed for "${label}"`, e);
+    throw new Error(e.message || `Couldn't connect to "${label}" — it may be out of range, turned off, or no longer available. Try "Pick a different phone…" to select it fresh.`);
   }
 
-  const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
-  const server = await device.gatt.connect();
-
+  // The connection can drop again right after connect() resolves — a genuine disconnect, not
+  // just the discovery-not-settled-yet timing race this loop was originally written for (that
+  // one's still real too, hence still retrying rather than failing outright on attempt 1). The
+  // two need telling apart: retrying getPrimaryService() against a server that's actually gone
+  // can never succeed and just repeats the identical failure every time (confirmed against a
+  // real "GATT Server is disconnected" log where all 3 attempts failed identically) — so each
+  // attempt re-establishes the connection first whenever it's found dropped.
+  onProgress(`Verifying "${label}" is running RaceMaster Mobile…`);
   let deviceInfo = null;
   let lastError = null;
   for (let attempt = 1; attempt <= DEVICE_INFO_ATTEMPTS; attempt++) {
     try {
-      const service  = await server.getPrimaryService(SERVICE_UUID);
-      const infoChar = await service.getCharacteristic(DEVICE_INFO_CHAR_UUID);
-      deviceInfo = decodeJson(await infoChar.readValue());
+      if (!device.gatt.connected) {
+        onProgress(`Reconnecting to "${label}"… (attempt ${attempt}/${DEVICE_INFO_ATTEMPTS})`);
+        bleWarn(`[mule-ble] reconnecting before DeviceInfo attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} (connection dropped)`);
+        server = await withTimeout(
+          device.gatt.connect(), GATT_RECONNECT_TIMEOUT_MS,
+          `Timed out reconnecting to "${label}".`,
+        );
+      } else if (attempt > 1) {
+        onProgress(`Still verifying "${label}"… (attempt ${attempt}/${DEVICE_INFO_ATTEMPTS})`);
+      }
+      deviceInfo = await withTimeout(
+        readDeviceInfo(server), DEVICE_INFO_READ_TIMEOUT_MS,
+        `Timed out reading DeviceInfo from "${label}".`,
+      );
       if (deviceInfo && typeof deviceInfo.raceLabel === 'string') break; // genuine success
       deviceInfo = null; // decoded but the wrong shape — still worth a retry, not immediately fatal
     } catch (e) {
       lastError = e;
-      console.warn(`[mule-ble] DeviceInfo read attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} failed`, e);
+      bleWarn(`[mule-ble] DeviceInfo read attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} failed`, e);
     }
     if (attempt < DEVICE_INFO_ATTEMPTS) await new Promise(r => setTimeout(r, DEVICE_INFO_RETRY_DELAY_MS));
   }
 
   if (!deviceInfo) {
+    // A link that kept dropping is a flaky-connection problem, not evidence this isn't a
+    // genuine RaceMaster Mobile phone (it connected fine at least once) — worth keeping
+    // remembered for next time, unlike a device that connected solidly throughout but never
+    // spoke this protocol at all, which forgetKnownDevice below treats as the real thing.
+    const keptDisconnecting = !device.gatt.connected;
     device.gatt.disconnect();
-    console.error(`[mule-ble] gave up on DeviceInfo after ${DEVICE_INFO_ATTEMPTS} attempts`, lastError);
-    throw new Error(`"${device.name || 'That device'}" doesn't appear to be running RaceMaster Mobile — pick a different device.`);
+    if (!keptDisconnecting) forgetKnownDevice(device.id);
+    bleError(`[mule-ble] gave up on DeviceInfo after ${DEVICE_INFO_ATTEMPTS} attempts`, lastError);
+    throw new Error(keptDisconnecting
+      ? `Lost the Bluetooth connection to "${label}" while verifying it — try Connect to Phone… again.`
+      : `"${label}" doesn't appear to be running RaceMaster Mobile — pick a different device.`);
   }
 
   connectedDevice = device;
   connectedInfo = deviceInfo;
   device.addEventListener('gattserverdisconnected', forgetConnection);
+  rememberDevice(device.id, deviceInfo.deviceName || deviceInfo.deviceId);
+  bleLog('[mule-ble] DeviceInfo received', deviceInfo);
 
   return deviceInfo;
+}
+
+// onProgress(message), if given, is called at each real step of the connect/verify process —
+// see connectAndVerify's own doc for why: a caller displaying it via showStatus() needs that
+// refreshed periodically, or its 10s auto-clear makes a still-in-progress attempt look dead.
+export async function connectToPhone(onProgress) {
+  if (!isBluetoothAvailable()) {
+    throw new Error('Web Bluetooth is not available — use Chrome or Edge over HTTPS (or localhost).');
+  }
+  const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+  return connectAndVerify(device, onProgress);
+}
+
+// Reconnects directly to a device from getKnownDevices() above, skipping the browser's own
+// anonymous picker entirely — the whole point of remembering it in the first place. Still goes
+// through the exact same DeviceInfo verification/retry as a fresh pick, so a remembered device
+// that's since stopped running RaceMaster Mobile is caught and forgotten rather than blindly
+// trusted just because it was chosen by name.
+export async function reconnectToKnownDevice(device, onProgress) {
+  return connectAndVerify(device, onProgress);
 }
 
 // Pulls the currently-connected phone's own race history plus anything it's relaying on
@@ -362,11 +547,11 @@ export async function pullFromConnectedPhone() {
       advanceLastPulledLineNumber(deviceInfo.deviceId, raceLabel, ownLines);
       results.push({ raceLabel, deviceName, deviceId: deviceInfo.deviceId, lines: ownLines });
     } catch (e) {
-      console.error('[mule-ble] pull failed for own race', raceLabel, e);
+      bleError('[mule-ble] pull failed for own race', raceLabel, e);
       errors.push(e);
     }
   } else {
-    console.log('[mule-ble] device has no race of its own (pure Mule) — skipping straight to relay entries');
+    bleLog('[mule-ble] device has no race of its own (pure Mule) — skipping straight to relay entries');
   }
 
   for (const relay of deviceInfo.relayEntries || []) {
@@ -386,7 +571,7 @@ export async function pullFromConnectedPhone() {
       advanceLastPulledLineNumber(relay.originDeviceId, raceLabel, lines);
       results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, lines });
     } catch (e) {
-      console.error('[mule-ble] pull failed for relayed race', raceLabel, e);
+      bleError('[mule-ble] pull failed for relayed race', raceLabel, e);
       errors.push(e);
     }
   }

@@ -650,18 +650,28 @@
       </div>
 
       <div class="tab-bar" id="safety-tab-bar">
-        <button class="active" data-safety-tab="outstanding">Outstanding</button>
+        <button class="active" data-safety-tab="outstanding-seniors">Outstanding (Seniors)</button>
+        <button data-safety-tab="outstanding-juniors">Outstanding (Juniors)</button>
         <button data-safety-tab="dnf">Retirees / DNFs</button>
         <button data-safety-tab="finished">Finishers</button>
         <button data-safety-tab="early">Early Starters</button>
         <button data-safety-tab="noshows">No-shows</button>
       </div>
 
-      <div class="tab-panel active" id="safety-tab-outstanding">
+      <div class="tab-panel active" id="safety-tab-outstanding-seniors">
         <div class="table-scroll">
           <table class="data-table">
             <thead></thead>
-            <tbody id="safety-outstanding-tbody"></tbody>
+            <tbody id="safety-outstanding-seniors-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="safety-tab-outstanding-juniors">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="safety-outstanding-juniors-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -1222,6 +1232,8 @@
         <button class="btn btn-secondary" id="btn-refresh-mobile-files">Refresh</button>
         <button class="btn btn-secondary" id="btn-add-to-finishers">Add to Finishers</button>
         <button class="btn" id="btn-connect-phone">Connect to Phone…</button>
+        <span id="mobile-files-poll-interval" class="entry-status" hidden></span>
+        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto"><input type="checkbox" id="btn-ble-logging"> Bluetooth logging</label>
       </div>
       <div class="table-scroll">
         <table class="data-table">

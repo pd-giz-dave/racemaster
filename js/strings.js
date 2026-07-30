@@ -170,8 +170,9 @@ export const TOOLTIPS = {
 
   // Mobile Files
   'btn-refresh-mobile-files':    'Reload mobile files from the server and from anything pulled locally over Bluetooth',
-  'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
+  'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Offers a direct reconnect for a phone connected to before; otherwise confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
   'btn-add-to-finishers':        'Add the selected mobile file(s) to the finishers list, as if entered manually — requires location "Finish", valid bib numbers, the same race, and no more than one bibs and one time phone selected',
+  'btn-ble-logging':             'Log routine Bluetooth connect/pull activity to the browser console — off by default; a genuine connect/pull failure is always logged regardless',
 
   // Data file / auth
   'df-username':                 'Your RaceMaster username — use only letters, numbers and hyphens',
@@ -368,11 +369,16 @@ export const HELP = {
         useful for troubleshooting. <strong>Delete</strong> permanently removes a device's file from the server.</p>
     <p>Use <strong>Refresh</strong> to reload the list from the server and from anything already pulled locally over Bluetooth.</p>
     <p><strong>Connect to Phone…</strong> pulls a device's history directly over Bluetooth from a nearby phone running RaceMaster Mobile —
-        no network needed, for use out on the course. The browser's own device picker can't show a meaningful name, so once connected
-        you're asked to confirm the phone's own name before anything is pulled — a device not running RaceMaster Mobile at all is
-        rejected outright. If the server is reachable the pull is then pushed straight there, the same as a normal WiFi sync;
+        no network needed, for use out on the course. The browser's own device picker can't show a meaningful name, so the first time you
+        connect to a given phone you're asked to confirm its own name before anything is pulled — a device not running RaceMaster Mobile at
+        all is rejected outright. A phone you've connected to before is instead offered directly as <strong>Reconnect to &lt;name&gt;</strong>,
+        skipping the anonymous picker entirely (Chrome/Edge only — other browsers always use the picker). If the server is reachable the
+        pull is then pushed straight there, the same as a normal WiFi sync;
         otherwise it's kept in this browser as <strong>pending upload</strong> until you push it (or discard it) once you're back in signal.
-        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session.</p>
+        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session.
+        Tick <strong>Bluetooth logging</strong> to also log routine connect/pull activity to the browser console — off by default, useful
+        when troubleshooting a Connect to Phone… problem; the setting is remembered across visits to this page. A genuine connect or pull
+        failure is always logged to the console regardless of this setting.</p>
     <p>Tick one or more files and use <strong>Add to Finishers</strong> to transfer them into the Finishers list, as if entered manually —
         typically one file of bibs and one of time splits, paired up by split number, though a single file with both is fine too.
         Selections are remembered if you navigate away and back. This is driven entirely by bibs: a bib with no matching split is

@@ -5,7 +5,7 @@ import { recordFinisher, deleteFinisher } from '../finishers.js';
 import { isEntryBanned, getEntryName } from '../entries.js';
 import { derivePairGender } from '../categories.js';
 import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable, tableColumns } from '../ui.js';
-import { TABLES } from '../strings.js';
+import { TABLES, COURSE } from '../strings.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
 import {
@@ -61,7 +61,10 @@ const SAFETY_NOSHOWS_COLS = tableColumns(TABLES['safety-noshows'], {
 });
 
 export function renderSafety() {
-  renderTable('safety-outstanding-tbody', SAFETY_OUT_COLS, getOutstandingRows(), {
+  renderTable('safety-outstanding-seniors-tbody', SAFETY_OUT_COLS, getOutstandingRows(COURSE.SENIORS), {
+    rowAttrs: e => ({ 'data-bib': e.bibNumber }),
+  });
+  renderTable('safety-outstanding-juniors-tbody', SAFETY_OUT_COLS, getOutstandingRows(COURSE.JUNIORS), {
     rowAttrs: e => ({ 'data-bib': e.bibNumber }),
   });
 
@@ -118,11 +121,13 @@ async function unretire(bib) {
 export function wireSafety() {
   wireTabBar('safety-tab-bar', 'safety-tab-', 'data-safety-tab');
 
-  document.getElementById('safety-outstanding-tbody')?.addEventListener('click', e => {
+  const onRetireClick = e => {
     const btn = e.target.closest('[data-action="retire"]');
     if (!btn) return;
     retireFromSafety(+btn.closest('[data-bib]')?.dataset.bib);
-  });
+  };
+  document.getElementById('safety-outstanding-seniors-tbody')?.addEventListener('click', onRetireClick);
+  document.getElementById('safety-outstanding-juniors-tbody')?.addEventListener('click', onRetireClick);
 
   document.getElementById('safety-dnf-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action="unretire"]');
