@@ -139,7 +139,13 @@ function foldLatestVisible(rows) {
   return [...latestByRoot.values()].filter(r => r.action !== 'Undo');
 }
 
-function bySplitNumber(a, b) { return (a.splitNumber ?? 0) - (b.splitNumber ?? 0); }
+// Sorts by the file's own lineNumber — the one field every row has and that's never ambiguous.
+// splitNumber can't be used for this: it's null for rows with no real split (Clock, DNF — see
+// NO_SPLIT_ACTIONS in finishers.js), and `?? 0` would collide those with each other and with any
+// genuine split 0, scrambling their order. That matters beyond just DNF: multiple Clock lines are
+// legitimate (a later one is a clock reset — not yet implemented mobile-side, but the ordering
+// must already be right for when it is), and only lineNumber order preserves which came first.
+function byLineNumber(a, b) { return (a.lineNumber ?? 0) - (b.lineNumber ?? 0); }
 
 function formatCount(visible) {
   return visible === 0 ? '' : String(visible);
@@ -154,8 +160,8 @@ function buildSegmentView(lines) {
   const timeRows = lines.filter(r => r.splitTime != null);
   const bibsRows = lines.filter(r => r.splitTime == null);
   return {
-    timeSegment: foldLatestVisible(currentSegment(timeRows)).sort(bySplitNumber),
-    bibsSegment: foldLatestVisible(currentSegment(bibsRows)).sort(bySplitNumber),
+    timeSegment: foldLatestVisible(currentSegment(timeRows)).sort(byLineNumber),
+    bibsSegment: foldLatestVisible(currentSegment(bibsRows)).sort(byLineNumber),
   };
 }
 
@@ -178,13 +184,31 @@ function locationSummary(visibleRows) {
 function showDeviceModal(owner, raceLabel, deviceName, lines) {
   const { timeSegment, bibsSegment } = buildSegmentView(lines);
   const visibleRows = [...timeSegment, ...bibsSegment];
-  const splitNumbers = [...new Set(visibleRows.map(r => r.splitNumber ?? 0))].sort((a, b) => a - b);
 
-  const rows = splitNumbers.map(n => {
-    const bib  = bibsSegment.find(r => (r.splitNumber ?? 0) === n);
-    const time = timeSegment.find(r => (r.splitNumber ?? 0) === n);
-    return `<tr>
-      <td>${n}</td>
+  // Rows with a real splitNumber pair a bibs-recording phone's entry with a time-recording
+  // phone's entry at the same position in the sequence. Rows with no real splitNumber (DNF —
+  // see NO_SPLIT_ACTIONS in finishers.js) never pair with anything and must get a row of their
+  // own — falling back to a shared "0" for all of them (as this used to, via `splitNumber ?? 0`)
+  // collapsed them onto one slot, real splitNumber-0 row included, so only the first one found
+  // there was ever shown, silently hiding the rest (e.g. a DNF hidden behind Clock's own real 0).
+  const bySplit = new Map(); // real splitNumber -> { bib, time, order }
+  const solo = [];           // one entry per row with no real splitNumber: { bib|time, order }
+  const place = (r, side) => {
+    if (r.splitNumber == null) { solo.push({ [side]: r, order: r.lineNumber ?? 0 }); return; }
+    const p = bySplit.get(r.splitNumber) || { order: r.lineNumber ?? 0 };
+    p[side] = r;
+    p.order = Math.min(p.order, r.lineNumber ?? 0);
+    bySplit.set(r.splitNumber, p);
+  };
+  for (const r of bibsSegment) place(r, 'bib');
+  for (const r of timeSegment) place(r, 'time');
+
+  const displayRows = [...bySplit.entries()].map(([n, p]) => ({ n, ...p }))
+    .concat(solo.map(p => ({ n: null, ...p })))
+    .sort((a, b) => a.order - b.order);
+
+  const rows = displayRows.map(({ n, bib, time }) => `<tr>
+      <td>${n ?? ''}</td>
       <td>${bib ? escHtml(bib.action) : ''}</td>
       <td>${bib ? escHtml(bib.bibNumber ?? '') : ''}</td>
       <td>${bib ? whenOf(bib) : ''}</td>
@@ -193,8 +217,7 @@ function showDeviceModal(owner, raceLabel, deviceName, lines) {
       <td>${time ? escHtml(time.splitTime ?? '') : ''}</td>
       <td>${time ? whenOf(time) : ''}</td>
       <td>${time ? escHtml(time.note ?? '') : ''}</td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-backdrop';
@@ -425,11 +448,18 @@ function getSelectedRows() {
 // partway through a race would permanently offset every later bib's splitNumber against its
 // true corresponding Time split.
 //
+// The result is sorted by lineNumber, not splitNumber — recordFinisher() is called in this same
+// order below, and splitNumber is null for Clock/DNF rows, which would otherwise all collapse to
+// the front ahead of every real split. lineNumber order matters in its own right too: several
+// Clock lines in one file is legitimate (a later one marks a clock reset — not yet implemented
+// mobile-side, but must already land in the right relative order for when it is), and only
+// lineNumber order preserves which came first.
+//
 // This is the single source of truth both the red/green status check and the actual rebuild
 // below are computed from, so they can never disagree with each other.
 function expectedFinisherEntries(bibs, times) {
   const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
-  return [...bibs].sort(bySplitNumber).map(b => {
+  return [...bibs].sort(byLineNumber).map(b => {
     const action = BIBS_ACTION_TO_FINISHER[b.action];
     const number = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action) ? +b.bibNumber : 0;
     const paired = timeBySplit.get(b.splitNumber);
@@ -453,10 +483,14 @@ function computeIncorporationStatus(r) {
 
 // Duplicate split numbers within one bucket mean two independent recording streams got
 // selected together (e.g. two separate bibs-recording phones) — their split numbers aren't
-// comparable, so nothing here can be safely paired or transferred.
+// comparable, so nothing here can be safely paired or transferred. Rows with no real
+// splitNumber (DNF/Clock — see NO_SPLIT_ACTIONS in finishers.js) all carry the same null
+// sentinel and must be skipped here, or two-or-more of them (e.g. multiple retirees in one
+// pull) would falsely collide and abort the whole rebuild.
 function findDuplicateSplitNumbers(rows) {
   const seen = new Set(), dupes = new Set();
   for (const r of rows) {
+    if (r.splitNumber == null) continue;
     if (seen.has(r.splitNumber)) dupes.add(r.splitNumber);
     seen.add(r.splitNumber);
   }

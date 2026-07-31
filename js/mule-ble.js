@@ -308,6 +308,13 @@ function loadKnownDevices() {
 function rememberDevice(id, name) {
   try {
     const map = loadKnownDevices();
+    // Any other id already remembered under this same name is a stale entry for this same
+    // phone under a previous browser-assigned device.id (e.g. its underlying BLE address
+    // rotated, or it was re-picked after a permission reset) — drop it so getKnownDevices()
+    // doesn't offer two "Reconnect to <name>" entries for what is really one phone.
+    for (const otherId of Object.keys(map)) {
+      if (otherId !== id && map[otherId] === name) delete map[otherId];
+    }
     map[id] = name;
     localStorage.setItem(KNOWN_DEVICES_KEY, JSON.stringify(map));
   } catch { /* storage unavailable — best effort only */ }
