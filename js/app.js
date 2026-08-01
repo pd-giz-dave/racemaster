@@ -4,6 +4,7 @@ import { state, loadAll } from './state.js';
 import { restoreDirectory, getSession, isStandalone } from './storage.js';
 import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch } from './connect.js';
 import { startPresenceWatch } from './presence.js';
+import { startBibAllocationsSync } from './bib-allocations.js';
 import { wireDatasets, renderDatasets, hasUnconfirmedLogin } from './views/datasets.js';
 import { showBusy } from './utils.js';
 import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
@@ -45,6 +46,7 @@ export async function init() {
       await loadAll();
       updateBannerEventName(state.event.name);
       startPresenceWatch(session?.dataset || null);
+      startBibAllocationsSync();
       if (session) {
         showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
       } else {

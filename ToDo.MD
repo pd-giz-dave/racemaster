@@ -29,6 +29,5 @@ It appears as a paragraph before the results in the published html
       unlike the time mode phone, the bibs mode phone does not need to get to the finish before the first runner does,
       this means it can be loaded with bib numbers after registration closes,
       but...juniors go off before senior registration closes, how do deal with that,
-      not an issue if we have a mobile signal - it can get the list via the server
-
-
+      not an issue if we have a mobile signal - it can get the list via the server,
+      see below for a possible mechanism

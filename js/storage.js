@@ -197,6 +197,17 @@ export async function apiPushMobileSync(token, raceLabel, deviceName, lines) {
   return res.json();
 }
 
+// Pushes a race-wide {raceName, raceDate, entries} bib/name/course export to
+// server.js's POST /api/mobile/:raceLabel/bib-allocations — see js/bib-allocations.js.
+export async function apiPushBibAllocations(token, raceLabel, payload) {
+  const res = await fetch(`/api/mobile/${encodeURIComponent(raceLabel)}/bib-allocations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 // ---- Bluetooth-pulled files pending an eventual server push (field use, no network) ----
 //
 // Keyed by owner (the signed-in user at pull time) + raceLabel + deviceName, same identity a

@@ -248,6 +248,26 @@ function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
   fs.writeFileSync(mobileDeviceFilePath(username, raceLabel, deviceName), JSON.stringify(lines, null, 2), 'utf8');
 }
 
+// bib-allocations.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course}]}
+// file the web app pushes (see POST .../bib-allocations below), not a per-device sync file, so
+// it lives in the same owner-scoped race dir but is deliberately excluded from device
+// enumeration in getMobileRacesForUser() below.
+function bibAllocationsFilePath(username, raceLabel) {
+  return path.join(mobileRaceDir(username, raceLabel), 'bib-allocations.json');
+}
+
+function readBibAllocations(username, raceLabel) {
+  const fp = bibAllocationsFilePath(username, raceLabel);
+  if (!fs.existsSync(fp)) return null;
+  try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch { return null; }
+}
+
+function writeBibAllocations(username, raceLabel, payload) {
+  const dir = mobileRaceDir(username, raceLabel);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(bibAllocationsFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
+}
+
 // raceLabel ends "…-dd-mm-yy" (the race date, as typed/picked on the phone) — pull that out
 // for sorting. Returns { dd, mm, yy } (strings) or null if the label doesn't end that way.
 function parseRaceLabelDate(raceLabel) {
@@ -289,7 +309,7 @@ function getMobileRacesForUser(username, adminAccess = false) {
       const devices = [];
       let recordCount = 0;
       for (const file of files) {
-        if (!file.endsWith('.json')) continue;
+        if (!file.endsWith('.json') || file === 'bib-allocations.json') continue;
         const deviceName = file.slice(0, -'.json'.length);
         const records = readMobileDeviceFile(owner, raceLabel, deviceName);
         recordCount += records.length;
@@ -297,7 +317,10 @@ function getMobileRacesForUser(username, adminAccess = false) {
       }
       devices.sort((a, b) => a.name.localeCompare(b.name));
 
-      results.push({ owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel) });
+      results.push({
+        owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel),
+        bibAllocations: readBibAllocations(owner, raceLabel),
+      });
     }
   }
 
@@ -605,6 +628,43 @@ const server = http.createServer(async (req, res) => {
       } catch {
         return jsonReply(res, 400, { error: 'Invalid JSON' });
       }
+    }
+
+    // POST /api/mobile/:raceLabel/bib-allocations — the web app pushes a race-wide
+    // {raceName, raceDate, entries: [{bibNumber, name, course}]} export so any phone syncing
+    // this race (WiFi or Mule/BLE) can learn which bib belongs to which course, without needing
+    // registration to have closed first.
+    // Checked before the broader POST /api/mobile/:raceLabel below, which would
+    // otherwise swallow this path too (`pathname.startsWith('/api/mobile/')` matches both).
+    // Lands in the exact same owner-scoped mobile/<username>/<raceLabel>/ folder as this race's
+    // own per-device files — same auth/ownership model as every other /api/mobile/* route,
+    // nothing new to gate. No GET route needed: this file (like any other mobile file) is
+    // already reachable with no auth via the generic static file server below.
+    if (pathname.startsWith('/api/mobile/') && pathname.endsWith('/bib-allocations') && req.method === 'POST') {
+      const username = getAuthUser(req);
+      if (!username) return jsonReply(res, 401, { error: 'Unauthorised' });
+      const raceLabel = sanitiseName(decodeURIComponent(
+        pathname.slice('/api/mobile/'.length, -'/bib-allocations'.length)));
+      if (!raceLabel) return jsonReply(res, 400, { error: 'Invalid race label' });
+      let body;
+      try { body = JSON.parse(await readBody(req)); }
+      catch { return jsonReply(res, 400, { error: 'Invalid JSON' }); }
+      const entries = Array.isArray(body?.entries) ? body.entries : [];
+      const payload = {
+        raceName: typeof body?.raceName === 'string' ? body.raceName : '',
+        raceDate: typeof body?.raceDate === 'string' ? body.raceDate : '',
+        generatedAt: new Date().toISOString(),
+        entries: entries
+          .map(e => ({
+            bibNumber: Number(e?.bibNumber) || 0,
+            name: typeof e?.name === 'string' ? e.name : '',
+            course: typeof e?.course === 'string' ? e.course : '',
+          }))
+          .filter(e => e.bibNumber > 0),
+      };
+      writeBibAllocations(username, raceLabel, payload);
+      console.log(`[bib-allocations] ${username}/${raceLabel}: updated (${payload.entries.length} entries)`);
+      return jsonReply(res, 200, { ok: true });
     }
 
     // POST /api/mobile/:raceLabel  —  Android App Mule Mode's sync target.

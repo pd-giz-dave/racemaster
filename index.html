@@ -22,7 +22,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.9-alpha)</button></h1>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.10-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -1235,11 +1235,27 @@
         <span id="mobile-files-poll-interval" class="entry-status" hidden></span>
         <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto"><input type="checkbox" id="btn-ble-logging"> Bluetooth logging</label>
       </div>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead></thead>
-          <tbody id="mobile-files-tbody"></tbody>
-        </table>
+      <div class="tab-bar" id="mobile-files-tab-bar">
+        <button class="active" data-mf-tab="devices">Devices</button>
+        <button data-mf-tab="bib-allocations">Bib Allocations</button>
+      </div>
+
+      <div class="tab-panel active" id="mobile-files-tab-devices">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="mobile-files-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="mobile-files-tab-bib-allocations">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="bib-allocations-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
