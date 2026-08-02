@@ -14,20 +14,24 @@
 Public datasets are read-only for non-owners and non-admins.
 Allow read-only access to public datasets even if not logged in?
 
-## Add a notes field to event setup
+## Add a notes field to published results
 
-It appears as a paragraph before the results in the published html
+- [ ] When publish results is selected on the results page, show the previously set notes
+      and provide a means to edit it or cancel the publish
+- [ ] The notes appear as a paragraph before the results in the published html
+- [ ] The notes are sticky and are part of the event settings but only surface as above
 
 ## Re-jig the mobile files "add to finishers"
 
-- [ ] instead of "add to finishers" create a separate tab that shows the consolidated
-      results from the selected mobile files
+- [ ] instead of "add to finishers" create a separate tab on the page that shows the 
+      consolidated results from the selected mobile files
+- [ ] the selected files must include one from the finish location and any number of cp locations
+- [ ] the results tab here must have the following columns:
+      BibNumber, Name, Category, Course, FinishTime, CP1, CP1Time, ... CPn, CPnTime
+      where CPn+CPnTime reflect whatever was discovered in the selected device files,
+      CPnTime is calculated as the elapsed time to that CP since the start,
+      the start time-of-day can be found via the timestamp against the time mode start line,
+      the CP time-of-day can be found via the timestamp in its line, elapsed time is the difference
 - [ ] allow for CP mode entries, assume the course is in CP location order, e.g. CP1 -> CP2 -> .. CPn,
       compute elapsed times through CPs as their time-of-day minus time-of-day when the clock started
 - [ ] add the results tab here as another results source when generating the results page
-- [ ] need a mechanism for the bibs mode device to know what bibs are in what course,
-      unlike the time mode phone, the bibs mode phone does not need to get to the finish before the first runner does,
-      this means it can be loaded with bib numbers after registration closes,
-      but...juniors go off before senior registration closes, how do deal with that,
-      not an issue if we have a mobile signal - it can get the list via the server,
-      see below for a possible mechanism

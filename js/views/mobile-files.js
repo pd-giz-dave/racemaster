@@ -377,6 +377,12 @@ function renderRaceList(races, isAdminUser) {
 // simply omitted, same convention flattenDevices() uses for a race with no devices.
 let currentBibAllocRows = [];
 
+// Race last actioned via "Send to Phone" — kept keyed (not just an index) so it survives a
+// full re-render (Refresh, tab revisit) in the same slot, same idea as rowKey() for the
+// Devices tab's own selection tracking. In-memory only; resets on page reload.
+let lastSentKey = null;
+function bibAllocKey(r) { return `${r.owner} ${r.raceLabel}`; }
+
 function renderBibAllocationsList(races, isAdminUser) {
   currentBibAllocRows = races
     .filter(r => r.bibAllocations)
@@ -387,9 +393,11 @@ function renderBibAllocationsList(races, isAdminUser) {
     raceDate:    r => formatRaceDate(r.raceDate),
     bibCount:    r => String(r.ba.entries.length),
     generatedAt: r => escHtml(r.ba.generatedAt || ''),
-    actions:     () => `<button class="btn-sm" data-action="view">View</button>`,
+    actions:     () => `
+      <button class="btn-sm" data-action="view">View</button>
+      <button class="btn-sm" data-action="send">Send to Phone</button>`,
   }), currentBibAllocRows, {
-    rowAttrs: r => ({ 'data-idx': r.idx }),
+    rowAttrs: r => ({ 'data-idx': r.idx, class: bibAllocKey(r) === lastSentKey ? 'row-editing' : '' }),
   });
 }
 
@@ -879,6 +887,14 @@ export function wireMobileFiles() {
     const r = currentBibAllocRows[+btn.closest('[data-idx]')?.dataset.idx];
     if (!r) return;
     if (btn.dataset.action === 'view') showBibAllocationsModal(r.owner, r.raceLabel, r.ba);
+    else if (btn.dataset.action === 'send') {
+      lastSentKey = bibAllocKey(r);
+      showStatus(`Send to phone: "bib-allocations.json" (${r.raceLabel}) — not yet implemented.`);
+      // Immediate feedback rather than waiting for the next full re-render — same pattern the
+      // Devices tab's own selection checkbox uses (see the 'change' listener below).
+      document.querySelectorAll('#bib-allocations-tbody tr.row-editing').forEach(tr => tr.classList.remove('row-editing'));
+      btn.closest('tr')?.classList.add('row-editing');
+    }
   });
   const loggingCb = document.getElementById('btn-ble-logging');
   if (loggingCb) {

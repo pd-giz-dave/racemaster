@@ -57,6 +57,8 @@ export function wireSIResults() {
     if (!await showConfirmDialog('Clear all SI results?', 'Clear', true)) return;
     await clearSIResults();
     renderSIResults();
+    renderIssues([]); // issues live only in the DOM from the last import — clear stays stale otherwise
+    switchTab('data');
     showStatus('SI results cleared.');
   });
   wireTabBar('si-results-tab-bar', 'si-results-tab-', 'data-si-tab');
