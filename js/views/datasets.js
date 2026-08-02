@@ -370,6 +370,10 @@ export function wireDatasets(onConnect) {
       setStatus('df-auth-status', 'Enter username and password.', true);
       return;
     }
+    if (isCreate && !/^[a-zA-Z0-9-]+$/.test(username)) {
+      setStatus('df-auth-status', 'Username can only contain letters, numbers and hyphens (a-z, A-Z, 0-9, -).', true);
+      return;
+    }
     setStatus('df-auth-status', isCreate ? 'Creating account…' : 'Signing in…');
     const call = isCreate ? apiCreateAccount(username, password) : apiLogin(username, password);
     call.then(result => {
