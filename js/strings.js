@@ -320,6 +320,10 @@ export const HELP = {
         <strong>Pairs</strong> and <strong>Splits</strong> tabs. Use <strong>Print Prize List</strong>
         to print overall and category winners for the presentation.</p>
     <p>Use <strong>Publish Results</strong> to publish results as a HTML page that can be linked to from your website.
+        You'll first be prompted for optional <strong>notes</strong> — pre-filled with whatever you set last
+        time — which appear as a paragraph before the results on the published page; cancelling this dialog
+        cancels the publish. Notes are saved with the event and carry over to the next publish, but are only
+        ever seen or edited here (they don't appear on the Event Settings page).
         The URL generated can be copied to the clipboard and pasted into a browser for direct viewing.
         Use the <strong>Show Published</strong> button to open the published URL.</p>
   `,
@@ -458,7 +462,7 @@ export const PAGES = {
       <li><strong>Pre-entries</strong> — import from SportIdent / EntryCentral CSV, print pre-filled entry forms</li>
       <li><strong>Registration</strong> — on-the-day entry with automatic bib and SI card (dibber) assignment</li>
       <li><strong>Finishers</strong> — stopwatch time entry or SI dibber result import</li>
-      <li><strong>Results</strong> — automatic category placing and prize list, live per-category progress tracking to judge when it's safe to do the prize presentation, CSV export, web publish</li>
+      <li><strong>Results</strong> — automatic category placing and prize list, live per-category progress tracking to judge when it's safe to do the prize presentation, CSV export, web publish with optional sticky notes shown as a paragraph on the published page</li>
       <li><strong>Safety</strong> — live outstanding / DNF / finished counts; no-show pre-entry list</li>
       <li><strong>Helpers</strong> — record volunteer names, roles, and contribution history</li>
       <li><strong>People database</strong> — persistent runner history across events</li>
@@ -476,7 +480,14 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.11-alpha - current version</h3>
+    <h3>v0.0.12-alpha - current version</h3>
+    <ul>
+      <li><strong>Publish notes</strong> — clicking <strong>Publish Results</strong> now first prompts for an optional note,
+          pre-filled with whatever was set last time; it appears as a paragraph before the results on the published page,
+          and cancelling the dialog cancels the publish. The note is saved with the event and carries over to future
+          publishes, but is only ever shown or edited from this dialog — it doesn't appear on the Event Settings page</li>
+    </ul>
+    <h3>v0.0.11-alpha</h3>
     <ul>
       <li><strong>Progress</strong> tab on Results &amp; Prize List — one row per age category, in age order, showing how many entrants have finished (retirees excluded) versus are still outstanding, to help judge when it's safe to do the prize presentation; now the first tab shown</li>
       <li>Reordered the Results tabs to Progress, Prizes, Seniors, Juniors, Pairs, Splits, Helpers</li>

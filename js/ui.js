@@ -127,7 +127,7 @@ export function showChoiceDialog(message, choices, { focusCancel = false, vertic
   });
 }
 
-export function showInputDialog(message, { defaultValue = '', placeholder = '', clipboard = false, type = 'text' } = {}) {
+export function showInputDialog(message, { defaultValue = '', placeholder = '', clipboard = false, type = 'text', multiline = false } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'choice-dialog-overlay';
@@ -140,8 +140,9 @@ export function showInputDialog(message, { defaultValue = '', placeholder = '', 
     msg.textContent = message;
     box.appendChild(msg);
 
-    const input = document.createElement('input');
-    input.type = type;
+    const input = document.createElement(multiline ? 'textarea' : 'input');
+    if (!multiline) input.type = type;
+    else input.rows = 4;
     input.className = 'input-dialog-field';
     input.value = defaultValue;
     input.placeholder = placeholder;
@@ -184,7 +185,7 @@ export function showInputDialog(message, { defaultValue = '', placeholder = '', 
     overlay.appendChild(box);
     document.body.appendChild(overlay);
 
-    input.addEventListener('keydown', e => {
+    if (!multiline) input.addEventListener('keydown', e => {
       if (e.key === 'Enter') close(input.value);
     });
 

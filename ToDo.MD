@@ -7,19 +7,14 @@
 
 ## Add importing results from other sources
 
-- [ ] CSV file - make SI Results a generic CSV import
-
-## Public datasets
-
-Public datasets are read-only for non-owners and non-admins.
-Allow read-only access to public datasets even if not logged in?
+- [ ] CSV file - make SI Results a generic CSV import as long as the file has required columns (in any order)
 
 ## Add a notes field to published results
 
-- [ ] When publish results is selected on the results page, show the previously set notes
+- [x] When publish results is selected on the results page, show the previously set notes
       and provide a means to edit it or cancel the publish
-- [ ] The notes appear as a paragraph before the results in the published html
-- [ ] The notes are sticky and are part of the event settings but only surface as above
+- [x] The notes appear as a paragraph before the results in the published html
+- [x] The notes are sticky and are part of the event settings but only surface as above
 
 ## Re-jig the mobile files "add to finishers"
 

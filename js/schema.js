@@ -57,13 +57,13 @@ export function createEvent({
   timingMethod = 'Stopwatch', maleRecord = '', femaleRecord = '',
   prizeDepthOverall = 3, prizeDepthPerCategory = 1, juniorPrizeDepthPerCategory = 6,
   juniorLimit = 'None', juniorStartTime = '18:50:00', juniorEntryLimit = 100,
-  juniorTimingMethod = 'Stopwatch', hasPairs = false,
+  juniorTimingMethod = 'Stopwatch', hasPairs = false, notes = '',
 } = {}) {
   return {
     name, distance, date, startTime,
     firstBibNumber, firstDibberNumber, categories, entryLimit,
     timingMethod, maleRecord, femaleRecord,
     prizeDepthOverall, prizeDepthPerCategory, juniorPrizeDepthPerCategory,
-    juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod, hasPairs,
+    juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod, hasPairs, notes,
   };
 }

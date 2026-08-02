@@ -224,7 +224,10 @@ export async function publishResultsHTML() {
   const data     = formatResults();
   const splits   = getSplitsRows(data.seniors, data.juniors);
   const filename = makeFilename();
-  const html     = wrap(TITLES.combined(), SECTIONS.combined({ ...data, splitsRows: splits.rows, maxSplits: splits.maxSplits }));
+  const notesHtml = state.event.notes?.trim()
+    ? `<p class="re-notes">${escHtml(state.event.notes).replace(/\r\n/g, '\n').replace(/\n/g, '<br>')}</p>`
+    : '';
+  const html     = wrap(TITLES.combined(), notesHtml + SECTIONS.combined({ ...data, splitsRows: splits.rows, maxSplits: splits.maxSplits }));
   const token    = localStorage.getItem('racemaster-token');
   const res = await fetch('/api/publish-results', {
     method:  'POST',

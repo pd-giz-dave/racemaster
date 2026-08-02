@@ -44,6 +44,7 @@ body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
 /* ---- Page wrapper ---- */
 .re-page    { max-width: 960px; margin: 0 auto; padding: 20px; }
 .re-summary { font-size: 0.8rem; color: var(--muted); margin: 8px 0; }
+.re-notes   { font-size: 0.9rem; margin: 12px 0; padding: 10px 12px; background: var(--accent-light); border-radius: 4px; }
 .re-footer  { margin-top: 24px; font-size: 0.75rem; color: var(--muted); text-align: right; }
 
 /* ---- Collapsible sections ---- */

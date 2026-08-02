@@ -2,7 +2,7 @@
 
 import { formatResults, computeAvgTop10, getSplitsRows } from '../results.js';
 import { getCategoryProgress } from '../safety.js';
-import { state } from '../state.js';
+import { state, saveEvent } from '../state.js';
 import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderThead, renderTable, tableColumns, escHtml } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { openPrizeListPreview } from '../forms';
@@ -213,6 +213,16 @@ function showPublished() {
 }
 
 async function publishResults() {
+  const notes = await showInputDialog(
+    'Notes to appear as a paragraph before the results on the published page (optional):',
+    { defaultValue: state.event.notes || '', multiline: true, placeholder: 'e.g. course changes, sponsor thanks, weather notes…' }
+  );
+  if (notes === null) return;
+  if (notes !== (state.event.notes || '')) {
+    state.event.notes = notes;
+    await saveEvent();
+  }
+
   showStatus('Publishing…');
   try {
     await publishResultsHTML();
