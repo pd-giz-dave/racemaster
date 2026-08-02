@@ -625,7 +625,7 @@ export const TABLES = {
     { id: 'club',     label: 'Club',    title: 'Running club' },
     { id: 'cat',      label: 'Cat',     title: 'Age category' },
     { id: 'time',     label: 'Time',    title: 'Finish time (R = course record)' },
-    { id: 'pct_ldrs', label: '%Ldrs',   title: "Finish time as a percentage of the winner's time", align: 'right' },
+    { id: 'pct_ldrs', label: '%Ldrs',   title: 'Finish time relative to the top 10 finishers’ average (that average = 100%)', align: 'right' },
     { id: 'behind',   label: 'Behind',  title: 'Time behind the leader' },
   ],
   'results-junior': [

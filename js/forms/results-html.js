@@ -159,8 +159,11 @@ function seniorsSection(seniors) {
   if (!seniors.length) return '';
   const avg = computeAvgTop10(seniors);
   const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
-  const note = avg ? `Top ${n} average: ${avg} &nbsp; R = course record` : 'R = course record';
-  return section('Senior Results', seniors.length, `<p class="re-summary">${note}</p><table class="data-table re-sortable">
+  const avgPart = avg ? `Top ${n} average: ${avg} = 100% — %Ldrs shows each finisher's time relative to this average` : '';
+  const recordPart = seniors.some(r => r.recordBreaker) ? 'R = course record' : '';
+  const note = [avgPart, recordPart].filter(Boolean).join('<br>');
+  const summary = note ? `<p class="re-summary">${note}</p>` : '';
+  return section('Senior Results', seniors.length, `${summary}<table class="data-table re-sortable">
   <thead><tr><th>Pos</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th>%Ldrs</th><th>Behind</th></tr></thead>
   <tbody>${buildSeniorsBodyHTML(seniors)}</tbody>
 </table>`);

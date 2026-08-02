@@ -43,8 +43,9 @@ export function renderResults() {
   if (summary) {
     const avg = computeAvgTop10(seniors);
     const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
-    const avgPart = avg ? `Top ${n} average: ${avg}` : '';
-    summary.innerHTML = avgPart ? `${avgPart}<span style="margin-left:2em">R = course record</span>` : '';
+    const avgPart = avg ? `Top ${n} average: ${avg} = 100% — %Ldrs shows each finisher's time relative to this average` : '';
+    const recordPart = seniors.some(r => r.recordBreaker) ? 'R = course record' : '';
+    summary.innerHTML = [avgPart, recordPart].filter(Boolean).join('<br>');
   }
   renderPrizes(prizes);
   renderHelpersReport(helpersReport);
