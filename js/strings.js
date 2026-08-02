@@ -303,14 +303,25 @@ export const HELP = {
         You can re-import if more data arrives later.</p>
   `,
   'view-results': `
-    <p>Results, prizes and helpers are calculated automatically when you open this page.
-        Switch between the <strong>Seniors</strong>, <strong>Juniors</strong>, <strong>Pairs</strong>, 
-        <strong>Prizes</strong> and <strong>Helpers</strong> tabs to review the output.</p>
-    <p>Use <strong>Export CSV</strong> to save a results spreadsheet for publication, 
-        or <strong>Print Prize List</strong> to print overall and category winners for the presentation.</p>
-    <p>Use <strong>Publish Results</strong> to publish results as one or more HTML pages that can be linked to from your website.
-        The URL generated can be copied to the clipboard and pasted into a browser for direct viewing. 
-        Use the <strong>Show Published URL</strong> button to be re-shown the last URL published.</p>
+    <p>Results, prizes and helpers are calculated automatically when you open this page, across
+        seven tabs: <strong>Progress</strong>, <strong>Prizes</strong>, <strong>Seniors</strong>,
+        <strong>Juniors</strong>, <strong>Pairs</strong> (only present for a pairs race),
+        <strong>Splits</strong> (only present once SI results carry split times) and
+        <strong>Helpers</strong>.</p>
+    <p><strong>Progress</strong> is shown first — one row per age category, in age order, with
+        how many entrants in that category have <strong>Finished</strong> (retirees excluded)
+        and how many are still <strong>Outstanding</strong> (neither finished nor retired). Use
+        it to judge when it's safe to do the prize presentation.</p>
+    <p>On the <strong>Seniors</strong> tab, <strong>%Ldrs</strong> shows each finisher's time as a
+        percentage of the top 10 finishers' average (that average = 100%); <strong>R</strong>
+        next to a time marks a course record, shown only when one's actually been broken.</p>
+    <p>Use <strong>Export CSV</strong> to save the current tab's data as a spreadsheet for ad-hoc
+        manipulation — available on the <strong>Seniors</strong>, <strong>Juniors</strong>,
+        <strong>Pairs</strong> and <strong>Splits</strong> tabs. Use <strong>Print Prize List</strong>
+        to print overall and category winners for the presentation.</p>
+    <p>Use <strong>Publish Results</strong> to publish results as a HTML page that can be linked to from your website.
+        The URL generated can be copied to the clipboard and pasted into a browser for direct viewing.
+        Use the <strong>Show Published</strong> button to open the published URL.</p>
   `,
   'view-people': `
     <p>The master database of competitors. Records here can be persisted between events so names, 
@@ -447,7 +458,7 @@ export const PAGES = {
       <li><strong>Pre-entries</strong> — import from SportIdent / EntryCentral CSV, print pre-filled entry forms</li>
       <li><strong>Registration</strong> — on-the-day entry with automatic bib and SI card (dibber) assignment</li>
       <li><strong>Finishers</strong> — stopwatch time entry or SI dibber result import</li>
-      <li><strong>Results</strong> — automatic category placing and prize list, CSV export, web publish</li>
+      <li><strong>Results</strong> — automatic category placing and prize list, live per-category progress tracking to judge when it's safe to do the prize presentation, CSV export, web publish</li>
       <li><strong>Safety</strong> — live outstanding / DNF / finished counts; no-show pre-entry list</li>
       <li><strong>Helpers</strong> — record volunteer names, roles, and contribution history</li>
       <li><strong>People database</strong> — persistent runner history across events</li>
@@ -465,9 +476,17 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.10-alpha - current version</h3>
+    <h3>v0.0.11-alpha - current version</h3>
     <ul>
-      <li><strong>Bib Allocations</strong> tab on Mobile Files — automatically generates and publishes a per-race bib number / name / course list from the current Entries and Event (no button to press, kept up to date within a couple of seconds of any edit), so a phone in Bibs or Checkpoint mode can know which bib is on which course before registration has even closed</li>
+      <li><strong>Progress</strong> tab on Results &amp; Prize List — one row per age category, in age order, showing how many entrants have finished (retirees excluded) versus are still outstanding, to help judge when it's safe to do the prize presentation; now the first tab shown</li>
+      <li>Reordered the Results tabs to Progress, Prizes, Seniors, Juniors, Pairs, Splits, Helpers</li>
+      <li><strong>Export CSV</strong> now also works on the Pairs and Splits tabs (previously Seniors/Juniors only)</li>
+      <li>The Seniors tab's "Top 10 average" note now explains that average is what <strong>%Ldrs</strong> is relative to (=100%); the "R = course record" hint only shows when a record has actually been broken, and sits on its own line</li>
+      <li>Extended the Results and About pages' help text to cover all of the above; fixed the Results page's help text not word-wrapping (a stray CSS rule was forcing it onto one line, unlike every other page)</li>
+      <li>Datasets page: Connect and Copy confirmations now appear inline next to the row you clicked instead of below the whole list, so a long dataset list never needs scrolling to see or act on them; "New dataset" and "Save As" moved to their own card, always visible rather than a button revealing a form with another button inside it; new dataset/save-as names are restricted to the same letters/numbers/hyphens as account names, and both forms clear themselves after a successful save</li>
+      <li>Fixed "Connect" on the Datasets page silently pretending to succeed when the server was actually unreachable, and made every offline error on that page show consistently (title bar + bottom status bar, matching every other page) rather than only in a local corner of the page</li>
+      <li>SI Results: "Clear All" now also clears the Issues tab, which previously kept showing stale entries from the last import</li>
+      <li><strong>Bib Allocations</strong> tab on Mobile Files — automatically generates and publishes a per-race bib number / name / course list from the current Entries and Event (no button to press, kept up to date within a couple of seconds of any edit), so a phone in Bibs or Checkpoint mode can know which bib is on which course before registration has even closed; a "Send to Phone" action is present but not yet implemented, pending a matching change in the RaceMaster Mobile app</li>
     </ul>
     <h3>v0.0.9-alpha</h3>
     <ul>
@@ -616,6 +635,11 @@ export const TABLES = {
     { id: 'cat',        label: 'Cat',         title: 'Age category from pre-entry' },
     { id: 'pre_no',     label: 'Pre-entry #', title: 'SI Entries participant number' },
     { id: 'on_day_bib', label: 'On-day bib',  title: 'Bib assigned if they entered on the day without linking to their pre-entry' },
+  ],
+  'results-progress': [
+    { id: 'category',    label: 'Category',    title: 'Age category' },
+    { id: 'finished',    label: 'Finished',    title: 'Entrants in this category who have finished (retirees excluded)', align: 'right' },
+    { id: 'outstanding', label: 'Outstanding', title: 'Entrants in this category not yet finished or retired', align: 'right' },
   ],
   'results-senior': [
     { id: 'pos',      label: 'Pos',     title: 'Overall finishing position' },

@@ -22,7 +22,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.10-alpha)</button></h1>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.11-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -772,16 +772,36 @@
           </div>
         </div>
         <div class="tab-bar" id="results-tab-bar">
-          <button class="active" data-results-tab="senior">Seniors</button>
+          <button class="active" data-results-tab="progress">Progress</button>
+          <button data-results-tab="prizes">Prizes</button>
+          <button data-results-tab="senior">Seniors</button>
           <button data-results-tab="junior">Juniors</button>
           <button data-results-tab="pairs" id="results-tab-pairs-btn" hidden>Pairs</button>
-          <button data-results-tab="prizes">Prizes</button>
-          <button data-results-tab="helpers">Helpers</button>
           <button data-results-tab="splits" id="results-tab-splits-btn" hidden>Splits</button>
+          <button data-results-tab="helpers">Helpers</button>
         </div>
       </div>
 
-      <div class="tab-panel active" id="tab-results-senior">
+      <div class="tab-panel active" id="tab-results-progress">
+        <div class="table-scroll">
+          <table class="data-table" id="results-progress-table">
+            <thead></thead>
+            <tbody id="results-progress-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-results-prizes">
+        <p id="prizes-hint"></p>
+        <div class="table-scroll">
+          <table class="data-table" id="prizes-table">
+            <thead></thead>
+            <tbody id="prizes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-results-senior">
         <p id="results-senior-summary" style="margin:6px 0;font-size:0.875rem;color:var(--muted)"></p>
         <div class="table-scroll">
           <table class="data-table">
@@ -809,12 +829,11 @@
         </div>
       </div>
 
-      <div class="tab-panel" id="tab-results-prizes">
-        <p id="prizes-hint"></p>
+      <div class="tab-panel" id="tab-results-splits">
         <div class="table-scroll">
-          <table class="data-table" id="prizes-table">
+          <table class="data-table">
             <thead></thead>
-            <tbody id="prizes-tbody"></tbody>
+            <tbody id="results-splits-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -824,15 +843,6 @@
           <table class="data-table">
             <thead></thead>
             <tbody id="results-helpers-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="tab-panel" id="tab-results-splits">
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead></thead>
-            <tbody id="results-splits-tbody"></tbody>
           </table>
         </div>
       </div>

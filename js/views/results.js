@@ -1,8 +1,9 @@
 'use strict';
 
 import { formatResults, computeAvgTop10, getSplitsRows } from '../results.js';
+import { getCategoryProgress } from '../safety.js';
 import { state } from '../state.js';
-import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderThead } from '../ui.js';
+import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderThead, renderTable, tableColumns, escHtml } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { openPrizeListPreview } from '../forms';
 import { downloadCSV } from '../storage.js';
@@ -14,6 +15,8 @@ let _seniors      = [];
 let _juniors      = [];
 let _prizes       = [];
 let _pairsResults = [];
+let _splitsRows   = [];
+let _maxSplits    = 0;
 
 export function renderResults() {
   const { warnings, seniors, juniors, prizes, pairsResults, helpersReport } = formatResults();
@@ -24,6 +27,7 @@ export function renderResults() {
 
   renderResultsTable('results-senior-tbody', seniors);
   renderJuniorsTable('results-junior-tbody', juniors);
+  renderProgressTable();
 
   // Pairs tab — visible only when there are pair entries
   const pairsBtn = document.getElementById('results-tab-pairs-btn');
@@ -34,6 +38,8 @@ export function renderResults() {
 
   // Splits tab — visible only when SI results carry split times
   const { maxSplits, rows: splitsRows } = getSplitsRows(seniors, juniors);
+  _splitsRows = splitsRows;
+  _maxSplits  = maxSplits;
   renderSplitsTable(splitsRows, maxSplits);
 
   const printBtn = document.getElementById('btn-print-prize-list');
@@ -51,6 +57,14 @@ export function renderResults() {
   renderHelpersReport(helpersReport);
   updateResultsButtons();
   return warnings;
+}
+
+function renderProgressTable() {
+  renderTable('results-progress-tbody', tableColumns(TABLES['results-progress'], {
+    category:    r => escHtml(r.category),
+    finished:    r => String(r.finished),
+    outstanding: r => String(r.outstanding),
+  }), getCategoryProgress());
 }
 
 export function renderResultsTable(tbodyId, results) {
@@ -129,6 +143,7 @@ function updateResultsButtons() {
   if (tab === 'senior')      exportDisabled = seniors.length === 0;
   else if (tab === 'junior') exportDisabled = juniors.length === 0;
   else if (tab === 'pairs')  exportDisabled = _pairsResults.length === 0;
+  else if (tab === 'splits') exportDisabled = _splitsRows.length === 0;
   else                       exportDisabled = true;
 
   const hasAnyResults = seniors.length > 0 || juniors.length > 0;
@@ -151,6 +166,24 @@ function exportResultsCSV() {
       return { ...r, partnerName: r.partner?.name || '', club, category: pg ? `${r.category || ''} ${pg}`.trim() : (r.category || '') };
     });
     downloadCSV(`${eventName}-results-pairs.csv`, rows, CSV.results.pairs);
+  } else if (tab === 'splits') {
+    // Split count varies by event (however many controls the SI course had), so the column
+    // list is built here rather than in the static CSV_SCHEMA — one cumulative/delta pair per
+    // control, flattened out of each row's splits array.
+    const fields = ['position', 'bibNumber', 'name', 'category'];
+    for (let i = 1; i <= _maxSplits; i++) fields.push(`split${i}Cumulative`, `split${i}Delta`);
+    fields.push('finishCumulative', 'finishDelta');
+    const rows = _splitsRows.map(r => {
+      const flat = { position: r.position, bibNumber: r.bibNumber, name: r.name, category: r.category };
+      r.splits.forEach((s, i) => {
+        flat[`split${i + 1}Cumulative`] = s.cumulative;
+        flat[`split${i + 1}Delta`]      = s.delta;
+      });
+      flat.finishCumulative = r.finishTime.cumulative;
+      flat.finishDelta      = r.finishTime.delta;
+      return flat;
+    });
+    downloadCSV(`${eventName}-results-splits.csv`, rows, fields);
   } else {
     downloadCSV(`${eventName}-results-seniors.csv`, _seniors, CSV.results.seniors);
   }

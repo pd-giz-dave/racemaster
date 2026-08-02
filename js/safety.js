@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { getEntry, isEntryBanned, getEntriesOnCourse, getEntryName } from './entries.js';
-import { derivePairGender } from './categories.js';
+import { derivePairGender, getCategoryPriority } from './categories.js';
 import { getOutstandingCount } from './finishers.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from './si-results.js';
 import { formatResults } from './results.js';
@@ -17,6 +17,48 @@ export function getFinishedBibs() {
   );
   for (const bib of getSIAccountedBibs()) bibs.add(bib);
   return bibs;
+}
+
+// "Truly finished", DNF/retired excluded — Finish action or an SI row with a race time.
+// Deliberately separate from getFinishedRows()'s own inline version of this same idea below:
+// that function uses the stopwatch-only finish set to decide which SI rows are *additional*
+// (not already stopwatch-recorded) — reusing this combined set there instead would make every
+// SI-only finisher's row test true against itself and silently drop them from that list.
+export function getFinishedOnlyBibs() {
+  const bibs = new Set(
+    state.finishers.filter(f => f.action === 'Finish' && +f.number > 0).map(f => +f.number)
+  );
+  for (const r of state.siResults) {
+    const bib = getSIBib(r);
+    if (bib > 0 && getSIRaceTime(r)) bibs.add(bib);
+  }
+  return bibs;
+}
+
+// One row per category actually used by an entry, in age order — for the Results page's
+// Progress tab, to judge when it's safe to do the prize presentation. "Finished" excludes
+// DNF/retirees (getFinishedOnlyBibs); "outstanding" excludes anyone finished, DNF'd, or
+// SI-accounted (getFinishedBibs) — same "not accounted for" definition getOutstandingRows()
+// already uses, just grouped by category instead of course. Entries with no resolvable
+// category (bad/missing DOB, manual data issue) get folded into a synthetic "Uncategorised"
+// row rather than silently dropped — the one thing this tab must never do is hide someone
+// who's genuinely still outstanding.
+const UNCATEGORISED = 'Uncategorised';
+export function getCategoryProgress() {
+  const finishedBibs  = getFinishedOnlyBibs();
+  const accountedBibs = getFinishedBibs();
+  const byCategory = new Map();
+  for (const e of state.entries) {
+    const bib = +e.bibNumber;
+    if (!bib) continue;
+    const cat = e.category || UNCATEGORISED;
+    const row = byCategory.get(cat) || { category: cat, finished: 0, outstanding: 0 };
+    if (finishedBibs.has(bib)) row.finished++;
+    else if (!accountedBibs.has(bib)) row.outstanding++;
+    byCategory.set(cat, row);
+  }
+  return [...byCategory.values()].sort((a, b) =>
+    getCategoryPriority(a.category) - getCategoryPriority(b.category));
 }
 
 function entryInfo(bib) {
