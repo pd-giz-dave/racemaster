@@ -42,12 +42,17 @@ export async function init() {
     const session = getSession();
     showBusy('Loading…');
     try {
-      await restoreDirectory();
+      const reachedServer = await restoreDirectory();
       await loadAll();
       updateBannerEventName(state.event.name);
       startPresenceWatch(session?.dataset || null);
       startBibAllocationsSync();
-      if (session) {
+      if (session && !reachedServer) {
+        // restoreDirectory() degrades to the local cache rather than hard-failing when the
+        // server can't be reached, so the load itself still succeeds — but showing the normal
+        // "connected" message here would hide that this might be a stale, previously-synced copy.
+        showStatus(`Server unreachable — showing the last cached copy of ${session.dataset}.`, true);
+      } else if (session) {
         showStatus(`${session.dataset}: ${state.event.name || 'no event set'}`);
       } else {
         showStatus(state.event.name ? `Standalone: ${state.event.name}` : 'Standalone mode — no server sync');

@@ -343,18 +343,58 @@ export const HELP = {
     <p>Add roles here before recording helpers, or type them directly into the helpers form, or load the <strong>Built-in</strong> roles.</p>
   `,
   'view-datafile': `
-    <p>Datasets are stored on the RaceMaster server. Sign in to view, create, and connect to your datasets.
-        Each dataset holds all the data for one event — entries, finishers, results, and so on.</p>
-    <p><strong>Connect</strong> — load a dataset from the server and make it the active dataset.
-        Any unsaved local changes can be pushed first or discarded.</p>
-    <p><strong>Save As</strong> — copy the current in-memory data to a new server dataset (useful for keeping history of each event).</p>
-    <p><strong>Copy</strong> — duplicate an existing server dataset under a new name, without changing which one is connected.</p>
-    <p><strong>Export / Import</strong> — save or restore a local JSON snapshot of all event data, independent of the server.</p>
-    <p>Private datasets are only visible to their owner (and admins). Public datasets are visible to all signed-in users.</p>
-    <p>When not signed-in you will see a login panel, either sign-in to your existing account or
-        create a new one (they are completely free with no-catches).
-        If you do not want to use an account just select <strong>Continue without signing in</strong>.
-        In that case you can you use the Export/Import buttons to work purely locally.</p>
+    <p>Datasets are stored on the RaceMaster server. Each dataset holds <em>all</em> the data for one
+        event — entries, finishers, results, categories, everything — as one self-contained unit. You'll
+        normally create one dataset per event (or copy last year's as a starting point) rather than
+        reusing a single dataset across multiple races.</p>
+
+    <p>The page has up to four cards, depending on whether you're signed in:</p>
+    <p><strong>Account</strong> (top-left) — sign in, create a free account, or
+        <strong>Continue without signing in</strong> to work purely locally with no server at all
+        (use <strong>Export</strong>/<strong>Import</strong>, top of the page, to save/restore a local
+        JSON snapshot in that mode). Admin accounts get an extra <strong>Users</strong> section here
+        for granting/revoking admin and deleting accounts.</p>
+    <p><strong>Field-Use Testing</strong> — a <strong>Hide Server</strong> toggle that simulates the
+        server being completely unreachable, exactly as it would be out on the course with no
+        signal. Use it to check that offline behaviour (cached data, the local sync queue, connecting
+        while offline) works the way you expect, without needing to actually lose signal.</p>
+    <p><strong>Your Datasets</strong> — every dataset you own, plus every <em>public</em> dataset
+        anyone has created (private datasets are only visible to their owner and admins). Your own
+        rows are shaded differently from other users' public ones so the two are easy to tell apart
+        at a glance. Each row shows:</p>
+    <ul style="margin:0 0 12px 1.2em">
+      <li>a <strong>Private</strong>/<strong>Public</strong> badge, with a <strong>→ public</strong>/
+          <strong>→ private</strong> button (owners/admins only) to flip it — public means any other
+          signed-in user can see and Copy it, private means only you (and admins) can;</li>
+      <li><strong>(orphaned)</strong> next to the owner if that account no longer exists;</li>
+      <li>a green <strong>Connected ✕</strong> badge instead of a Connect button on whichever dataset
+          is currently active — click it to disconnect.</li>
+    </ul>
+    <p>Creating datasets:</p>
+    <ul style="margin:0 0 12px 1.2em">
+      <li><strong>New dataset</strong> — create a genuinely empty dataset from scratch.</li>
+      <li><strong>Save As</strong> — the mirror image of Copy: takes whatever you
+          currently have <em>open right now</em> — including any local edits not yet synced to the
+          server — and saves it as a brand-new dataset. Use this to snapshot the current state of
+          your work under a new name (e.g. keeping a copy of each year's results).</li>
+    </ul>
+    <p>Which of the action buttons you want depends on what you're trying to do:</p>
+    <ul style="margin:0 0 12px 1.2em">
+      <li><strong>Connect</strong> — make an existing dataset the active one, replacing whatever's
+          currently loaded. If you have unsaved local changes it asks whether to push them to the
+          server first or discard them before connecting.</li>
+      <li><strong>Copy</strong> — duplicate <em>any</em> dataset you can see (yours or someone else's
+          public one) into a new dataset of your own, under a new name, without touching what's
+          currently connected. Use this to start a new event from an existing template, or to grab a
+          copy of a public dataset to work from.</li>
+      <li><strong>Delete</strong> (owners/admins only) — permanently removes a dataset and everything
+          in it. If it's the one currently connected, you're disconnected first.</li>
+    </ul>
+    <p>Connect/Copy each open their confirmation right below the row you clicked, rather than at the
+        bottom of the page, so a long dataset list never needs scrolling to see or act on them.</p>
+    <p>When not signed in you'll see just the login panel: sign in to an existing account, create a
+        new one (free, no catches), or select <strong>Continue without signing in</strong> to skip
+        accounts entirely and work purely locally via Export/Import.</p>
   `,
   'view-mobile-files': `
     <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app, split across two tabs:

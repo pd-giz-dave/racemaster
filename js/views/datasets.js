@@ -9,7 +9,7 @@ import {
   apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiSetUserAdmin, apiDeleteUser,
   dumpState, restoreState,
 } from '../storage.js';
-import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise } from '../ui.js';
+import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise, escHtml } from '../ui.js';
 import { showBusy } from '../utils.js';
 import { updateDataFileButton, pingServerNow } from '../connect.js';
 import { renderAll, showView } from '../app.js';
@@ -18,9 +18,19 @@ import { isServerHidden, setServerHidden } from '../server-hide.js';
 let activeToken    = null;
 let activeUsername = null;
 let isAdminUser    = false;
-let copySource     = null;
 let _onConnect     = null;
 let lastKnownDatasets = []; // last successfully-fetched list — see loadDatasets()'s catch branch
+
+// The one dataset row currently showing inline Connect/Copy UI instead of its normal action
+// buttons — rendered as an extra <tr> right after that row (see renderDatasetList()) rather
+// than a fixed div below the whole list, so it's never out of view on a long list. Only one at
+// a time: opening Connect/Copy on a different row replaces whatever was open.
+// { type: 'connect'|'copy', owner, fullName, name, status: 'confirming'|'busy'|'error',
+//   hasPushOption?, busyLabel?, error?, nameValue?, visValue? }
+let pendingRow = null;
+let currentDatasets = []; // last list renderDatasetList() drew, so pendingRow changes alone
+                          // can redraw without a server refetch
+function rerenderDatasetList() { renderDatasetList(currentDatasets); }
 
 // True once handleLogin() has succeeded but before a dataset has been picked or created —
 // setSession() (which persists the token) only ever happens as part of connecting to a
@@ -66,19 +76,43 @@ function setStatus(id, msg, isError = false) {
   if (!el) return;
   el.textContent = msg;
   el.style.color = isError ? 'var(--danger)' : 'var(--success)';
+  // Mirrors showStatus()'s own 10s auto-clear (js/ui.js) — without this a message here (unlike
+  // the shared status bar/title) never disappeared on its own, so an old one could still be
+  // sitting here, inconsistently, well after a newer status had already replaced it elsewhere.
+  setTimeout(() => {
+    if (el.textContent === msg) { el.textContent = ''; el.style.color = ''; }
+  }, 10000);
+}
+
+// Every server-unreachable catch on this page used to only write to its own local inline
+// span, unlike every other page (e.g. mobile-files.js), which surfaces the same failure through
+// the shared showStatus() — the global status bar every other page trains the eye to check, with
+// consistent styling and auto-clear. This writes to both, so an offline error here looks and
+// behaves the same as anywhere else in the app.
+function reportError(id, msg) {
+  setStatus(id, msg, true);
+  showStatus(msg, true);
 }
 
 function radioValue(name) {
   return document.querySelector(`input[name="${name}"]:checked`)?.value || 'private';
 }
 
+// Same character restriction as account creation (see handleLogin()'s isCreate check) — also
+// catches "public"/"private" appearing anywhere in the name, since those are reserved as the
+// visibility suffix server-side and wouldn't be ruled out by the character check alone (both
+// words are themselves just letters). Returns an error message, or '' if the name is valid.
+function validateDatasetName(name) {
+  if (!/^[a-zA-Z0-9-]+$/.test(name)) return 'Name can only contain letters, numbers and hyphens (a-z, A-Z, 0-9, -).';
+  if (/public|private/i.test(name)) return 'Name must not contain "public" or "private".';
+  return '';
+}
+
 // ---- Dataset list ----
 
 function loadDatasets() {
   showPanel('datasets', isAdminUser);
-  hideCopyForm();
-  hideConnectConfirm();
-  if (getEl('df-save-as-form')) getEl('df-save-as-form').hidden = true;
+  pendingRow = null;
   const userEl = getEl('df-logged-in-user');
   if (userEl) userEl.textContent = activeUsername ? `Signed in as ${activeUsername}` : '';
   setStatus('df-dataset-status', 'Loading…');
@@ -89,7 +123,7 @@ function loadDatasets() {
   }).catch(() => {
     // Server unreachable (e.g. hidden for testing, or a transient blip out in the field) —
     // keep showing the last known list rather than wiping it down to empty.
-    setStatus('df-dataset-status', 'Could not reach the server — showing the last known list.', true);
+    reportError('df-dataset-status', 'Server unreachable — showing the last known list.');
     renderDatasetList(lastKnownDatasets);
   });
   if (isAdminUser) loadUsers();
@@ -123,7 +157,7 @@ function loadUsers() {
     list.querySelectorAll('.df-user-delete').forEach(btn => {
       btn.onclick = () => deleteUser(decodeURIComponent(btn.dataset.username));
     });
-  }).catch(err => setStatus('df-user-status', err?.message || 'Could not load users.', true));
+  }).catch(() => reportError('df-user-status', 'Server unreachable — could not load users.'));
 }
 
 async function setUserAdmin(username, makeAdmin) {
@@ -134,7 +168,7 @@ async function setUserAdmin(username, makeAdmin) {
   apiSetUserAdmin(activeToken, username, makeAdmin).then(result => {
     if (result.error) { setStatus('df-user-status', result.error, true); return; }
     loadUsers();
-  }).catch(() => setStatus('df-user-status', 'Server unreachable.', true));
+  }).catch(() => reportError('df-user-status', 'Server unreachable — cannot change admin rights right now, try again once back online.'));
 }
 
 async function deleteUser(username) {
@@ -144,10 +178,65 @@ async function deleteUser(username) {
     if (result.error) { setStatus('df-user-status', result.error, true); return; }
     setStatus('df-user-status', `"${username}" deleted.`);
     loadUsers();
-  }).catch(() => setStatus('df-user-status', 'Server unreachable.', true));
+  }).catch(() => reportError('df-user-status', 'Server unreachable — cannot delete this user right now, try again once back online.'));
+}
+
+// Builds the extra <tr> shown right after a row matching pendingRow — the confirm/busy/error
+// states for both Connect and Copy, replacing what used to be two separate fixed divs below
+// the whole list. colspan matches the 6 columns in the table below.
+function renderInlineRow() {
+  const p = pendingRow;
+  if (p.status === 'busy') {
+    const label = p.type === 'connect' ? (p.busyLabel || 'Connecting…') : 'Copying…';
+    return `<tr class="df-inline-row"><td colspan="6">
+      <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
+        <p style="margin:0;font-size:0.875rem;color:var(--muted)">${escHtml(label)}</p>
+      </div>
+    </td></tr>`;
+  }
+  if (p.status === 'error') {
+    return `<tr class="df-inline-row"><td colspan="6">
+      <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
+        <p style="margin:0 0 8px;font-size:0.875rem;color:var(--danger)">${escHtml(p.error)}</p>
+        <div class="btn-row"><button class="btn btn-secondary df-inline-cancel">Cancel</button></div>
+      </div>
+    </td></tr>`;
+  }
+  // status === 'confirming'
+  if (p.type === 'connect') {
+    const buttons = p.hasPushOption
+      ? `<button class="btn btn-primary df-inline-connect-push">Push &amp; Connect</button>
+         <button class="btn btn-secondary df-inline-connect-discard">Discard &amp; Connect</button>`
+      : `<button class="btn btn-secondary df-inline-connect-discard">Connect: ${escHtml(p.name)}</button>`;
+    const msg = p.hasPushOption
+      ? `You have unsaved local data. Push it to "${escHtml(p.name)}" before connecting, or discard it?`
+      : `Connecting will replace local data with "${escHtml(p.name)}" from the server.`;
+    return `<tr class="df-inline-row"><td colspan="6">
+      <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
+        <p style="margin:0 0 8px;font-size:0.875rem">${msg}</p>
+        <div class="btn-row">${buttons}<button class="btn btn-secondary df-inline-cancel">Cancel</button></div>
+      </div>
+    </td></tr>`;
+  }
+  // p.type === 'copy'
+  return `<tr class="df-inline-row"><td colspan="6">
+    <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
+      <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong>${escHtml(p.name)} (${escHtml(p.owner)})</strong> to:</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input class="df-inline-copy-name" type="text" placeholder="new-name" aria-label="New dataset name" value="${escHtml(p.nameValue || '')}" style="flex:1;min-width:100px">
+        <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-inline-copy-vis" value="private" ${p.visValue !== 'public' ? 'checked' : ''}> Private</label>
+        <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-inline-copy-vis" value="public" ${p.visValue === 'public' ? 'checked' : ''}> Public</label>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-primary df-inline-copy-submit">Copy</button>
+        <button class="btn btn-secondary df-inline-cancel">Cancel</button>
+      </div>
+    </div>
+  </td></tr>`;
 }
 
 function renderDatasetList(datasets) {
+  currentDatasets = datasets;
   const list = getEl('df-dataset-list');
   if (!datasets.length) {
     list.innerHTML = '<p style="color:var(--muted);margin:0 0 4px;font-size:0.875rem">No datasets yet — create one below.</p>';
@@ -158,6 +247,7 @@ function renderDatasetList(datasets) {
     const isOwn      = d.owner === activeUsername;
     const canManage  = isOwn || isAdminUser;
     const isSelected = currentDataset === `${d.owner}/${d.fullName}`;
+    const isPending  = pendingRow && pendingRow.owner === d.owner && pendingRow.fullName === d.fullName;
     const newVis     = d.visibility === 'private' ? 'public' : 'private';
     const connectBtn = isSelected
       ? `<button class="btn btn-sm df-ds-disconnect df-badge df-badge-connected" data-owner="${d.owner}" data-fullname="${d.fullName}" title="Disconnect from this dataset">Connected ✕</button>`
@@ -172,7 +262,7 @@ function renderDatasetList(datasets) {
       ? `<button class="btn btn-sm btn-danger df-ds-delete" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Delete</button>`
       : '';
     const muted = '<span style="color:var(--muted)">—</span>';
-    return `<tr class="${isOwn ? 'df-row-own' : 'df-row-other'}${isSelected ? ' df-row-selected' : ''}">
+    const row = `<tr class="${isOwn ? 'df-row-own' : 'df-row-other'}${isSelected ? ' df-row-selected' : ''}${isPending ? ' row-editing' : ''}">
       <td>${d.name}</td>
       <td>${d.eventName || muted}</td>
       <td>${d.eventDate || muted}</td>
@@ -180,6 +270,7 @@ function renderDatasetList(datasets) {
       <td><span class="df-badge df-badge-${d.visibility}">${d.visibility}</span></td>
       <td style="white-space:nowrap">${connectBtn}${visBtn}${copyBtn}${deleteBtn}</td>
     </tr>`;
+    return isPending ? row + renderInlineRow() : row;
   }).join('');
   list.innerHTML = `<table class="data-table">
     <thead><tr>
@@ -203,6 +294,14 @@ function renderDatasetList(datasets) {
   list.querySelectorAll('.df-ds-delete').forEach(btn => {
     btn.onclick = () => deleteDataset(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
   });
+
+  // Inline Connect/Copy row buttons — only one pendingRow at a time, so a plain querySelector
+  // (rather than querySelectorAll) is enough.
+  list.querySelector('.df-inline-connect-push')?.addEventListener('click', () => confirmConnect(true));
+  list.querySelector('.df-inline-connect-discard')?.addEventListener('click', () => confirmConnect(false));
+  list.querySelector('.df-inline-cancel')?.addEventListener('click', () => { pendingRow = null; rerenderDatasetList(); });
+  list.querySelector('.df-inline-copy-submit')?.addEventListener('click', submitInlineCopy);
+  list.querySelector('.df-inline-copy-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
 }
 
 function disconnectDataset() {
@@ -225,7 +324,7 @@ async function deleteDataset(owner, fullName, name) {
     setStatus('df-dataset-status', `"${name}" deleted.`);
     loadDatasets();
   }).catch(() => {
-    setStatus('df-dataset-status', 'Server unreachable.', true);
+    reportError('df-dataset-status', 'Server unreachable — cannot delete right now, try again once back online.');
   });
 }
 
@@ -241,78 +340,84 @@ function changeVisibility(owner, fullName, newVisibility) {
     setStatus('df-dataset-status', '');
     loadDatasets();
   }).catch(() => {
-    setStatus('df-dataset-status', 'Server unreachable.', true);
+    reportError('df-dataset-status', 'Server unreachable — cannot change visibility right now, try again once back online.');
   });
 }
 
 function connectDataset(owner, fullName) {
   const name = fullName.replace(/-(?:private|public)$/, '');
-  if (isDirty() && hasCachedData()) {
-    showConnectConfirm(
-      `You have unsaved local data. Push it to "${name}" before connecting, or discard it?`,
-      name, true,
-      pushFirst => doConnectDataset(owner, fullName, pushFirst)
-    );
-  } else {
-    showConnectConfirm(
-      `Connecting will replace local data with "${name}" from the server.`,
-      name, false,
-      () => doConnectDataset(owner, fullName, false)
-    );
-  }
+  const hasPushOption = isDirty() && hasCachedData();
+  pendingRow = { type: 'connect', owner, fullName, name, hasPushOption, status: 'confirming' };
+  rerenderDatasetList();
 }
 
-function showConnectConfirm(msg, name, hasPushOption, onConfirm) {
-  getEl('df-connect-confirm-msg').textContent = msg;
-  const pushBtn    = getEl('df-btn-connect-push');
-  const discardBtn = getEl('df-btn-connect-discard');
-  let focusBtn;
-  if (hasPushOption) {
-    pushBtn.hidden = false;
-    pushBtn.textContent = `Push & Connect: ${name}`;
-    pushBtn.onclick = () => { hideConnectConfirm(); onConfirm(true); };
-    discardBtn.textContent = 'Discard & Connect';
-    discardBtn.onclick = () => { hideConnectConfirm(); onConfirm(false); };
-    focusBtn = pushBtn;
-  } else {
-    pushBtn.hidden = true;
-    discardBtn.textContent = `Connect: ${name}`;
-    discardBtn.onclick = () => { hideConnectConfirm(); onConfirm(false); };
-    focusBtn = discardBtn;
-  }
-  getEl('df-connect-confirm').hidden = false;
-  setTimeout(() => focusBtn.focus(), 0);
-}
-
-function hideConnectConfirm() {
-  getEl('df-connect-confirm').hidden = true;
+// Called from the inline row's Push&Connect/Discard&Connect/Connect button.
+function confirmConnect(pushFirst) {
+  const { owner, fullName } = pendingRow;
+  pendingRow = { ...pendingRow, status: 'busy', busyLabel: pushFirst ? 'Pushing local changes…' : 'Connecting…' };
+  rerenderDatasetList();
+  doConnectDataset(owner, fullName, pushFirst);
 }
 
 function doConnectDataset(owner, fullName, pushFirst) {
-  setStatus('df-dataset-status', pushFirst ? 'Pushing local changes…' : 'Connecting…');
   switchDataset(activeToken, owner, fullName, { pushFirst }).then(() => {
     updateDataFileButton();
+    // switchDataset()/restoreDirectory() degrade to the local cache rather than hard-failing
+    // when the server can't be reached — deliberately, so Connect still works offline with
+    // whatever was last synced. Either way this navigates away via _onConnect() (app.js's
+    // connectAndLoad(), which shows its own reachedServer-aware message on the Home page it
+    // lands on — see that fix), so there's nothing left to show here regardless of whether
+    // the server was actually reached.
+    pendingRow = null;
     _onConnect?.();
   }).catch(() => {
-    setStatus('df-dataset-status', 'Could not connect to dataset.', true);
+    // The common "server unreachable" case is already handled above via reachedServer===false
+    // (restoreDirectory() catches that itself and resolves, it never rejects for it) — this
+    // catch only fires for something genuinely unexpected, so it's a rare path in practice.
+    // Still worth keeping inline rather than the below-the-fold df-dataset-status, on the same
+    // "never make the operator scroll to see what happened" principle as everything else here.
+    pendingRow = { ...pendingRow, status: 'error', error: 'Server unreachable — cannot connect right now, try again once back online.' };
+    rerenderDatasetList();
   });
 }
 
 // ---- Copy form ----
 
 function showCopyForm(owner, fullName, name) {
-  copySource = { owner, fullName, name };
-  getEl('df-copy-source-label').textContent = `${name} (${owner})`;
-  getEl('df-copy-name').value = '';
-  const privateRadio = document.querySelector('input[name="df-copy-vis"][value="private"]');
-  if (privateRadio) privateRadio.checked = true;
-  getEl('df-copy-form').hidden = false;
-  getEl('df-copy-name').focus();
+  pendingRow = { type: 'copy', owner, fullName, name, status: 'confirming' };
+  rerenderDatasetList();
 }
 
-function hideCopyForm() {
-  getEl('df-copy-form').hidden = true;
-  copySource = null;
+function submitInlineCopy() {
+  const toName     = getEl('df-dataset-list').querySelector('.df-inline-copy-name')?.value.trim() || '';
+  const visibility = radioValue('df-inline-copy-vis');
+  if (!toName) {
+    pendingRow = { ...pendingRow, status: 'error', error: 'Enter a name for the copy.', nameValue: toName, visValue: visibility };
+    rerenderDatasetList();
+    return;
+  }
+  const nameError = validateDatasetName(toName);
+  if (nameError) {
+    pendingRow = { ...pendingRow, status: 'error', error: nameError, nameValue: toName, visValue: visibility };
+    rerenderDatasetList();
+    return;
+  }
+  const { owner, fullName } = pendingRow;
+  pendingRow = { ...pendingRow, status: 'busy', nameValue: toName, visValue: visibility };
+  rerenderDatasetList();
+  apiCopyDataset(activeToken, owner, fullName, toName, visibility)
+    .then(result => {
+      if (result.error) {
+        pendingRow = { ...pendingRow, status: 'error', error: result.error };
+        rerenderDatasetList();
+        return;
+      }
+      pendingRow = null;
+      loadDatasets();
+    }).catch(() => {
+      pendingRow = { ...pendingRow, status: 'error', error: 'Server unreachable — cannot copy right now, try again once back online.' };
+      rerenderDatasetList();
+    });
 }
 
 // ---- State export / import ----
@@ -390,7 +495,7 @@ export function wireDatasets(onConnect) {
         loadDatasets();
       }
     }).catch(() => {
-      setStatus('df-auth-status', 'Server unreachable.', true);
+      reportError('df-auth-status', `Server unreachable — cannot ${isCreate ? 'create an account' : 'sign in'} right now, try again once back online.`);
     });
   }
 
@@ -423,61 +528,28 @@ export function wireDatasets(onConnect) {
     _onConnect?.();
   };
 
-  getEl('df-btn-connect-cancel').onclick = hideConnectConfirm;
-  getEl('df-btn-cancel-copy').onclick    = hideCopyForm;
-
-  getEl('df-btn-do-copy').onclick = () => {
-    if (!copySource) return;
-    const toName = getEl('df-copy-name').value.trim();
-    if (!toName) { setStatus('df-dataset-status', 'Enter a name for the copy.', true); return; }
-    if (/public|private/i.test(toName)) {
-      setStatus('df-dataset-status', 'Name must not contain "public" or "private".', true); return;
-    }
-    const visibility = radioValue('df-copy-vis');
-    setStatus('df-dataset-status', 'Copying…');
-    apiCopyDataset(activeToken, copySource.owner, copySource.fullName, toName, visibility)
-      .then(result => {
-        if (result.error) { setStatus('df-dataset-status', result.error, true); return; }
-        hideCopyForm();
-        loadDatasets();
-      }).catch(() => {
-        setStatus('df-dataset-status', 'Server unreachable.', true);
-      });
-  };
-
-  getEl('df-copy-name').onkeydown = e => { if (e.key === 'Enter') getEl('df-btn-do-copy').click(); };
-
-  function showSaveAsForm() {
-    getEl('df-save-as-name').value = '';
-    const privateRadio = document.querySelector('input[name="df-save-as-vis"][value="private"]');
+  function resetVisRadio(name) {
+    const privateRadio = document.querySelector(`input[name="${name}"][value="private"]`);
     if (privateRadio) privateRadio.checked = true;
-    getEl('df-save-as-form').hidden = false;
-    getEl('df-save-as-name').focus();
   }
-
-  function hideSaveAsForm() {
-    getEl('df-save-as-form').hidden = true;
-  }
-
-  getEl('df-btn-save-as').onclick        = showSaveAsForm;
-  getEl('df-btn-cancel-save-as').onclick = hideSaveAsForm;
 
   getEl('df-btn-do-save-as').onclick = () => {
-    const name = getEl('df-save-as-name').value.trim();
-    if (!name) { setStatus('df-dataset-status', 'Enter a name for the new dataset.', true); return; }
-    if (/public|private/i.test(name)) {
-      setStatus('df-dataset-status', 'Name must not contain "public" or "private".', true); return;
-    }
+    const nameInput = getEl('df-save-as-name');
+    const name = nameInput.value.trim();
+    if (!name) { setStatus('df-newdataset-status', 'Enter a name for the new dataset.', true); return; }
+    const nameError = validateDatasetName(name);
+    if (nameError) { setStatus('df-newdataset-status', nameError, true); return; }
     const visibility = radioValue('df-save-as-vis');
-    setStatus('df-dataset-status', 'Saving…');
+    setStatus('df-newdataset-status', 'Saving…');
     saveAsDataset(activeToken, activeUsername, name, visibility)
       .then(result => {
-        if (result.error) { setStatus('df-dataset-status', result.error, true); return; }
-        hideSaveAsForm();
-        setStatus('df-dataset-status', `Saved as "${name}".`);
+        if (result.error) { setStatus('df-newdataset-status', result.error, true); return; }
+        nameInput.value = '';
+        resetVisRadio('df-save-as-vis');
+        setStatus('df-newdataset-status', `Saved as "${name}".`);
         loadDatasets();
       }).catch(() => {
-        setStatus('df-dataset-status', 'Server unreachable.', true);
+        reportError('df-newdataset-status', 'Server unreachable — cannot save right now, try again once back online.');
       });
   };
 
@@ -485,21 +557,23 @@ export function wireDatasets(onConnect) {
 
   getEl('df-btn-create-dataset').onclick = () => {
     if (!activeToken) { showPanel('auth', false); return; }
-    const name = getEl('df-new-dataset-name').value.trim();
-    if (!name) { setStatus('df-dataset-status', 'Enter a dataset name.', true); return; }
-    if (/public|private/i.test(name)) {
-      setStatus('df-dataset-status', 'Name must not contain "public" or "private".', true); return;
-    }
+    const nameInput = getEl('df-new-dataset-name');
+    const name = nameInput.value.trim();
+    if (!name) { setStatus('df-newdataset-status', 'Enter a dataset name.', true); return; }
+    const nameError = validateDatasetName(name);
+    if (nameError) { setStatus('df-newdataset-status', nameError, true); return; }
     const visibility = radioValue('df-new-vis');
-    setStatus('df-dataset-status', 'Creating…');
+    setStatus('df-newdataset-status', 'Creating…');
     apiCreateDataset(activeToken, name, visibility).then(result => {
-      if (result.error) { setStatus('df-dataset-status', result.error, true); return; }
+      if (result.error) { setStatus('df-newdataset-status', result.error, true); return; }
+      nameInput.value = '';
+      resetVisRadio('df-new-vis');
       switchDataset(activeToken, result.owner, result.fullName).then(() => {
         updateDataFileButton();
         _onConnect?.();
       });
     }).catch(() => {
-      setStatus('df-dataset-status', 'Server unreachable.', true);
+      reportError('df-newdataset-status', 'Server unreachable — cannot create right now, try again once back online.');
     });
   };
 

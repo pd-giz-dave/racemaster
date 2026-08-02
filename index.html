@@ -55,16 +55,16 @@
       <a href="#" data-view="si-results">SI Results</a>
       <a href="#" data-view="results">Results &amp; Prize List</a>
 
+      <div class="nav-section">Mobile App</div>
+      <a href="/downloads/racemaster-mobile-debug.apk" download>Download APK (debug build)</a>
+      <a href="#" data-view="mobile-files">Mobile Files</a>
+
       <div class="nav-section">Data</div>
       <a href="#" data-view="people">People</a>
       <a href="#" data-view="clubs">Clubs</a>
       <a href="#" data-view="dibbers">Dibbers</a>
       <a href="#" data-view="categories">Categories</a>
       <a href="#" data-view="roles">Roles</a>
-
-      <div class="nav-section">Mobile App</div>
-      <a href="/downloads/racemaster-mobile-debug.apk" download>Download APK (debug build)</a>
-      <a href="#" data-view="mobile-files">Mobile Files</a>
     </nav>
   </aside>
   <div id="nav-backdrop"></div>
@@ -78,6 +78,7 @@
     <div class="view" id="view-home">
       <div class="view-header">
         <h2 id="home-view-title">Event Summary</h2>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div class="home-info-row">
@@ -1101,6 +1102,7 @@
           <button class="btn btn-secondary" id="btn-export-state">Export</button>
           <button class="btn btn-secondary" id="btn-import-state">Import</button>
         </div>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap">
@@ -1154,67 +1156,43 @@
           <button class="btn btn-secondary" id="btn-toggle-server-hidden" style="width:100%">Hide Server</button>
         </div>
 
-        <!-- Datasets area -->
-        <div id="df-panels-row" style="display:none;gap:1rem;align-items:flex-start;flex:1;flex-wrap:wrap">
+        <!-- New dataset / Save As card — name input gets its own full-width row (rather than
+             sharing one with the visibility radios + submit button) so a longer dataset name
+             can be typed/read without the input scrolling its own contents. -->
+        <div id="df-panel-new-dataset" class="card" style="min-width:240px;width:300px;flex-shrink:0">
+          <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">New dataset:</p>
+          <input id="df-new-dataset-name" type="text" placeholder="dataset-name" aria-label="Dataset name" style="width:100%;margin-bottom:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="private" checked> Private</label>
+            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="public"> Public</label>
+            <button id="df-btn-create-dataset" class="btn btn-primary">Create</button>
+          </div>
+
+          <hr style="margin:14px 0;border:none;border-top:1px solid var(--border,#ddd)">
+
+          <!-- Save As form — always visible, same as the New dataset form above it, rather than
+               a button that reveals a form containing another "Save As" button (confusing). -->
+          <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">Save current data as:</p>
+          <input id="df-save-as-name" type="text" placeholder="new-name" aria-label="New dataset name" style="width:100%;margin-bottom:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="private" checked> Private</label>
+            <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="public"> Public</label>
+            <button id="df-btn-do-save-as" class="btn btn-primary">Save As</button>
+          </div>
+
+          <p id="df-newdataset-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+        </div><!-- end df-panel-new-dataset -->
+
+        <!-- Datasets area — flex-basis:100% forces this onto its own full-width row below
+             Account/Field-Use Testing, rather than competing with them for horizontal space
+             (it needs far more room than either of those two compact cards). -->
+        <div id="df-panels-row" style="display:none;gap:1rem;align-items:flex-start;flex:1;flex-basis:100%;flex-wrap:wrap">
 
           <!-- Datasets card -->
           <div id="df-panel-datasets" class="card" style="flex:1;min-width:300px">
-            <p style="margin:0 0 8px;font-size:0.875rem;color:var(--muted,#666)">Your datasets and public datasets from other users:</p>
-            <div id="df-dataset-list" style="margin-bottom:10px"></div>
-
-            <!-- Connect confirmation -->
-            <div id="df-connect-confirm" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
-              <p id="df-connect-confirm-msg" style="margin:0 0 8px;font-size:0.875rem"></p>
-              <div class="btn-row">
-                <button id="df-btn-connect-push" class="btn btn-primary" hidden>Push &amp; Connect</button>
-                <button id="df-btn-connect-discard" class="btn btn-secondary"></button>
-                <button id="df-btn-connect-cancel" class="btn btn-secondary">Cancel</button>
-              </div>
-            </div>
-
-            <!-- Copy form -->
-            <div id="df-copy-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
-              <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong id="df-copy-source-label"></strong> to:</p>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <input id="df-copy-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
-                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-copy-vis" value="private" checked> Private</label>
-                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-copy-vis" value="public"> Public</label>
-              </div>
-              <div class="btn-row" style="margin-top:8px">
-                <button id="df-btn-do-copy" class="btn btn-primary">Copy</button>
-                <button id="df-btn-cancel-copy" class="btn btn-secondary">Cancel</button>
-              </div>
-            </div>
-
-            <!-- Save As form -->
-            <div id="df-save-as-form" hidden style="background:var(--panel-alt);padding:10px;border-radius:6px;margin-bottom:10px">
-              <p style="margin:0 0 6px;font-size:0.875rem">Save current data as new dataset:</p>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <input id="df-save-as-name" type="text" placeholder="new-name" aria-label="New dataset name" style="flex:1;min-width:100px">
-                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="private" checked> Private</label>
-                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-save-as-vis" value="public"> Public</label>
-              </div>
-              <div class="btn-row" style="margin-top:8px">
-                <button id="df-btn-do-save-as" class="btn btn-primary">Save As</button>
-                <button id="df-btn-cancel-save-as" class="btn btn-secondary">Cancel</button>
-              </div>
-            </div>
-
-            <!-- Create form -->
-            <div style="border-top:1px solid var(--border,#ddd);padding-top:10px;margin-bottom:4px">
-              <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">New dataset:</p>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <input id="df-new-dataset-name" type="text" placeholder="dataset-name" aria-label="Dataset name" style="flex:1;min-width:100px">
-                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="private" checked> Private</label>
-                <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-new-vis" value="public"> Public</label>
-                <button id="df-btn-create-dataset" class="btn btn-primary">Create</button>
-              </div>
-            </div>
-
+            <p style="margin:0 0 8px;font-size:0.875rem;color:var(--muted,#666)">Your datasets and public datasets from other users (select connect to use one):</p>
+            <div id="df-dataset-list" class="table-scroll" style="margin-bottom:10px"></div>
             <p id="df-dataset-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
-            <div class="btn-row" style="margin-top:10px">
-              <button id="df-btn-save-as" class="btn btn-secondary">Save As…</button>
-            </div>
           </div><!-- end df-panel-datasets -->
 
         </div><!-- end df-panels-row -->

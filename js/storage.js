@@ -386,6 +386,10 @@ function scheduleSyncToServer() {
  * On 401 (token expired / server restarted): clears session, uses cache.
  * On network error: falls back to cache.
  */
+// Returns true if the server was actually reached (or there was no session to reach it with),
+// false if it fell back to the local cache because the server was unreachable — callers that
+// need to tell a genuine connect from a silent offline fallback (e.g. datasets.js's Connect
+// button) can use this; callers that don't care (e.g. app.js's own startup load) can ignore it.
 export async function restoreDirectory() {
   const session = getSession();
   if (!session) return true; // standalone — use localStorage cache
@@ -411,6 +415,7 @@ export async function restoreDirectory() {
     }
   } catch {
     // Server unreachable (or timed out) — use localStorage cache as-is
+    return false;
   }
   return true;
 }
