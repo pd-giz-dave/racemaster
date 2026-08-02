@@ -15,6 +15,7 @@ echo "Pulling data from ${REMOTE}:${SRC}..."
 
 rsync -av --rsync-path="sudo rsync" "${REMOTE}:${SRC}/data/"        "${LOCAL}/data/"
 rsync -av --rsync-path="sudo rsync" "${REMOTE}:${SRC}/results/"     "${LOCAL}/results/"
+rsync -av --rsync-path="sudo rsync" "${REMOTE}:${SRC}/mobile/"      "${LOCAL}/mobile/"
 rsync -av --rsync-path="sudo rsync" "${REMOTE}:${SRC}/users.txt"    "${LOCAL}/users.txt"
 rsync -av --rsync-path="sudo rsync" "${REMOTE}:${SRC}/admins.txt"   "${LOCAL}/admins.txt"
 rsync -av --rsync-path="sudo rsync" "${REMOTE}:${SRC}/sessions.txt" "${LOCAL}/sessions.txt"

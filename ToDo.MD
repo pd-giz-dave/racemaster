@@ -9,13 +9,6 @@
 
 - [ ] CSV file - make SI Results a generic CSV import as long as the file has required columns (in any order)
 
-## Add a notes field to published results
-
-- [x] When publish results is selected on the results page, show the previously set notes
-      and provide a means to edit it or cancel the publish
-- [x] The notes appear as a paragraph before the results in the published html
-- [x] The notes are sticky and are part of the event settings but only surface as above
-
 ## Re-jig the mobile files "add to finishers"
 
 - [ ] instead of "add to finishers" create a separate tab on the page that shows the 
