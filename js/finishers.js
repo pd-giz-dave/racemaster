@@ -145,7 +145,7 @@ export async function deleteFinishersFrom(stateIdx) {
 /** Count entries on a course that have not finished (NORMAL) or retired (DNF) in the finishers list or SI results. */
 export function getOutstandingCount(course) {
   const finishedOrRetiredBibs = new Set(
-    state.finishers
+    [...state.finishers, ...state.mobileProgress]
       .filter(f => f.action === 'Finish' || f.action === 'DNF')
       .map(f => +f.number)
       .filter(n => n > 0)

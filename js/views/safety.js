@@ -13,6 +13,7 @@ import {
   getEarlyStarterRows, buildNoShows, getSafetyCounts,
 } from '../safety.js';
 import { getLatestCheckpoint } from '../mobile-checkpoints.js';
+import { removeMobileProgressRecord } from '../mobile-progress.js';
 
 const SAFETY_OUT_COLS = tableColumns(TABLES['safety-outstanding'], {
   bib:     e => e.bibNumber,
@@ -113,10 +114,15 @@ async function retireFromSafety(bib) {
 async function unretire(bib) {
   if (!await showConfirmDialog(`Remove retirement for bib ${bib}?`, 'Unretire', true)) return;
   const stateIdx = state.finishers.findIndex(f => f.action === 'DNF' && +f.number === bib);
-  if (stateIdx < 0) { showStatus('Retirement record not found.', true); return; }
   showBusy('Removing retirement…');
-  const result = await deleteFinisher(stateIdx);
-  if (result?.error) { showBusy(''); showStatus(result.error, true); return; }
+  if (stateIdx >= 0) {
+    const result = await deleteFinisher(stateIdx);
+    if (result?.error) { showBusy(''); showStatus(result.error, true); return; }
+  } else if (!await removeMobileProgressRecord(bib, 'DNF')) {
+    showBusy('');
+    showStatus('Retirement record not found.', true);
+    return;
+  }
   showBusy('');
   showStatus(`Bib ${bib} unretired.`);
   renderSafety();

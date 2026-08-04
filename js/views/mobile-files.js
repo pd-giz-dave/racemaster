@@ -13,12 +13,10 @@ import {
   isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
-import { recordFinisher, clearAllFinishers } from '../finishers.js';
-import { getFinishedRows, getDnfRows, entryInfo } from '../safety.js';
+import { entryInfo } from '../safety.js';
 import { getMobileCheckpointNumbers, getMobileCheckpointTimes } from '../mobile-checkpoints.js';
 import { secondsToTime } from '../utils.js';
-import { adjustedFinishTime } from '../time-utils.js';
-import { state, saveMobileCheckpoints } from '../state.js';
+import { state, saveMobileCheckpoints, saveMobileProgress } from '../state.js';
 
 function getEl(id) { return document.getElementById(id); }
 
@@ -32,10 +30,29 @@ let lastKnownRaces = [];
 // Ticked checkboxes, keyed by identity rather than row index — row indices are reassigned on
 // every render (races/devices can appear in a different order once sorted), so persisting
 // selection across a re-render (or navigating away from Mobile Files and back) needs a stable
-// key instead. Lives only in memory — resets on a full page reload, same as any other in-app
-// navigation state.
+// key instead.
 const selectedKeys = new Set();
 function rowKey(r) { return `${r.owner} ${r.raceLabel} ${r.device.name}`; }
+
+// Persisted (unlike selectedKeys' own in-memory Set, which this only ever seeds/mirrors) so
+// the Results & Prize List page's autoUpdateProgress() (see below) can find "what was last
+// ticked here" even after a page reload, with the event name+date stored alongside so a later
+// dataset switch doesn't get an old event's selection silently replayed against a new one.
+const SELECTED_KEYS_STORAGE_KEY = 'racemaster-mobile-selected-keys';
+
+function loadSelectedKeys() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SELECTED_KEYS_STORAGE_KEY) || 'null');
+    return parsed && Array.isArray(parsed.keys) ? parsed : null;
+  } catch { return null; }
+}
+function saveSelectedKeys() {
+  try {
+    localStorage.setItem(SELECTED_KEYS_STORAGE_KEY, JSON.stringify({
+      eventName: state.event.name, eventDate: state.event.date, keys: [...selectedKeys],
+    }));
+  } catch { /* storage unavailable/full — best effort only, same as other persisted state here */ }
+}
 
 // ---- "New since last Compute Results" tracking ----
 //
@@ -205,7 +222,7 @@ function locationSummary(visibleRows) {
 
 // Same "every visible line should share one location" rule as locationSummary(), but returns
 // the raw string (or null if the file disagrees with itself, which is already invalid) rather
-// than a display-ready HTML snippet — used by computeResults() to bucket selected files by
+// than a display-ready HTML snippet — used by updateProgress() to bucket selected files by
 // resolved location rather than show them.
 function rawLocationOf(visibleRows) {
   const locations = [...new Set(visibleRows.map(r => r.location))];
@@ -594,22 +611,24 @@ function getSelectedRows() {
     .filter(Boolean);
 }
 
-// Derives what Finishers *should* contain for one file's current segment — bib-driven (a split
-// with no matching bib is just excess, never looked up; a bib with no matching split is still
-// included, just untimed), pairing each bib with the Time entry at the same split number if one
-// exists. Retirees never carry a split time (finishers.js's own NO_SPLIT_ACTIONS convention);
+// Derives what state.mobileProgress *should* contain for one file's current segment — bib-driven
+// (a split with no matching bib is just excess, never looked up; a bib with no matching split is
+// still included, just untimed), pairing each bib with the Time entry at the same split number if
+// one exists. Retirees never carry a split time (finishers.js's own NO_SPLIT_ACTIONS convention);
 // Clock's own "time" is its offset/time-of-day value from its note field, not a paired split.
 // This relies on racemaster-mobile not allocating a splitNumber to DNF rows at all (so they
 // never consume a slot the Time-mode side didn't also produce) — without that, a retiree
 // partway through a race would permanently offset every later bib's splitNumber against its
 // true corresponding Time split.
 //
-// The result is sorted by lineNumber, not splitNumber — recordFinisher() is called in this same
-// order below, and splitNumber is null for Clock/DNF rows, which would otherwise all collapse to
-// the front ahead of every real split. lineNumber order matters in its own right too: several
-// Clock lines in one file is legitimate (a later one marks a clock reset — not yet implemented
-// mobile-side, but must already land in the right relative order for when it is), and only
-// lineNumber order preserves which came first.
+// The result is sorted by lineNumber, not splitNumber — applyComputedResults() assigns it to
+// state.mobileProgress in this same order, and adjustedFinishTime()'s own mobile fallback (see
+// time-utils.js) relies on that order to find the *last* matching Clock/Start/etc record, so
+// getting this order right matters beyond just display. splitNumber is null for Clock/DNF rows,
+// which would otherwise all collapse to the front ahead of every real split. lineNumber order
+// matters in its own right too: several Clock lines in one file is legitimate (a later one marks
+// a clock reset — not yet implemented mobile-side, but must already land in the right relative
+// order for when it is), and only lineNumber order preserves which came first.
 //
 // This is the single source of truth both the red/green status check and the actual rebuild
 // below are computed from, so they can never disagree with each other.
@@ -653,48 +672,45 @@ function findDuplicateSplitNumbers(rows) {
   return [...dupes].sort((a, b) => a - b);
 }
 
-// Wipes both data sources a Compute Results run produces — the Finishers list (any origin, not
-// just mobile, matching this feature's own long-standing full-rebuild behaviour) and checkpoint
-// data — as one explicit step. Used both by the standalone Clear Results button below and by
-// computeResults() itself, which always clears before rebuilding rather than leaving the old
-// arrays in place until the very end and relying on the final assignment to replace them; this
-// way there's no ambiguity about the old set being gone before anything new is written.
-// Everything downstream — Safety Check's finished/outstanding counts and "Last CP" hint, the
-// Results & Prize List page — reads live from state.finishers/state.mobileCheckpoints, so
-// clearing these two arrays is itself what "undoes the effects" of a previous Compute Results
-// run everywhere else in the app; no other state needs touching.
-async function clearResultsData() {
-  await clearAllFinishers();
+// Wipes both data sources an Update Progress run produces — state.mobileProgress (Start/Finish/
+// DNF/etc, genuinely separate from the manually-entered Finishers list, see js/mobile-progress.js)
+// and state.mobileCheckpoints — as one explicit step. Used both by the standalone Clear Progress
+// button below and by applyComputedResults(), which always clears before rebuilding rather than
+// leaving the old arrays in place until the very end and relying on the final assignment to
+// replace them; this way there's no ambiguity about the old set being gone before anything new
+// is written. Everything downstream — the Progress tab itself, Safety Check's finished/
+// outstanding counts and "Last CP" hint, the Results & Prize List page — reads live from
+// state.mobileProgress/state.mobileCheckpoints, so clearing these two arrays is itself what
+// "undoes the effects" of a previous run everywhere else in the app; no other state needs
+// touching, and the manually-entered Finishers list is never affected either way.
+async function clearProgressData() {
+  state.mobileProgress = [];
   state.mobileCheckpoints = [];
+  await saveMobileProgress();
   await saveMobileCheckpoints();
 }
 
-async function clearResults() {
-  if (!state.finishers.length && !state.mobileCheckpoints.length) {
-    showStatus('No computed results to clear.');
+async function clearProgress() {
+  if (!state.mobileProgress.length && !state.mobileCheckpoints.length) {
+    showStatus('No computed progress to clear.');
     return;
   }
-  const existingCount = state.finishers.length;
+  const existingCount = state.mobileProgress.length;
   if (!await showConfirmDialog(
-    `This deletes all ${existingCount} finisher record(s) and all checkpoint data. Continue?`,
-    'Clear Results', true
+    `This deletes all ${existingCount} progress record(s) and all checkpoint data. Continue?`,
+    'Clear Progress', true
   )) return;
-  await clearResultsData();
-  renderMobileResultsList();
-  showStatus('Results cleared.');
+  await clearProgressData();
+  renderMobileProgressTable();
+  showStatus('Progress cleared.');
 }
 
 // Combines the selected files' current-segment Bibs/Time entries (each device's own segment
 // resolved independently first, exactly like showDeviceModal, since Reset boundaries and line
-// numbers are per-device), validates them, and — if valid — deletes every existing finisher and
-// rebuilds the list from scratch via expectedFinisherEntries()/recordFinisher(). Line-by-line
-// diffing against whatever Finishers already held (patching in corrections, retracting entries
-// the phone had since undone or reset away, etc.) turned out to be a losing battle with every new
-// edge case the phone's own history could produce — a full rebuild sidesteps all of that: the
-// current segment (see buildSegmentView) is already the true, final picture, Reset/Undo included,
-// so there's nothing left to diff. This is the exact same entry point manual Finishers-page entry
-// uses, so duplicate-bib and entries-list checks stay in one place rather than being reimplemented
-// here.
+// numbers are per-device) and validates them — no dialogs, no state mutation, so this same
+// logic can be shared between the button handler (updateProgress, below) and the silent
+// auto-update path (autoUpdateProgress, further below). Returns either { error } or the
+// computed { finishRows, cpBuckets, expected, cpTimesByCp }.
 //
 // Selected files are bucketed by their own resolved location (see resolveLocationKey) rather
 // than requiring every selected file to be "Finish" — Finish drives the (unchanged, accurate)
@@ -705,19 +721,10 @@ async function clearResults() {
 // phone has no stopwatch of its own, only an absolute per-bib timestamp, so they're
 // necessarily an approximation, primarily useful for safety awareness (roughly where on the
 // course an outstanding runner was last seen) rather than as a results input.
-async function computeResults() {
-  // Refresh first so validation runs against the latest data — renderMobileFiles() already
-  // shows its own status message if the fetch fails, falling back to whatever's currently
-  // loaded (server unreachable is the expected case out in the field) rather than blocking.
-  await renderMobileFiles();
-
-  const selected = getSelectedRows();
-  if (!selected.length) { showStatus('Select one or more mobile files first.', true); return; }
-
+async function validateAndCompute(selected) {
   const raceLabels = [...new Set(selected.map(r => r.raceLabel))];
   if (raceLabels.length > 1) {
-    showStatus(`Cannot compute results — selected files are from different races: ${raceLabels.join(', ')}.`, true);
-    return;
+    return { error: `Cannot compute results — selected files are from different races: ${raceLabels.join(', ')}.` };
   }
 
   const finishRows = [];
@@ -726,30 +733,26 @@ async function computeResults() {
     const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
     const visibleRows = [...timeSegment, ...bibsSegment];
     if (!visibleRows.length) {
-      showStatus(`Cannot compute results — "${r.device.name}" is empty (no entries in its current segment).`, true);
-      return;
+      return { error: `Cannot compute results — "${r.device.name}" is empty (no entries in its current segment).` };
     }
     const raw = rawLocationOf(visibleRows);
     if (raw == null) {
-      showStatus(`Cannot compute results — "${r.device.name}" has inconsistent locations within its own file.`, true);
-      return;
+      return { error: `Cannot compute results — "${r.device.name}" has inconsistent locations within its own file.` };
     }
     const key = resolveLocationKey(raw);
     if (!key) {
-      showStatus(`Cannot compute results — location "${raw}" isn't recognised as Finish or a checkpoint.`, true);
-      return;
+      return { error: `Cannot compute results — location "${raw}" isn't recognised as Finish or a checkpoint.` };
     }
     if (key.kind === 'finish') {
       finishRows.push(r);
     } else if (cpBuckets.has(key.number)) {
-      showStatus(`Cannot compute results — more than one file selected for CP${key.number}.`, true);
-      return;
+      return { error: `Cannot compute results — more than one file selected for CP${key.number}.` };
     } else {
       cpBuckets.set(key.number, r);
     }
   }
 
-  if (!finishRows.length) { showStatus('Select at least the Finish location file(s) too.', true); return; }
+  if (!finishRows.length) return { error: 'Select at least the Finish location file(s) too.' };
 
   const bibs = [], times = [];
   for (const r of finishRows) {
@@ -758,17 +761,15 @@ async function computeResults() {
     times.push(...timeSegment.filter(t => TRANSFERABLE_TIME_ACTIONS.has(t.action)));
   }
 
-  if (!bibs.length && !times.length) { showStatus('Selected Finish file(s) have no transferable entries.', true); return; }
+  if (!bibs.length && !times.length) return { error: 'Selected Finish file(s) have no transferable entries.' };
 
   const dupBibSplits = findDuplicateSplitNumbers(bibs);
   if (dupBibSplits.length) {
-    showStatus(`Cannot compute results — more than one bibs-recording phone selected at Finish (duplicate split number(s) ${dupBibSplits.join(', ')}).`, true);
-    return;
+    return { error: `Cannot compute results — more than one bibs-recording phone selected at Finish (duplicate split number(s) ${dupBibSplits.join(', ')}).` };
   }
   const dupTimeSplits = findDuplicateSplitNumbers(times);
   if (dupTimeSplits.length) {
-    showStatus(`Cannot compute results — more than one time-recording phone selected at Finish (duplicate split number(s) ${dupTimeSplits.join(', ')}).`, true);
-    return;
+    return { error: `Cannot compute results — more than one time-recording phone selected at Finish (duplicate split number(s) ${dupTimeSplits.join(', ')}).` };
   }
 
   const invalidBibs = [...new Set(
@@ -777,8 +778,7 @@ async function computeResults() {
       .filter(n => !Number.isFinite(n) || n <= 0 || !getEntry(n))
   )];
   if (invalidBibs.length) {
-    showStatus(`Cannot compute results — bib number(s) not in entries: ${invalidBibs.join(', ')}.`, true);
-    return;
+    return { error: `Cannot compute results — bib number(s) not in entries: ${invalidBibs.join(', ')}.` };
   }
 
   // Checkpoint buckets need the Finish bucket's own Time-mode Start row as the universal t=0
@@ -787,8 +787,7 @@ async function computeResults() {
   if (cpBuckets.size) {
     const startMs = findStartTimestamp(times);
     if (startMs == null) {
-      showStatus('Cannot compute checkpoint times — no Start record found in the Finish location\'s time file; select it too.', true);
-      return;
+      return { error: 'Cannot compute checkpoint times — no Start record found in the Finish location\'s time file; select it too.' };
     }
     const invalidCpBibs = [];
     for (const [cpNumber, r] of cpBuckets) {
@@ -799,122 +798,175 @@ async function computeResults() {
       cpTimesByCp.set(cpNumber, computeCpTimes(cpRows, startMs));
     }
     if (invalidCpBibs.length) {
-      showStatus(`Cannot compute results — bib number(s) not in entries: ${invalidCpBibs.join('; ')}.`, true);
-      return;
+      return { error: `Cannot compute results — bib number(s) not in entries: ${invalidCpBibs.join('; ')}.` };
     }
   }
 
   const expected = expectedFinisherEntries(bibs, times);
-  const existingCount = state.finishers.length;
-  const cpSummary = cpBuckets.size ? ` and checkpoint times from ${cpBuckets.size} CP file(s)` : '';
-  const confirmMsg = existingCount
-    ? `This deletes all ${existingCount} existing finisher record(s) and rebuilds ${expected.length} from ${finishRows.length} Finish file(s)${cpSummary}. Continue?`
-    : `Add ${expected.length} finisher record(s) from ${finishRows.length} Finish file(s)${cpSummary}?`;
-  if (!await showConfirmDialog(confirmMsg, 'Compute Results')) return;
+  return { finishRows, cpBuckets, expected, cpTimesByCp };
+}
 
-  // Old results are wiped first, unconditionally, rather than relying on the rebuild below to
-  // implicitly replace them — see clearResultsData()'s own doc comment.
-  await clearResultsData();
+// The actual mutation, shared by both the button handler and the silent auto-update path —
+// wipes state.mobileProgress and rebuilds it wholesale from `expected` (line-by-line diffing
+// against whatever Progress already held turned out to be a losing battle with every new edge
+// case the phone's own history could produce — see validateAndCompute()'s own doc for why a
+// full rebuild sidesteps that; every bib in `expected` was already validated against entries by
+// validateAndCompute(), so no further per-entry validation is needed here), then rebuilds
+// state.mobileCheckpoints wholesale too, stored raw (crossing timestamp minus start timestamp,
+// no offset correction) — early/late-start and clock-offset adjustment is the domain of
+// adjustedFinishTime() in results.js/formatResults(), not this page; this page's job is only to
+// provide the raw information that needs. Never touches the manually-entered Finishers list.
+// Returns { added } for the caller's own status message.
+async function applyComputedResults(expected, cpTimesByCp, selected) {
+  await clearProgressData();
 
-  let added = 0;
-  const errors = [];
-  for (const exp of expected) {
-    const result = await recordFinisher(exp.number, exp.time, exp.action);
-    if (result.error) errors.push(result.error); else added++;
-  }
+  state.mobileProgress = expected.map(({ action, number, time }) => ({ action, number, time }));
+  await saveMobileProgress();
 
-  // Checkpoint data is rebuilt wholesale each run too, mirroring clearAllFinishers()'s own
-  // full-rebuild philosophy — no incremental diffing against phone history edge cases. This
-  // runs *after* the recordFinisher() loop above so state.finishers already holds this run's
-  // Start/Clock/category/gender/course marker records — adjustedFinishTime() below searches
-  // exactly those to correct each bib's raw CP elapsed time for an early/late start or a clock
-  // offset, the same adjustment already applied to FinishTime for ordinary finishers.
   const bibsSeen = new Set();
   for (const cpMap of cpTimesByCp.values()) for (const bib of cpMap.keys()) bibsSeen.add(bib);
   state.mobileCheckpoints = [...bibsSeen].map(bib => {
-    const entry = getEntry(bib);
     const cpTimes = {};
-    for (const [cpNumber, cpMap] of cpTimesByCp) {
-      if (!cpMap.has(bib)) continue;
-      const raw = cpMap.get(bib);
-      cpTimes[cpNumber] = entry ? adjustedFinishTime(entry, raw, null) : raw;
-    }
+    for (const [cpNumber, cpMap] of cpTimesByCp) if (cpMap.has(bib)) cpTimes[cpNumber] = cpMap.get(bib);
     return { bibNumber: bib, cpTimes };
   });
   await saveMobileCheckpoints();
 
   // Mark every selected file as "seen as of now" — this run covered whatever these files held at
-  // this moment, regardless of any per-entry errors above, so the red/green marker should reset
-  // right along with it. See the tracking block near rowKey for why a lineNumber is enough.
+  // this moment. See the tracking block near rowKey for why a lineNumber is enough.
   for (const r of selected) setLastSyncedLineNumber(r);
+
+  return { added: expected.length };
+}
+
+async function updateProgress() {
+  // Refresh first so validation runs against the latest data — renderMobileFiles() already
+  // shows its own status message if the fetch fails, falling back to whatever's currently
+  // loaded (server unreachable is the expected case out in the field) rather than blocking.
+  await renderMobileFiles();
+
+  const selected = getSelectedRows();
+  if (!selected.length) { showStatus('Select one or more mobile files first.', true); return; }
+
+  const result = await validateAndCompute(selected);
+  if (result.error) { showStatus(result.error, true); return; }
+  const { finishRows, cpBuckets, expected, cpTimesByCp } = result;
+
+  const existingCount = state.mobileProgress.length;
+  const cpSummary = cpBuckets.size ? ` and checkpoint times from ${cpBuckets.size} CP file(s)` : '';
+  const confirmMsg = existingCount
+    ? `This replaces ${existingCount} existing progress record(s) with ${expected.length} from ${finishRows.length} Finish file(s)${cpSummary}. Continue?`
+    : `Add ${expected.length} progress record(s) from ${finishRows.length} Finish file(s)${cpSummary}?`;
+  if (!await showConfirmDialog(confirmMsg, 'Update Progress')) return;
+
+  const { added } = await applyComputedResults(expected, cpTimesByCp, selected);
 
   // Re-render so each transferred file's row immediately reflects its new incorporation status
   // (red/green) rather than waiting for the next Refresh/pull — see the ordering note above
   // deleteRow() for why this comes before the specific outcome message, not after.
   await renderMobileFiles();
-  renderMobileResultsList();
-  document.querySelector('#mobile-files-tab-bar [data-mf-tab="results"]')?.click();
+  renderMobileProgressTable();
+  document.querySelector('#mobile-files-tab-bar [data-mf-tab="progress"]')?.click();
   showStatus(
-    `Rebuilt the finishers list: ${added} record${added === 1 ? '' : 's'} added`
-      + `${cpBuckets.size ? `, checkpoint times computed for ${bibsSeen.size} bib(s)` : ''}`
-      + `${errors.length ? `, ${errors.length} error(s): ${errors.join('; ')}` : ''}.`,
-    errors.length > 0 && added === 0
+    `Progress updated: ${added} record${added === 1 ? '' : 's'}`
+      + `${cpBuckets.size ? `, checkpoint times computed for ${state.mobileCheckpoints.length} bib(s)` : ''}.`
   );
 }
 
-// ---- Results tab (consolidated BibNumber/Name/Category/Course/FinishTime/CP*n* view) ----
+// Silent counterpart to updateProgress(), called from the Results & Prize List page's own
+// renderResults() (see js/views/results.js) whenever it's opened — no confirm dialog, no
+// forced tab-switch, and any validation failure is logged rather than shown as an error, since
+// this is a background convenience refresh, not a user action. Only ever runs the rebuild
+// (applyComputedResults) when there's proof something genuinely changed since the last real run
+// (computeIncorporationStatus() === 'outstanding', the same "new lines since last sync"
+// mechanism the Devices tab's own red/green marker already uses) — an unconditional silent
+// rebuild on every page visit would otherwise turn every Results page visit into a background
+// stall for no reason. Since this only ever touches state.mobileProgress/state.mobileCheckpoints
+// (never the manually-entered Finishers list), there's nothing here it could silently discard.
+export async function autoUpdateProgress() {
+  const persisted = loadSelectedKeys();
+  if (!persisted || !persisted.keys.length) return;
+  // Event name+date is a heuristic, not a guaranteed-unique dataset identity (two different
+  // datasets could coincidentally share both) — good enough to guard against the realistic
+  // case (switching datasets in place, via Datasets' Connect, without a page reload) without
+  // needing a true cross-dataset identifier, which nothing in this codebase currently tracks.
+  if (persisted.eventName !== state.event.name || persisted.eventDate !== state.event.date) return;
 
-function buildMobileResultsColumns(cpNumbers) {
-  const base = TABLES['mobile-results'];
+  selectedKeys.clear();
+  for (const k of persisted.keys) selectedKeys.add(k);
+
+  await renderMobileFiles(); // rebuilds currentRows + reflects selectedKeys in the checkboxes
+  const selected = getSelectedRows();
+  if (!selected.length) return; // persisted files no longer exist
+  if (!selected.some(r => computeIncorporationStatus(r) === 'outstanding')) return; // nothing new since the last run
+
+  const result = await validateAndCompute(selected);
+  if (result.error) { console.warn('[mobile-files] Progress auto-update skipped:', result.error); return; }
+
+  await applyComputedResults(result.expected, result.cpTimesByCp, selected);
+  renderMobileProgressTable();
+}
+
+// ---- Progress tab (raw BibNumber/Name/Category/Course/Start/FinishTime/CP*n* view) ----
+//
+// Deliberately pre-adjustment and position-agnostic — this tab's job is to provide the raw
+// information Results & Prize List's own adjustedFinishTime()-based pipeline needs (see
+// js/results.js's formatResults()/getSplitsRows()), plus safety feedback on where runners are
+// on the course, not to mirror final results. That's why this reads state.mobileProgress/
+// state.mobileCheckpoints directly rather than safety.js's getFinishedRows()/getDnfRows() (both
+// of which call formatResults() and return already-adjusted times + computed race positions) —
+// sorted by bib number, since this tab has no position to sort by at all.
+
+function buildProgressColumns(cpNumbers) {
+  const base = TABLES['mobile-progress'];
   const idx = base.findIndex(c => c.id === 'cp');
   const proforma = base[idx];
   const cpCols = cpNumbers.map(n => ({ id: `cp_${n}`, label: `CP${n}`, title: `${proforma.title} ${n}` }));
   return [...base.slice(0, idx), ...cpCols, ...base.slice(idx + 1)];
 }
 
-// Rows = every finished/DNF bib (via safety.js's getFinishedRows/getDnfRows, so FinishTime here
-// always matches what Safety Check and Results & Prize List already show — including the same
-// adjustedFinishTime() correction for early/late starts and clock offsets, since that's already
-// baked into the result rows getFinishedRows() joins against) UNION every bib with at least one
-// checkpoint sighting, even if never finished — that union is deliberate: a bib seen only at a
-// CP, with no finish, is exactly the safety-relevant case (still out on the course, last seen at
-// CP*n*). Sorted by finishing position, matching Results & Prize List's own presentation order —
-// DNF and CP-only bibs have no position, so sort after every real finisher, by bib number.
-function buildMobileResultsRows() {
+// Rows = every bib with a Start/Finish/DNF record in state.mobileProgress (mobile-recorded only
+// — the manually-entered Finishers list is never read here, see js/mobile-progress.js) UNION
+// every bib with at least one checkpoint sighting, even if never finished — that union is
+// deliberate: a bib seen only at a CP, with no finish, is exactly the safety-relevant case
+// (still out on the course, last seen at CP*n*). FinishTime here is the raw, unadjusted
+// stopwatch/paired-split value — the adjusted race time lives on the Results & Prize List page,
+// not here.
+function buildProgressRows() {
   const rowsByBib = new Map();
-  for (const f of getFinishedRows()) {
-    const pos = f.pos === '' || f.pos == null ? null : +f.pos;
-    rowsByBib.set(+f.number, { bibNumber: +f.number, name: f.name, category: f.category, course: f.course, finishTime: f.time, pos });
-  }
-  for (const d of getDnfRows()) {
-    if (!rowsByBib.has(+d.bib)) rowsByBib.set(+d.bib, { bibNumber: +d.bib, name: d.name, category: d.category, course: d.course, finishTime: 'DNF', pos: null });
-  }
-  for (const r of state.mobileCheckpoints) {
-    const bib = +r.bibNumber;
+  const ensure = bib => {
     if (!rowsByBib.has(bib)) {
       const info = entryInfo(bib);
-      rowsByBib.set(bib, { bibNumber: bib, name: info.name, category: info.category, course: info.course, finishTime: '', pos: null });
+      rowsByBib.set(bib, { bibNumber: bib, name: info.name, category: info.category, course: info.course, startTime: '', finishTime: '', cpTimes: {} });
     }
-    rowsByBib.get(bib).cpTimes = getMobileCheckpointTimes(r);
+    return rowsByBib.get(bib);
+  };
+  for (const f of state.mobileProgress) {
+    const bib = +f.number;
+    if (bib <= 0) continue;
+    if (f.action === 'Start')       ensure(bib).startTime  = f.time || '';
+    else if (f.action === 'Finish') ensure(bib).finishTime = f.time || '';
+    else if (f.action === 'DNF')    ensure(bib).finishTime = 'DNF';
   }
-  return [...rowsByBib.values()].sort((a, b) => {
-    const ap = a.pos ?? Infinity, bp = b.pos ?? Infinity;
-    return ap !== bp ? ap - bp : a.bibNumber - b.bibNumber;
-  });
+  for (const r of state.mobileCheckpoints) {
+    ensure(+r.bibNumber).cpTimes = getMobileCheckpointTimes(r);
+  }
+  return [...rowsByBib.values()].sort((a, b) => a.bibNumber - b.bibNumber);
 }
 
-function renderMobileResultsList() {
+function renderMobileProgressTable() {
   const cpNumbers = getMobileCheckpointNumbers();
-  const rows = buildMobileResultsRows();
+  const rows = buildProgressRows();
   const renderers = {
     bibNumber:  r => String(r.bibNumber),
     name:       r => escHtml(r.name),
     category:   r => escHtml(r.category),
     course:     r => escHtml(r.course),
+    start:      r => escHtml(r.startTime || ''),
     finishTime: r => escHtml(r.finishTime || ''),
   };
   for (const n of cpNumbers) renderers[`cp_${n}`] = r => escHtml(r.cpTimes?.[n] || '');
-  renderTable('mobile-results-tbody', tableColumns(buildMobileResultsColumns(cpNumbers), renderers), rows);
+  renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(cpNumbers), renderers), rows);
 }
 
 // Gated the same way mule-ble.js's own bleLog is — routine tracing only, off by default.
@@ -1170,8 +1222,8 @@ async function onRefreshButtonClick() {
 export function wireMobileFiles() {
   on('btn-refresh-mobile-files', 'click', onRefreshButtonClick);
   on('btn-connect-phone', 'click', onConnectButtonClick);
-  on('btn-compute-results', 'click', computeResults);
-  on('btn-clear-results', 'click', clearResults);
+  on('btn-update-progress', 'click', updateProgress);
+  on('btn-clear-progress', 'click', clearProgress);
   onDisconnect(onBleDisconnected);
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
   document.getElementById('bib-allocations-tbody')?.addEventListener('click', e => {
@@ -1211,8 +1263,9 @@ export function wireMobileFiles() {
     const r = currentRows[+cb.dataset.idx];
     if (!r) return;
     if (cb.checked) selectedKeys.add(rowKey(r)); else selectedKeys.delete(rowKey(r));
+    saveSelectedKeys();
     // Colour is selection-driven now — reflect the change immediately rather than waiting for
-    // the next full re-render (a fresh fetch or a Refresh/Compute Results click).
+    // the next full re-render (a fresh fetch or a Refresh/Update Progress click).
     r.incorporationStatus = computeIncorporationStatus(r);
     const tr = cb.closest('tr');
     if (tr) {
@@ -1223,7 +1276,7 @@ export function wireMobileFiles() {
   });
 }
 
-// Genuinely awaitable (not fire-and-forget) so a caller — e.g. computeResults()
+// Genuinely awaitable (not fire-and-forget) so a caller — e.g. updateProgress()
 // wanting the latest data before validating a transfer — can wait for it to finish. Resolves
 // true if the server fetch succeeded, false if it fell back to a local/offline view (with its
 // own status message already shown either way, so callers don't need to notify separately on
@@ -1238,7 +1291,7 @@ export async function renderMobileFiles() {
     showStatus('Sign in on the Datasets page to view mobile files.');
     renderRaceList([], false);
     renderBibAllocationsList([], false);
-    renderMobileResultsList();
+    renderMobileProgressTable();
     if (count) count.textContent = '0';
     return false;
   }
@@ -1252,7 +1305,7 @@ export async function renderMobileFiles() {
     if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
     renderRaceList(merged, isAdminUser);
     renderBibAllocationsList(merged, isAdminUser);
-    renderMobileResultsList();
+    renderMobileProgressTable();
     showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
     return true;
   } catch {
@@ -1262,7 +1315,7 @@ export async function renderMobileFiles() {
     if (count) count.textContent = `${merged.length} race${merged.length === 1 ? '' : 's'}`;
     renderRaceList(merged, isAdminUser);
     renderBibAllocationsList(merged, isAdminUser);
-    renderMobileResultsList();
+    renderMobileProgressTable();
     showStatus(merged.length
       ? 'Server unreachable — showing the last known list plus anything pulled locally.'
       : 'Server unreachable, and no locally-pulled files yet.', !merged.length);

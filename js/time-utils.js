@@ -16,6 +16,18 @@ export function usingDibbers(course) {
   return ciEq(getTimingMethod(course), 'Dibbers');
 }
 
+// state.mobileProgress (mobile-recorded Clock/Start/category/etc markers — see js/mobile-progress.js)
+// has no position relative to state.finishers, so it can't be searched "nearest above" a given
+// index — instead this takes the last matching record in the mobile file's own chronological
+// order (state.mobileProgress preserves lineNumber order), used as a fallback only when the
+// manual (state.finishers) search above finds nothing at all.
+function findLastMobileProgress(pred) {
+  for (let i = state.mobileProgress.length - 1; i >= 0; i--) {
+    if (pred(state.mobileProgress[i])) return state.mobileProgress[i];
+  }
+  return null;
+}
+
 /**
  * Compute a runner's race time from their raw finish time.
  * Pass the finisher record (from state.finishers) so the lookup walks backward
@@ -26,7 +38,9 @@ export function usingDibbers(course) {
  *   Clock with h = 0 (mm:ss or ss)         → relative, ref = Clock.time (late-start offset)
  *   Clock with h > 0 (hh:mm:ss)            → time-of-day, ref = Clock.time
  *
- * Start time sources (nearest above, priority order):
+ * Start time sources (nearest above, priority order — each also falls back to a mobile-recorded
+ * equivalent in state.mobileProgress when state.finishers has none at all, since a mobile-only
+ * race has no manual entries to search):
  *   1. Start finisher record for this bib
  *   2. Category finisher record (action === entry.category)
  *   3. Male / Female finisher record (seniors only; gender derived from categories list)
@@ -54,6 +68,7 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
   for (let i = searchFrom - 1; i >= 0; i--) {
     if (state.finishers[i].action === 'Clock') { clockRecord = state.finishers[i]; break; }
   }
+  if (!clockRecord) clockRecord = findLastMobileProgress(f => f.action === 'Clock');
   const clockTime   = clockRecord !== null ? clockRecord.time : '';
   const isTOD       = clockTime ? +clockTime.split(':')[0] > 0 : false;
   const clockOffset = clockTime ? timeToSeconds(normaliseTime(clockTime)) : 0;
@@ -68,6 +83,7 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
     const f = state.finishers[i];
     if (f.action === 'Start' && +f.number === bib) { bibStart = f; break; }
   }
+  if (!bibStart) bibStart = findLastMobileProgress(f => f.action === 'Start' && +f.number === bib);
 
   if (bibStart !== null && bibStart.time) {
     startRef = timeToSeconds(normaliseTime(bibStart.time));
@@ -80,6 +96,10 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
         const f = state.finishers[i];
         if (ciEq(f.action, entry.category) && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; break; }
       }
+      if (!found) {
+        const f = findLastMobileProgress(f => ciEq(f.action, entry.category) && f.time);
+        if (f) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; }
+      }
     }
 
     if (!found && !ciEq(course, COURSE.JUNIORS)) {
@@ -91,6 +111,10 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
         const f = state.finishers[i];
         if (f.action === genderAction && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; break; }
       }
+      if (!found) {
+        const f = findLastMobileProgress(f => f.action === genderAction && f.time);
+        if (f) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; }
+      }
     }
 
     if (!found) {
@@ -98,7 +122,11 @@ export function adjustedFinishTime(entry, finishTime, finisherRecord = null) {
       const courseAction = ciEq(course, COURSE.JUNIORS) ? 'Juniors' : 'Seniors';
       for (let i = searchFrom - 1; i >= 0; i--) {
         const f = state.finishers[i];
-        if (f.action === courseAction && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); break; }
+        if (f.action === courseAction && f.time) { startRef = timeToSeconds(normaliseTime(f.time)); found = true; break; }
+      }
+      if (!found) {
+        const f = findLastMobileProgress(f => f.action === courseAction && f.time);
+        if (f) startRef = timeToSeconds(normaliseTime(f.time));
       }
     }
   }

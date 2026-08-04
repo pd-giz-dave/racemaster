@@ -171,8 +171,8 @@ export const TOOLTIPS = {
   // Mobile Files
   'btn-refresh-mobile-files':    'Reload mobile files from the server and from anything pulled locally over Bluetooth',
   'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Offers a direct reconnect for a phone connected to before; otherwise confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
-  'btn-compute-results':         'Rebuild the finishers list from the selected Finish location file(s) (as if entered manually) and compute approximate checkpoint times from any selected checkpoint file(s), shown on the Results tab — requires valid bib numbers, the same race, no empty files, and no more than one file per location',
-  'btn-clear-results':           'Delete the finishers list and all checkpoint data computed by Compute Results — also clears their effects elsewhere, e.g. Safety Check',
+  'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s) (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — requires valid bib numbers, the same race, no empty files, and no more than one file per location',
+  'btn-clear-progress':          'Delete the finishers list and all checkpoint data computed by Update Progress — also clears their effects elsewhere, e.g. Safety Check',
   'btn-ble-logging':             'Log routine Bluetooth connect/pull activity to the browser console — off by default; a genuine connect/pull failure is always logged regardless',
 
   // Data file / auth
@@ -307,8 +307,10 @@ export const HELP = {
     <p>Results, prizes and helpers are calculated automatically when you open this page, across
         seven tabs: <strong>Progress</strong>, <strong>Prizes</strong>, <strong>Seniors</strong>,
         <strong>Juniors</strong>, <strong>Pairs</strong> (only present for a pairs race),
-        <strong>Splits</strong> (only present once SI results carry split times) and
-        <strong>Helpers</strong>.</p>
+        <strong>Splits</strong> (only present once SI results carry split times, or Mobile Files'
+        own Progress tab has checkpoint data) and <strong>Helpers</strong>. Opening this page also
+        silently re-runs Mobile Files' Update Progress in the background, using whatever file
+        selection was last used there, but only when something has actually changed since.</p>
     <p><strong>Progress</strong> is shown first — one row per age category, in age order, with
         how many entrants in that category have <strong>Finished</strong> (retirees excluded)
         and how many are still <strong>Outstanding</strong> (neither finished nor retired). Use
@@ -415,7 +417,7 @@ export const HELP = {
   'view-mobile-files': `
     <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app, split across three tabs:
         <strong>Devices</strong> (one row per physical phone), <strong>Bib Allocations</strong> (see below) and
-        <strong>Results</strong> (see below). You see your own uploads; admins see everyone's.</p>
+        <strong>Progress</strong> (see below). You see your own uploads; admins see everyone's.</p>
     <p>Each device's file interleaves two independent record types: <strong>Bibs</strong> (bib-number entries, from Bibs or Checkpoint mode)
         and <strong>Time</strong> (stopwatch splits, from Time mode). The counts shown are only what's currently <em>visible</em> —
         the entries since that device's own last Reset — the same view the phone's own screen would show; a blank count means none of that type exist at all.</p>
@@ -436,24 +438,28 @@ export const HELP = {
         Tick <strong>Bluetooth logging</strong> to also log routine connect/pull activity to the browser console — off by default, useful
         when troubleshooting a Connect to Phone… problem; the setting is remembered across visits to this page. A genuine connect or pull
         failure is always logged to the console regardless of this setting.</p>
-    <p>Tick one or more files and use <strong>Compute Results</strong> to rebuild the Finishers list and the Results tab below
-        together. It needs at least one <strong>Finish</strong> location file (typically one bibs file and one time file,
-        paired up by split number, though a single file with both is fine too) — this part is unchanged from before and is
-        the authoritative finish time: a bib with no matching split is still added, just left untimed, while any split with
-        no matching bib is simply ignored (the bibs will catch up on a later sync), and if a bib was already added untimed by
-        an earlier run, a later run supplying the missing time fills it in rather than duplicating the record. The old
-        finishers list and all checkpoint data are cleared before each run, so it's always a full rebuild rather than a
-        merge. Rejected if any bib number isn't in Entries, if the selected files aren't all from the same race, if a
-        selected file is empty (nothing in its current segment), or if more than one file resolves to the same location
-        (Finish or a checkpoint) at once.</p>
+    <p>Tick one or more files and use <strong>Update Progress</strong> to rebuild the Finishers list and the Progress tab
+        below together. It needs at least one <strong>Finish</strong> location file (typically one bibs file and one time
+        file, paired up by split number, though a single file with both is fine too) — this part is unchanged from before
+        and is the authoritative finish time: a bib with no matching split is still added, just left untimed, while any
+        split with no matching bib is simply ignored (the bibs will catch up on a later sync), and if a bib was already
+        added untimed by an earlier run, a later run supplying the missing time fills it in rather than duplicating the
+        record. The old finishers list and all checkpoint data are cleared before each run, so it's always a full rebuild
+        rather than a merge. Rejected if any bib number isn't in Entries, if the selected files aren't all from the same
+        race, if a selected file is empty (nothing in its current segment), or if more than one file resolves to the same
+        location (Finish or a checkpoint) at once.</p>
     <p>You can also tick any number of <strong>checkpoint</strong> location files (any location containing a number, e.g.
-        "CP1", "Checkpoint 2") alongside the Finish file(s) — each contributes an approximate elapsed time per bib, computed
-        as that bib's own crossing timestamp minus the Finish location's stopwatch Start time, corrected for the same
-        early/late start or clock offset already applied to FinishTime. Unlike FinishTime, checkpoint times are
-        <strong>not authoritative</strong> — Checkpoint mode has no stopwatch of its own, so this is necessarily an
-        approximation, mainly useful for judging roughly where an outstanding runner is on the course (it also surfaces as a
-        "Last CP" hint on the Safety Check page's Outstanding tab).</p>
-    <p>Use <strong>Clear Results</strong> to delete the finishers list and all checkpoint data without selecting or
+        "CP1", "Checkpoint 2") alongside the Finish file(s) — each contributes a <strong>raw</strong> elapsed time per bib,
+        computed as that bib's own crossing timestamp minus the Finish location's stopwatch Start time. Checkpoint mode has
+        no stopwatch of its own, so this is necessarily an approximation and, unlike FinishTime, is <strong>not</strong>
+        corrected for an individual early/late start or a clock offset here — that correction happens on the Results &amp;
+        Prize List page's Splits tab instead, the same place adjusted finish times are computed. This page's job is only to
+        provide the raw information; it's mainly useful here for judging roughly where an outstanding runner is on the
+        course (it also surfaces as a "Last CP" hint on the Safety Check page's Outstanding tab).</p>
+    <p>Opening the Results &amp; Prize List page automatically re-runs Update Progress in the background using whatever
+        selection was last ticked here, but only when something has actually changed since (new data pulled from a phone) —
+        it never silently re-runs otherwise, so it can't quietly discard a manual Finishers-page edit with no visible sign.</p>
+    <p>Use <strong>Clear Progress</strong> to delete the finishers list and all checkpoint data without selecting or
         recomputing anything — this also clears their effects everywhere else that reads them, e.g. Safety Check's
         finished/outstanding counts and "Last CP" hint.</p>
     <p>The <strong>Bib Allocations</strong> tab shows, per race, a bib number / name / course list generated automatically from
@@ -462,11 +468,12 @@ export const HELP = {
         which course before registration has even closed. <strong>View</strong> shows the full list for a race, sorted by bib
         number. The underlying file (<code>bib-allocations.json</code>, alongside that race's device files) is public and
         needs no sign-in to fetch, so it deliberately carries only bib number, name and course — never anything else from an entry.</p>
-    <p>The <strong>Results</strong> tab shows the consolidated table built by the most recent <strong>Compute Results</strong>
-        run: BibNumber, Name, Category, Course, FinishTime, and one column per checkpoint actually selected, in finishing
-        position order (the same order as Results & Prize List) — a bib with no finish yet, DNF'd or seen only at a
-        checkpoint, sorts after every finisher. A bib seen only at a checkpoint, with no finish yet, still gets its own row
-        with a blank FinishTime — that's the safety-relevant case.</p>
+    <p>The <strong>Progress</strong> tab shows the raw, pre-adjustment table built by the most recent
+        <strong>Update Progress</strong> run: BibNumber, Name, Category, Course, Start (an explicit individual start time,
+        if this bib had a recorded early/late start), FinishTime (the raw, unadjusted value — the adjusted race time is on
+        Results &amp; Prize List, not here), and one column per checkpoint actually selected. Sorted by bib number, not
+        position — this tab has no notion of finishing position, only Results &amp; Prize List does. A bib seen only at a
+        checkpoint, with no finish yet, still gets its own row with a blank FinishTime — that's the safety-relevant case.</p>
   `,
 };
 
@@ -785,13 +792,14 @@ export const TABLES = {
     { id: 'generatedAt', label: 'Generated',  title: 'When this file was last generated by the web app' },
     { id: 'actions',     label: 'Actions',    title: 'View the bib/name/course list' },
   ],
-  'mobile-results': [
+  'mobile-progress': [
     { id: 'bibNumber',  label: 'Bib',    title: 'Race number' },
     { id: 'name',       label: 'Name',   title: "Competitor's name" },
     { id: 'category',   label: 'Cat',    title: 'Age category' },
     { id: 'course',     label: 'Course', title: 'Senior or junior course' },
-    { id: 'finishTime', label: 'Finish', title: 'Official finish time, from the Finishers list' },
-    { id: 'cp',         label: 'CP',     title: 'Approximate elapsed time at this checkpoint — timestamp-based, not authoritative' },
+    { id: 'start',      label: 'Start',  title: 'Explicit individual start time recorded for this bib, if any (early/late start)' },
+    { id: 'finishTime', label: 'Finish', title: 'Raw finish time as recorded, from the Finishers list — not adjusted for start/clock offsets (see Results & Prize List for the adjusted race time)' },
+    { id: 'cp',         label: 'CP',     title: 'Approximate elapsed time at this checkpoint — raw, timestamp-based, not authoritative or offset-adjusted' },
   ],
 };
 

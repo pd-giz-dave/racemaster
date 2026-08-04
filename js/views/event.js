@@ -1,6 +1,6 @@
 'use strict';
 
-import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults, applyCustomCategories } from '../state.js';
+import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults, saveMobileProgress, saveMobileCheckpoints, applyCustomCategories } from '../state.js';
 import { applyFRAPreset, applyWFRAPreset, builtinFRARows, builtinWFRARows, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
@@ -109,6 +109,7 @@ export async function saveEventForm() {
       ['Finishers',   state.finishers.length],
       ['Helpers',     state.helpers.length],
       ['SI Results',  state.siResults.length],
+      ['Mobile Progress', state.mobileProgress.length],
     ].filter(([, n]) => n > 0);
     if (counts.length) {
       lines.push('\nThe following will be permanently cleared:');
@@ -157,9 +158,11 @@ export async function saveEventForm() {
     state.entries   = [];  state.finishers = [];
     state.helpers   = [];  state.finishNumbersMap = {};
     state.siResults = [];
+    state.mobileProgress = [];  state.mobileCheckpoints = [];
     await Promise.all([
       saveEntries(), saveHelpers(), saveFinishers(),
       clearSIEntries(), saveSIResults(), saveCategories(),
+      saveMobileProgress(), saveMobileCheckpoints(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
   }

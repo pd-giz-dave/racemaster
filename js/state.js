@@ -20,9 +20,12 @@ export const state = {
   preEntries:       [],  // {participantNumber, firstName, lastName, gender, dob, club, fraNumber, category, email, ...}
   entries:          [],  // {bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry}
   helpers:          [],  // {number, name, club, gender, dob, category, role}
-  finishers:        [],  // {action, number, time}
+  finishers:        [],  // {action, number, time} — manual stopwatch entry only, see js/finishers.js
   siResults:        [],  // dynamic - whatever comes from SI results CSV
   mobileCheckpoints: [], // {bibNumber, cpTimes: {'<n>': 'HH:MM:SS'}} — dynamic, see mobile-checkpoints.js
+  mobileProgress:   [],  // {action, number, time} — Start/Finish/DNF/Clock/etc from Mobile Files'
+                          // Update Progress, kept genuinely separate from finishers (manual entry
+                          // only) so a mobile pull can never overwrite/clobber it — see js/mobile-progress.js
 
   // Runtime-only (not persisted)
   finishNumbersMap: {},  // 'S101' -> ['5','7'] (course-prefix + bib -> array of finisher indices)
@@ -44,6 +47,7 @@ export async function loadAll() {
     loadList('finishers'),
     loadList('siResults'),
     loadList('mobileCheckpoints'),
+    loadList('mobileProgress'),
     loadPreset('roles', BUILTIN_ROLES, r => ({ ...r })),
   ]);
   if (state.categories.length === 0) {
@@ -96,6 +100,7 @@ export async function saveHelpers()          { await writeTable('helpers',      
 export async function saveFinishers()        { await writeTable('finishers',       state.finishers); }
 export async function saveSIResults()        { await writeTable('siResults',       state.siResults); }
 export async function saveMobileCheckpoints() { await writeTable('mobileCheckpoints', state.mobileCheckpoints); }
+export async function saveMobileProgress()    { await writeTable('mobileProgress',    state.mobileProgress); }
 
 export function applyFRACategories() {
   _applyPreset(FRA_CATEGORIES);

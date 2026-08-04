@@ -20,6 +20,10 @@ const PULL_TIMEOUT_MS = 15000;
 // racemaster-mobile's own MulePullClient waits the same way before writing its PullRequest.
 const NOTIFY_SETTLE_MS = 300;
 
+// This web client's own stable identity on the wire — used both as the ack's deviceId (see
+// sendSinkAck below) and as the "puller" half of computeRequestKey (see its own doc).
+const WEB_DEVICE_ID = 'racemaster-web';
+
 export function isBluetoothAvailable() {
   return typeof navigator !== 'undefined' && !!navigator.bluetooth;
 }
@@ -291,7 +295,7 @@ async function sendSinkAck(service, recordUuids) {
     const batch = recordUuids.slice(i, i + ACK_BATCH_SIZE);
     try {
       await ackChar.writeValueWithResponse(encodeJson({
-        deviceId: 'racemaster-web',
+        deviceId: WEB_DEVICE_ID,
         recordUuids: batch,
         deviceName: 'RaceMaster (web)',
         isSink: true,
@@ -305,6 +309,22 @@ async function sendSinkAck(service, recordUuids) {
       bleError(`[mule-ble] sink ack write failed for batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
     }
   }
+}
+
+// Deterministically identifies one "give me your data since X" ask, mirroring
+// MulePullClient.kt's own computeRequestKey exactly (same scheme, same field order) so the two
+// clients stay wire-compatible — see that function's own doc for the full reasoning (why
+// deterministic rather than a fresh random value per call: a random key could never collide
+// with itself, so could never actually get deduped by the phone's response cache). Scoped to
+// WEB_DEVICE_ID so this web client's own request never collides with a different phone
+// puller's request for the same underlying data. This web client's connection model is
+// single, point-to-point (one BluetoothDevice at a time, never multiple simultaneous routes to
+// the same phone the way a multi-mule mesh can have), so in practice this mostly only helps its
+// own retry-after-disconnect path (see connectAndVerify's retry loop) rather than the
+// multi-route case the phone-to-phone mesh cares about — carried on every request regardless,
+// for wire-protocol consistency with the phone side.
+function computeRequestKey(originDeviceId, originRaceLabel, sinceLineNumber) {
+  return `${WEB_DEVICE_ID}:${originDeviceId ?? 'self'}:${originRaceLabel ?? ''}:${sinceLineNumber}`;
 }
 
 // Writes [pullRequest] to CONTROL and returns whatever JSON array streams back over DATA once
@@ -345,14 +365,21 @@ async function pullRelayManifestEntries(service) {
 
 // ---- Known-device memory ----
 //
-// The browser's own picker can't show a meaningful name for any of these phones (see
-// PeripheralSyncService: the advertisement deliberately omits the device name — BLE's legacy
-// advertising payload is capped at 31 bytes total and the 128-bit service UUID needed to filter
-// the picker down to genuine RaceMaster Mobile phones already consumes most of that, leaving no
-// room for a name too). Once connected, though, a genuine phone's real name IS known (via
-// DeviceInfo) — remembered here (browser-assigned device.id → that name) so a later connect can
-// offer a direct "Reconnect to <name>" that skips the anonymous picker entirely for a phone
-// that's been through it before. Persisted (not just in-memory) so this survives a page reload.
+// The browser's own picker can't show a meaningful name for any of these phones — even though
+// racemaster-mobile's phones now advertise a name (see PeripheralSyncService.startAdvertising's
+// scan-response payload, MuleGattProfile.encodeAdvertisedIdentity), that's not something this
+// web client can read pre-connection: the only two Web Bluetooth APIs that could
+// (`navigator.bluetooth.requestLEScan()`, `BluetoothDevice.watchAdvertisements()`) are both
+// still gated behind `chrome://flags/#enable-experimental-web-platform-features` (not shipped to
+// stable), and `requestDevice()`'s own native picker doesn't surface advertisement/scan-response
+// fields to the page at all — it's the browser's own OS-level chooser UI, not something this
+// script draws or has access to the contents of. So this gap is a genuine, currently-permanent
+// platform limitation on the web side, not a leftover TODO — don't attempt to "fix" it here
+// without first confirming one of those two APIs has actually shipped. Once connected, though, a
+// genuine phone's real name IS known (via DeviceInfo) — remembered here (browser-assigned
+// device.id → that name) so a later connect can offer a direct "Reconnect to <name>" that skips
+// the anonymous picker entirely for a phone that's been through it before. Persisted (not just
+// in-memory) so this survives a page reload.
 const KNOWN_DEVICES_KEY = 'racemaster-ble-known-devices';
 
 function loadKnownDevices() {
@@ -632,7 +659,10 @@ export async function pullFromConnectedPhone() {
     const deviceName = sanitiseName(deviceInfo.deviceName || deviceInfo.deviceId) || 'unknown-device';
     const since = getLastPulledLineNumber(deviceInfo.deviceId, raceLabel);
     try {
-      const ownLines = await pullOne(service, { sinceLineNumber: since });
+      const ownLines = await pullOne(service, {
+        sinceLineNumber: since,
+        requestKey: computeRequestKey(null, null, since),
+      });
       advanceLastPulledLineNumber(deviceInfo.deviceId, raceLabel, ownLines);
       results.push({ raceLabel, deviceName, deviceId: deviceInfo.deviceId, lines: ownLines });
     } catch (e) {
@@ -672,6 +702,7 @@ export async function pullFromConnectedPhone() {
         sinceLineNumber: since,
         originDeviceId: relay.originDeviceId,
         originRaceLabel: relay.originRaceLabel,
+        requestKey: computeRequestKey(relay.originDeviceId, relay.originRaceLabel, since),
       });
       advanceLastPulledLineNumber(relay.originDeviceId, raceLabel, lines);
       results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, lines });

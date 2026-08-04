@@ -10,7 +10,7 @@ import { COURSE } from './strings.js';
 
 export function getFinishedBibs() {
   const bibs = new Set(
-    state.finishers
+    [...state.finishers, ...state.mobileProgress]
       .filter(f => f.action === 'Finish' || f.action === 'DNF')
       .map(f => +f.number)
       .filter(n => n > 0)
@@ -21,12 +21,13 @@ export function getFinishedBibs() {
 
 // "Truly finished", DNF/retired excluded — Finish action or an SI row with a race time.
 // Deliberately separate from getFinishedRows()'s own inline version of this same idea below:
-// that function uses the stopwatch-only finish set to decide which SI rows are *additional*
-// (not already stopwatch-recorded) — reusing this combined set there instead would make every
-// SI-only finisher's row test true against itself and silently drop them from that list.
+// that function uses the stopwatch/mobile finish set to decide which SI rows are *additional*
+// (not already accounted for elsewhere) — reusing this combined set there instead would make
+// every SI-only finisher's row test true against itself and silently drop them from that list.
 export function getFinishedOnlyBibs() {
   const bibs = new Set(
-    state.finishers.filter(f => f.action === 'Finish' && +f.number > 0).map(f => +f.number)
+    [...state.finishers, ...state.mobileProgress]
+      .filter(f => f.action === 'Finish' && +f.number > 0).map(f => +f.number)
   );
   for (const r of state.siResults) {
     const bib = getSIBib(r);
@@ -84,11 +85,18 @@ export function getDnfRows() {
     .filter(d => d.bib > 0 && state.finishers[d.idx].action === 'DNF');
   const swDnfBibs = new Set(swDnfs.map(d => d.bib));
 
+  // Mobile-recorded DNFs (state.mobileProgress) have no editable Finishers-page row of their
+  // own, same as an SI-only DNF below — idx: -1.
+  const mobileDnfs = state.mobileProgress
+    .filter(f => f.action === 'DNF' && +f.number > 0 && !swDnfBibs.has(+f.number))
+    .map(f => ({ bib: +f.number, idx: -1 }));
+  const knownDnfBibs = new Set([...swDnfBibs, ...mobileDnfs.map(d => d.bib)]);
+
   const siDnfs = state.siResults
-    .filter(r => getSIStatus(r) && getSIBib(r) > 0 && !swDnfBibs.has(getSIBib(r)))
+    .filter(r => getSIStatus(r) && getSIBib(r) > 0 && !knownDnfBibs.has(getSIBib(r)))
     .map(r => ({ bib: getSIBib(r), idx: -1 }));
 
-  return [...swDnfs, ...siDnfs]
+  return [...swDnfs, ...mobileDnfs, ...siDnfs]
     .filter((d, i, arr) => arr.findIndex(x => x.bib === d.bib) === i)
     .sort((a, b) => a.bib - b.bib)
     .map(({ bib, idx }) => {
@@ -101,8 +109,12 @@ export function getFinishedRows() {
   const swFinished = state.finishers.filter(f => f.action === 'Finish' && +f.number > 0);
   const swFinishedBibs = new Set(swFinished.map(f => +f.number));
 
+  const mobileFinished = state.mobileProgress
+    .filter(f => f.action === 'Finish' && +f.number > 0 && !swFinishedBibs.has(+f.number));
+  const knownFinishedBibs = new Set([...swFinishedBibs, ...mobileFinished.map(f => +f.number)]);
+
   const siFinished = state.siResults
-    .filter(r => getSIRaceTime(r) && getSIBib(r) > 0 && !swFinishedBibs.has(getSIBib(r)))
+    .filter(r => getSIRaceTime(r) && getSIBib(r) > 0 && !knownFinishedBibs.has(getSIBib(r)))
     .map(r => ({ number: getSIBib(r) }));
 
   const { seniors, juniors } = formatResults();
@@ -111,7 +123,7 @@ export function getFinishedRows() {
     if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
   }
 
-  return [...swFinished, ...siFinished]
+  return [...swFinished, ...mobileFinished, ...siFinished]
     .sort((a, b) => +a.number - +b.number)
     .map(f => {
       const r   = entryInfo(+f.number);
@@ -121,8 +133,12 @@ export function getFinishedRows() {
 }
 
 export function getEarlyStarterRows() {
-  return state.finishers
-    .filter(f => f.action === 'Start' && +f.number > 0)
+  const swStarts = state.finishers.filter(f => f.action === 'Start' && +f.number > 0);
+  const swStartBibs = new Set(swStarts.map(f => +f.number));
+  const mobileStarts = state.mobileProgress
+    .filter(f => f.action === 'Start' && +f.number > 0 && !swStartBibs.has(+f.number));
+
+  return [...swStarts, ...mobileStarts]
     .sort((a, b) => +a.number - +b.number)
     .map(f => {
       const r = entryInfo(+f.number);

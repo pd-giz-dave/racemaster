@@ -23,15 +23,24 @@
 - [x] allow for CP mode entries, assume the course is in CP location order, e.g. CP1 -> CP2 -> .. CPn,
       compute elapsed times through CPs as their time-of-day minus time-of-day when the clock started
 - [x] add the results tab here as another results source when generating the results page
-- [ ] i think i've got muddled here: the idea of the results tab is collate all the information
+- [ ] i think i've got muddled here: the idea of the results tab is to collate all the information
       in the selected mobile files in such a manner as they can be incorporated in the race results
       as rendered on the results page, currently there are 2 sources: the finishers list and the SI results
-      list, the intention is this mobile files set is a third source, i like the safety features
+      list, the intention is these mobile files results set are a third source, i like the safety features
       you implemented but the results page has gone too wrt start and clock offsets, that is the
-      domain of the adjust finish times function, the mobile results page should just provide the
+      domain of the adjust finish times function in format results, the mobile results page should just provide the
       required information to allow that, the mobile files contain all the same information as can be
       gleaned from the finishers list with the addition of the CP mode times, they must be in
       the formatted results in a similar way to the SI results
+- [ ] change the results tab name to "Progress", the "Compute Results" to "Update Progress" and "Clear Results" to "Clear Progress",
+- [ ] the Progress tab fulfills 2 roles: provide information required to produce results and provide feedback about where runners are on the course,
+      to that end the ordering should be by bib number and not position (as it no longer knows that)
+- [ ] the progress page should also show explicit start actions if a bib has done an early/late start
+- [ ] when the results page is shown it should do an auto "Update Progress" when the context is appropriate
+- [ ] on the safety page Last CP column, add "Start @..." for explicit early/late starts, 
+      also show the time-of-day not the elapsed time,
+      also use time-of-day and not start time on the early starters page,
+      fallback to elapsed time if time-of-day is not available
 
 ## Data loss prevention
 
@@ -55,4 +64,17 @@
 - [ ] provide a means for users to change their password and their mobile one too
 - [ ] an admin user can change any password
 - [ ] the mobile password must be different to the web-app constraint must always be applied
+
+## Race details
+
+- [ ] in event settings add a section that lists CP numbers that must be passed and in what order
+- [ ] if the list is empty CP records are optional and purely for safety purposes
+- [ ] if the list is populated those CP are compulsory and a runner missing one is disqualified 
+      and flagged as such in the results
+- [ ] such disqualifications appear in the splits tab on the results page as DSQ
+- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a commpulsory 
+      CP add a button in that 'slot' - "Grant" - that when selected considers that runner to have passed that
+      CP, this is intended to correct genuine mis-recordings at the CP, such corrections must be preserved
+      across "Update progress" actions, the rest of the system must react as if there was a time there
+      (ie. they may longer be considered as a DSQ)
 

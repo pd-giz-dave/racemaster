@@ -2,6 +2,7 @@
 
 import { formatResults, computeAvgTop10, getSplitsRows } from '../results.js';
 import { getCategoryProgress } from '../safety.js';
+import { autoUpdateProgress } from './mobile-files.js';
 import { state, saveEvent } from '../state.js';
 import { on, showStatus, wireTabBar, showChoiceDialog, showInputDialog, sanitise, renderThead, renderTable, tableColumns, escHtml } from '../ui.js';
 import { TABLES } from '../strings.js';
@@ -17,8 +18,15 @@ let _prizes       = [];
 let _pairsResults = [];
 let _splitsRows   = [];
 let _maxSplits    = 0;
+let _cpNumbers    = [];
 
-export function renderResults() {
+export async function renderResults() {
+  // Silently re-runs Mobile Files' own Update Progress using whatever file selection was last
+  // used for this event, but only when there's proof something genuinely changed since (see
+  // autoUpdateProgress()'s own doc in mobile-files.js) — a no-op, no-network-call in the common
+  // case (nothing new), so this doesn't turn opening this page into a background stall.
+  await autoUpdateProgress();
+
   const { warnings, seniors, juniors, prizes, pairsResults, helpersReport } = formatResults();
   _seniors      = seniors;
   _juniors      = juniors;
@@ -36,11 +44,12 @@ export function renderResults() {
   const pairsTbody = document.getElementById('results-pairs-tbody');
   if (pairsTbody) pairsTbody.innerHTML = buildPairsBodyHTML(pairsResults);
 
-  // Splits tab — visible only when SI results carry split times
-  const { maxSplits, rows: splitsRows } = getSplitsRows(seniors, juniors);
+  // Splits tab — visible when SI results carry split times, or mobile checkpoint data exists
+  const { maxSplits, cpNumbers, rows: splitsRows } = getSplitsRows(seniors, juniors);
   _splitsRows = splitsRows;
   _maxSplits  = maxSplits;
-  renderSplitsTable(splitsRows, maxSplits);
+  _cpNumbers  = cpNumbers;
+  renderSplitsTable(splitsRows, maxSplits, cpNumbers);
 
   const printBtn = document.getElementById('btn-print-prize-list');
   if (printBtn) printBtn.disabled = prizes.length === 0;
@@ -79,14 +88,14 @@ export function renderJuniorsTable(tbodyId, results) {
   if (tbody) tbody.innerHTML = buildJuniorsBodyHTML(results);
 }
 
-function renderSplitsTable(rows, maxSplits) {
+function renderSplitsTable(rows, maxSplits, cpNumbers = []) {
   const splitsBtn = document.getElementById('results-tab-splits-btn');
-  if (splitsBtn) splitsBtn.hidden = maxSplits === 0;
-  if (!maxSplits) return;
+  if (splitsBtn) splitsBtn.hidden = maxSplits === 0 && cpNumbers.length === 0;
+  if (!maxSplits && !cpNumbers.length) return;
 
-  renderThead('results-splits-tbody', buildSplitsColumns(maxSplits));
+  renderThead('results-splits-tbody', buildSplitsColumns(maxSplits, cpNumbers));
   const tbody = document.getElementById('results-splits-tbody');
-  if (tbody) tbody.innerHTML = buildSplitsBodyHTML(rows, maxSplits);
+  if (tbody) tbody.innerHTML = buildSplitsBodyHTML(rows, maxSplits, cpNumbers);
 }
 
 export function renderPrizes(prizes, tbodyId = 'prizes-tbody') {
@@ -167,11 +176,13 @@ function exportResultsCSV() {
     });
     downloadCSV(`${eventName}-results-pairs.csv`, rows, CSV.results.pairs);
   } else if (tab === 'splits') {
-    // Split count varies by event (however many controls the SI course had), so the column
-    // list is built here rather than in the static CSV_SCHEMA — one cumulative/delta pair per
-    // control, flattened out of each row's splits array.
+    // Split count varies by event (however many controls the SI course had, or how many
+    // mobile checkpoints were used), so the column list is built here rather than in the
+    // static CSV_SCHEMA — one cumulative/delta pair per SI control, one plain time per mobile
+    // checkpoint (no leg-delta concept), flattened out of each row's splits/cpTimes.
     const fields = ['position', 'bibNumber', 'name', 'category'];
     for (let i = 1; i <= _maxSplits; i++) fields.push(`split${i}Cumulative`, `split${i}Delta`);
+    for (const n of _cpNumbers) fields.push(`cp${n}Time`);
     fields.push('finishCumulative', 'finishDelta');
     const rows = _splitsRows.map(r => {
       const flat = { position: r.position, bibNumber: r.bibNumber, name: r.name, category: r.category };
@@ -179,6 +190,7 @@ function exportResultsCSV() {
         flat[`split${i + 1}Cumulative`] = s.cumulative;
         flat[`split${i + 1}Delta`]      = s.delta;
       });
+      for (const n of _cpNumbers) flat[`cp${n}Time`] = r.cpTimes?.[n] || '';
       flat.finishCumulative = r.finishTime.cumulative;
       flat.finishDelta      = r.finishTime.delta;
       return flat;

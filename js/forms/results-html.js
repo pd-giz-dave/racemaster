@@ -108,8 +108,10 @@ export function buildHelpersBodyHTML(helpersReport) {
 /** results-splits columns from strings.js, with the 'split' proforma cloned once per
  *  event split (id/label/title suffixed "_N") — shared by the on-screen table (via
  *  renderThead) and the published HTML (via buildSplitsHeadHTML below), so both stay
- *  in sync with a single set of labels. */
-export function buildSplitsColumns(maxSplits) {
+ *  in sync with a single set of labels. cpNumbers (from getSplitsRows()'s own return
+ *  value) appends one CP*n* column per mobile checkpoint after the SI split columns —
+ *  a mobile-only event has maxSplits === 0 and cpNumbers doing all the work instead. */
+export function buildSplitsColumns(maxSplits, cpNumbers = []) {
   const base      = TABLES['results-splits'];
   const idx       = base.findIndex(c => c.id === 'split');
   const proforma  = base[idx];
@@ -117,26 +119,42 @@ export function buildSplitsColumns(maxSplits) {
     const n = i + 1;
     return { id: `${proforma.id}_${n}`, label: `${proforma.label} ${n}`, title: `${proforma.title} ${n}` };
   });
-  return [...base.slice(0, idx), ...splitCols, ...base.slice(idx + 1)];
+  const cpCols = cpNumbers.map(n => ({
+    id: `cp_${n}`,
+    label: `CP${n}`,
+    title: `Approximate elapsed time at checkpoint ${n} from Mobile Files — timestamp-based, not authoritative`,
+  }));
+  return [...base.slice(0, idx), ...splitCols, ...cpCols, ...base.slice(idx + 1)];
 }
 
-export function buildSplitsHeadHTML(maxSplits) {
-  return '<tr>' + buildSplitsColumns(maxSplits)
+export function buildSplitsHeadHTML(maxSplits, cpNumbers = []) {
+  return '<tr>' + buildSplitsColumns(maxSplits, cpNumbers)
     .map(c => `<th${c.title ? ` title="${escHtml(c.title)}"` : ''}>${escHtml(c.label)}</th>`).join('') + '</tr>';
 }
 
 // Cumulative time on top, leg time (since the previous control) below — same
-// two-line pattern used elsewhere for pair rows (e.g. views/entries.js).
+// two-line pattern used elsewhere for pair rows (e.g. views/entries.js). Mobile checkpoint
+// times have no leg-delta concept of their own, so a CP cell is always just passed
+// { cumulative } — delta being falsy already renders as a plain single-line cell.
 function splitCellHTML({ cumulative, delta } = {}) {
   const cum = escHtml(cumulative || '');
   return delta ? `${cum}<br><span style="color:var(--muted);font-size:0.85em">${escHtml(delta)}</span>` : cum;
 }
 
-export function buildSplitsBodyHTML(rows, maxSplits) {
+// A row with no result position at all (status set by getSplitsRows() — seen at a checkpoint,
+// never finished) shows why, rather than the raw sentinel position value used only for sorting.
+function splitsPositionLabel(r) {
+  if (r.status === 'dnf')         return 'DNF';
+  if (r.status === 'outstanding') return 'Out on course';
+  return r.position;
+}
+
+export function buildSplitsBodyHTML(rows, maxSplits, cpNumbers = []) {
   return rows.map(r => {
     const splitCells = Array.from({ length: maxSplits }, (_, i) => `<td>${splitCellHTML(r.splits[i])}</td>`).join('');
-    return `<tr><td>${r.position}</td><td>${escHtml(r.bibNumber||'')}</td>
-      <td>${escHtml(r.name||'')}</td><td>${escHtml(r.category||'')}</td>${splitCells}
+    const cpCells = cpNumbers.map(n => `<td>${splitCellHTML({ cumulative: r.cpTimes?.[n] || '' })}</td>`).join('');
+    return `<tr><td>${escHtml(String(splitsPositionLabel(r)))}</td><td>${escHtml(r.bibNumber||'')}</td>
+      <td>${escHtml(r.name||'')}</td><td>${escHtml(r.category||'')}</td>${splitCells}${cpCells}
       <td>${splitCellHTML(r.finishTime)}</td></tr>`;
   }).join('');
 }
@@ -185,17 +203,17 @@ function helpersSection(helpersReport) {
 </table>`);
 }
 
-function splitsSection(splitsRows, maxSplits) {
-  if (!maxSplits || !splitsRows.length) return '';
+function splitsSection(splitsRows, maxSplits, cpNumbers = []) {
+  if ((!maxSplits && !cpNumbers.length) || !splitsRows.length) return '';
   return section('Splits', splitsRows.length, `<table class="data-table re-sortable">
-  <thead>${buildSplitsHeadHTML(maxSplits)}</thead>
-  <tbody>${buildSplitsBodyHTML(splitsRows, maxSplits)}</tbody>
+  <thead>${buildSplitsHeadHTML(maxSplits, cpNumbers)}</thead>
+  <tbody>${buildSplitsBodyHTML(splitsRows, maxSplits, cpNumbers)}</tbody>
 </table>`);
 }
 
 const SECTIONS = {
-  combined: ({ seniors, juniors, pairsResults, helpersReport, splitsRows, maxSplits }) =>
-    juniorsSection(juniors) + seniorsSection(seniors) + pairsSection(pairsResults) + helpersSection(helpersReport) + splitsSection(splitsRows, maxSplits),
+  combined: ({ seniors, juniors, pairsResults, helpersReport, splitsRows, maxSplits, cpNumbers }) =>
+    juniorsSection(juniors) + seniorsSection(seniors) + pairsSection(pairsResults) + helpersSection(helpersReport) + splitsSection(splitsRows, maxSplits, cpNumbers),
   juniors:  ({ juniors })         => juniorsSection(juniors),
   seniors:  ({ seniors })         => seniorsSection(seniors),
   helpers:  ({ helpersReport })   => helpersSection(helpersReport),
@@ -227,7 +245,7 @@ export async function publishResultsHTML() {
   const notesHtml = state.event.notes?.trim()
     ? `<p class="re-notes">${escHtml(state.event.notes).replace(/\r\n/g, '\n').replace(/\n/g, '<br>')}</p>`
     : '';
-  const html     = wrap(TITLES.combined(), notesHtml + SECTIONS.combined({ ...data, splitsRows: splits.rows, maxSplits: splits.maxSplits }));
+  const html     = wrap(TITLES.combined(), notesHtml + SECTIONS.combined({ ...data, splitsRows: splits.rows, maxSplits: splits.maxSplits, cpNumbers: splits.cpNumbers }));
   const token    = localStorage.getItem('racemaster-token');
   const res = await fetch('/api/publish-results', {
     method:  'POST',

@@ -8,6 +8,8 @@ import { getEntry, getSortedEntries, isEntryBanned, getEntryName } from './entri
 import { adjustedFinishTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
 import { getSIBib, getSIRaceTime, getSICourse, getSIStatus, getSINumSplits, getSISplitTime } from './si-results.js';
+import { getMobileCheckpointNumbers, getMobileCheckpointTimes, getMobileCheckpointBib } from './mobile-checkpoints.js';
+import { getSortedMobileProgress } from './mobile-progress.js';
 
 
 /** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, helpersReport }. */
@@ -24,13 +26,27 @@ export function formatResults() {
       .filter(f => f.action === 'Finish');
     const swBibs = new Set(swFinishers.map(f => +f.number));
 
-    // SI results for this course — skip bibs already in stopwatch source
+    // Mobile Files' Progress data for this course — skip bibs already in the stopwatch source.
+    // Raw, unadjusted times exactly like swFinishers (both get adjustedFinishTime() below), not
+    // pre-adjusted the way SI results are — see js/mobile-progress.js.
+    const mobileFinishers = getSortedMobileProgress(course)
+      .filter(f => f.action === 'Finish')
+      .filter(f => {
+        if (swBibs.has(+f.number)) {
+          clashWarnings.push(`Bib ${f.number} has stopwatch and mobile result — mobile ignored`);
+          return false;
+        }
+        return true;
+      });
+    const mobileBibs = new Set(mobileFinishers.map(f => +f.number));
+
+    // SI results for this course — skip bibs already accounted for above
     const siFinishers = state.siResults
       .filter(r => ciEq(getSICourse(r), course) && getSIBib(r) > 0 && getSIRaceTime(r))
       .map(r => ({ action: 'Finish', number: getSIBib(r), time: getSIRaceTime(r) }))
       .filter(f => {
-        if (swBibs.has(+f.number)) {
-          clashWarnings.push(`Bib ${f.number} has stopwatch and SI result — SI ignored`);
+        if (swBibs.has(+f.number) || mobileBibs.has(+f.number)) {
+          clashWarnings.push(`Bib ${f.number} has stopwatch/mobile and SI result — SI ignored`);
           return false;
         }
         return true;
@@ -38,10 +54,10 @@ export function formatResults() {
     const siBibSet = new Set(siFinishers.map(f => +f.number));
 
     // Assign each finisher a numeric sort key.
-    // SI entries use their time. SW entries use adjusted time if available; untimed SW entries
-    // get a fractional key interpolated between their nearest timed neighbours so they stay
-    // in list order, interleaved with timed entries at the right point.
-    const rawList = [...swFinishers, ...siFinishers];
+    // SI entries use their time. SW/mobile entries use adjusted time if available; untimed
+    // entries get a fractional key interpolated between their nearest timed neighbours so they
+    // stay in list order, interleaved with timed entries at the right point.
+    const rawList = [...swFinishers, ...mobileFinishers, ...siFinishers];
     const keys = rawList.map(f => {
       const e = +f.number > 0 ? getEntry(+f.number) : null;
       const t = !siBibSet.has(+f.number) && e && f.time ? adjustedFinishTime(e, f.time, f) : f.time;
@@ -127,7 +143,7 @@ export function formatResults() {
     const addedBibs = new Set(courseResults.map(r => +r.bibNumber));
 
     const dnfBibs = new Set(
-      getSortedFinishers(course)
+      [...getSortedFinishers(course), ...getSortedMobileProgress(course)]
         .filter(f => f.action === 'DNF' && +f.number > 0)
         .map(f => +f.number)
     );
@@ -350,52 +366,118 @@ function buildHelpersReport() {
 
 /**
  * Build one row per SI result that carries split times, joined against the
- * already-computed official results (for position/name/category). Rows with
- * no matching finisher (DNF/DNS/unmatched bib) or no splits are skipped.
+ * already-computed official results (for position/name/category), UNIONed with
+ * one row per bib carrying mobile checkpoint data (see js/mobile-checkpoints.js) —
+ * the mobile-derived elapsed times are approximate/raw (crossing timestamp minus
+ * the stopwatch's own start timestamp) and get the same early/late-start and
+ * clock-offset correction applied here, via adjustedFinishTime(), that ordinary
+ * finish times already get in formatResults() above — that correction is this
+ * function's job, not Mobile Files' own Progress tab, which only ever shows the
+ * raw values.
+ *
+ * A union, not an attachment onto SI's own row list, because state.siResults is
+ * empty for the common mobile-only event — attaching cpTimes only to existing SI
+ * rows would show nothing at all in that case, the primary one this serves.
  *
  * SI's split times are cumulative (elapsed since the start), not leg times —
  * each split/finish-time value is returned as { cumulative, delta }, where
  * delta is the time since the previous control (or, for the finish, since
- * the last control).
+ * the last control). Mobile checkpoint times have no leg-delta concept (no
+ * intermediate splits of their own), so cpTimes are plain 'HH:MM:SS' strings.
  *
- * Returns { maxSplits, rows } — maxSplits is 0 when no result has splits.
+ * Returns { maxSplits, maxCp, cpNumbers, rows }.
  */
 export function getSplitsRows(seniors, juniors) {
   const maxSplits = Math.max(0, ...state.siResults.map(getSINumSplits));
-  if (!maxSplits) return { maxSplits: 0, rows: [] };
+  const cpNumbers = getMobileCheckpointNumbers();
+  const maxCp = cpNumbers.length;
+  if (!maxSplits && !maxCp) return { maxSplits: 0, maxCp: 0, cpNumbers: [], rows: [] };
 
   const resultsByBib = new Map();
   for (const r of [...seniors, ...juniors]) {
     if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
   }
 
-  const rows = [];
-  for (const si of state.siResults) {
-    const n = getSINumSplits(si);
-    if (!n) continue;
-    const bib = getSIBib(si);
-    const r = bib > 0 ? resultsByBib.get(bib) : null;
-    if (!r) continue;
+  const rowsByBib = new Map();
 
-    const cumTimes = Array.from({ length: n }, (_, i) => getSISplitTime(si, i + 1));
-    const raceTime = getSIRaceTime(si) || r.time;
+  if (maxSplits) {
+    for (const si of state.siResults) {
+      const n = getSINumSplits(si);
+      if (!n) continue;
+      const bib = getSIBib(si);
+      const r = bib > 0 ? resultsByBib.get(bib) : null;
+      if (!r) continue;
 
-    // index 0 = start (always valid, always 0); 1..n = controls; n+1 = finish.
-    // A zero-second leg (two controls reached in the same second) is legitimate
-    // data, not missing data — only a negative gap or an unparsed time is rejected.
-    const secs  = [0, ...cumTimes.map(timeToSeconds), timeToSeconds(raceTime)];
-    const valid = [true, ...cumTimes.map(t => timeToSeconds(t) > 0), timeToSeconds(raceTime) > 0];
-    const legDelta = i => (valid[i] && valid[i - 1] && secs[i] - secs[i - 1] >= 0)
-      ? secondsToTime(secs[i] - secs[i - 1])
-      : '';
+      const cumTimes = Array.from({ length: n }, (_, i) => getSISplitTime(si, i + 1));
+      const raceTime = getSIRaceTime(si) || r.time;
 
-    const splits = cumTimes.map((cumulative, i) => ({ cumulative, delta: legDelta(i + 1) }));
-    const finishTime = { cumulative: raceTime, delta: legDelta(n + 1) };
+      // index 0 = start (always valid, always 0); 1..n = controls; n+1 = finish.
+      // A zero-second leg (two controls reached in the same second) is legitimate
+      // data, not missing data — only a negative gap or an unparsed time is rejected.
+      const secs  = [0, ...cumTimes.map(timeToSeconds), timeToSeconds(raceTime)];
+      const valid = [true, ...cumTimes.map(t => timeToSeconds(t) > 0), timeToSeconds(raceTime) > 0];
+      const legDelta = i => (valid[i] && valid[i - 1] && secs[i] - secs[i - 1] >= 0)
+        ? secondsToTime(secs[i] - secs[i - 1])
+        : '';
 
-    rows.push({ position: r.position, bibNumber: bib, name: getEntryName(r), category: r.category, splits, finishTime });
+      const splits = cumTimes.map((cumulative, i) => ({ cumulative, delta: legDelta(i + 1) }));
+      const finishTime = { cumulative: raceTime, delta: legDelta(n + 1) };
+
+      rowsByBib.set(bib, { position: r.position, bibNumber: bib, name: getEntryName(r), category: r.category, splits, finishTime, cpTimes: {} });
+    }
   }
-  rows.sort((a, b) => a.position - b.position);
-  return { maxSplits, rows };
+
+  if (maxCp) {
+    for (const mc of state.mobileCheckpoints) {
+      const bib = getMobileCheckpointBib(mc);
+      const entry = getEntry(bib);
+      if (!entry) continue;
+
+      // Anchor on this bib's own *manual* Finish/DNF record if one exists (state.mobileProgress
+      // has no position to anchor on — adjustedFinishTime() falls back to its own last-record
+      // search there when this is null, see time-utils.js) — matters once mid-race clock resets
+      // land manual-side: without this, a DNF'd/still-out bib's checkpoint time would silently
+      // pick up whichever clock reset is last overall, not whichever was in effect when that bib
+      // was actually seen.
+      const finisherRecord = state.finishers.find(f => +f.number === bib && (f.action === 'Finish' || f.action === 'DNF')) || null;
+      const raw = getMobileCheckpointTimes(mc);
+      const cpTimes = {};
+      for (const n of cpNumbers) {
+        if (raw[n] != null) cpTimes[n] = adjustedFinishTime(entry, raw[n], finisherRecord);
+      }
+
+      const r = resultsByBib.get(bib);
+      const existing = rowsByBib.get(bib);
+      if (existing) {
+        existing.cpTimes = cpTimes;
+      } else if (r) {
+        // Finished (via any of formatResults()'s three sources) but with no SI split row of its
+        // own (e.g. a mobile-only finisher) — still show the actual finish time, not a blank cell.
+        rowsByBib.set(bib, { position: r.position, bibNumber: bib, name: getEntryName(entry), category: entry.category || '', splits: [], finishTime: { cumulative: r.time }, cpTimes, status: 'finished' });
+      } else {
+        // Seen at a checkpoint but never finished — either retired (a DNF recorded anywhere:
+        // manual, mobile, or SI status) or still genuinely out on the course. sortKey pushes
+        // both to the bottom, same as formatResults()'s own DNF position 9999, without reusing
+        // that literal as a value ever shown to the user (see buildSplitsBodyHTML).
+        // finishTime: {} (not null) — splitCellHTML destructures its argument; a missing/
+        // undefined argument falls back to its own default, but null does not and would throw.
+        const dnf = isRecordedDnf(bib);
+        rowsByBib.set(bib, { position: Number.MAX_SAFE_INTEGER, bibNumber: bib, name: getEntryName(entry), category: entry.category || '', splits: [], finishTime: {}, cpTimes, status: dnf ? 'dnf' : 'outstanding' });
+      }
+    }
+  }
+
+  const rows = [...rowsByBib.values()].sort((a, b) => a.position - b.position || a.bibNumber - b.bibNumber);
+  return { maxSplits, maxCp, cpNumbers, rows };
+}
+
+/** True if bib has a DNF/retirement recorded anywhere — manual Finishers entry, mobile Update
+ *  Progress, or an SI result with a non-blank Status. Used by getSplitsRows() to tell "retired"
+ *  apart from "still out on the course" for a bib with a checkpoint sighting but no finish. */
+function isRecordedDnf(bib) {
+  if (state.finishers.some(f => f.action === 'DNF' && +f.number === bib)) return true;
+  if (state.mobileProgress.some(f => f.action === 'DNF' && +f.number === bib)) return true;
+  return state.siResults.some(r => getSIBib(r) === bib && getSIStatus(r));
 }
 
 /** Get results sorted by position for a course */

@@ -1218,8 +1218,8 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-secondary" id="btn-refresh-mobile-files">Refresh</button>
-        <button class="btn btn-secondary" id="btn-compute-results">Compute Results</button>
-        <button class="btn btn-secondary" id="btn-clear-results">Clear Results</button>
+        <button class="btn btn-secondary" id="btn-update-progress">Update Progress</button>
+        <button class="btn btn-secondary" id="btn-clear-progress">Clear Progress</button>
         <button class="btn" id="btn-connect-phone">Connect to Phone…</button>
         <span id="mobile-files-poll-interval" class="entry-status" hidden></span>
         <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto"><input type="checkbox" id="btn-ble-logging"> Bluetooth logging</label>
@@ -1227,7 +1227,7 @@
       <div class="tab-bar" id="mobile-files-tab-bar">
         <button class="active" data-mf-tab="devices">Devices</button>
         <button data-mf-tab="bib-allocations">Bib Allocations</button>
-        <button data-mf-tab="results">Results</button>
+        <button data-mf-tab="progress">Progress</button>
       </div>
 
       <div class="tab-panel active" id="mobile-files-tab-devices">
@@ -1248,11 +1248,11 @@
         </div>
       </div>
 
-      <div class="tab-panel" id="mobile-files-tab-results">
+      <div class="tab-panel" id="mobile-files-tab-progress">
         <div class="table-scroll">
           <table class="data-table">
             <thead></thead>
-            <tbody id="mobile-results-tbody"></tbody>
+            <tbody id="mobile-progress-tbody"></tbody>
           </table>
         </div>
       </div>
