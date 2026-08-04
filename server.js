@@ -268,11 +268,12 @@ function writeBibAllocations(username, raceLabel, payload) {
   fs.writeFileSync(bibAllocationsFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
 }
 
-// raceLabel ends "…-dd-mm-yy" (the race date, as typed/picked on the phone) — pull that out
-// for sorting. Returns { dd, mm, yy } (strings) or null if the label doesn't end that way.
+// raceLabel ends "…-YY-MM-DD" (2-digit year first, e.g. "-26-08-04" = 4 August 2026 — the
+// phone's own date suffix) — pull that out for sorting. Returns { yy, mm, dd } (strings) or
+// null if the label doesn't end that way.
 function parseRaceLabelDate(raceLabel) {
   const m = /-(\d{2})-(\d{2})-(\d{2})$/.exec(raceLabel || '');
-  return m ? { dd: m[1], mm: m[2], yy: m[3] } : null;
+  return m ? { yy: m[1], mm: m[2], dd: m[3] } : null;
 }
 
 // Returns array of { owner, raceLabel, raceDate, devices: [{name, records, lines}], recordCount },

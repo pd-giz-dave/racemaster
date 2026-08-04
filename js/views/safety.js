@@ -12,6 +12,7 @@ import {
   getOutstandingRows, getDnfRows, getFinishedRows,
   getEarlyStarterRows, buildNoShows, getSafetyCounts,
 } from '../safety.js';
+import { getLatestCheckpoint } from '../mobile-checkpoints.js';
 
 const SAFETY_OUT_COLS = tableColumns(TABLES['safety-outstanding'], {
   bib:     e => e.bibNumber,
@@ -20,6 +21,10 @@ const SAFETY_OUT_COLS = tableColumns(TABLES['safety-outstanding'], {
   cat:     e => {
     const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
     return pg ? `${e.category || ''} ${pg}`.trim() : (e.category || '');
+  },
+  lastCP:  e => {
+    const last = getLatestCheckpoint(+e.bibNumber);
+    return last ? `CP${last.cp} @ ${last.time}` : '';
   },
   actions: () => `<button class="btn-sm btn-delete btn-retire-safety" data-action="retire">Retire</button>`,
 });

@@ -22,6 +22,7 @@ export const state = {
   helpers:          [],  // {number, name, club, gender, dob, category, role}
   finishers:        [],  // {action, number, time}
   siResults:        [],  // dynamic - whatever comes from SI results CSV
+  mobileCheckpoints: [], // {bibNumber, cpTimes: {'<n>': 'HH:MM:SS'}} — dynamic, see mobile-checkpoints.js
 
   // Runtime-only (not persisted)
   finishNumbersMap: {},  // 'S101' -> ['5','7'] (course-prefix + bib -> array of finisher indices)
@@ -42,6 +43,7 @@ export async function loadAll() {
     loadList('helpers'),
     loadList('finishers'),
     loadList('siResults'),
+    loadList('mobileCheckpoints'),
     loadPreset('roles', BUILTIN_ROLES, r => ({ ...r })),
   ]);
   if (state.categories.length === 0) {
@@ -93,6 +95,7 @@ export async function saveEntries()          { await writeTable('entries',      
 export async function saveHelpers()          { await writeTable('helpers',         state.helpers); }
 export async function saveFinishers()        { await writeTable('finishers',       state.finishers); }
 export async function saveSIResults()        { await writeTable('siResults',       state.siResults); }
+export async function saveMobileCheckpoints() { await writeTable('mobileCheckpoints', state.mobileCheckpoints); }
 
 export function applyFRACategories() {
   _applyPreset(FRA_CATEGORIES);

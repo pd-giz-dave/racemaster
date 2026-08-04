@@ -61,7 +61,7 @@ export function getCategoryProgress() {
     getCategoryPriority(a.category) - getCategoryPriority(b.category));
 }
 
-function entryInfo(bib) {
+export function entryInfo(bib) {
   const e  = getEntry(bib);
   const pg = e?.partner ? derivePairGender(e.gender, e.partner.gender) : '';
   return {

@@ -163,8 +163,41 @@ function encodeJson(obj) {
   return new TextEncoder().encode(JSON.stringify(obj));
 }
 
+// ATT's maximum attribute value length (Bluetooth Core Spec, Vol 3, Part F, §3.2.9) — a single
+// GATT characteristic read can never return more than this many bytes, for any client, on any
+// platform; there is no larger single read to ask for instead. DeviceInfo used to grow
+// unboundedly with relayEntries (one per device a phone was relaying for), which could push it
+// past this cap; it now only ever reports relayCount (a plain number) there, with the actual
+// manifest fetched via its own separate chunked pull (see pullRelayManifestEntries below,
+// mirroring MuleGattProfile.kt's RelayManifestEntry doc on the phone side) precisely so it's
+// never bounded by this single-read cap regardless of how many devices are being relayed. Kept
+// as a defensive check regardless — if DeviceInfo's JSON payload ever did grow past this (e.g.
+// an unexpectedly long deviceName/raceLabel), the value would arrive silently truncated
+// mid-string, and JSON.parse would fail with a generic "Unterminated string" error that gives no
+// hint this is a hard protocol ceiling rather than corrupt data — detected explicitly below so
+// the real cause is obvious the first time.
+const ATT_MAX_ATTRIBUTE_VALUE_LENGTH = 512;
+
 function decodeJson(dataView) {
-  return JSON.parse(new TextDecoder('utf-8').decode(dataView));
+  const text = new TextDecoder('utf-8').decode(dataView);
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    if (dataView.byteLength >= ATT_MAX_ATTRIBUTE_VALUE_LENGTH) {
+      const err = new Error(
+        `DeviceInfo is ${dataView.byteLength} bytes — at or beyond Bluetooth's hard ${ATT_MAX_ATTRIBUTE_VALUE_LENGTH}-byte limit for a single characteristic read, so it arrived truncated. `
+        + `This phone's device/race name is unusually long for DeviceInfo to fit in one read — the app needs to split DeviceInfo across multiple reads.`
+      );
+      // The payload size is a property of the phone's current state, not a transient BLE
+      // hiccup — retrying reads the exact same oversized value and fails identically every
+      // time (unlike a dropped connection, which reconnecting can genuinely fix). Marked so
+      // connectAndVerify's retry loop can stop immediately instead of burning through all
+      // DEVICE_INFO_ATTEMPTS for a guaranteed-identical failure.
+      err.nonRetryable = true;
+      throw err;
+    }
+    throw e;
+  }
 }
 
 // "yyyy/MM/dd HH:mm:ss" — the same format racemaster-mobile's own HTTP sync path formats
@@ -274,7 +307,11 @@ async function sendSinkAck(service, recordUuids) {
   }
 }
 
-async function pullOne(service, pullRequest) {
+// Writes [pullRequest] to CONTROL and returns whatever JSON array streams back over DATA once
+// reassembled — shared by pullOne (SyncRecord[] shape) and pullRelayManifestEntries
+// (RelayManifestEntry[] shape) below, which differ only in what shape the resulting array
+// decodes as and what (if anything) each maps it into afterward.
+async function pullChunkedArray(service, pullRequest) {
   const dataChar    = await service.getCharacteristic(DATA_CHAR_UUID);
   const controlChar = await service.getCharacteristic(CONTROL_CHAR_UUID);
   const streamPromise = collectDataStream(dataChar);
@@ -283,11 +320,27 @@ async function pullOne(service, pullRequest) {
   bleLog('[mule-ble] sending pull request', pullRequest);
   await controlChar.writeValueWithResponse(encodeJson(pullRequest));
   try {
-    const records = await streamPromise;
-    return records.map(toStoredLine);
+    return await streamPromise;
   } finally {
     try { await dataChar.stopNotifications(); } catch { /* connection may already be gone */ }
   }
+}
+
+async function pullOne(service, pullRequest) {
+  const records = await pullChunkedArray(service, pullRequest);
+  return records.map(toStoredLine);
+}
+
+// Fetches the connected phone's own current relay manifest — everything else it's holding
+// relayable data for on behalf of other, genuinely different origin devices (see
+// RelayManifestEntry's own doc on the phone side for why this is its own separate, chunked pull
+// rather than a DeviceInfo field: the manifest can grow arbitrarily large with however many
+// devices are being relayed, and DeviceInfo is a single read bounded by
+// ATT_MAX_ATTRIBUTE_VALUE_LENGTH). Only worth calling when DeviceInfo.relayCount was > 0 — see
+// pullFromConnectedPhone below. sinceLineNumber is required by PullRequest's own wire shape but
+// ignored by the phone for this request type; 0 is sent purely to satisfy that.
+async function pullRelayManifestEntries(service) {
+  return pullChunkedArray(service, { sinceLineNumber: 0, requestRelayManifest: true });
 }
 
 // ---- Known-device memory ----
@@ -444,7 +497,14 @@ async function connectAndVerify(device, onProgress = () => {}) {
   onProgress(`Verifying "${label}" is running RaceMaster Mobile…`);
   let deviceInfo = null;
   let lastError = null;
+  // How many attempts actually ran — DEVICE_INFO_ATTEMPTS is only the *ceiling* on the loop
+  // below, not what genuinely happened: a nonRetryable failure (see decodeJson's own doc)
+  // breaks out on the very first attempt it occurs on, same as a genuine success can. Logging
+  // the ceiling instead of this after the loop (see the "gave up" bleError further down) is
+  // what made a truncated-DeviceInfo failure claim "after 3 attempts" when only 1 ever ran.
+  let attemptsMade = 0;
   for (let attempt = 1; attempt <= DEVICE_INFO_ATTEMPTS; attempt++) {
+    attemptsMade = attempt;
     try {
       if (!device.gatt.connected) {
         onProgress(`Reconnecting to "${label}"… (attempt ${attempt}/${DEVICE_INFO_ATTEMPTS})`);
@@ -464,6 +524,15 @@ async function connectAndVerify(device, onProgress = () => {}) {
       deviceInfo = null; // decoded but the wrong shape — still worth a retry, not immediately fatal
     } catch (e) {
       lastError = e;
+      if (e.nonRetryable) {
+        // Deterministic — retrying would just read the exact same oversized value and fail
+        // identically (see decodeJson's own doc), so this is logged once, here, as the real
+        // failure it is, rather than as a routine bleWarn retry note *and* duplicated again by
+        // the generic "gave up" bleError after the loop (see the `attemptsMade`-gated skip
+        // there) — the same underlying error doesn't need to appear in the console twice.
+        bleError(`[mule-ble] DeviceInfo read failed permanently on attempt ${attempt} (non-retryable)`, e);
+        break;
+      }
       bleWarn(`[mule-ble] DeviceInfo read attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} failed`, e);
     }
     if (attempt < DEVICE_INFO_ATTEMPTS) await new Promise(r => setTimeout(r, DEVICE_INFO_RETRY_DELAY_MS));
@@ -473,14 +542,26 @@ async function connectAndVerify(device, onProgress = () => {}) {
     // A link that kept dropping is a flaky-connection problem, not evidence this isn't a
     // genuine RaceMaster Mobile phone (it connected fine at least once) — worth keeping
     // remembered for next time, unlike a device that connected solidly throughout but never
-    // spoke this protocol at all, which forgetKnownDevice below treats as the real thing.
+    // spoke this protocol at all, which forgetKnownDevice below treats as the real thing. A
+    // too-large DeviceInfo (lastError.nonRetryable) is the same case as a link that kept
+    // dropping in that sense — a too-big payload is itself proof this is a genuine RaceMaster
+    // Mobile phone (it's the app's own characteristic, correctly shaped, just oversized this
+    // time), so forgetting it here would be wrong and would just make an otherwise-good phone
+    // re-prompt for confirmation next time for no reason.
     const keptDisconnecting = !device.gatt.connected;
     device.gatt.disconnect();
-    if (!keptDisconnecting) forgetKnownDevice(device.id);
-    bleError(`[mule-ble] gave up on DeviceInfo after ${DEVICE_INFO_ATTEMPTS} attempts`, lastError);
-    throw new Error(keptDisconnecting
-      ? `Lost the Bluetooth connection to "${label}" while verifying it — try Connect to Phone… again.`
-      : `"${label}" doesn't appear to be running RaceMaster Mobile — pick a different device.`);
+    if (!keptDisconnecting && !lastError?.nonRetryable) forgetKnownDevice(device.id);
+    // Already logged (as the specific failure it is, via bleError) at the point it happened,
+    // inside the loop above — skipped here so it isn't reported a second time under this
+    // generic "gave up" wording too.
+    if (!lastError?.nonRetryable) {
+      bleError(`[mule-ble] gave up on DeviceInfo after ${attemptsMade} attempt${attemptsMade === 1 ? '' : 's'}`, lastError);
+    }
+    throw new Error(lastError && lastError.nonRetryable
+      ? lastError.message
+      : keptDisconnecting
+        ? `Lost the Bluetooth connection to "${label}" while verifying it — try Connect to Phone… again.`
+        : `"${label}" doesn't appear to be running RaceMaster Mobile — pick a different device.`);
   }
 
   connectedDevice = device;
@@ -513,8 +594,9 @@ export async function reconnectToKnownDevice(device, onProgress) {
 }
 
 // Pulls the currently-connected phone's own race history plus anything it's relaying on
-// behalf of other devices (see DeviceInfo.relayEntries — a mule-to-mule chain), and returns
-// one entry per origin device: { raceLabel, deviceName, deviceId, lines }[] — each containing
+// behalf of other devices (see DeviceInfo.relayCount/pullRelayManifestEntries above — a
+// mule-to-mule chain), and returns one entry per origin device: { raceLabel, deviceName,
+// deviceId, lines }[] — each containing
 // only the delta since this same origin was last successfully pulled (see
 // getLastPulledLineNumber above), not its full history every time. deviceId is the true origin
 // device's own stable id (never the connected Mule's, for a relayed entry) — callers that
@@ -561,7 +643,23 @@ export async function pullFromConnectedPhone() {
     bleLog('[mule-ble] device has no race of its own (pure Mule) — skipping straight to relay entries');
   }
 
-  for (const relay of deviceInfo.relayEntries || []) {
+  // The manifest itself (unlike the count) is fetched fresh here rather than off the
+  // connect-time deviceInfo — see pullRelayManifestEntries' own doc. Only bothered with when
+  // relayCount says there's something to fetch, so a leaf Time/Bibs/CP phone (always
+  // relayCount 0) never pays this extra round trip. A failure here is treated the same as any
+  // other leg failing (see the try/catch pattern above/below) — logged and pushed onto errors,
+  // never discarding whatever the own-race leg above already retrieved.
+  let relayEntries = [];
+  if (deviceInfo.relayCount > 0) {
+    try {
+      relayEntries = await pullRelayManifestEntries(service);
+    } catch (e) {
+      bleError('[mule-ble] failed to fetch relay manifest', e);
+      errors.push(e);
+    }
+  }
+
+  for (const relay of relayEntries) {
     // originDeviceId/originRaceLabel go out on the wire below exactly as the phone itself
     // reported them — that's how it identifies which relayed race to stream back, and must
     // match its own internal records byte for byte. Only the sanitised copies (raceLabel/
