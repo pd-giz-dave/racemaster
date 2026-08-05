@@ -37,10 +37,16 @@
       to that end the ordering should be by bib number and not position (as it no longer knows that)
 - [ ] the progress page should also show explicit start actions if a bib has done an early/late start
 - [ ] when the results page is shown it should do an auto "Update Progress" when the context is appropriate
-- [ ] on the safety page Last CP column, add "Start @..." for explicit early/late starts, 
-      also show the time-of-day not the elapsed time,
-      also use time-of-day and not start time on the early starters page,
+- [ ] on the safety page Last CP column, add "Start @..." for explicit early/late starts
+      as we know we saw them there, also show the time-of-day not the elapsed time,
+      also use time-of-day and not start time on the early starters tab,
       fallback to elapsed time if time-of-day is not available
+- [ ] another possible change of tack on results: the only thing the finishers page cannot do is CP splits,
+      for the SI case they are shown dynamically in the splits tab of the results, so the conventional results
+      can be accommodated on the finishers page, explore the idea of consolidating all results sources into
+      the finishers page and doing splits separately, the finishers page would need a 'source' column so that
+      multiple sources can mix (e.g. juniors manual via stopwatch, seniors auto via SI), so the sources are (at present):
+      manual, SI, bluetooth, would that simplify things?
 
 ## Data loss prevention
 
