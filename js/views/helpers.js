@@ -239,10 +239,18 @@ export function wireHelpers() {
 
   const roleDescEl = document.getElementById('helper-form-role-desc');
   wireRoleTypeahead(roleInput, {
-    onSelect: r => {
-      if (roleDescEl) roleDescEl.value = r.description || '';
-      addRoleFromInput();
-    },
+    onSelect: r => { if (roleDescEl) roleDescEl.value = r.description || ''; },
+  });
+  // Only commit the typed text as a role chip on an explicit end-of-entry signal
+  // — a comma (above) or leaving the field. A prefix becoming momentarily unique
+  // while still typing (e.g. "MARS" uniquely matching "MARSHAL") must NOT
+  // auto-add, or fast typing "MARSH" adds "MARSHAL" then treats the trailing "H"
+  // as a fresh unique prefix for "HELPER". Ignore blur caused by moving focus
+  // into the typeahead dropdown (e.g. arrow-down) — that's still mid-selection.
+  roleInput?.addEventListener('blur', e => {
+    const dropdown = roleInput.closest('.form-field')?.querySelector('.name-typeahead');
+    if (dropdown?.contains(e.relatedTarget)) return;
+    addRoleFromInput();
   });
 
   if (roleDescEl) {
