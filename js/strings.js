@@ -677,6 +677,7 @@ export const TABLES = {
     { id: 'entries',     label: 'Entries',     title: 'Total entrants in this category (bib assigned)', align: 'right' },
     { id: 'finished',    label: 'Finished',    title: 'Entrants in this category who have finished (retirees excluded)', align: 'right' },
     { id: 'outstanding', label: 'Outstanding', title: 'Entrants in this category not yet finished or retired', align: 'right' },
+    { id: 'dnf',         label: 'DNF',         title: 'Entrants in this category who have retired or are otherwise accounted for without finishing', align: 'right' },
   ],
   'results-senior': [
     { id: 'pos',      label: 'Pos',     title: 'Overall finishing position' },

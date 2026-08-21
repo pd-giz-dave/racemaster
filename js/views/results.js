@@ -74,6 +74,7 @@ function renderProgressTable() {
     entries:     r => String(r.entries),
     finished:    r => r.finished    ? String(r.finished)    : '',
     outstanding: r => r.outstanding ? String(r.outstanding) : '',
+    dnf:         r => r.dnf         ? String(r.dnf)         : '',
   }), getCategoryProgress());
 }
 
