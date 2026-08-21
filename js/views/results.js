@@ -71,6 +71,7 @@ export async function renderResults() {
 function renderProgressTable() {
   renderTable('results-progress-tbody', tableColumns(TABLES['results-progress'], {
     category:    r => escHtml(r.category),
+    entries:     r => String(r.entries),
     finished:    r => r.finished    ? String(r.finished)    : '',
     outstanding: r => r.outstanding ? String(r.outstanding) : '',
   }), getCategoryProgress());

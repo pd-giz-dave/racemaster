@@ -37,13 +37,15 @@ export function getFinishedOnlyBibs() {
 }
 
 // One row per category actually used by an entry, in age order — for the Results page's
-// Progress tab, to judge when it's safe to do the prize presentation. "Finished" excludes
-// DNF/retirees (getFinishedOnlyBibs); "outstanding" excludes anyone finished, DNF'd, or
-// SI-accounted (getFinishedBibs) — same "not accounted for" definition getOutstandingRows()
-// already uses, just grouped by category instead of course. Entries with no resolvable
-// category (bad/missing DOB, manual data issue) get folded into a synthetic "Uncategorised"
-// row rather than silently dropped — the one thing this tab must never do is hide someone
-// who's genuinely still outstanding.
+// Progress tab, to judge when it's safe to do the prize presentation. "Entries" is every
+// bib'd entry in the category regardless of finish status, so it's populated before any
+// finishers are recorded. "Finished" excludes DNF/retirees (getFinishedOnlyBibs);
+// "outstanding" excludes anyone finished, DNF'd, or SI-accounted (getFinishedBibs) — same
+// "not accounted for" definition getOutstandingRows() already uses, just grouped by
+// category instead of course. Entries with no resolvable category (bad/missing DOB,
+// manual data issue) get folded into a synthetic "Uncategorised" row rather than silently
+// dropped — the one thing this tab must never do is hide someone who's genuinely still
+// outstanding.
 const UNCATEGORISED = 'Uncategorised';
 export function getCategoryProgress() {
   const finishedBibs  = getFinishedOnlyBibs();
@@ -53,7 +55,8 @@ export function getCategoryProgress() {
     const bib = +e.bibNumber;
     if (!bib) continue;
     const cat = e.category || UNCATEGORISED;
-    const row = byCategory.get(cat) || { category: cat, finished: 0, outstanding: 0 };
+    const row = byCategory.get(cat) || { category: cat, entries: 0, finished: 0, outstanding: 0 };
+    row.entries++;
     if (finishedBibs.has(bib)) row.finished++;
     else if (!accountedBibs.has(bib)) row.outstanding++;
     byCategory.set(cat, row);

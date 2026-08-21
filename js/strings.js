@@ -674,6 +674,7 @@ export const TABLES = {
   ],
   'results-progress': [
     { id: 'category',    label: 'Category',    title: 'Age category' },
+    { id: 'entries',     label: 'Entries',     title: 'Total entrants in this category (bib assigned)', align: 'right' },
     { id: 'finished',    label: 'Finished',    title: 'Entrants in this category who have finished (retirees excluded)', align: 'right' },
     { id: 'outstanding', label: 'Outstanding', title: 'Entrants in this category not yet finished or retired', align: 'right' },
   ],
