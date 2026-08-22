@@ -7,6 +7,16 @@ import { on, setHTML, showStatus, showConfirmDialog, escHtml, pickFile, renderTa
 import { TABLES } from '../strings.js';
 import { renderPeople } from './people.js';
 
+let sortCol = null;
+let sortDir = 1;   // 1 = asc, -1 = desc
+
+// Only the columns useful for looking someone up during an incident — the rest is raw
+// imported data nobody needs to sort by.
+const SORT_KEYS = {
+  ref:  pe => +pe.participantNumber || 0,
+  name: pe => `${(pe.lastName||'').toLowerCase()} ${(pe.firstName||'').toLowerCase()}`,
+};
+
 const PRE_ENTRY_COLS = tableColumns(TABLES['pre-entries'], {
   ref:           pe => pe.participantNumber || '',
   name:          pe => cleanName(`${pe.firstName||''} ${pe.lastName||''}`.trim()),
@@ -34,8 +44,28 @@ const PRE_ENTRY_COLS = tableColumns(TABLES['pre-entries'], {
 
 export function renderPreEntries() {
   const preEntries = getSortedPreEntries();
+  if (sortCol && SORT_KEYS[sortCol]) {
+    const key = SORT_KEYS[sortCol];
+    preEntries.sort((a, b) => { const av = key(a), bv = key(b); return av < bv ? -sortDir : av > bv ? sortDir : 0; });
+  }
   renderTable('pre-entries-tbody', PRE_ENTRY_COLS, preEntries);
   setHTML('pre-entry-count', `${preEntries.length} pre-entries`);
+  wirePreEntriesSort();
+}
+
+function wirePreEntriesSort() {
+  const ths = [...document.querySelectorAll('#pre-entries-table thead th')];
+  PRE_ENTRY_COLS.forEach((col, idx) => {
+    const th = ths[idx];
+    if (!th || !SORT_KEYS[col.id]) return;
+    th.classList.add('p-sortable');
+    th.dataset.sortDir = col.id === sortCol ? (sortDir === 1 ? 'asc' : 'desc') : '';
+    th.addEventListener('click', () => {
+      sortDir = sortCol === col.id ? -sortDir : 1;
+      sortCol = col.id;
+      renderPreEntries();
+    });
+  });
 }
 
 function renderIssues(issues) {
