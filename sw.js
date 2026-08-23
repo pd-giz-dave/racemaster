@@ -1,5 +1,8 @@
 'use strict';
 
+// Note: This service worker is only installed on remote deployments.
+//       For localhost it is not installed, so all requests are passed to the server.
+
 // auto updated if anything changes
 const CACHE = 'racemaster-20260625145805';
 

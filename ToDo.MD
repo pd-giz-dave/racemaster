@@ -3,6 +3,7 @@
 ## Add test suite
 
 - [x] JS logic
+- [x] server logic
 - [ ] view logic?
 
 ## Add importing results from other sources
