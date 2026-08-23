@@ -2,7 +2,7 @@
 
 ## Add test suite
 
-- [ ] JS logic
+- [x] JS logic
 - [ ] view logic?
 
 ## Add importing results from other sources

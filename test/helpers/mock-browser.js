@@ -33,3 +33,32 @@ export function installFetchMock(handler) {
 export function jsonResponse(body, { ok = true } = {}) {
   return { ok, json: async () => body };
 }
+
+// state.js's save*() functions (saveEntries, savePeople, ...) go through storage.js's
+// writeTable(), which fires a `window.dispatchEvent(new CustomEvent(...))` on every write
+// (notifyDirty()). Node has no `window`; without this, that call throws inside writeTable's
+// own try/catch and just logs a console.warn on every save — harmless but noisy. Node's
+// built-in EventTarget gives real addEventListener/dispatchEvent semantics for free.
+export function installWindowMock() {
+  globalThis.window = new EventTarget();
+  return globalThis.window;
+}
+
+// For tests using node:test's fake timers (t.mock.timers.enable/tick) against code with a
+// multi-await chain after the timer fires (e.g. writeTable's debounced syncToServer(), which
+// awaits fetchTimed() which awaits fetch() then awaits res.json()) — a fixed number of chained
+// `await Promise.resolve()` calls is fragile since it has to exactly match the chain's depth.
+// setImmediate is a real (unmocked) macrotask, so it only fires once the entire microtask queue
+// from the timer callback has drained, regardless of how deep that chain is.
+export function flushMicrotasks() {
+  return new Promise(resolve => setImmediate(resolve));
+}
+
+// Node (21+) defines its own global `navigator` (e.g. navigator.userAgent) as a getter-only
+// accessor property — a plain `globalThis.navigator = {...}` throws "Cannot set property
+// navigator ... which has only a getter" in strict-mode ES modules. It's configurable, so
+// redefine it outright instead. `delete globalThis.navigator` still works fine to remove it.
+export function installNavigatorMock(value) {
+  Object.defineProperty(globalThis, 'navigator', { value, configurable: true, writable: true });
+  return globalThis.navigator;
+}

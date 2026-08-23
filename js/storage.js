@@ -29,8 +29,6 @@ const USERNAME_KEY   = 'racemaster-username';   // localStorage: logged-in usern
 const IS_ADMIN_KEY   = 'racemaster-isadmin';    // localStorage: admin flag
 const STANDALONE_KEY = 'racemaster-standalone'; // localStorage: standalone mode flag
 
-export const hasFSA = false;
-
 let _syncTimer    = null;
 let _conflicted   = false;
 
