@@ -1,6 +1,6 @@
 'use strict';
 
-import { getSession, isDirty, getVersion, isConflicted, discardConflict } from './storage.js';
+import { getSession, isDirty, getVersion, isConflicted, discardConflict, flushPendingMobileFiles } from './storage.js';
 import { showConfirmDialog } from './ui.js';
 
 export function startUpdateCheck() {
@@ -56,6 +56,10 @@ export async function pingServerNow() {
       el.style.color      = 'var(--header-fg-dim)';
       el.style.background = '';
       el.title            = '';
+      // Reachable — flush anything a Bluetooth pull queued locally while we (or the phones)
+      // were offline. Fire-and-forget: flushPendingMobileFiles() handles its own errors and a
+      // slow/failed flush shouldn't hold up this status-dot update.
+      flushPendingMobileFiles();
     }
   } catch {
     el.textContent    = '● offline';

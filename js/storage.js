@@ -259,6 +259,41 @@ export function removePendingMobileFile(owner, raceLabel, deviceName) {
   storePendingMobileFiles(loadPendingMobileFiles().filter(f => !(f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName)));
 }
 
+// Scenario this exists for: web-app offline, phones also offline, a Bluetooth pull lands in
+// the pending queue above because pullAndSyncConnectedPhone()'s own push attempt failed —
+// then the web-app comes back online. Without this, that data only ever leaves the browser if
+// someone remembers to click Push on the Mobile Files page. Called from connect.js's
+// pingServerNow() on every successful ping, so it naturally retries each tick until it
+// succeeds; reuses the exact same push call (and so the exact same delta data — the pending
+// queue only ever holds what mule-ble.js pulled since its own last-pulled cursor) that the
+// manual Push button and the initial BLE-pull push already use — just triggered automatically
+// instead of by a click. flushInProgress guards against a slow flush still running when the
+// next tick's ping succeeds again.
+let flushInProgress = false;
+export async function flushPendingMobileFiles() {
+  if (flushInProgress) return;
+  const session = getSession();
+  if (!session) return;
+  const owner = getUsername();
+  const pending = loadPendingMobileFiles().filter(f => f.owner === owner);
+  if (!pending.length) return;
+  flushInProgress = true;
+  try {
+    for (const f of pending) {
+      let result;
+      try {
+        result = await apiPushMobileSync(session.token, f.raceLabel, f.deviceName, f.lines);
+      } catch {
+        return; // server went unreachable again mid-flush — leave the rest queued for next tick
+      }
+      if (result.error) continue; // leave this one queued rather than silently dropping its data
+      removePendingMobileFile(f.owner, f.raceLabel, f.deviceName);
+    }
+  } finally {
+    flushInProgress = false;
+  }
+}
+
 export async function apiListUsers(token) {
   const res = await fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } });
   return res.json();

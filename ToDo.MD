@@ -50,7 +50,7 @@
 
 ## Data loss prevention
 
-- [ ] mobile files must be auto sync'd to the server whenever the server is reachable,
+- [x] mobile files must be auto sync'd to the server whenever the server is reachable,
       specifically this scenario: web-app goes offline, mobile phones are also offline,
       mobile files are being pulled via bluetooth, web-app goes online,
       mobile files fetched or updated via bluetooth must be pushed/sync'd to the server,
@@ -69,7 +69,7 @@
 - [ ] allow the admin user to create other web-app users and their mobile version and their passwords
 - [ ] provide a means for users to change their password and their mobile one too
 - [ ] an admin user can change any password
-- [ ] the mobile password must be different to the web-app constraint must always be applied
+- [ ] the mobile password must be different to the web-app and its constraint must always be applied (a-zA-Z0-9)
 
 ## Race details
 
