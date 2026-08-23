@@ -7,5 +7,6 @@ admins.txt
 sessions.txt
 server.log
 server-dev.log
+coverage/
 .claude/
 .idea/
