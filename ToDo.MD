@@ -56,6 +56,8 @@
       mobile files are being pulled via bluetooth, web-app goes online,
       mobile files fetched or updated via bluetooth must be pushed/sync'd to the server,
       such push/sync must use the same delta mechanism the bluetooth route uses
+- [ ] make sure the user knows when a BT connection to racemaster-mobile is lost, and auto re-connect?
+      how to mitigate android phones cycling the BT id?
 
 ## Security improvement
 
