@@ -181,6 +181,54 @@ describe('server integration: mobile sync', () => {
   });
 });
 
+describe('server integration: bib-allocations', () => {
+  it('an owner pushing their own bib-allocations lands under their own mobile/ folder', async () => {
+    const token = await createAndLogin('ba-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'ba-race-26-08-23';
+
+    const push = await fetch(`${base}/api/mobile/ba-owner/${raceLabel}/bib-allocations`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ raceName: 'X', raceDate: '23/08/2026', entries: [{ bibNumber: 1, name: 'A', course: '10K' }] }),
+    });
+    assert.equal(push.status, 200);
+
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === raceLabel);
+    assert.ok(race.bibAllocations);
+  });
+
+  it('rejects pushing bib-allocations under a dataset owned by a different, non-admin user', async () => {
+    const victimToken = await createAndLogin('ba-victim');
+    await fetch(`${base}/api/mobile/ba-victim/some-race/bib-allocations`, {
+      method: 'POST', headers: { Authorization: `Bearer ${victimToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: [{ bibNumber: 1, name: 'A', course: '10K' }] }),
+    });
+
+    const attackerToken = await createAndLogin('ba-attacker');
+    const r = await fetch(`${base}/api/mobile/ba-victim/some-race/bib-allocations`, {
+      method: 'POST', headers: { Authorization: `Bearer ${attackerToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: [{ bibNumber: 2, name: 'B', course: '10K' }] }),
+    });
+    assert.equal(r.status, 403);
+  });
+
+  it('lets an admin push bib-allocations under another user\'s dataset', async () => {
+    // 'first-user' from the earlier auth test is this run's admin.
+    const adminToken = await (await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'first-user', password: 'secret123' }),
+    }).then(r => r.json())).token;
+    await createAndLogin('ba-someone-else');
+
+    const r = await fetch(`${base}/api/mobile/ba-someone-else/admin-pushed-race/bib-allocations`, {
+      method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: [{ bibNumber: 3, name: 'C', course: '10K' }] }),
+    });
+    assert.equal(r.status, 200);
+  });
+});
+
 describe('server integration: admin users routes', () => {
   it('a non-admin gets 403 from the admin-only user routes', async () => {
     const token = await createAndLogin('plain-user');

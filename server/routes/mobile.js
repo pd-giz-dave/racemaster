@@ -13,22 +13,24 @@ import path from 'path';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleMobileRoutes(req, res, pathname) {
-  // POST /api/mobile/:raceLabel/bib-allocations — the web app pushes a race-wide
+  // POST /api/mobile/:owner/:raceLabel/bib-allocations — the web app pushes a race-wide
   // {raceName, raceDate, entries: [{bibNumber, name, course}]} export so any phone syncing
   // this race (WiFi or Mule/BLE) can learn which bib belongs to which course, without needing
   // registration to have closed first.
-  // Checked before the broader POST /api/mobile/:raceLabel below, which would
-  // otherwise swallow this path too (`pathname.startsWith('/api/mobile/')` matches both).
-  // Lands in the exact same owner-scoped mobile/<username>/<raceLabel>/ folder as this race's
-  // own per-device files — same auth/ownership model as every other /api/mobile/* route,
-  // nothing new to gate. No GET route needed: this file (like any other mobile file) is
-  // already reachable with no auth via the generic static file server.
-  if (pathname.startsWith('/api/mobile/') && pathname.endsWith('/bib-allocations') && req.method === 'POST') {
+  // Checked before the broader POST /api/mobile/:raceLabel below, which would otherwise
+  // swallow this path too once decoded (both start with `/api/mobile/`).
+  // owner is the dataset's own owner (js/bib-allocations.js sends session.dataset's owner
+  // half, not necessarily the logged-in user) — same owner-only-or-admin write rule as
+  // PUT /api/data/:owner/:fullName, so this lands in the exact owner-scoped
+  // mobile/<owner>/<raceLabel>/ folder this race's own per-device files already use, not
+  // wherever the pushing admin happens to be logged in as.
+  if (/^\/api\/mobile\/[^/]+\/[^/]+\/bib-allocations$/.test(pathname) && req.method === 'POST') {
     const username = getAuthUser(req);
     if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
-    const raceLabel = sanitiseName(decodeURIComponent(
-      pathname.slice('/api/mobile/'.length, -'/bib-allocations'.length)));
-    if (!raceLabel) { jsonReply(res, 400, { error: 'Invalid race label' }); return true; }
+    const [owner, raceLabel] = pathname.slice('/api/mobile/'.length, -'/bib-allocations'.length)
+      .split('/').map(decodeURIComponent).map(sanitiseName);
+    if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
+    if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' }); return true; }
     let body;
     try { body = JSON.parse(await readBody(req)); }
     catch { jsonReply(res, 400, { error: 'Invalid JSON' }); return true; }
@@ -45,8 +47,8 @@ export async function handleMobileRoutes(req, res, pathname) {
         }))
         .filter(e => e.bibNumber > 0),
     };
-    writeBibAllocations(username, raceLabel, payload);
-    console.log(`[bib-allocations] ${username}/${raceLabel}: updated (${payload.entries.length} entries)`);
+    writeBibAllocations(owner, raceLabel, payload);
+    console.log(`[bib-allocations] ${username} -> ${owner}/${raceLabel}: updated (${payload.entries.length} entries)`);
     jsonReply(res, 200, { ok: true });
     return true;
   }

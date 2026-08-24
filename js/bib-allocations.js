@@ -33,10 +33,15 @@ function buildPayload() {
 async function pushBibAllocations() {
   const session = getSession();
   if (!session) return; // standalone/logged-out — nothing to push to
+  // The current dataset's own owner, not getUsername() — an admin (or anyone else with write
+  // access to someone else's dataset) must land this under *that dataset's* mobile/ folder, or
+  // phones syncing this race (which look for bib-allocations.json under the race's actual
+  // owner) would never find it.
+  const [owner] = session.dataset.split('/');
   const raceLabel = deriveRaceLabel(state.event);
   const payload = buildPayload();
   if (!raceLabel || !payload.entries.length) return; // no event name/date yet, or no entries
-  try { await apiPushBibAllocations(session.token, raceLabel, payload); }
+  try { await apiPushBibAllocations(session.token, owner, raceLabel, payload); }
   catch { /* server unreachable — next dirty-change retries, same as storage.js's syncToServer() */ }
 }
 

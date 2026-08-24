@@ -29,11 +29,26 @@ describe('bib-allocations.js:startBibAllocationsSync', () => {
     await flushMicrotasks(); // let the now-fired timer's async pushBibAllocations() run
 
     assert.equal(fetchMock.calls.length, 1);
-    // sanitiseName strips spaces entirely (not to hyphens) and lowercases.
-    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/testfellrace-15-06-26\/bib-allocations/);
+    // sanitiseName strips spaces entirely (not to hyphens) and lowercases. Owner ("me") comes
+    // from session.dataset's own owner half — not necessarily the logged-in user.
+    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/me\/testfellrace-15-06-26\/bib-allocations/);
     const body = JSON.parse(fetchMock.calls[0].opts.body);
     assert.equal(body.raceName, 'Test Fell Race');
     assert.deepEqual(body.entries, [{ bibNumber: 1, name: 'Dave', course: 'Seniors' }]);
+  });
+
+  it('uses the dataset\'s own owner, not the logged-in username, when they differ (e.g. an admin working on someone else\'s dataset)', async (t) => {
+    localStorage.setItem('racemaster-username', 'admin-user');
+    localStorage.setItem('racemaster-dataset', 'someone-else/race');
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    startBibAllocationsSync();
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+
+    assert.equal(fetchMock.calls.length, 1);
+    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/someone-else\/testfellrace-15-06-26\/bib-allocations/);
   });
 
   it('re-pushes on a racemaster-dirty-change event, debounced', async (t) => {
