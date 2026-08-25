@@ -1118,7 +1118,15 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
       // timeout can leave a dead-in-practice link reporting isConnected() true for a
       // surprisingly long time) fails silently, tick after tick, with nothing shown until that
       // event eventually arrives — exactly the "no feedback" this was meant to prevent.
-      showStatus(e.message || 'Failed to pull history from the phone.', true);
+      //
+      // Only shown while still nominally connected, though: if the link has already formally
+      // ended by the time this catch runs (isConnected() false), onBleDisconnected/
+      // onAutoReconnectStatusChange already reports whatever's appropriate for that (deliberate
+      // or not) — piling this pull's own generic failure on top is redundant at best, and
+      // actively confusing when it races a deliberate disconnect (a tick already in flight the
+      // instant "Disconnect from X" is clicked fails this way purely because the user just
+      // ended the connection on purpose, not because anything went wrong).
+      if (isConnected()) showStatus(e.message || 'Failed to pull history from the phone.', true);
       return;
     }
     const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
