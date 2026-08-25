@@ -56,8 +56,19 @@
       mobile files are being pulled via bluetooth, web-app goes online,
       mobile files fetched or updated via bluetooth must be pushed/sync'd to the server,
       such push/sync must use the same delta mechanism the bluetooth route uses
-- [ ] make sure the user knows when a BT connection to racemaster-mobile is lost, and auto re-connect?
+- [x] make sure the user knows when a BT connection to racemaster-mobile is lost, and auto re-connect?
       how to mitigate android phones cycling the BT id?
+      - user notice + auto-reconnect: done (js/mule-ble.js attemptAutoReconnect, wired in
+        js/views/mobile-files.js) — 3 retries a few seconds apart against the live device
+        object, reporting attempt/succeeded/gave-up status; falls back to the existing
+        "click Connect to Phone… again" message only once retries are exhausted
+      - BT id cycling: platform limitation, not fixable in app code (Android's rotating BLE
+        address + no bonding in this protocol means the OS/browser can't resolve a rotated
+        address back to "the same device" at all) — see the doc comment above
+        KNOWN_DEVICES_KEY in js/mule-ble.js. Mitigated as far as possible: rememberDevice()
+        already deduped the known-devices list by name across a rotation, and auto-reconnect
+        (above) uses the live device reference rather than an id lookup so it's unaffected by
+        rotation happening mid-retry
 
 ## Security improvement
 
