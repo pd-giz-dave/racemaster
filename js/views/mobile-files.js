@@ -8,9 +8,10 @@ import { on, escHtml, showConfirmDialog, showChoiceDialog, showStatus, renderTab
 import { TABLES } from '../strings.js';
 import {
   isBluetoothAvailable, connectToPhone as bleConnect, pullFromConnectedPhone,
-  disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect, onAutoReconnectStatus,
+  disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers, getRecommendedPollIntervalMs,
   isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
+  abandonConnection,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
 import { entryInfo } from '../safety.js';
@@ -969,17 +970,24 @@ function renderMobileProgressTable() {
   renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(cpNumbers), renderers), rows);
 }
 
+// HH:MM:SS.mmm — see mule-ble.js's own identical ts() for why (duplicated rather than shared,
+// matching this codebase's established convention for small helpers like this one).
+function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+
 // Gated the same way mule-ble.js's own bleLog is — routine tracing only, off by default.
-function debugLog(...args) { if (isBleLoggingEnabled()) console.log(...args); }
+function debugLog(...args) { if (isBleLoggingEnabled()) console.log(`[${ts()}]`, ...args); }
 
 function updateConnectButtonLabel() {
   const btn = getEl('btn-connect-phone');
   if (!btn) return;
-  btn.textContent = isConnected() ? `Disconnect from ${getConnectedDeviceName()}`
+  btn.textContent = isConnected()
+    ? (connectionIssue ? `⚠ ${getConnectedDeviceName()} not responding — Disconnect?` : `Disconnect from ${getConnectedDeviceName()}`)
     : connectAttemptInProgress ? 'Connecting…'
-    : autoReconnecting ? 'Reconnecting…'
     : 'Connect to Phone…';
-  btn.disabled = connectAttemptInProgress || autoReconnecting;
+  btn.disabled = connectAttemptInProgress;
   // Echoes getRecommendedPollIntervalMs() so it's visible whether auto-sync is even running and
   // at what cadence, rather than something only inferable from timestamps in the console.
   const pollEl = getEl('mobile-files-poll-interval');
@@ -1031,10 +1039,60 @@ function stopAutoPull() {
 // wedging Chromium's Bluetooth backend further rather than just wasting a retry.
 let connectAttemptInProgress = false;
 
-// Set/cleared by the onAutoReconnectStatus listener below (wired in wireMobileFiles) — mirrors
-// connectAttemptInProgress for updateConnectButtonLabel()/button-disable purposes, but for an
-// automatic retry after an unexpected drop rather than a fresh manual pick.
-let autoReconnecting = false;
+// Set when a pull genuinely fails while still nominally connected (see pullAndSyncConnectedPhone
+// below) — the case a status toast alone doesn't cover well, since it auto-clears after ~10s and
+// then there's nothing left showing anything was ever wrong. BLE's own supervision timeout can
+// leave a dead-in-practice link reporting isConnected() true for a surprisingly long time before
+// the formal disconnect event ever fires, so this is what persistently reflects "the connection
+// is there, but it isn't actually working" on the button itself for that whole window, rather
+// than only in a toast that fades.
+let connectionIssue = false;
+
+// Counts consecutive pull failures while still nominally connected — once this crosses
+// PERSISTENT_FAILURE_THRESHOLD, the connection is treated as unrecoverable (see
+// abandonConnection's own doc for why this deliberately does NOT attempt to reconnect
+// automatically) rather than just reporting the same failure again forever. Reset to 0 on any
+// successful pull.
+let consecutivePullFailures = 0;
+const PERSISTENT_FAILURE_THRESHOLD = 3;
+
+// getConnectedDeviceName() is already null by the time an unexpected disconnect is reported
+// (mule-ble.js's forgetConnection clears its own state before notifying this file) — kept here,
+// updated on every successful connect, so the header banner below can still name the phone that
+// was just lost.
+let lastConnectedDeviceName = null;
+
+// A showStatus() toast alone isn't enough for an unexpected drop — it auto-clears after ~10s,
+// and the whole point here is that the operator may not even be looking at the page right when
+// it happens (this app is expected to eventually drive auto-generated results with the operator
+// elsewhere — see ToDo.MD). This is a persistent header badge instead, visible from any view,
+// that only clears on deliberate operator action: the "I know" dismiss button, or starting a
+// fresh manual connect attempt (see onConnectButtonClick, which hides it unconditionally as
+// soon as the button is clicked either way) — never on a timer.
+function showBleLostBanner(name) {
+  const el = getEl('header-ble-warning');
+  if (!el) return;
+  el.hidden = false;
+  el.style.color = '#333';
+  el.style.background = 'var(--header-warn)';
+  el.style.padding = '2px 6px';
+  el.style.borderRadius = '3px';
+  el.textContent = '';
+  el.append(` ⚠ Lost Bluetooth connection to "${name || 'phone'}" `); // text node — safe even though name is phone-reported, untrusted text
+  const dismissBtn = document.createElement('button');
+  dismissBtn.type = 'button';
+  dismissBtn.textContent = 'I know';
+  dismissBtn.style.cssText = 'margin-left:6px;font-size:0.8em;padding:1px 6px;border:none;border-radius:3px;cursor:pointer';
+  dismissBtn.addEventListener('click', hideBleLostBanner);
+  el.append(dismissBtn);
+}
+
+function hideBleLostBanner() {
+  const el = getEl('header-ble-warning');
+  if (!el) return;
+  el.hidden = true;
+  el.textContent = '';
+}
 
 // wasDeliberate comes straight from mule-ble.js's onDisconnect (see its own doc) — computed
 // fresh there from disconnectPhone()'s own tracking every time this fires, rather than this
@@ -1043,37 +1101,19 @@ let autoReconnecting = false;
 // it was meant for, misreporting a later, genuinely unexpected drop as expected too.
 function onBleDisconnected(wasDeliberate) {
   stopAutoPull();
+  connectionIssue = false; // moot once the link has formally ended — don't let it linger into a later, genuinely fresh connection
+  consecutivePullFailures = 0;
   updateConnectButtonLabel();
   if (wasDeliberate) {
     debugLog('[mobile-files] disconnected (expected)');
   } else {
     // Never gated behind the logging toggle — same reasoning as mule-ble.js's own bleError: a
-    // real problem needs to be visible even if that toggle was left off. mule-ble.js starts
-    // trying to reconnect automatically right after this (see onAutoReconnectStatus below for
-    // the attempt-by-attempt status) — this is just the very first, immediate notice that
-    // something happened at all, not the final word on it.
-    console.error('[mobile-files] Bluetooth connection lost unexpectedly — attempting to reconnect');
-    showStatus('Lost the Bluetooth connection — attempting to reconnect…', true);
-  }
-}
-
-// Drives the button label/disabled state and status toasts through an automatic reconnect
-// attempt (see mule-ble.js's attemptAutoReconnect) — the disconnect above already reported the
-// drop itself; this reports what happens next.
-function onAutoReconnectStatusChange(status) {
-  if (status.status === 'attempting') {
-    autoReconnecting = true;
-    updateConnectButtonLabel();
-    showStatus(`Bluetooth connection lost — reconnecting… (attempt ${status.attempt}/${status.of})`, true);
-  } else if (status.status === 'succeeded') {
-    autoReconnecting = false;
-    updateConnectButtonLabel();
-    showStatus(`Reconnected to ${getConnectedDeviceName()}.`);
-    startAutoPull();
-  } else if (status.status === 'gave-up') {
-    autoReconnecting = false;
-    updateConnectButtonLabel();
-    showStatus('Lost the Bluetooth connection — auto-sync has stopped. Click Connect to Phone… to reconnect.', true);
+    // real problem needs to be visible even if that toggle was left off. Deliberately no
+    // automatic reconnect attempt (see abandonConnection's own doc) — a fresh, manual Connect to
+    // Phone… is what's actually proven to work after a drop, so that's what this asks for.
+    console.error('[mobile-files] Bluetooth connection lost unexpectedly');
+    showStatus('Lost the Bluetooth connection — click Connect to Phone… to reconnect.', true);
+    showBleLostBanner(lastConnectedDeviceName);
   }
 }
 
@@ -1120,15 +1160,39 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
       // event eventually arrives — exactly the "no feedback" this was meant to prevent.
       //
       // Only shown while still nominally connected, though: if the link has already formally
-      // ended by the time this catch runs (isConnected() false), onBleDisconnected/
-      // onAutoReconnectStatusChange already reports whatever's appropriate for that (deliberate
-      // or not) — piling this pull's own generic failure on top is redundant at best, and
-      // actively confusing when it races a deliberate disconnect (a tick already in flight the
-      // instant "Disconnect from X" is clicked fails this way purely because the user just
-      // ended the connection on purpose, not because anything went wrong).
-      if (isConnected()) showStatus(e.message || 'Failed to pull history from the phone.', true);
+      // ended by the time this catch runs (isConnected() false), onBleDisconnected already
+      // reports whatever's appropriate for that (deliberate or not) — piling this pull's own
+      // generic failure on top is redundant at best, and actively confusing when it races a
+      // deliberate disconnect (a tick already in flight the instant "Disconnect from X" is
+      // clicked fails this way purely because the user just ended the connection on purpose, not
+      // because anything went wrong).
+      if (isConnected()) {
+        connectionIssue = true;
+        consecutivePullFailures++;
+        updateConnectButtonLabel();
+        if (consecutivePullFailures >= PERSISTENT_FAILURE_THRESHOLD) {
+          // Enough consecutive failures while still "connected" that waiting on
+          // 'gattserverdisconnected' to eventually explain why isn't worth it any more — but
+          // deliberately not attempting an automatic reconnect either (see abandonConnection's
+          // own doc for why that turned out not to be worth the complexity). Just end the
+          // connection cleanly, forget the device, and tell the operator plainly.
+          consecutivePullFailures = 0;
+          const name = getConnectedDeviceName();
+          abandonConnection();
+          connectionIssue = false;
+          updateConnectButtonLabel();
+          showStatus(`Lost the connection to "${name}" — it stopped responding. Click Connect to Phone… to reconnect.`, true);
+          showBleLostBanner(name);
+        } else {
+          showStatus(e.message || 'Failed to pull history from the phone.', true);
+        }
+      }
       return;
     }
+    // A pull that actually succeeded (even an empty one — see the silent/totalLines check
+    // below) is proof the link is genuinely working again, not just still nominally connected.
+    consecutivePullFailures = 0;
+    if (connectionIssue) { connectionIssue = false; updateConnectButtonLabel(); }
     const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
     if (silent && totalLines === 0) return;
 
@@ -1169,6 +1233,10 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
 // startAutoPull() running (button becomes "Disconnect from <device>") so a second click just
 // ends the session rather than re-picking a device.
 async function onConnectButtonClick() {
+  debugLog(`[mobile-files] ===== Connect/Disconnect button clicked (currently ${isConnected() ? `connected to ${getConnectedDeviceName()}` : 'not connected'}) =====`);
+  // Any interaction with this button — disconnecting or (re)connecting — counts as the operator
+  // having seen and responded to a stale "connection lost" banner, per its own doc above.
+  hideBleLostBanner();
   if (isConnected()) {
     disconnectPhone();
     // Immediate UI feedback rather than waiting on the real 'gattserverdisconnected' event —
@@ -1246,6 +1314,7 @@ async function onConnectButtonClick() {
     }
   }
 
+  lastConnectedDeviceName = getConnectedDeviceName();
   updateConnectButtonLabel();
   showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
   await pullAndSyncConnectedPhone();
@@ -1266,7 +1335,6 @@ export function wireMobileFiles() {
   on('btn-update-progress', 'click', updateProgress);
   on('btn-clear-progress', 'click', clearProgress);
   onDisconnect(onBleDisconnected);
-  onAutoReconnectStatus(onAutoReconnectStatusChange);
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
   document.getElementById('bib-allocations-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');

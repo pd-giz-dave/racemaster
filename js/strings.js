@@ -504,7 +504,26 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.12-alpha - current version</h3>
+    <h3>v0.0.13-alpha - current version</h3>
+    <ul>
+      <li><strong>Bluetooth connection-lost warning</strong> — an unexpected drop (or a connection that's stopped
+          responding, even if it still looks connected) now shows a persistent warning banner in the header, visible
+          from any page, that only clears when you click "I know" or start a fresh Connect to Phone…; a status message
+          alone used to fade after a few seconds, easy to miss if you weren't looking right at that moment. The
+          "Connect to Phone…" button itself also now shows ⚠ when the connection has stopped responding, and a phone
+          that dropped unexpectedly is no longer offered as a "Reconnect to…" shortcut next time — only a fresh pick
+          is, since that's what's actually proven to work after a drop</li>
+      <li>Helpers page: typing a role no longer auto-adds it the instant what you've typed uniquely matches one — it
+          only commits on a comma or moving off the field, so quickly typing e.g. "MARSHAL" no longer also adds
+          "HELPER" the moment "H" alone becomes unique</li>
+      <li>Results &amp; Prize List Progress tab: added <strong>Entries</strong> (always shown, even before any
+          finishers are recorded) and <strong>DNF</strong> columns, so Entries always equals Finished + Outstanding + DNF</li>
+      <li>Pre-Entries table: click the Ref or Name column headers to sort (Ref numerically, Name by last name then
+          first), for quickly looking someone up during an incident</li>
+      <li>Fixed Bib Allocations being saved under whichever user pushed them rather than the dataset's actual owner —
+          only mattered when someone other than the owner (e.g. an admin) was working on a dataset</li>
+    </ul>
+    <h3>v0.0.12-alpha</h3>
     <ul>
       <li><strong>Publish notes</strong> — clicking <strong>Publish Results</strong> now first prompts for an optional note,
           pre-filled with whatever was set last time; it appears as a paragraph before the results on the published page,

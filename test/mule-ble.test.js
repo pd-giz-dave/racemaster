@@ -15,8 +15,8 @@ import { installLocalStorageMock, flushMicrotasks, installNavigatorMock } from '
 import {
   isBluetoothAvailable, isBleLoggingEnabled, setBleLoggingEnabled, isConnected,
   getConnectedDeviceName, getRecommendedPollIntervalMs, disconnectPhone, onDisconnect,
-  onAutoReconnectStatus, resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
-  getKnownDevices, connectToPhone, pullFromConnectedPhone,
+  resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
+  getKnownDevices, connectToPhone, pullFromConnectedPhone, abandonConnection,
 } from '../js/mule-ble.js';
 
 const SERVICE_UUID          = '6d6f6269-6c65-2e72-6163-656d61737465';
@@ -141,10 +141,12 @@ function makeFakeDataChar() {
 // stream back for that specific request. failConnectsFrom (default: never), if given, makes the
 // Nth-and-every-later gatt.connect() call reject instead of succeeding — the 1-indexed call
 // count includes the very first connect, so failConnectsFrom: 2 means "connects fine once, then
-// every reconnect after that fails", for auto-reconnect-gives-up tests. failWrite (default:
-// false), if true, makes the CONTROL write itself reject every time — simulates the connection
-// dropping between a pull starting and its write landing.
-function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failWrite = false }) {
+// every reconnect after that fails". failWrite (default: false), if true, makes the CONTROL
+// write itself reject every time — simulates the connection dropping between a pull starting
+// and its write landing. dropAfterConnect (default: never), if given, fires a real
+// 'gattserverdisconnected' event synchronously right after the Nth gatt.connect() call
+// succeeds — simulates a flaky link dropping again immediately mid-attempt.
+function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failWrite = false, dropAfterConnect = null }) {
   const dataChar = makeFakeDataChar();
   const controlChar = {
     writeValueWithResponse: async (bytes) => {
@@ -175,6 +177,10 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
         connectCallCount++;
         if (connectCallCount >= failConnectsFrom) throw new Error('out of range');
         device.gatt.connected = true;
+        if (connectCallCount === dropAfterConnect) {
+          device.gatt.connected = false;
+          for (const fn of disconnectListeners) fn();
+        }
         return gattServer;
       },
       // Real BluetoothRemoteGATTServer.disconnect() fires 'gattserverdisconnected' on the
@@ -322,106 +328,8 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
   });
 });
 
-describe('mule-ble.js:auto-reconnect on unexpected disconnect', () => {
-  it('automatically reconnects, reporting attempt-by-attempt status, when the connection drops unexpectedly', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-
-    await connectToPhone();
-    assert.equal(isConnected(), true);
-
-    const statuses = [];
-    onAutoReconnectStatus(s => statuses.push(s));
-
-    device._simulateUnexpectedDisconnect();
-    assert.equal(isConnected(), false);
-    // Fires synchronously — forgetConnection() calls attemptAutoReconnect(), whose first loop
-    // iteration reports status before its first await (the retry delay).
-    assert.deepEqual(statuses[0], { status: 'attempting', attempt: 1, of: 3 });
-
-    t.mock.timers.tick(4000);
-    await flushMicrotasks(); // reconnect + DeviceInfo re-read, no genuine delay against this mock
-
-    assert.equal(isConnected(), true);
-    assert.equal(statuses.at(-1).status, 'succeeded');
-  });
-
-  it('gives up (and reports it) after every auto-reconnect attempt fails', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    // Connects fine once (the initial connectToPhone()); every reconnect after that fails —
-    // simulates the phone genuinely staying out of range.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsFrom: 2 });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-
-    await connectToPhone();
-    const statuses = [];
-    onAutoReconnectStatus(s => statuses.push(s));
-
-    device._simulateUnexpectedDisconnect();
-    for (let i = 0; i < 3; i++) {
-      t.mock.timers.tick(4000);
-      await flushMicrotasks();
-    }
-
-    assert.equal(isConnected(), false);
-    assert.deepEqual(statuses.filter(s => s.status === 'attempting').map(s => s.attempt), [1, 2, 3]);
-    assert.equal(statuses.at(-1).status, 'gave-up');
-  });
-
-  it('does not auto-reconnect after a deliberate disconnectPhone() call', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-
-    await connectToPhone();
-    const statuses = [];
-    onAutoReconnectStatus(s => statuses.push(s));
-
-    disconnectPhone();
-    assert.equal(isConnected(), false);
-
-    t.mock.timers.tick(10000);
-    await flushMicrotasks();
-
-    assert.deepEqual(statuses, []); // never even started
-    assert.equal(isConnected(), false);
-  });
-
-  it('a fresh manual connect supersedes an in-flight auto-reconnect for the previous phone', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo1 = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'race1', relayCount: 0 };
-    const device1 = makeFakePhone({ deviceInfo: deviceInfo1, recordsByRequest: () => [], failConnectsFrom: 2 });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device1 } });
-    await connectToPhone();
-
-    const statuses = [];
-    onAutoReconnectStatus(s => statuses.push(s));
-    device1._simulateUnexpectedDisconnect(); // kicks off an auto-reconnect loop doomed to keep failing
-
-    // Before that loop finishes, the operator manually connects to a different phone instead.
-    const deviceInfo2 = { deviceId: 'dev2', deviceName: 'Phone Two', raceLabel: 'race2', relayCount: 0 };
-    const device2 = makeFakePhone({ deviceInfo: deviceInfo2, recordsByRequest: () => [] });
-    device2.id = 'dev2';
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device2 } });
-    await connectToPhone();
-    assert.equal(getConnectedDeviceName(), 'Phone Two');
-
-    // Let device1's stale loop run to completion — it must notice it's been superseded and
-    // bow out quietly rather than clobbering the new connection or reporting its own outcome.
-    for (let i = 0; i < 3; i++) {
-      t.mock.timers.tick(4000);
-      await flushMicrotasks();
-    }
-
-    assert.equal(getConnectedDeviceName(), 'Phone Two');
-    assert.ok(!statuses.some(s => s.status === 'gave-up' || s.status === 'succeeded'));
-  });
-
-  it('onDisconnect callback receives wasDeliberate: true for disconnectPhone(), false for an unexpected drop', async (t) => {
+describe('mule-ble.js:onDisconnect wasDeliberate', () => {
+  it('receives wasDeliberate: true for disconnectPhone(), false for an unexpected drop', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
@@ -461,5 +369,51 @@ describe('mule-ble.js:auto-reconnect on unexpected disconnect', () => {
     device._simulateUnexpectedDisconnect();
 
     assert.deepEqual(seen, [false]);
+  });
+});
+
+describe('mule-ble.js:forgetConnection forgets the known device on an unexpected drop, not a deliberate one', () => {
+  it('an unexpected drop removes the device from getKnownDevices()', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
+    await connectToPhone();
+    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
+
+    device._simulateUnexpectedDisconnect();
+    assert.deepEqual(await getKnownDevices(), []);
+  });
+
+  it('a deliberate disconnectPhone() call leaves the device remembered', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
+    await connectToPhone();
+
+    disconnectPhone();
+    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
+  });
+});
+
+describe('mule-ble.js:abandonConnection', () => {
+  it('disconnects and forgets the device — deliberately no automatic reconnect attempt', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
+    await connectToPhone();
+    assert.equal(isConnected(), true);
+
+    abandonConnection();
+
+    assert.equal(isConnected(), false);
+    assert.deepEqual(await getKnownDevices(), []);
+  });
+
+  it('is a safe no-op when nothing is connected', () => {
+    assert.doesNotThrow(() => abandonConnection());
+    assert.equal(isConnected(), false);
   });
 });

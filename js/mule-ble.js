@@ -44,9 +44,18 @@ export function isBleLoggingEnabled() {
 export function setBleLoggingEnabled(enabled) {
   try { localStorage.setItem(BLE_LOGGING_KEY, enabled ? '1' : '0'); } catch { /* storage unavailable — best effort only */ }
 }
-function bleLog(...args)   { if (isBleLoggingEnabled()) console.log(...args); }
-function bleWarn(...args)  { if (isBleLoggingEnabled()) console.warn(...args); }
-function bleError(...args) { console.error(...args); }
+// HH:MM:SS.mmm — every log line below is timestamped with this so a real console dump (often
+// spanning many minutes of a field session, and easy to lose the sequence of when things
+// actually happened in relative to each other once pasted somewhere flat) can be read in order
+// rather than relying on the browser's own per-line timestamp, which most pasted/exported logs
+// don't carry.
+function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+function bleLog(...args)   { if (isBleLoggingEnabled()) console.log(`[${ts()}]`, ...args); }
+function bleWarn(...args)  { if (isBleLoggingEnabled()) console.warn(`[${ts()}]`, ...args); }
+function bleError(...args) { console.error(`[${ts()}]`, ...args); }
 
 // Mirrors server.js's own sanitiseName() exactly. A phone reports its raceLabel/deviceName
 // as free text (whatever the operator typed) — server.js re-sanitises whatever it receives on
@@ -66,21 +75,7 @@ function sanitiseName(s) {
 let connectedDevice = null; // BluetoothDevice
 let connectedInfo   = null; // last-read DeviceInfo
 let disconnectListener = null;
-
-// Auto-reconnect state — see attemptAutoReconnect() below (near connectAndVerify, which it
-// reuses) for the retry loop itself. Kept here alongside the rest of the connection state since
-// it's all part of the same "what's this module currently doing" picture.
-let lastDevice = null; // kept across a disconnect (unlike connectedDevice) so there's something to retry against
 let deliberateDisconnect = false; // set just before disconnectPhone()'s own .gatt.disconnect() call
-let autoReconnectInProgress = false;
-let autoReconnectListener = null;
-// Bumped at the start of every fresh "connection intent" — a manual connectToPhone()/
-// reconnectToKnownDevice() call, an explicit disconnectPhone(), or an auto-reconnect loop
-// kicking off. An in-flight auto-reconnect loop checks this hasn't moved on before each of its
-// own attempts, so it cleanly abandons itself rather than clobbering a connection the user has
-// since moved on from (picked a different phone, or deliberately disconnected) once it
-// eventually resolves.
-let reconnectGeneration = 0;
 
 export function isConnected() {
   return !!connectedDevice?.gatt?.connected;
@@ -111,34 +106,26 @@ export function onDisconnect(callback) {
   disconnectListener = callback;
 }
 
-// Registers a callback fired at each step of an automatic reconnect attempt, started whenever
-// the connection drops unexpectedly (never after disconnectPhone() itself) — see
-// attemptAutoReconnect() near connectAndVerify below for the retry loop this reports on.
-// Called with { status: 'attempting', attempt, of } before each try, { status: 'succeeded' }
-// once reconnected (isConnected()/getConnectedDeviceName() are already valid by then), or
-// { status: 'gave-up' } once every attempt has failed — same situation as before this existed,
-// needing a manual Connect to Phone… again.
-export function onAutoReconnectStatus(callback) {
-  autoReconnectListener = callback;
-}
-
+// A deliberately dumb function — no auto-reconnect (see abandonConnection() below for why that
+// was removed). Just clears connection state and reports what happened. An unexpected drop also
+// forgets the device (see rememberDevice's own doc on KNOWN_DEVICES_KEY): with no automatic
+// recovery attempted, offering it right back as a "Reconnect to X" shortcut next time would be
+// recommending something that isn't proven to still work — a fresh pick through the browser's
+// own picker is a more honest next step. A deliberate disconnect (the operator's own "Disconnect
+// from X" click) does NOT forget it — they may well want to reconnect to the same phone shortly.
 function forgetConnection() {
   const wasDeliberate = deliberateDisconnect;
   deliberateDisconnect = false;
+  const id = connectedDevice?.id;
+  bleLog(`[mule-ble] gattserverdisconnected fired (wasDeliberate=${wasDeliberate})`);
   connectedDevice = null;
   connectedInfo = null;
+  if (!wasDeliberate && id) forgetKnownDevice(id);
   disconnectListener?.(wasDeliberate);
-  // !autoReconnectInProgress guards against this firing again *during* an already-running auto-
-  // reconnect loop — connectAndVerify's own internal reconnect retries can legitimately trigger
-  // this same 'gattserverdisconnected' listener again mid-attempt, which must not spawn a second,
-  // overlapping outer retry loop on top of the one already handling it.
-  if (!wasDeliberate && lastDevice && !autoReconnectInProgress) {
-    attemptAutoReconnect(lastDevice, ++reconnectGeneration);
-  }
 }
 
 export function disconnectPhone() {
-  reconnectGeneration++; // supersedes any in-flight auto-reconnect attempt regardless of whether there's a live connection to formally end
+  bleLog('[mule-ble] ===== manual disconnect requested =====');
   if (!connectedDevice?.gatt?.connected) return; // nothing live to disconnect
   // Only set once we know .gatt.disconnect() below will actually fire — forgetConnection() is
   // what resets this back to false, so setting it with no real event ever coming (e.g. called
@@ -147,6 +134,23 @@ export function disconnectPhone() {
   // misclassifying the *next* genuinely unexpected disconnect as deliberate too.
   deliberateDisconnect = true;
   connectedDevice.gatt.disconnect(); // triggers 'gattserverdisconnected' → forgetConnection()
+}
+
+// Called by a caller (mobile-files.js's own repeated-pull-failure watchdog) that's independently
+// decided a persistently failing connection is unrecoverable, and given up trying — an earlier
+// version of this tried to force a disconnect+reconnect automatically instead, but that turned
+// out to only reliably work via a genuine, fresh, human-initiated disconnect+reconnect; fighting
+// to reproduce that automatically (GATT service-discovery caching, races between this app's own
+// recovery attempt and the browser's own event firing again mid-attempt) added a lot of
+// complexity for something that, confirmed in the field, doesn't actually recover on its own.
+// So: don't try. Just end the connection cleanly and forget the device (see forgetConnection's
+// own doc on why an unexpected end already does this too) — a deliberate reconnect through the
+// picker is what's proven to actually work.
+export function abandonConnection() {
+  bleWarn('[mule-ble] abandoning a persistently failing connection — leaving reconnection to a fresh, manual Connect to Phone…');
+  const id = connectedDevice?.id;
+  disconnectPhone();
+  if (id) forgetKnownDevice(id);
 }
 
 // ---- Delta-sync bookkeeping ----
@@ -443,11 +447,11 @@ async function pullRelayManifestEntries(service) {
 // permission system. That's a platform-level limitation with no code-level fix on this side
 // either. What IS fixable, and is: (1) rememberDevice() below dedupes by name, so a phone
 // reconnecting under a new id after its address rotates replaces its stale "Reconnect to <name>"
-// entry rather than leaving a confusing duplicate; (2) attemptAutoReconnect() (near
-// connectAndVerify) retries against the live BluetoothDevice object already held from the
-// current connection, not an id lookup, so it's entirely unaffected by rotation happening
-// *during* its own retry window — only a rotation that happens while fully disconnected (e.g.
-// the phone's app was restarted) requires a fresh manual pick, which then gets deduped by (1).
+// entry rather than leaving a confusing duplicate; (2) forgetConnection() (deliberately no
+// auto-reconnect any more — see its own doc) forgets the device outright on any unexpected end,
+// rather than leaving a "Reconnect to <name>" shortcut sitting there that isn't proven to still
+// work — a fresh pick through the picker is what's confirmed to actually work after any kind of
+// drop, address rotation or not.
 //
 // Once connected, though, a genuine phone's real name IS known (via DeviceInfo) — remembered
 // here (browser-assigned device.id → that name) so a later connect can offer a direct
@@ -472,7 +476,7 @@ function rememberDevice(id, name) {
     localStorage.setItem(KNOWN_DEVICES_KEY, JSON.stringify(map));
   } catch { /* storage unavailable — best effort only */ }
 }
-function forgetKnownDevice(id) {
+export function forgetKnownDevice(id) {
   try {
     const map = loadKnownDevices();
     if (!(id in map)) return;
@@ -666,55 +670,23 @@ async function connectAndVerify(device, onProgress = () => {}) {
 
   connectedDevice = device;
   connectedInfo = deviceInfo;
-  lastDevice = device;
   device.addEventListener('gattserverdisconnected', forgetConnection);
   rememberDevice(device.id, deviceInfo.deviceName || deviceInfo.deviceId);
-  bleLog('[mule-ble] DeviceInfo received', deviceInfo);
+  bleLog(`[mule-ble] ===== connected to "${label}" =====`, deviceInfo);
 
   return deviceInfo;
-}
-
-// Retried a few times, a few seconds apart, rather than leaving the operator to notice the drop
-// and click Connect to Phone… again themselves — a phone going briefly out of range (walked
-// around a building corner, put down mid-course) is common enough in the field that recovering
-// automatically matters more here than for a first connect. Reuses connectAndVerify as-is
-// (including its own internal reconnect retries and DeviceInfo re-verification) rather than a
-// bespoke bare gatt.connect() — a device that's since stopped being a genuine RaceMaster Mobile
-// phone (rare, but e.g. a factory reset) must be caught the same way a fresh pick would.
-const AUTO_RECONNECT_ATTEMPTS = 3;
-const AUTO_RECONNECT_DELAY_MS = 4000;
-
-async function attemptAutoReconnect(device, myGeneration) {
-  autoReconnectInProgress = true;
-  try {
-    for (let attempt = 1; attempt <= AUTO_RECONNECT_ATTEMPTS; attempt++) {
-      if (reconnectGeneration !== myGeneration) return; // superseded — a manual connect or explicit disconnect happened since
-      autoReconnectListener?.({ status: 'attempting', attempt, of: AUTO_RECONNECT_ATTEMPTS });
-      await new Promise(r => setTimeout(r, AUTO_RECONNECT_DELAY_MS));
-      if (reconnectGeneration !== myGeneration) return;
-      try {
-        await connectAndVerify(device);
-        autoReconnectListener?.({ status: 'succeeded' });
-        return;
-      } catch (e) {
-        bleWarn(`[mule-ble] auto-reconnect attempt ${attempt}/${AUTO_RECONNECT_ATTEMPTS} failed`, e);
-      }
-    }
-    if (reconnectGeneration === myGeneration) autoReconnectListener?.({ status: 'gave-up' });
-  } finally {
-    autoReconnectInProgress = false;
-  }
 }
 
 // onProgress(message), if given, is called at each real step of the connect/verify process —
 // see connectAndVerify's own doc for why: a caller displaying it via showStatus() needs that
 // refreshed periodically, or its 10s auto-clear makes a still-in-progress attempt look dead.
 export async function connectToPhone(onProgress) {
+  bleLog('[mule-ble] ===== manual connect requested: opening picker =====');
   if (!isBluetoothAvailable()) {
     throw new Error('Web Bluetooth is not available — use Chrome or Edge over HTTPS (or localhost).');
   }
-  reconnectGeneration++; // supersede any in-flight auto-reconnect attempt from a previous connection
   const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+  bleLog(`[mule-ble] picker resolved to "${device.name || device.id}"`);
   return connectAndVerify(device, onProgress);
 }
 
@@ -724,7 +696,7 @@ export async function connectToPhone(onProgress) {
 // that's since stopped running RaceMaster Mobile is caught and forgotten rather than blindly
 // trusted just because it was chosen by name.
 export async function reconnectToKnownDevice(device, onProgress) {
-  reconnectGeneration++; // supersede any in-flight auto-reconnect attempt from a previous connection
+  bleLog(`[mule-ble] ===== manual connect requested: reconnecting to known device "${device.name || device.id}" =====`);
   return connectAndVerify(device, onProgress);
 }
 
@@ -740,7 +712,19 @@ export async function reconnectToKnownDevice(device, onProgress) {
 // disconnectPhone() explicitly once done.
 export async function pullFromConnectedPhone() {
   if (!isConnected()) throw new Error('Not connected to a phone.');
-  const service = await connectedDevice.gatt.getPrimaryService(SERVICE_UUID);
+  let service;
+  try {
+    service = await connectedDevice.gatt.getPrimaryService(SERVICE_UUID);
+  } catch (e) {
+    // Unlike every leg below, this one has no try/catch of its own to fall into and log via —
+    // confirmed in the field as a real, silent gap: isConnected() can still read true (a link
+    // that's dead in practice but hasn't fired 'gattserverdisconnected' — see abandonConnection's
+    // own doc above) while this very first GATT call already fails, and without this it
+    // propagated straight to the caller with nothing logged here at all, making a run of failed
+    // auto-pull ticks look like they'd done nothing rather than shown WHY.
+    bleError('[mule-ble] pull failed: could not get the primary service (connection may be dead despite isConnected() still reading true)', e);
+    throw e;
+  }
   const deviceInfo = connectedInfo;
 
   // Each leg (this device's own race, plus one per relay entry) is pulled independently —
