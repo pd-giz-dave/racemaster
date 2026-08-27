@@ -15,6 +15,50 @@ const CONTROL_CHAR_UUID     = '6d6f6269-6c65-2e72-6163-000000000002';
 const DATA_CHAR_UUID        = '6d6f6269-6c65-2e72-6163-000000000003';
 const ACK_CHAR_UUID         = '6d6f6269-6c65-2e72-6163-000000000004';
 
+// Advertised (never a real GATT service — see MuleGattProfile.MULE_MODE_MARKER_SERVICE_UUID's
+// own doc on the phone side) only while a racemaster-mobile phone is currently in Mule Mode.
+// connectToPhone() below requires both this and SERVICE_UUID in one requestDevice() filter so
+// its picker only offers phones currently in Mule Mode, not every nearby Time/Bibs/CP phone too.
+//
+// This is the second attempt at that goal — the first encoded mode as a byte in the scan-response
+// manufacturer data and filtered on it via requestDevice()'s manufacturerData/dataPrefix option.
+// Confirmed in the field (2026-08-27, against a Chromium-based browser on a remote Windows
+// laptop) that the manufacturerData filter matched nothing even though
+// chrome://bluetooth-internals' raw advertisement view proved the phone's bytes were exactly
+// correct; removing just that one filter field made the same phone appear immediately, isolating
+// the browser's own filter-matching for that option (not this wire format) as the broken part on
+// that specific deployment. The exact underlying reason wasn't chased further — manufacturerData
+// filtering is generally a less mature/less exercised part of most Web Bluetooth implementations
+// than plain service-UUID filtering, across platforms, but nothing here should be read as a claim
+// about *why* it failed on that machine specifically, only that it did. Service-UUID filtering is
+// the one path confirmed reliable there, hence this approach instead.
+//
+// Why this string, despite looking exactly like every other full 128-bit UUID here, is secretly
+// a "16-bit UUID" (explained for anyone who hasn't worked with BLE UUIDs before): the Bluetooth
+// SIG (Special Interest Group) defined one official 128-bit UUID, the "Bluetooth Base UUID" —
+// 00000000-0000-1000-8000-00805F9B34FB. A "16-bit UUID" is, by definition, that exact value with
+// only its first 4 hex digits swapped out, so 16-bit UUID 0xFFF0 and
+// 0000FFF0-0000-1000-8000-00805F9B34FB are, byte for byte, the identical value. There's no
+// separate "16-bit UUID" type in the Web Bluetooth API (or Android's, on the phone side) — you
+// always write/read the full 128-bit string; its "16-bit-ness" is a fact about *which value it
+// happens to be*, not about how it's spelled here. SERVICE_UUID above, by contrast, does NOT end
+// in that fixed -0000-1000-8000-00805F9B34FB suffix — it's a genuinely random, one-off custom
+// value — so it can never be treated as a short form the way this one can.
+//
+// That distinction is *why* this exists as its own separate UUID instead of just reusing
+// SERVICE_UUID's pattern: BLE's own advertisement format has two ways to encode a service UUID —
+// the full 16 raw bytes (+2 bytes of framing = 18 bytes total), or, only for a value matching the
+// Base UUID pattern, just its 2 changed bytes (+2 bytes of framing = 4 bytes total), since a
+// receiver can always reconstruct the full 128 bits by re-inserting that same fixed suffix. The
+// legacy advertisement packet this rides in is capped at 31 bytes total, and SERVICE_UUID alone
+// already costs the full 18 of those (it can't be shortened, per above) — a second *custom*
+// 128-bit UUID would cost another 18 bytes and blow the budget outright, whereas this short-form
+// value costs only 4. The phone's own BLE stack performs this compaction on the wire
+// automatically (see MuleGattProfile.MULE_MODE_MARKER_SERVICE_UUID's own doc); by the time it
+// reaches this browser, the OS's own Bluetooth stack has already expanded it back to the full
+// 128-bit string below — this file never sees or handles a "short" UUID directly either.
+const MULE_MODE_MARKER_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
+
 const PULL_TIMEOUT_MS = 15000;
 // Gives the peripheral's CCCD subscription time to land before it starts streaming —
 // racemaster-mobile's own MulePullClient waits the same way before writing its PullRequest.
@@ -453,6 +497,19 @@ async function pullRelayManifestEntries(service) {
 // work — a fresh pick through the picker is what's confirmed to actually work after any kind of
 // drop, address rotation or not.
 //
+// A bonding-based fix for this was attempted and reverted (2026-08-28): a dedicated encrypted
+// characteristic (PAIRING_ANCHOR_CHAR_UUID) forced Android to bond with a phone on first
+// connection, which should have let the OS resolve its rotated address transparently afterward —
+// but confirmed in the field, on two independent Windows laptops, once bonded, *every* GATT
+// operation to that phone started failing (not just the encrypted one), with no way found to
+// recover it short of fully unbonding the devices again. Whatever the exact mechanism (BLE
+// encryption applies to a whole connection, not per-characteristic, so a broken
+// encryption-resumption step for the bonded link would explain reads failing across the board),
+// the practical result was a phone that could no longer be connected to at all — categorically
+// worse than the rotating-identity annoyance this was meant to fix. Not attempted again without
+// a way to first confirm bonding actually works reliably against this deployment's real
+// hardware/browser combinations.
+//
 // Once connected, though, a genuine phone's real name IS known (via DeviceInfo) — remembered
 // here (browser-assigned device.id → that name) so a later connect can offer a direct
 // "Reconnect to <name>" that skips the anonymous picker entirely for a phone that's been through
@@ -507,13 +564,16 @@ export async function getKnownDevices() {
 // Connects to an already-selected BluetoothDevice (either fresh from requestDevice()'s picker,
 // or a remembered one from getKnownDevices() bypassing it) and reads its DeviceInfo — leaving
 // the connection open (see disconnectPhone()/onDisconnect() above) rather than pulling and
-// disconnecting in one shot. No pairing/bonding is required by this protocol. Returns the
-// DeviceInfo read at connect time, so a fresh-picker caller can echo the phone's own name back
-// for confirmation before doing anything else with it (a known-device caller already knows the
-// name — that's the whole point of remembering it — so has no need to).
+// disconnecting in one shot. No pairing/bonding is required by this protocol (see
+// getKnownDevices()'s own doc for why a bonding-based fix for the rotating-address problem was
+// tried and reverted). Returns the DeviceInfo read at connect time, so a fresh-picker caller can
+// echo the phone's own name back for confirmation before doing anything else with it (a
+// known-device caller already knows the name — that's the whole point of remembering it — so has
+// no need to).
 //
 // The requestDevice() filter already restricts the picker to devices advertising our service
-// UUID, but that's an advertisement-layer claim, not a guarantee — reading DeviceInfo here is
+// UUID and currently in Mule Mode (see connectToPhone's own doc), but that's an
+// advertisement-layer claim, not a guarantee — reading DeviceInfo here is
 // what actually confirms this is a genuine RaceMaster Mobile peripheral; anything that fails
 // that gets disconnected immediately, forgotten if it was a remembered device, and rejected
 // with a clear reason rather than a raw browser exception.
@@ -685,7 +745,20 @@ export async function connectToPhone(onProgress) {
   if (!isBluetoothAvailable()) {
     throw new Error('Web Bluetooth is not available — use Chrome or Edge over HTTPS (or localhost).');
   }
-  const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+  // Both UUIDs live in one filter object's services array, so a device must advertise BOTH to
+  // match (Web Bluetooth's own "advertised UUIDs must be a superset of filter.services"
+  // semantics) — not just our GATT service, but specifically MULE_MODE_MARKER_SERVICE_UUID too,
+  // which racemaster-mobile only advertises while actually in Mule Mode (see its own doc). Every
+  // other nearby racemaster-mobile phone (Time/Bibs/CP) still runs the exact same GATT
+  // peripheral this file could otherwise connect to — this filter is purely so the operator
+  // doesn't have to trial-and-error through the picker to find the one phone that's actually
+  // meant to be pulled from directly. A phone on an older build that predates this marker simply
+  // won't advertise it and so won't appear, same as it wouldn't have shown a meaningful name
+  // before this either.
+  bleLog(`[mule-ble] requestDevice() filter: services=[${SERVICE_UUID}, ${MULE_MODE_MARKER_SERVICE_UUID}]`);
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [{ services: [SERVICE_UUID, MULE_MODE_MARKER_SERVICE_UUID] }],
+  });
   bleLog(`[mule-ble] picker resolved to "${device.name || device.id}"`);
   return connectAndVerify(device, onProgress);
 }

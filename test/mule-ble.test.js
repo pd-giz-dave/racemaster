@@ -328,6 +328,35 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
   });
 });
 
+describe('mule-ble.js:connectToPhone picker filter (Mule Mode only)', () => {
+  const MULE_MODE_MARKER_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
+
+  it('filters requestDevice() to both the GATT service UUID and the Mule Mode marker UUID', async (t) => {
+    // Same reasoning as every other test in this file that reaches connectToPhone(): without
+    // fake timers, the losing side of connectAndVerify's internal Promise.race (a real, unref'd
+    // 12s setTimeout) is left dangling for the rest of this process's life, which doesn't fail
+    // anything but needlessly stalls the whole suite's wall-clock runtime.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    let requestDeviceOptions = null;
+    installNavigatorMock({
+      bluetooth: { requestDevice: async (options) => { requestDeviceOptions = options; return device; } },
+    });
+
+    await connectToPhone();
+    disconnectPhone();
+
+    // Both UUIDs required in one filter object — Web Bluetooth's "advertised UUIDs must be a
+    // superset of filter.services" semantics — not the manufacturerData/dataPrefix approach
+    // tried first (see MULE_MODE_MARKER_SERVICE_UUID's own doc for why that was abandoned:
+    // confirmed unreliable in the field on at least one real platform, whereas service-UUID
+    // filtering is pushed down into the OS's own native discovery filter and proven reliable).
+    assert.equal(requestDeviceOptions.filters.length, 1);
+    assert.deepEqual(requestDeviceOptions.filters[0].services, [SERVICE_UUID, MULE_MODE_MARKER_SERVICE_UUID]);
+  });
+});
+
 describe('mule-ble.js:onDisconnect wasDeliberate', () => {
   it('receives wasDeliberate: true for disconnectPhone(), false for an unexpected drop', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });

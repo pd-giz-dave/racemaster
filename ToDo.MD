@@ -86,3 +86,46 @@
       across "Update progress" actions, the rest of the system must react as if there was a time there
       (ie. they may longer be considered as a DSQ)
 
+## Re-think dataset structure?
+
+Instead of a single dataset with everything embedded consider people, categories, dibbers, roles being separate tables?
+The current 'dataset' then becomes the 'event' and is created new for each race.
+So structure on the server is:
+  data
+        organisation 1
+            people
+            categories
+            dibbers
+            roles
+            events
+                  race 1
+                  race 2
+                  race 3
+                  ...
+        organisation 2
+        organisation 3
+        ...
+  mobile
+      organisation 1
+        race 1
+            bib allocations
+            phone 1
+            phone 2
+            phone 3
+            ...
+      organisation 2
+      organisation 3
+      ...
+  results
+      js/css/et al for results rendering
+      race 1
+      race 2
+      race 3
+      ...
+The downside is cannot snapshot everything into a single json file.
+But can if tweak the logic to auto manage them, eg. load as part of event setup
+and have setup option to auto update (only if logged in).
+Hmmm... how to handle public/private?
+Or part of setup is to pick people/cats/roles/dibbers then public/private is part of file name as now.
+Then auto update only allowed to 'self' or anybody if an admin.
+Export produces a zip file with all tables in it, and import unzips them.
