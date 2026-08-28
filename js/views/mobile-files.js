@@ -11,7 +11,7 @@ import {
   disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers, getRecommendedPollIntervalMs,
   isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
-  abandonConnection,
+  abandonConnection, forgetKnownDevice,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
 import { entryInfo } from '../safety.js';
@@ -1032,10 +1032,22 @@ let pullInProgress = false;
 
 function scheduleNextAutoPull(baseIntervalMs) {
   const jitteredMs = baseIntervalMs * (1 + (Math.random() * 2 - 1) * JITTER_FRACTION);
-  autoPullTimer = setTimeout(() => {
+  autoPullTimer = setTimeout(async () => {
     debugLog('[mobile-files] auto-pull tick');
-    pullAndSyncConnectedPhone({ silent: true });
-    scheduleNextAutoPull(baseIntervalMs);
+    // Awaited, not fire-and-forget — a pull can run long (several relay legs pulled
+    // sequentially, each its own GATT round trip, occasionally hitting the 15s pull timeout),
+    // easily longer than this loop's own ~10s base interval. Scheduling the next tick on a fixed
+    // cadence regardless (the original approach) meant ticks kept arriving mid-pull, tripping
+    // pullInProgress's guard and getting discarded — confirmed in the field as a steady stream of
+    // "already in progress" skips instead of the intended one-in-flight-at-a-time cadence.
+    // Waiting here means each tick's own gap is measured from the previous pull's actual finish,
+    // not from when it merely started.
+    await pullAndSyncConnectedPhone({ silent: true });
+    // stopAutoPull() (e.g. onBleDisconnected firing because the phone dropped mid-pull) may have
+    // nulled autoPullTimer while the await above was in flight — reschedule only if this loop is
+    // still meant to be running, or a stopped auto-pull would silently start itself back up one
+    // tick later.
+    if (autoPullTimer !== null) scheduleNextAutoPull(baseIntervalMs);
   }, jitteredMs);
 }
 
@@ -1128,6 +1140,20 @@ function onBleDisconnected(wasDeliberate) {
   updateConnectButtonLabel();
   if (wasDeliberate) {
     debugLog('[mobile-files] disconnected (expected)');
+  } else if (connectAttemptInProgress) {
+    // A drop right after gatt.connect() resolves but before DeviceInfo verification settles is
+    // an expected part of connectAndVerify's own retry loop (see its own doc on the
+    // discovery-not-settled-yet timing race) — its onProgress callback (wired straight to
+    // showStatus by the caller below) already reports each retry attempt on its own, so this
+    // isn't a genuine "was connected, now lost" event needing this generic banner too. That
+    // mattered in practice: unlike showStatus, showBleLostBanner() is a persistent element that
+    // only ever clears via the operator's own dismiss click or the *next* button click's
+    // hideBleLostBanner() call (see onConnectButtonClick's own doc on that) — neither of which
+    // happens automatically when this same reconnect attempt then goes on to succeed a few
+    // seconds later. Showing it here left a fully successful reconnect looking stuck on "Lost
+    // Bluetooth connection" — confirmed in the field as exactly this: a reconnect that plainly
+    // worked (pulls succeeding right after) with a stale failure banner still sitting over it.
+    debugLog('[mobile-files] disconnected mid-connect-attempt (expected — connectAndVerify is retrying)');
   } else {
     // Never gated behind the logging toggle — same reasoning as mule-ble.js's own bleError: a
     // real problem needs to be visible even if that toggle was left off. Deliberately no
@@ -1283,15 +1309,36 @@ async function onConnectButtonClick() {
   }
   // A remembered phone (one already connected to and verified before) can be reconnected
   // directly, skipping the browser's own anonymous picker entirely — see getKnownDevices()'s
-  // own doc for why that picker can never show a real name on its own.
-  const known = await getKnownDevices();
+  // own doc for why that picker can never show a real name on its own. Always shown, even with
+  // zero known devices, rather than skipping straight to the picker in that case — getKnownDevices()
+  // itself is just a local read of already-granted permissions (see its own doc), not a scan, so
+  // this dialog lets the operator see that first ("No known devices") and only trigger the
+  // browser's real scan by deliberately clicking through to it.
+  // Loops rather than returning after a Forget click — forgetting a stale/wrong entry is
+  // typically the operator clearing clutter on the way to picking a *different* phone, not the
+  // end of the interaction, so re-showing the (now-shorter) list lets them carry straight on
+  // instead of having to click Connect to Phone… a second time.
+  let known = await getKnownDevices();
   let chosenDevice = null;
-  if (known.length) {
-    const choices = known.map(k => ({ label: `Reconnect to ${k.name}`, value: k.device }));
-    choices.push({ label: 'Pick a different phone…', value: 'other' });
-    const picked = await showChoiceDialog('Connect to which phone?', choices, { vertical: true });
+  while (true) {
+    const choices = known.map(k => ({
+      label: k.name,
+      buttons: [
+        { label: 'Reconnect', value: { device: k.device } },
+        { label: 'Forget', value: { forgetId: k.device.id }, danger: true },
+      ],
+    }));
+    choices.push({ label: known.length ? 'Pick a different phone…' : 'Scan for a phone…', value: { other: true }, inline: true });
+    const message = known.length ? 'Connect to which phone?' : 'No known devices.';
+    const picked = await showChoiceDialog(message, choices, { vertical: true });
     if (picked === null) { showStatus('Cancelled.'); return; }
-    if (picked !== 'other') chosenDevice = picked;
+    if (picked.forgetId) {
+      forgetKnownDevice(picked.forgetId);
+      known = known.filter(k => k.device.id !== picked.forgetId);
+      continue;
+    }
+    if (!picked.other) chosenDevice = picked.device;
+    break;
   }
 
   connectAttemptInProgress = true;
@@ -1340,7 +1387,12 @@ async function onConnectButtonClick() {
   updateConnectButtonLabel();
   showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
   await pullAndSyncConnectedPhone();
-  startAutoPull();
+  // The link can die mid-pull (see onBleDisconnected) — that already reverts the button and
+  // calls stopAutoPull(), but a stale timer wasn't running yet to stop at that point. Without
+  // this check, this line ran anyway right after and started one fresh against a connection
+  // that's already gone, ticking "not connected" forever until the operator noticed and clicked
+  // Connect to Phone… themselves to get a fresh stopAutoPull() call.
+  if (isConnected()) startAutoPull();
 }
 
 async function onRefreshButtonClick() {

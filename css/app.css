@@ -826,6 +826,24 @@ button.df-badge-connected:hover { background: var(--danger); }
   align-self: flex-end;
   width: auto;
 }
+.choice-dialog-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.choice-dialog-row--actions {
+  justify-content: flex-end;
+}
+.choice-dialog-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  color: var(--text);
+}
 .input-dialog-field {
   width: 100%;
   box-sizing: border-box;

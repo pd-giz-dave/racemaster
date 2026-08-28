@@ -100,19 +100,61 @@ export function showChoiceDialog(message, choices, { focusCancel = false, vertic
       resolve(value);
     };
 
-    for (const { label, value, danger } of choices) {
-      const btn = document.createElement('button');
-      btn.className = danger ? 'btn btn-delete' : 'btn';
-      btn.textContent = label;
-      btn.addEventListener('click', () => close(value));
-      btns.appendChild(btn);
+    // A choice with `buttons` (instead of a single `value`) renders as one row: a label plus
+    // several small inline buttons sharing it — e.g. "<device name>: [Reconnect] [Forget]" —
+    // rather than each option getting its own full-width button. `inline: true` on a plain
+    // choice instead packs it into the same row as the dialog's own Cancel button, right-aligned
+    // alongside it, rather than getting its own full-width row above it — for a single trailing
+    // action (e.g. "Pick a different phone…") that reads as a peer of Cancel, not one more item
+    // in the list above it. Both are opt-in shapes on top of the plain {label, value, danger}
+    // choice below (never assumed) so every other caller of this dialog is unaffected.
+    let inlineChoice = null;
+    for (const choice of choices) {
+      if (choice.buttons) {
+        const row = document.createElement('div');
+        row.className = 'choice-dialog-row';
+        const label = document.createElement('span');
+        label.className = 'choice-dialog-row-label';
+        label.textContent = choice.label;
+        row.appendChild(label);
+        for (const { label: btnLabel, value, danger } of choice.buttons) {
+          const btn = document.createElement('button');
+          btn.className = danger ? 'btn btn-sm btn-delete' : 'btn btn-sm';
+          btn.textContent = btnLabel;
+          btn.addEventListener('click', () => close(value));
+          row.appendChild(btn);
+        }
+        btns.appendChild(row);
+      } else if (choice.inline) {
+        inlineChoice = choice; // rendered below, alongside Cancel, not here
+      } else {
+        const btn = document.createElement('button');
+        btn.className = choice.danger ? 'btn btn-delete' : 'btn';
+        btn.textContent = choice.label;
+        btn.addEventListener('click', () => close(choice.value));
+        btns.appendChild(btn);
+      }
     }
 
     const cancel = document.createElement('button');
     cancel.className = 'btn btn-secondary choice-dialog-cancel';
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', () => close(null));
-    if (focusCancel) btns.prepend(cancel); else btns.appendChild(cancel);
+
+    if (inlineChoice) {
+      const inlineBtn = document.createElement('button');
+      inlineBtn.className = inlineChoice.danger ? 'btn btn-delete' : 'btn';
+      inlineBtn.textContent = inlineChoice.label;
+      inlineBtn.addEventListener('click', () => close(inlineChoice.value));
+      const row = document.createElement('div');
+      row.className = 'choice-dialog-row choice-dialog-row--actions';
+      row.append(inlineBtn, cancel);
+      btns.appendChild(row);
+    } else if (focusCancel) {
+      btns.prepend(cancel);
+    } else {
+      btns.appendChild(cancel);
+    }
 
     box.appendChild(btns);
     overlay.appendChild(box);
