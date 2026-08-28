@@ -1008,25 +1008,47 @@ function updateConnectButtonLabel() {
 // reports it via getRecommendedPollIntervalMs() (DeviceInfo.pollIntervalMs), so this stays in
 // step with whatever racemaster-mobile's own MuleGattProfile.RECOMMENDED_POLL_INTERVAL_MS is,
 // rather than a second hardcoded copy here drifting out of sync with it.
+//
+// A self-rescheduling setTimeout, not setInterval — a plain setInterval fires at a truly fixed
+// period, and that period is the exact same MuleGattProfile.RECOMMENDED_POLL_INTERVAL_MS the
+// connected phone's own MuleSyncEngine uses for its own steady-state auto-sync loop (see that
+// class's AUTO_SYNC_INTERVAL — unlike its one-off FIRST_SIGHTING_JITTER, which only staggers
+// newly-discovered devices apart from each other, that steady-state loop has no jitter of its
+// own once running). Two independent, unjittered, same-period timers settle into whatever
+// relative phase they happened to start at — purely an accident of when the phone booted versus
+// when the operator clicked Connect — and then never drift apart again, confirmed as a real risk
+// in the field: this browser's own pull traffic could land on top of that same phone's own
+// native mesh radio activity on every single tick, not just occasionally. Re-randomizing the
+// delay before every tick (JITTER_FRACTION below) keeps this side's timing continuously
+// wandering relative to the phone's fixed cadence instead of freezing into one unlucky phase
+// forever — it doesn't stop an occasional overlap (nothing can, and the existing retry/timeout
+// handling already tolerates that fine), it stops a persistent, repeating one.
+const JITTER_FRACTION = 0.2; // ±20% of the base interval
 let autoPullTimer = null;
 
 // Guards against overlapping pulls — a slow BLE transfer (large history, weak signal) could
 // still be in flight when the next timer tick or a manual Refresh click fires.
 let pullInProgress = false;
 
+function scheduleNextAutoPull(baseIntervalMs) {
+  const jitteredMs = baseIntervalMs * (1 + (Math.random() * 2 - 1) * JITTER_FRACTION);
+  autoPullTimer = setTimeout(() => {
+    debugLog('[mobile-files] auto-pull tick');
+    pullAndSyncConnectedPhone({ silent: true });
+    scheduleNextAutoPull(baseIntervalMs);
+  }, jitteredMs);
+}
+
 function startAutoPull() {
   stopAutoPull();
   const intervalMs = getRecommendedPollIntervalMs();
-  debugLog(`[mobile-files] starting auto-pull every ${intervalMs}ms`);
-  autoPullTimer = setInterval(() => {
-    debugLog('[mobile-files] auto-pull tick');
-    pullAndSyncConnectedPhone({ silent: true });
-  }, intervalMs);
+  debugLog(`[mobile-files] starting auto-pull every ~${intervalMs}ms (±${JITTER_FRACTION * 100}% jitter)`);
+  scheduleNextAutoPull(intervalMs);
 }
 
 function stopAutoPull() {
   if (autoPullTimer !== null) {
-    clearInterval(autoPullTimer);
+    clearTimeout(autoPullTimer);
     autoPullTimer = null;
   }
 }

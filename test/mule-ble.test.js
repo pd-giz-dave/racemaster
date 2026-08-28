@@ -325,6 +325,113 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(results.length, 1);
     assert.equal(results[0].raceLabel, 'relayed-race');
     assert.equal(results[0].deviceId, 'origin1');
+    disconnectPhone();
+  });
+
+  it('reuses the cached relay manifest across pulls when relayCount is unchanged', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 1 };
+    const relayManifest = [{ originDeviceId: 'origin1', originRaceLabel: 'relayed-race', originDeviceName: 'Origin Phone' }];
+    let manifestFetchCount = 0;
+    let relayedPullCount = 0;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => {
+        if (req.requestRelayManifest) { manifestFetchCount++; return relayManifest; }
+        relayedPullCount++;
+        return [];
+      },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    await connectToPhone();
+
+    const pull1 = pullFromConnectedPhone();
+    await settleOnePull(t); // manifest fetch
+    await settleOnePull(t); // origin1's relayed pull
+    await pull1;
+
+    const pull2 = pullFromConnectedPhone();
+    await settleOnePull(t); // origin1's relayed pull only — manifest reused from cache, no fetch
+    await pull2;
+
+    assert.equal(manifestFetchCount, 1); // NOT re-fetched on the second pull
+    assert.equal(relayedPullCount, 2);   // but the per-origin delta pull still runs every time
+    disconnectPhone();
+  });
+
+  it('re-fetches the relay manifest when relayCount changes between pulls', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 1 };
+    let manifest = [{ originDeviceId: 'origin1', originRaceLabel: 'relayed-race', originDeviceName: 'Origin Phone' }];
+    let manifestFetchCount = 0;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => (req.requestRelayManifest ? (manifestFetchCount++, manifest) : []),
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    await connectToPhone();
+
+    const pull1 = pullFromConnectedPhone();
+    await settleOnePull(t); // manifest fetch
+    await settleOnePull(t); // origin1's relayed pull
+    await pull1;
+    assert.equal(manifestFetchCount, 1);
+
+    // Simulate a second device starting to relay through this phone between auto-pull ticks.
+    deviceInfo.relayCount = 2;
+    manifest = [
+      { originDeviceId: 'origin1', originRaceLabel: 'relayed-race', originDeviceName: 'Origin Phone' },
+      { originDeviceId: 'origin2', originRaceLabel: 'another-race', originDeviceName: 'Second Phone' },
+    ];
+
+    const pull2 = pullFromConnectedPhone();
+    await settleOnePull(t); // manifest re-fetch — relayCount changed
+    await settleOnePull(t); // origin1's relayed pull
+    await settleOnePull(t); // origin2's relayed pull
+    await pull2;
+
+    assert.equal(manifestFetchCount, 2); // re-fetched because relayCount changed
+    disconnectPhone();
+  });
+
+  it('re-fetches the relay manifest on a same-count membership swap when relayManifestVersion is reported', async (t) => {
+    // The gap relayCount alone can't cover: one origin fully synced away at the same moment a
+    // different one started relaying, leaving relayCount unchanged even though the actual
+    // membership did. A phone build that reports relayManifestVersion (see
+    // MuleGattProfile.DeviceInfo's own doc) bumps it on exactly this kind of change, letting the
+    // cache correctly invalidate here where a relayCount-only comparison would have missed it.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 1, relayManifestVersion: 1 };
+    let manifest = [{ originDeviceId: 'origin1', originRaceLabel: 'relayed-race', originDeviceName: 'Origin Phone' }];
+    let manifestFetchCount = 0;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => (req.requestRelayManifest ? (manifestFetchCount++, manifest) : []),
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    await connectToPhone();
+
+    const pull1 = pullFromConnectedPhone();
+    await settleOnePull(t); // manifest fetch
+    await settleOnePull(t); // origin1's relayed pull
+    const results1 = await pull1;
+    assert.equal(manifestFetchCount, 1);
+    assert.equal(results1[0].deviceId, 'origin1');
+
+    // Same count (still 1), but origin1 has fully synced away and origin2 has taken its place —
+    // exactly the swap a relayCount-only comparison can't see. The phone reports this via a
+    // bumped relayManifestVersion.
+    deviceInfo.relayManifestVersion = 2;
+    manifest = [{ originDeviceId: 'origin2', originRaceLabel: 'another-race', originDeviceName: 'Second Phone' }];
+
+    const pull2 = pullFromConnectedPhone();
+    await settleOnePull(t); // manifest re-fetch — relayManifestVersion changed despite same count
+    await settleOnePull(t); // origin2's relayed pull
+    const results2 = await pull2;
+
+    assert.equal(manifestFetchCount, 2); // re-fetched despite relayCount staying at 1
+    assert.equal(results2[0].deviceId, 'origin2');
+    disconnectPhone();
   });
 });
 

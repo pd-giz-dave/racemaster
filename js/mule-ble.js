@@ -121,6 +121,12 @@ let connectedInfo   = null; // last-read DeviceInfo
 let disconnectListener = null;
 let deliberateDisconnect = false; // set just before disconnectPhone()'s own .gatt.disconnect() call
 
+// Cached relay manifest — see pullFromConnectedPhone's own doc for why this exists. Reset
+// alongside connectedDevice/connectedInfo in forgetConnection() below, same lifecycle: a fresh
+// connection should never reuse a manifest fetched from a previous one.
+let cachedRelayEntries = null;    // RelayManifestEntry[] | null
+let cachedRelayManifestKey = null; // the value relayManifestCacheKey() returned when the cache above was fetched
+
 export function isConnected() {
   return !!connectedDevice?.gatt?.connected;
 }
@@ -164,6 +170,8 @@ function forgetConnection() {
   bleLog(`[mule-ble] gattserverdisconnected fired (wasDeliberate=${wasDeliberate})`);
   connectedDevice = null;
   connectedInfo = null;
+  cachedRelayEntries = null;
+  cachedRelayManifestKey = null;
   if (!wasDeliberate && id) forgetKnownDevice(id);
   disconnectListener?.(wasDeliberate);
 }
@@ -432,8 +440,19 @@ async function pullChunkedArray(service, pullRequest) {
   try {
     await dataChar.startNotifications();
     await new Promise(r => setTimeout(r, NOTIFY_SETTLE_MS));
-    bleLog('[mule-ble] sending pull request', pullRequest);
-    await controlChar.writeValueWithResponse(encodeJson(pullRequest));
+    // isSink mirrors the ack's own isSink (see sendSinkAck) but goes out on *every* request,
+    // not just when there's something to ack — this is what identifies this connection's own
+    // BluetoothDevice address as the web app's, on the very first poll tick, regardless of
+    // whether anything ends up being pulled that time. Without it, the phone side
+    // (BluetoothStateRepository.recordWebAppSeen — see its own doc) had no way to attribute a
+    // CONTROL write to this client specifically until the next time an ack actually fired,
+    // which sendSinkAck skips entirely whenever there's nothing new — confirmed in the field as
+    // the phone's own "web app last seen" feedback staying stuck on "never" the whole time a
+    // phone simply had no fresh data to push, even while this file's own log showed it polling
+    // fine every few seconds.
+    const requestWithIdentity = { ...pullRequest, isSink: true };
+    bleLog('[mule-ble] sending pull request', requestWithIdentity);
+    await controlChar.writeValueWithResponse(encodeJson(requestWithIdentity));
   } catch (e) {
     // startNotifications()/writeValueWithResponse() failing (e.g. the connection just dropped)
     // leaves streamPromise's own internal PULL_TIMEOUT_MS timer running with nothing left to
@@ -467,6 +486,21 @@ async function pullOne(service, pullRequest) {
 // ignored by the phone for this request type; 0 is sent purely to satisfy that.
 async function pullRelayManifestEntries(service) {
   return pullChunkedArray(service, { sinceLineNumber: 0, requestRelayManifest: true });
+}
+
+// What cachedRelayEntries (see its own doc) is keyed on — prefers relayManifestVersion (see
+// MuleGattProfile.DeviceInfo's own doc on the phone side), a counter the phone bumps only when
+// the manifest's actual content changes (an origin added/removed, or an existing origin's own
+// lastLineNumber/deviceName advancing), so a same-size membership swap between two ticks is
+// correctly detected as a change even though relayCount alone wouldn't show it. Falls back to
+// relayCount when relayManifestVersion is absent (an older phone build that predates this field
+// — DeviceInfo is JSON, so a missing field just comes through as undefined) — the same coarser,
+// count-only comparison this cache used before that field existed, with the same narrow known
+// gap (a same-count swap can go briefly unnoticed) for exactly the phones that can't report
+// anything better. `??`, not `||` — 0 is a legitimate version/count and must not be treated as
+// "missing".
+function relayManifestCacheKey(deviceInfo) {
+  return deviceInfo.relayManifestVersion ?? deviceInfo.relayCount;
 }
 
 // ---- Known-device memory ----
@@ -798,7 +832,24 @@ export async function pullFromConnectedPhone() {
     bleError('[mule-ble] pull failed: could not get the primary service (connection may be dead despite isConnected() still reading true)', e);
     throw e;
   }
-  const deviceInfo = connectedInfo;
+  // Re-read DeviceInfo fresh on every call rather than trusting connectedInfo (the connect-time
+  // snapshot) — relayCount, unlike raceLabel, is a genuinely dynamic quantity: it drops as
+  // relayed data finishes syncing away and rises as another device relays something new through
+  // this one. Trusting the stale snapshot meant this function could never notice either
+  // direction happening mid-connection: once relayCount was ever >0 at connect time, it kept
+  // re-fetching the (potentially large, chunked) relay manifest on every single auto-pull tick
+  // forever, even long after relayCount had genuinely dropped back to 0 — confirmed in the field
+  // as continuous, pointless BLE traffic against an otherwise fully idle phone. Falls back to
+  // the last-known copy if this one read fails — a single transient GATT hiccup here shouldn't
+  // abort the whole pull when the legs below might still succeed fine.
+  let deviceInfo = connectedInfo;
+  try {
+    const infoChar = await service.getCharacteristic(DEVICE_INFO_CHAR_UUID);
+    deviceInfo = decodeJson(await infoChar.readValue());
+    connectedInfo = deviceInfo;
+  } catch (e) {
+    bleWarn('[mule-ble] could not refresh DeviceInfo before pulling — using the last-known copy', e);
+  }
 
   // Each leg (this device's own race, plus one per relay entry) is pulled independently —
   // one failing (a relay entry the phone can no longer actually serve, a mid-transfer BLE
@@ -838,20 +889,35 @@ export async function pullFromConnectedPhone() {
     bleLog('[mule-ble] device has no race of its own (pure Mule) — skipping straight to relay entries');
   }
 
-  // The manifest itself (unlike the count) is fetched fresh here rather than off the
-  // connect-time deviceInfo — see pullRelayManifestEntries' own doc. Only bothered with when
-  // relayCount says there's something to fetch, so a leaf Time/Bibs/CP phone (always
-  // relayCount 0) never pays this extra round trip. A failure here is treated the same as any
-  // other leg failing (see the try/catch pattern above/below) — logged and pushed onto errors,
-  // never discarding whatever the own-race leg above already retrieved.
+  // Only bothered with at all when relayCount says there's something to fetch, so a leaf
+  // Time/Bibs/CP phone (always relayCount 0) never pays this extra round trip. Beyond that,
+  // cachedRelayEntries (see its own doc above) is reused as-is whenever relayManifestCacheKey()
+  // (below) reports no change since it was last fetched — an *existing* origin's own new data is
+  // picked up by its own per-origin delta pull below via its cursor regardless, with no need to
+  // re-fetch the manifest just to learn that. This is what turns "refetch the whole manifest
+  // every single auto-pull tick, forever" into "refetch only when the manifest's actual content
+  // last changed." A failure here is treated the same as any other leg failing (see the
+  // try/catch pattern above/below) — logged and pushed onto errors, never discarding whatever
+  // the own-race leg above already retrieved, and never left cached under a key it wasn't
+  // actually fetched for.
   let relayEntries = [];
   if (deviceInfo.relayCount > 0) {
-    try {
-      relayEntries = await pullRelayManifestEntries(service);
-    } catch (e) {
-      bleError('[mule-ble] failed to fetch relay manifest', e);
-      errors.push(e);
+    const cacheKey = relayManifestCacheKey(deviceInfo);
+    if (cachedRelayEntries && cachedRelayManifestKey === cacheKey) {
+      relayEntries = cachedRelayEntries;
+    } else {
+      try {
+        relayEntries = await pullRelayManifestEntries(service);
+        cachedRelayEntries = relayEntries;
+        cachedRelayManifestKey = cacheKey;
+      } catch (e) {
+        bleError('[mule-ble] failed to fetch relay manifest', e);
+        errors.push(e);
+      }
     }
+  } else {
+    cachedRelayEntries = null;
+    cachedRelayManifestKey = null;
   }
 
   for (const relay of relayEntries) {
