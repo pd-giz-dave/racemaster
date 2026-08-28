@@ -638,6 +638,20 @@ const GATT_CONNECT_TIMEOUT_MS = 12000;
 // better to fail this attempt fast and let the loop move on (or give up) within a sane budget.
 const GATT_RECONNECT_TIMEOUT_MS = 4000;
 
+// The very first gatt.connect() (before verification even starts) had no retry at all until
+// this was added — confirmed in the field as a single `NetworkError: Connection Error:
+// Connection attempt failed.` failing the whole attempt outright, even for a phone that then
+// connected fine on the operator's very next click. That's the same category of transient
+// failure DEVICE_INFO_ATTEMPTS below already retries past for the *verification* step; the
+// initial connect deserved the same treatment rather than forcing a manual retry via a whole
+// second button click (and, for a known device, having forgotten it in the meantime — see the
+// forgetKnownDevice call below, now only reached once every attempt here has failed). Retries
+// reuse GATT_RECONNECT_TIMEOUT_MS's own reasoning: only the first attempt gets the full
+// GATT_CONNECT_TIMEOUT_MS budget, since a device that was reachable moments ago either connects
+// quickly on a retry or is genuinely gone.
+const GATT_CONNECT_ATTEMPTS = 3;
+const GATT_CONNECT_RETRY_DELAY_MS = 500;
+
 // getPrimaryService()/getCharacteristic()/readValue() below have no spec-guaranteed timeout of
 // their own either — against a connection device.gatt.connected still calls "connected" but that
 // is, in practice, otherwise stuck, these have been observed to simply hang, same as
@@ -667,22 +681,35 @@ function withTimeout(promise, ms, message) {
 // progress (there are none currently, but this keeps the signature uniform) aren't forced to.
 async function connectAndVerify(device, onProgress = () => {}) {
   const label = device.name || 'that device';
-  onProgress(`Connecting to "${label}"…`);
   let server;
-  try {
-    server = await withTimeout(
-      device.gatt.connect(), GATT_CONNECT_TIMEOUT_MS,
-      `Timed out connecting to "${label}" — it may be out of range or turned off.`,
-    );
-  } catch (e) {
+  let lastConnectError = null;
+  for (let attempt = 1; attempt <= GATT_CONNECT_ATTEMPTS; attempt++) {
+    onProgress(attempt === 1
+      ? `Connecting to "${label}"…`
+      : `Connecting to "${label}"… (attempt ${attempt}/${GATT_CONNECT_ATTEMPTS})`);
+    try {
+      server = await withTimeout(
+        device.gatt.connect(),
+        attempt === 1 ? GATT_CONNECT_TIMEOUT_MS : GATT_RECONNECT_TIMEOUT_MS,
+        `Timed out connecting to "${label}" — it may be out of range or turned off.`,
+      );
+      lastConnectError = null;
+      break;
+    } catch (e) {
+      lastConnectError = e;
+      bleWarn(`[mule-ble] GATT connect attempt ${attempt}/${GATT_CONNECT_ATTEMPTS} failed for "${label}"`, e);
+      if (attempt < GATT_CONNECT_ATTEMPTS) await new Promise(r => setTimeout(r, GATT_CONNECT_RETRY_DELAY_MS));
+    }
+  }
+  if (lastConnectError) {
     // Any failure here — including a remembered device that's no longer reachable under the
     // identity it was recognised by, e.g. its BLE address rotated after an app update/restart —
     // means this entry is stale. Forgetting it now (rather than only ever on a DeviceInfo
     // failure further down) is what stops it lingering forever as a dead "Reconnect to X"
     // choice once a fresh pick of the same phone gets remembered under a new id alongside it.
     forgetKnownDevice(device.id);
-    bleError(`[mule-ble] GATT connect failed for "${label}"`, e);
-    throw new Error(e.message || `Couldn't connect to "${label}" — it may be out of range, turned off, or no longer available. Try "Pick a different phone…" to select it fresh.`);
+    bleError(`[mule-ble] GATT connect failed for "${label}" after ${GATT_CONNECT_ATTEMPTS} attempts`, lastConnectError);
+    throw new Error(lastConnectError.message || `Couldn't connect to "${label}" — it may be out of range, turned off, or no longer available. Try "Pick a different phone…" to select it fresh.`);
   }
 
   // The connection can drop again right after connect() resolves — a genuine disconnect, not
@@ -704,15 +731,36 @@ async function connectAndVerify(device, onProgress = () => {}) {
   for (let attempt = 1; attempt <= DEVICE_INFO_ATTEMPTS; attempt++) {
     attemptsMade = attempt;
     try {
-      if (!device.gatt.connected) {
+      // Reconnects before every retry now, not just when device.gatt.connected already reads
+      // false — Web Bluetooth allows only one GATT operation in flight per device at a time and
+      // gives no way to cancel one still pending, including one DEVICE_INFO_READ_TIMEOUT_MS
+      // below just gave up *waiting* on: that timeout losing the withTimeout() race does not
+      // mean the browser actually abandoned the real getPrimaryService/readValue call
+      // underneath, and device.gatt.connected keeps reading true throughout since the link
+      // itself never dropped. Retrying readDeviceInfo() straight against that same still-open
+      // connection collided with the still-in-flight prior attempt every time — confirmed in the
+      // field as `NetworkError: GATT operation already in progress` on every retry after the
+      // very first read ever timed out, guaranteed, not occasional, making the whole attempt
+      // fail outright once that first hang happened. A full disconnect+reconnect between every
+      // retry is what actually resets that stuck per-device operation queue — tearing the link
+      // down and rebuilding it is the closest thing Web Bluetooth has to cancelling a stuck
+      // operation.
+      if (attempt > 1) {
         onProgress(`Reconnecting to "${label}"… (attempt ${attempt}/${DEVICE_INFO_ATTEMPTS})`);
-        bleWarn(`[mule-ble] reconnecting before DeviceInfo attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} (connection dropped)`);
+        bleWarn(`[mule-ble] reconnecting before DeviceInfo attempt ${attempt}/${DEVICE_INFO_ATTEMPTS}`);
+        if (device.gatt.connected) {
+          // Marked deliberate first, same as disconnectPhone() itself (see its own doc on why
+          // this order matters) — this is our own cleanup disconnect, not a real drop, and a
+          // stale 'gattserverdisconnected' listener a past successful connection to this same
+          // remembered device left attached (see this function's own addEventListener call
+          // below, never removed) would otherwise report it as an unexpected one.
+          deliberateDisconnect = true;
+          device.gatt.disconnect();
+        }
         server = await withTimeout(
           device.gatt.connect(), GATT_RECONNECT_TIMEOUT_MS,
           `Timed out reconnecting to "${label}".`,
         );
-      } else if (attempt > 1) {
-        onProgress(`Still verifying "${label}"… (attempt ${attempt}/${DEVICE_INFO_ATTEMPTS})`);
       }
       deviceInfo = await withTimeout(
         readDeviceInfo(server), DEVICE_INFO_READ_TIMEOUT_MS,
@@ -747,6 +795,10 @@ async function connectAndVerify(device, onProgress = () => {}) {
     // time), so forgetting it here would be wrong and would just make an otherwise-good phone
     // re-prompt for confirmation next time for no reason.
     const keptDisconnecting = !device.gatt.connected;
+    // Marked deliberate first (see the retry loop's own matching comment above) — this cleanup
+    // disconnect is ours, not a real drop, and a stale listener from a past successful
+    // connection to this same remembered device would otherwise report it as an unexpected one.
+    if (!keptDisconnecting) deliberateDisconnect = true;
     device.gatt.disconnect();
     if (!keptDisconnecting && !lastError?.nonRetryable) forgetKnownDevice(device.id);
     // Already logged (as the specific failure it is, via bleError) at the point it happened,

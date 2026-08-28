@@ -141,12 +141,21 @@ function makeFakeDataChar() {
 // stream back for that specific request. failConnectsFrom (default: never), if given, makes the
 // Nth-and-every-later gatt.connect() call reject instead of succeeding — the 1-indexed call
 // count includes the very first connect, so failConnectsFrom: 2 means "connects fine once, then
-// every reconnect after that fails". failWrite (default: false), if true, makes the CONTROL
-// write itself reject every time — simulates the connection dropping between a pull starting
-// and its write landing. dropAfterConnect (default: never), if given, fires a real
-// 'gattserverdisconnected' event synchronously right after the Nth gatt.connect() call
-// succeeds — simulates a flaky link dropping again immediately mid-attempt.
-function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failWrite = false, dropAfterConnect = null }) {
+// every reconnect after that fails". failConnectsCount (default: 0), if given, makes exactly the
+// first N gatt.connect() calls reject with a transient-looking error before every call after
+// that succeeds normally — simulates the real, field-confirmed `NetworkError: Connection Error:
+// Connection attempt failed.` connectAndVerify's own GATT_CONNECT_ATTEMPTS retry loop exists to
+// recover from, as distinct from failConnectsFrom's permanent failure. failWrite (default:
+// false), if true, makes the CONTROL write itself reject every time — simulates the connection
+// dropping between a pull starting and its write landing. dropAfterConnect (default: never), if
+// given, fires a real 'gattserverdisconnected' event synchronously right after the Nth
+// gatt.connect() call succeeds — simulates a flaky link dropping again immediately mid-attempt.
+// failDeviceInfoReadsCount (default: 0), if given, makes exactly the first N DeviceInfo
+// characteristic reads reject, with device.gatt.connected deliberately left reading true
+// throughout (unlike dropAfterConnect) — simulates connectAndVerify's own DEVICE_INFO_READ_TIMEOUT_MS
+// giving up on a read that's still genuinely in flight underneath, the scenario its retry loop
+// must reconnect before retrying rather than reusing the same still-busy connection.
+function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failConnectsCount = 0, failWrite = false, dropAfterConnect = null, failDeviceInfoReadsCount = 0 }) {
   const dataChar = makeFakeDataChar();
   const controlChar = {
     writeValueWithResponse: async (bytes) => {
@@ -155,7 +164,14 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
       queueMicrotask(() => dataChar.emitRecords(recordsByRequest(req)));
     },
   };
-  const infoChar = { readValue: async () => jsonDataView(deviceInfo) };
+  let infoReadCallCount = 0;
+  const infoChar = {
+    readValue: async () => {
+      infoReadCallCount++;
+      if (infoReadCallCount <= failDeviceInfoReadsCount) throw new Error(`Timed out reading DeviceInfo from "that device".`);
+      return jsonDataView(deviceInfo);
+    },
+  };
   const ackChar  = { writeValueWithResponse: async () => {} };
   const service = {
     getCharacteristic: async (uuid) => ({
@@ -175,6 +191,7 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
       connected: false,
       connect: async () => {
         connectCallCount++;
+        if (connectCallCount <= failConnectsCount) throw new Error('Connection Error: Connection attempt failed.');
         if (connectCallCount >= failConnectsFrom) throw new Error('out of range');
         device.gatt.connected = true;
         if (connectCallCount === dropAfterConnect) {
@@ -195,6 +212,10 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
       // pullFromConnectedPhone() calls this directly on .gatt, not on connect()'s returned server.
       getPrimaryService: async () => service,
     },
+    // Test-only accessor (not part of the real BluetoothDevice API) — lets a test assert how
+    // many times gatt.connect() was actually called, e.g. to confirm a retry loop reconnected
+    // rather than reusing the same connection.
+    get _connectCallCount() { return connectCallCount; },
     // Test-only helper (not part of the real BluetoothDevice API) — simulates the phone
     // dropping out of range/turning off, firing the same 'gattserverdisconnected' listener a
     // real disconnect would.
@@ -215,6 +236,16 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
 async function settleOnePull(t) {
   await flushMicrotasks();
   t.mock.timers.tick(300);
+  await flushMicrotasks();
+}
+
+// Advances the fake clock past connectAndVerify's own GATT_CONNECT_RETRY_DELAY_MS between
+// retried gatt.connect() attempts (see makeFakePhone's failConnectsCount) and lets the resulting
+// promise chain drain. 600ms comfortably clears that 500ms delay without needing this test file
+// to import (and hardcode a duplicate of) the real, unexported constant.
+async function settleConnectRetry(t) {
+  await flushMicrotasks();
+  t.mock.timers.tick(600);
   await flushMicrotasks();
 }
 
@@ -267,6 +298,62 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
 
     disconnectPhone();
     assert.equal(isConnected(), false);
+  });
+
+  it('retries a transient initial gatt.connect() failure and still connects', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    // Fails the first 2 of GATT_CONNECT_ATTEMPTS (3) initial connect attempts with the real,
+    // field-confirmed transient error, then succeeds on the 3rd.
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsCount: 2 });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // attempt 1 fails, delay before attempt 2
+    await settleConnectRetry(t); // attempt 2 fails, delay before attempt 3
+    const info = await connectPromise; // attempt 3 succeeds
+
+    assert.equal(info.deviceName, 'Phone One');
+    assert.equal(isConnected(), true);
+    disconnectPhone();
+  });
+
+  it('gives up after GATT_CONNECT_ATTEMPTS consecutive initial connect failures and forgets the device', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsCount: Infinity });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    const assertion = assert.rejects(() => connectPromise, /Couldn't connect|Connection Error/);
+    await settleConnectRetry(t); // attempt 1 fails
+    await settleConnectRetry(t); // attempt 2 fails
+    await settleConnectRetry(t); // attempt 3 fails — gives up
+    await assertion;
+
+    assert.equal(isConnected(), false);
+  });
+
+  it('reconnects before retrying a DeviceInfo read even when device.gatt.connected never drops (avoids "GATT operation already in progress")', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    // The first DeviceInfo read fails (simulating connectAndVerify's own read timeout) while
+    // device.gatt.connected is deliberately left true throughout — the exact condition that,
+    // before this loop reconnected unconditionally on every retry, meant attempt 2 retried
+    // readDeviceInfo() straight against the same still-open connection instead.
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failDeviceInfoReadsCount: 1 });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // attempt 1's DeviceInfo read fails; delay before attempt 2
+    const info = await connectPromise;
+
+    assert.equal(info.deviceName, 'Phone One');
+    assert.equal(isConnected(), true);
+    // 2 calls: the initial connect, plus one forced reconnect before the successful retry —
+    // proves the loop reconnected even though device.gatt.connected never read false.
+    assert.equal(device._connectCallCount, 2);
+    disconnectPhone();
   });
 
   it('does not leave an unhandled rejection when the CONTROL write fails after the stream listener is already armed', async (t) => {
