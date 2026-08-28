@@ -16,7 +16,7 @@ import {
   isBluetoothAvailable, isBleLoggingEnabled, setBleLoggingEnabled, isConnected,
   getConnectedDeviceName, getRecommendedPollIntervalMs, disconnectPhone, onDisconnect,
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
-  getKnownDevices, connectToPhone, pullFromConnectedPhone, abandonConnection,
+  getKnownDevices, connectToPhone, reconnectToKnownDevice, pullFromConnectedPhone, abandonConnection,
 } from '../js/mule-ble.js';
 
 const SERVICE_UUID          = '6d6f6269-6c65-2e72-6163-656d61737465';
@@ -155,11 +155,20 @@ function makeFakeDataChar() {
 // throughout (unlike dropAfterConnect) — simulates connectAndVerify's own DEVICE_INFO_READ_TIMEOUT_MS
 // giving up on a read that's still genuinely in flight underneath, the scenario its retry loop
 // must reconnect before retrying rather than reusing the same still-busy connection.
-function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failConnectsCount = 0, failWrite = false, dropAfterConnect = null, failDeviceInfoReadsCount = 0 }) {
+// neverRespondToWrites (default: false), if true, makes the CONTROL write itself resolve
+// normally (unlike failWrite) but never queue the matching data-stream response — simulates a
+// pull that's genuinely in flight, purely waiting on incoming notifications, when the
+// connection then drops for real (see _simulateUnexpectedDisconnect). hangDeviceInfoReadsFrom
+// (default: never), if given, makes the Nth-and-every-later DeviceInfo characteristic read
+// return a promise that never settles at all, rather than rejecting — simulates a real GATT
+// call against a phone that's just gone out of range, which has no spec-guaranteed timeout of
+// its own and was observed hanging indefinitely before callers raced it against one.
+function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failConnectsCount = 0, failWrite = false, dropAfterConnect = null, failDeviceInfoReadsCount = 0, neverRespondToWrites = false, hangDeviceInfoReadsFrom = Infinity }) {
   const dataChar = makeFakeDataChar();
   const controlChar = {
     writeValueWithResponse: async (bytes) => {
       if (failWrite) throw new Error('GATT Server is disconnected. Cannot perform GATT operations.');
+      if (neverRespondToWrites) return;
       const req = JSON.parse(new TextDecoder().decode(bytes));
       queueMicrotask(() => dataChar.emitRecords(recordsByRequest(req)));
     },
@@ -168,6 +177,7 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
   const infoChar = {
     readValue: async () => {
       infoReadCallCount++;
+      if (infoReadCallCount >= hangDeviceInfoReadsFrom) return new Promise(() => {}); // never settles
       if (infoReadCallCount <= failDeviceInfoReadsCount) throw new Error(`Timed out reading DeviceInfo from "that device".`);
       return jsonDataView(deviceInfo);
     },
@@ -239,10 +249,12 @@ async function settleOnePull(t) {
   await flushMicrotasks();
 }
 
-// Advances the fake clock past connectAndVerify's own GATT_CONNECT_RETRY_DELAY_MS between
-// retried gatt.connect() attempts (see makeFakePhone's failConnectsCount) and lets the resulting
-// promise chain drain. 600ms comfortably clears that 500ms delay without needing this test file
-// to import (and hardcode a duplicate of) the real, unexported constant.
+// Advances the fake clock past whichever of connectAndVerify's own connect-related delays is
+// next pending — GATT_CONNECT_RETRY_DELAY_MS or DEVICE_INFO_RETRY_DELAY_MS between retried
+// gatt.connect() attempts (see makeFakePhone's failConnectsCount/failDeviceInfoReadsCount), or
+// GATT_CONNECT_SETTLE_MS before every DeviceInfo verification attempt — and lets the resulting
+// promise chain drain. All three are ≤500ms; 600ms comfortably clears any of them without
+// needing this test file to import (and hardcode a duplicate of) the real, unexported constants.
 async function settleConnectRetry(t) {
   await flushMicrotasks();
   t.mock.timers.tick(600);
@@ -267,10 +279,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
-    // connectToPhone()'s own path (gatt.connect + DeviceInfo read) has no genuine timed delay
-    // against a mock that resolves immediately — only the losing side of a Promise.race, which
-    // never fires. No tick needed; plain await drains the microtask chain.
-    const info = await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    const info = await connectPromise;
     assert.equal(info.raceLabel, 'test-race');
     assert.equal(isConnected(), true);
     assert.equal(getConnectedDeviceName(), 'Phone One');
@@ -311,7 +322,8 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // attempt 1 fails, delay before attempt 2
     await settleConnectRetry(t); // attempt 2 fails, delay before attempt 3
-    const info = await connectPromise; // attempt 3 succeeds
+    await settleConnectRetry(t); // attempt 3 succeeds; GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    const info = await connectPromise;
 
     assert.equal(info.deviceName, 'Phone One');
     assert.equal(isConnected(), true);
@@ -345,7 +357,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
     const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // attempt 1's DeviceInfo read fails; delay before attempt 2
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before attempt 1's DeviceInfo read, which then fails
+    await settleConnectRetry(t); // DEVICE_INFO_RETRY_DELAY_MS before attempt 2's reconnect
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before attempt 2's DeviceInfo read, which succeeds
     const info = await connectPromise;
 
     assert.equal(info.deviceName, 'Phone One');
@@ -361,7 +375,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failWrite: true });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     let unhandled = null;
     const onUnhandledRejection = (reason) => { unhandled = reason; };
@@ -386,6 +402,50 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(unhandled, null);
   });
 
+  it('rejects a pull immediately when the connection drops while it is purely waiting on data, instead of waiting out the full pull timeout', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], neverRespondToWrites: true });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone();
+    const rejectionAssertion = assert.rejects(() => pullPromise, /GATT Server is disconnected/);
+    await settleOnePull(t); // NOTIFY_SETTLE_MS before the CONTROL write, which "succeeds" but never streams anything back
+
+    // The real disconnect landing here — mid-pull, purely waiting on incoming notifications with
+    // no outbound GATT call left to reject on its own — is exactly the gap collectDataStream's
+    // own 'gattserverdisconnected' listener now closes.
+    device._simulateUnexpectedDisconnect();
+    await rejectionAssertion; // no 15s timer tick needed — proves this didn't wait on PULL_TIMEOUT_MS
+  });
+
+  it('gives up on a stuck mid-pull DeviceInfo refresh after a bounded timeout, instead of hanging indefinitely', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    // The very first DeviceInfo read (during connectToPhone()) succeeds normally; every read
+    // after that — i.e. pullFromConnectedPhone's own fresh-every-call refresh — hangs forever,
+    // simulating a phone that's just gone out of range.
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], hangDeviceInfoReadsFrom: 2 });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone();
+    const rejectionAssertion = assert.rejects(() => pullPromise, /Timed out refreshing DeviceInfo/);
+    await flushMicrotasks();
+    t.mock.timers.tick(5000); // DEVICE_INFO_READ_TIMEOUT_MS — the stuck refresh read must give up here, not hang forever
+    // Aborts the whole pull rather than falling back to stale DeviceInfo and carrying on — a
+    // refresh failing via this exact timeout means the connection is genuinely dead, not a
+    // one-off glitch on an otherwise-healthy link (see this function's own doc for the field
+    // evidence), so there's nothing worth attempting further legs for.
+    await rejectionAssertion;
+    disconnectPhone();
+  });
+
   it('skips the own-race pull entirely for a pure relay/Mule phone with no raceLabel of its own', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 1 };
@@ -401,7 +461,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     const pullPromise = pullFromConnectedPhone();
     await settleOnePull(t); // relay-manifest fetch's own settle delay
@@ -430,7 +492,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       },
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     const pull1 = pullFromConnectedPhone();
     await settleOnePull(t); // manifest fetch
@@ -456,7 +520,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       recordsByRequest: (req) => (req.requestRelayManifest ? (manifestFetchCount++, manifest) : []),
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     const pull1 = pullFromConnectedPhone();
     await settleOnePull(t); // manifest fetch
@@ -496,7 +562,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       recordsByRequest: (req) => (req.requestRelayManifest ? (manifestFetchCount++, manifest) : []),
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     const pull1 = pullFromConnectedPhone();
     await settleOnePull(t); // manifest fetch
@@ -526,10 +594,10 @@ describe('mule-ble.js:connectToPhone picker filter (Mule Mode only)', () => {
   const MULE_MODE_MARKER_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
 
   it('filters requestDevice() to both the GATT service UUID and the Mule Mode marker UUID', async (t) => {
-    // Same reasoning as every other test in this file that reaches connectToPhone(): without
-    // fake timers, the losing side of connectAndVerify's internal Promise.race (a real, unref'd
-    // 12s setTimeout) is left dangling for the rest of this process's life, which doesn't fail
-    // anything but needlessly stalls the whole suite's wall-clock runtime.
+    // Fake timers needed for real reasons now, same as every other test in this file that
+    // reaches connectToPhone(): GATT_CONNECT_SETTLE_MS is a genuine required delay before the
+    // first DeviceInfo verification attempt (see settleConnectRetry's own call sites below), not
+    // just cleanup for a dangling Promise.race timeout.
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
@@ -538,7 +606,9 @@ describe('mule-ble.js:connectToPhone picker filter (Mule Mode only)', () => {
       bluetooth: { requestDevice: async (options) => { requestDeviceOptions = options; return device; } },
     });
 
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
     disconnectPhone();
 
     // Both UUIDs required in one filter object — Web Bluetooth's "advertised UUIDs must be a
@@ -557,7 +627,9 @@ describe('mule-ble.js:onDisconnect wasDeliberate', () => {
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     const seen = [];
     onDisconnect(wasDeliberate => seen.push(wasDeliberate));
@@ -567,7 +639,9 @@ describe('mule-ble.js:onDisconnect wasDeliberate', () => {
 
     // Reconnect, then simulate a genuinely unexpected drop — the earlier deliberate disconnect
     // must not still be "remembered" as making this one expected too.
-    await connectToPhone();
+    const _reconnect = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await _reconnect;
     device._simulateUnexpectedDisconnect();
     assert.deepEqual(seen, [true, false]);
   });
@@ -585,7 +659,9 @@ describe('mule-ble.js:onDisconnect wasDeliberate', () => {
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     const seen = [];
     onDisconnect(wasDeliberate => seen.push(wasDeliberate));
@@ -595,28 +671,61 @@ describe('mule-ble.js:onDisconnect wasDeliberate', () => {
   });
 });
 
-describe('mule-ble.js:forgetConnection forgets the known device on an unexpected drop, not a deliberate one', () => {
-  it('an unexpected drop removes the device from getKnownDevices()', async (t) => {
+describe('mule-ble.js:forgetConnection no longer forgets on a mere unexpected drop — only a failed reconnect attempt does', () => {
+  it('an unexpected drop (e.g. briefly out of range) leaves the device remembered', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
     assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
 
+    // The overwhelmingly common "unexpected drop" in the field is a mule going briefly out of
+    // Bluetooth range — routine, not evidence the remembered identity has gone stale. Forgetting
+    // it here would force a full re-pick through the browser's slow native picker for something
+    // that would very likely reconnect instantly via the known-device shortcut instead.
     device._simulateUnexpectedDisconnect();
-    assert.deepEqual(await getKnownDevices(), []);
+    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
   });
 
-  it('a deliberate disconnectPhone() call leaves the device remembered', async (t) => {
+  it('a deliberate disconnectPhone() call also leaves the device remembered', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
 
     disconnectPhone();
     assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
+  });
+
+  it('a reconnect attempt against a device that has actually gone stale still forgets it, once that attempt itself fails', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    // Connects fine the first time (so it becomes known), but every gatt.connect() call from the
+    // 2nd onward fails outright — simulates the identity having genuinely gone stale (e.g. its
+    // BLE address rotated) by the time a later reconnect is attempted.
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsFrom: 2 });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    device._simulateUnexpectedDisconnect();
+    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']); // still remembered, per the test above
+
+    const reconnectPromise = reconnectToKnownDevice(device);
+    const rejectionAssertion = assert.rejects(() => reconnectPromise);
+    await settleConnectRetry(t); // attempt 1 fails, delay before attempt 2
+    await settleConnectRetry(t); // attempt 2 fails, delay before attempt 3
+    await settleConnectRetry(t); // attempt 3 fails — gives up
+    await rejectionAssertion;
+
+    assert.deepEqual(await getKnownDevices(), []); // the connect-failure safety net forgot it
   });
 });
 
@@ -626,7 +735,9 @@ describe('mule-ble.js:abandonConnection', () => {
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    await connectToPhone();
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
     assert.equal(isConnected(), true);
 
     abandonConnection();

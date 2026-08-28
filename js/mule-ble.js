@@ -157,22 +157,25 @@ export function onDisconnect(callback) {
 }
 
 // A deliberately dumb function — no auto-reconnect (see abandonConnection() below for why that
-// was removed). Just clears connection state and reports what happened. An unexpected drop also
-// forgets the device (see rememberDevice's own doc on KNOWN_DEVICES_KEY): with no automatic
-// recovery attempted, offering it right back as a "Reconnect to X" shortcut next time would be
-// recommending something that isn't proven to still work — a fresh pick through the browser's
-// own picker is a more honest next step. A deliberate disconnect (the operator's own "Disconnect
-// from X" click) does NOT forget it — they may well want to reconnect to the same phone shortly.
+// was removed). Just clears connection state and reports what happened. Does NOT forget the
+// device on an unexpected drop any more than a deliberate one does (see rememberDevice's own doc
+// on KNOWN_DEVICES_KEY for the full reasoning) — the single most common "unexpected drop" this
+// app actually sees in the field is a mule going briefly out of Bluetooth range, which is
+// routine, not evidence of anything wrong with the remembered identity. Forgetting on every such
+// drop forced a full re-pick through the browser's slow native picker (tens of seconds) for
+// something that would very likely have reconnected instantly via the known-device shortcut.
+// Connect-time failures (GATT_CONNECT_ATTEMPTS exhausted, or DEVICE_INFO_ATTEMPTS exhausted
+// against a device that stayed connected the whole time) still forget it themselves — that
+// safety net is what actually catches a genuinely stale identity (e.g. Android's BLE address
+// rotation), one extra failed attempt away, not an eager guess made the instant any drop occurs.
 function forgetConnection() {
   const wasDeliberate = deliberateDisconnect;
   deliberateDisconnect = false;
-  const id = connectedDevice?.id;
   bleLog(`[mule-ble] gattserverdisconnected fired (wasDeliberate=${wasDeliberate})`);
   connectedDevice = null;
   connectedInfo = null;
   cachedRelayEntries = null;
   cachedRelayManifestKey = null;
-  if (!wasDeliberate && id) forgetKnownDevice(id);
   disconnectListener?.(wasDeliberate);
 }
 
@@ -345,22 +348,42 @@ function toStoredLine(r) {
 // everything fine" the next time a pull silently comes back empty — each of those points at a
 // different layer (phone has no active race / a mid-transfer BLE drop / a client-side parsing
 // bug) and this is the only place that distinction is visible from.
-function collectDataStream(dataChar) {
+// [device], if given, is the BluetoothDevice this pull is running against — captured by the
+// caller before it can go null (see pullChunkedArray's own doc), so a real disconnect landing
+// while this is waiting purely on incoming notifications (already past writeValueWithResponse,
+// with no further outbound GATT call left to reject on its own) is caught immediately here too,
+// rather than only being discovered PULL_TIMEOUT_MS later. Confirmed in the field as exactly
+// this: a manual disconnect mid-pull, with several other in-flight legs failing within
+// milliseconds (their own next GATT call threw immediately) while one leg that happened to have
+// already reached this wait sat blocking for the full 15s regardless — this same leg would fail
+// just as fast as the others once wired up to react to the same event they're reacting to.
+function collectDataStream(dataChar, device) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let chunkCount = 0;
     const timer = setTimeout(() => {
-      dataChar.removeEventListener('characteristicvaluechanged', onValue);
+      cleanup();
       const gotBytes = chunks.reduce((n, c) => n + c.length, 0);
       bleError(`[mule-ble] pull timed out after ${PULL_TIMEOUT_MS}ms — received ${chunkCount} chunk(s), ${gotBytes} byte(s) before giving up`);
       reject(new Error('No data arrived from the phone — it may not have a race currently open (Bluetooth sync only serves an active race), or may have gone out of range.'));
     }, PULL_TIMEOUT_MS);
 
+    function cleanup() {
+      clearTimeout(timer);
+      dataChar.removeEventListener('characteristicvaluechanged', onValue);
+      device?.removeEventListener('gattserverdisconnected', onDisconnected);
+    }
+
+    function onDisconnected() {
+      cleanup();
+      bleWarn('[mule-ble] connection dropped while waiting on this leg\'s data stream — giving up immediately rather than waiting out the full pull timeout');
+      reject(new Error('GATT Server is disconnected. Cannot perform GATT operations.'));
+    }
+
     function onValue(event) {
       const value = event.target.value; // DataView
       if (value.byteLength === 1 && value.getUint8(0) === 0) {
-        clearTimeout(timer);
-        dataChar.removeEventListener('characteristicvaluechanged', onValue);
+        cleanup();
         const total = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
         let offset = 0;
         for (const c of chunks) { total.set(c, offset); offset += c.length; }
@@ -376,6 +399,7 @@ function collectDataStream(dataChar) {
       chunks.push(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
     }
     dataChar.addEventListener('characteristicvaluechanged', onValue);
+    device?.addEventListener('gattserverdisconnected', onDisconnected);
   });
 }
 
@@ -434,9 +458,14 @@ function computeRequestKey(originDeviceId, originRaceLabel, sinceLineNumber) {
 // (RelayManifestEntry[] shape) below, which differ only in what shape the resulting array
 // decodes as and what (if anything) each maps it into afterward.
 async function pullChunkedArray(service, pullRequest) {
+  // Captured now, before anything else in here awaits — connectedDevice is what
+  // collectDataStream listens on for an early 'gattserverdisconnected' (see its own doc); by the
+  // time a disconnect actually happens, forgetConnection() has already nulled the module-level
+  // variable out, so it has to be grabbed once, up front, while it's still this leg's device.
+  const device = connectedDevice;
   const dataChar    = await service.getCharacteristic(DATA_CHAR_UUID);
   const controlChar = await service.getCharacteristic(CONTROL_CHAR_UUID);
-  const streamPromise = collectDataStream(dataChar);
+  const streamPromise = collectDataStream(dataChar, device);
   try {
     await dataChar.startNotifications();
     await new Promise(r => setTimeout(r, NOTIFY_SETTLE_MS));
@@ -525,11 +554,13 @@ function relayManifestCacheKey(deviceInfo) {
 // permission system. That's a platform-level limitation with no code-level fix on this side
 // either. What IS fixable, and is: (1) rememberDevice() below dedupes by name, so a phone
 // reconnecting under a new id after its address rotates replaces its stale "Reconnect to <name>"
-// entry rather than leaving a confusing duplicate; (2) forgetConnection() (deliberately no
-// auto-reconnect any more — see its own doc) forgets the device outright on any unexpected end,
-// rather than leaving a "Reconnect to <name>" shortcut sitting there that isn't proven to still
-// work — a fresh pick through the picker is what's confirmed to actually work after any kind of
-// drop, address rotation or not.
+// entry rather than leaving a confusing duplicate; (2) connectAndVerify's own connect-time
+// failure paths (see forgetConnection's own doc) forget a device once a reconnect attempt
+// against it actually fails, which is what a rotated address eventually looks like from here —
+// forgetConnection() itself no longer forgets on the drop alone, since the overwhelmingly common
+// "unexpected end" in the field is a mule going briefly out of range, not an address rotation,
+// and forcing a full picker re-pick for that routine case was worse than the rare extra failed
+// reconnect attempt this now costs against a genuinely rotated/gone device instead.
 //
 // A bonding-based fix for this was attempted and reverted (2026-08-28): a dedicated encrypted
 // characteristic (PAIRING_ANCHOR_CHAR_UUID) forced Android to bond with a phone on first
@@ -660,10 +691,29 @@ const GATT_CONNECT_RETRY_DELAY_MS = 500;
 // status update, nothing — which looked exactly like the whole attempt had silently vanished.
 const DEVICE_INFO_READ_TIMEOUT_MS = 5000;
 
-async function readDeviceInfo(server) {
-  const service  = await server.getPrimaryService(SERVICE_UUID);
+// Gives the newly-established link a moment to settle before the first real GATT traffic on it
+// — full service/characteristic discovery, which reading DeviceInfo triggers implicitly — same
+// idea as NOTIFY_SETTLE_MS elsewhere in this file, just for the connect step instead of the
+// notify step. Confirmed in the field against a phone sitting a stable ~8ft from the laptop
+// (rock solid once actually connected and streaming data, even much further away) that every
+// DEVICE_INFO_ATTEMPTS retry was still failing the exact same way: gatt.connect() itself
+// resolving quickly every time, but the link dying again within 1-3s, before discovery could
+// finish — physical range wasn't the variable. That points at connection-parameter negotiation
+// (the peripheral's BLE stack settling from its initial, often conservative connection interval
+// to a stable one) rather than a discovery-not-settled-yet timing race retries alone can outlast
+// — this doesn't replace the retry loop below (a genuinely unreachable phone still needs that),
+// it just gives each attempt a better chance of landing inside the settled window instead of the
+// unstable one right after connect(), rather than only ever retrying through it.
+const GATT_CONNECT_SETTLE_MS = 500;
+
+async function readDeviceInfoFromService(service) {
   const infoChar = await service.getCharacteristic(DEVICE_INFO_CHAR_UUID);
   return decodeJson(await infoChar.readValue());
+}
+
+async function readDeviceInfo(server) {
+  const service = await server.getPrimaryService(SERVICE_UUID);
+  return readDeviceInfoFromService(service);
 }
 
 function withTimeout(promise, ms, message) {
@@ -719,6 +769,11 @@ async function connectAndVerify(device, onProgress = () => {}) {
   // can never succeed and just repeats the identical failure every time (confirmed against a
   // real "GATT Server is disconnected" log where all 3 attempts failed identically) — so each
   // attempt re-establishes the connection first whenever it's found dropped.
+  //
+  // GATT_CONNECT_SETTLE_MS (see its own doc) before the very first verification attempt too —
+  // this is the freshest the link ever is, so the settle window matters here at least as much as
+  // before any retry below.
+  await new Promise(r => setTimeout(r, GATT_CONNECT_SETTLE_MS));
   onProgress(`Verifying "${label}" is running RaceMaster Mobile…`);
   let deviceInfo = null;
   let lastError = null;
@@ -761,6 +816,9 @@ async function connectAndVerify(device, onProgress = () => {}) {
           device.gatt.connect(), GATT_RECONNECT_TIMEOUT_MS,
           `Timed out reconnecting to "${label}".`,
         );
+        // Same GATT_CONNECT_SETTLE_MS reasoning as before the first attempt above — this
+        // reconnect is just as fresh a link as that one was.
+        await new Promise(r => setTimeout(r, GATT_CONNECT_SETTLE_MS));
       }
       deviceInfo = await withTimeout(
         readDeviceInfo(server), DEVICE_INFO_READ_TIMEOUT_MS,
@@ -873,7 +931,17 @@ export async function pullFromConnectedPhone() {
   if (!isConnected()) throw new Error('Not connected to a phone.');
   let service;
   try {
-    service = await connectedDevice.gatt.getPrimaryService(SERVICE_UUID);
+    // Raced against a timeout like every other bare GATT call in this file (see
+    // DEVICE_INFO_READ_TIMEOUT_MS's own doc) — without it, a phone that's just gone out of range
+    // left this hanging indefinitely rather than failing, confirmed in the field at ~10.6s for
+    // one real drop and with no guaranteed upper bound at all. That mattered more once
+    // mobile-files.js's own auto-pull loop started awaiting each pull before scheduling the next
+    // (see scheduleNextAutoPull's own doc) — an unbounded hang here now stalls the *entire* loop,
+    // not just this one tick.
+    service = await withTimeout(
+      connectedDevice.gatt.getPrimaryService(SERVICE_UUID), DEVICE_INFO_READ_TIMEOUT_MS,
+      'Timed out getting the primary service — the connection may be dead despite isConnected() still reading true.',
+    );
   } catch (e) {
     // Unlike every leg below, this one has no try/catch of its own to fall into and log via —
     // confirmed in the field as a real, silent gap: isConnected() can still read true (a link
@@ -891,17 +959,32 @@ export async function pullFromConnectedPhone() {
   // direction happening mid-connection: once relayCount was ever >0 at connect time, it kept
   // re-fetching the (potentially large, chunked) relay manifest on every single auto-pull tick
   // forever, even long after relayCount had genuinely dropped back to 0 — confirmed in the field
-  // as continuous, pointless BLE traffic against an otherwise fully idle phone. Falls back to
-  // the last-known copy if this one read fails — a single transient GATT hiccup here shouldn't
-  // abort the whole pull when the legs below might still succeed fine.
-  let deviceInfo = connectedInfo;
+  // as continuous, pointless BLE traffic against an otherwise fully idle phone.
+  //
+  // Aborts the whole pull on failure here, same as the getPrimaryService call just above — no
+  // "use the last-known copy and carry on" fallback. That fallback used to exist on the theory
+  // that a single transient hiccup on this one read shouldn't cost the legs below a chance to
+  // still succeed, but a failure here specifically via DEVICE_INFO_READ_TIMEOUT_MS below means
+  // this waited the *entire* timeout budget with zero response — every bit as strong a "this
+  // connection is dead" signal as getPrimaryService failing, not a one-off glitch on an
+  // otherwise-healthy link. Confirmed in the field: continuing past a real timeout here every
+  // time just cascaded into the exact same "GATT Server is disconnected" failure on every relay
+  // leg below, one after another, for nothing but log noise — the fallback never once actually
+  // salvaged a leg the abort-early path would have missed.
+  let deviceInfo;
   try {
-    const infoChar = await service.getCharacteristic(DEVICE_INFO_CHAR_UUID);
-    deviceInfo = decodeJson(await infoChar.readValue());
-    connectedInfo = deviceInfo;
+    deviceInfo = await withTimeout(
+      readDeviceInfoFromService(service), DEVICE_INFO_READ_TIMEOUT_MS,
+      'Timed out refreshing DeviceInfo before pulling.',
+    );
   } catch (e) {
-    bleWarn('[mule-ble] could not refresh DeviceInfo before pulling — using the last-known copy', e);
+    // Logged explicitly here for the same reason as the getPrimaryService catch above — this
+    // has no try/catch of its own further out to fall into and log via, so without this the
+    // failure would propagate silently as far as this file's own diagnostic trail is concerned.
+    bleError('[mule-ble] pull failed: could not refresh DeviceInfo (connection may be dead despite isConnected() still reading true)', e);
+    throw e;
   }
+  connectedInfo = deviceInfo;
 
   // Each leg (this device's own race, plus one per relay entry) is pulled independently —
   // one failing (a relay entry the phone can no longer actually serve, a mid-transfer BLE
