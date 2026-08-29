@@ -1218,12 +1218,22 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
         connectionIssue = true;
         consecutivePullFailures++;
         updateConnectButtonLabel();
-        if (consecutivePullFailures >= PERSISTENT_FAILURE_THRESHOLD) {
+        // e.isTimeout (see withTimeout's own doc in mule-ble.js) means this specific failure was
+        // *our own* budget running out on a GATT call, not a real exception the connection threw
+        // — and losing that race never cancels the real operation still running underneath. Left
+        // alone, the very next auto-pull tick just collides with that still-in-flight ghost and
+        // fails with `GATT operation already in progress`, and the one after that, and so on —
+        // confirmed in the field as exactly this, PERSISTENT_FAILURE_THRESHOLD (3) times in a
+        // row before this branch was ever reached the old way, all of it pure noise once the
+        // first timeout had already made the outcome inevitable. Abandoning immediately on this
+        // specific signal skips straight to the same conclusion the threshold below eventually
+        // reaches anyway, without needing several more guaranteed collisions first.
+        if (consecutivePullFailures >= PERSISTENT_FAILURE_THRESHOLD || e.isTimeout) {
           // Enough consecutive failures while still "connected" that waiting on
           // 'gattserverdisconnected' to eventually explain why isn't worth it any more — but
           // deliberately not attempting an automatic reconnect either (see abandonConnection's
           // own doc for why that turned out not to be worth the complexity). Just end the
-          // connection cleanly, forget the device, and tell the operator plainly.
+          // connection cleanly and tell the operator plainly.
           consecutivePullFailures = 0;
           const name = getConnectedDeviceName();
           abandonConnection();

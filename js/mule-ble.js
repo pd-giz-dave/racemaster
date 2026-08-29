@@ -179,8 +179,13 @@ function forgetConnection() {
   disconnectListener?.(wasDeliberate);
 }
 
-export function disconnectPhone() {
-  bleLog('[mule-ble] ===== manual disconnect requested =====');
+// [reason] is purely for this function's own log line — it's called both from the operator's
+// own "Disconnect from X" click (the default, genuinely manual wording) and internally by
+// callers like abandonConnection() that end the connection programmatically for their own
+// reasons; logging every call as "manual disconnect requested" regardless made an automatic
+// abandon read as if the operator had clicked something they hadn't.
+export function disconnectPhone(reason = 'manual disconnect requested') {
+  bleLog(`[mule-ble] ===== ${reason} =====`);
   if (!connectedDevice?.gatt?.connected) return; // nothing live to disconnect
   // Only set once we know .gatt.disconnect() below will actually fire — forgetConnection() is
   // what resets this back to false, so setting it with no real event ever coming (e.g. called
@@ -198,14 +203,14 @@ export function disconnectPhone() {
 // to reproduce that automatically (GATT service-discovery caching, races between this app's own
 // recovery attempt and the browser's own event firing again mid-attempt) added a lot of
 // complexity for something that, confirmed in the field, doesn't actually recover on its own.
-// So: don't try. Just end the connection cleanly and forget the device (see forgetConnection's
-// own doc on why an unexpected end already does this too) — a deliberate reconnect through the
-// picker is what's proven to actually work.
+// So: don't try. Just end the connection cleanly — a deliberate reconnect through the known-device
+// shortcut or the picker is what's proven to actually work. Does NOT forget the device any more
+// (see forgetConnection's own doc for the full reasoning) — a persistently failing connection
+// while nominally still connected is, in the field, most often the same "mule briefly out of
+// range" case that doc already covers, not confirmation the remembered identity has gone stale.
 export function abandonConnection() {
   bleWarn('[mule-ble] abandoning a persistently failing connection — leaving reconnection to a fresh, manual Connect to Phone…');
-  const id = connectedDevice?.id;
-  disconnectPhone();
-  if (id) forgetKnownDevice(id);
+  disconnectPhone('abandoning a persistently failing connection');
 }
 
 // ---- Delta-sync bookkeeping ----
@@ -716,10 +721,24 @@ async function readDeviceInfo(server) {
   return readDeviceInfoFromService(service);
 }
 
+// The rejection this manufactures when [ms] wins the race is tagged .isTimeout so a caller can
+// tell "our own budget ran out" apart from a real GATT exception the underlying promise itself
+// rejected with — that distinction matters because losing this race never cancels the real
+// operation still running underneath (Web Bluetooth has no such mechanism): the browser can
+// still be mid-way through it long after this has already moved on, ready to collide with
+// whatever GATT call comes next and fail it with `GATT operation already in progress` —
+// confirmed in the field as exactly that, repeatedly, after a mid-pull DeviceInfo refresh timed
+// out. A caller that knows *why* a failure happened can react appropriately (e.g.
+// pullAndSyncConnectedPhone treating this specific case as unrecoverable immediately, rather
+// than waiting out several more guaranteed collisions with the same still-stuck operation).
 function withTimeout(promise, ms, message) {
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+    new Promise((_, reject) => setTimeout(() => {
+      const err = new Error(message);
+      err.isTimeout = true;
+      reject(err);
+    }, ms)),
   ]);
 }
 

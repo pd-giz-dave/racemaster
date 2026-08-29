@@ -443,6 +443,18 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     // one-off glitch on an otherwise-healthy link (see this function's own doc for the field
     // evidence), so there's nothing worth attempting further legs for.
     await rejectionAssertion;
+
+    // Tagged .isTimeout (see withTimeout's own doc) so mobile-files.js's own auto-pull loop can
+    // abandon the connection immediately on exactly this failure, rather than needing several
+    // more guaranteed `GATT operation already in progress` collisions with the still-stuck real
+    // operation first — confirmed in the field as exactly that pattern before this tag existed.
+    let caught = null;
+    const pullPromise2 = pullFromConnectedPhone().catch(e => { caught = e; });
+    await flushMicrotasks();
+    t.mock.timers.tick(5000); // same stuck refresh, same timeout
+    await pullPromise2;
+    assert.equal(caught?.isTimeout, true);
+
     disconnectPhone();
   });
 
@@ -730,7 +742,7 @@ describe('mule-ble.js:forgetConnection no longer forgets on a mere unexpected dr
 });
 
 describe('mule-ble.js:abandonConnection', () => {
-  it('disconnects and forgets the device — deliberately no automatic reconnect attempt', async (t) => {
+  it('disconnects but leaves the device remembered — deliberately no automatic reconnect attempt', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
@@ -743,7 +755,10 @@ describe('mule-ble.js:abandonConnection', () => {
     abandonConnection();
 
     assert.equal(isConnected(), false);
-    assert.deepEqual(await getKnownDevices(), []);
+    // No longer forgotten (see forgetConnection's own doc) — a persistently failing connection
+    // is most often the same "mule briefly out of range" case as a plain unexpected drop, not
+    // confirmation the remembered identity has gone stale.
+    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
   });
 
   it('is a safe no-op when nothing is connected', () => {
