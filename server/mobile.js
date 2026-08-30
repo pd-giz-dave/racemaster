@@ -115,7 +115,14 @@ export function getMobileRacesForUser(username, adminAccess = false) {
         const deviceName = file.slice(0, -'.json'.length);
         const records = readMobileDeviceFile(owner, raceLabel, deviceName);
         recordCount += records.length;
-        devices.push({ name: deviceName, records: records.length, lines: records });
+        // File mtime — i.e. when the server last actually received a sync from this device —
+        // distinct from the records' own `timestamp` fields (when each split/entry happened on
+        // the phone): a device can go quiet mid-race with its last-recorded data timestamp
+        // frozen in the past, so the Mobile Files page shows both to tell "we haven't heard from
+        // this phone in a while" apart from "this phone hasn't recorded anything new".
+        let lastSeen = null;
+        try { lastSeen = fs.statSync(path.join(raceDirPath, file)).mtime.toISOString(); } catch { /* races with readdirSync above are vanishingly rare and harmless to just omit */ }
+        devices.push({ name: deviceName, records: records.length, lines: records, lastSeen });
       }
       devices.sort((a, b) => a.name.localeCompare(b.name));
 

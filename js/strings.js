@@ -423,6 +423,10 @@ export const HELP = {
         the entries since that device's own last Reset — the same view the phone's own screen would show; a blank count means none of that type exist at all.</p>
     <p>The <strong>Location</strong> column should read the same for every visible line on a device — if it shows
         <strong>Inconsistent</strong>, the file has been mixed between two different course locations and needs checking.</p>
+    <p><strong>Last Seen</strong> is when the server (or, for a pending file, this browser) last actually heard from that
+        device — useful for spotting a phone that's gone quiet. <strong>Last Update</strong> is the newest entry's own
+        recorded timestamp, across every line on the device, not just what's currently visible — these two can differ,
+        e.g. a phone still connected but with nothing new to send.</p>
     <p><strong>View</strong> shows the Bibs and Time entries side by side, aligned by split number, with the location
         and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
         useful for troubleshooting. <strong>Delete</strong> permanently removes a device's file from the server.</p>
@@ -803,6 +807,8 @@ export const TABLES = {
     { id: 'location',  label: 'Location',  title: 'Course location stamped on this device\'s currently-visible lines — every line should agree' },
     { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset)' },
     { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset)' },
+    { id: 'lastSeen',   label: 'Last Seen',   title: 'When the server (or, for a Bluetooth-pulled pending file, this browser) last actually heard from this device' },
+    { id: 'lastUpdate', label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, across all lines (not just those currently visible)' },
     { id: 'actions',   label: 'Actions',   title: 'View, view raw, or delete this file' },
   ],
   'bib-allocations': [

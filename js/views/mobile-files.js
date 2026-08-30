@@ -89,6 +89,43 @@ function formatRaceDate(raceDate) {
   return `${raceDate.dd}/${raceDate.mm}/${raceDate.yy}`;
 }
 
+// ISO string (device.lastSeen — either a server file mtime or a pending file's local pulledAt,
+// see flattenDevices()) → "dd/mm/yy HH:MM" local time, matching formatRaceDate()'s own dd/mm/yy
+// convention elsewhere on this page.
+function formatDateTime(iso) {
+  if (!iso) return '<span style="color:var(--muted)">—</span>';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '<span style="color:var(--muted)">—</span>';
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// device.lastUpdate (see latestLineTimestamp() below) is the phone's own "yyyy/mm/dd HH:MM:SS"
+// stamp (formatTimestamp() in mule-ble.js) — reformatted to the same "dd/mm/yy HH:MM" shape as
+// formatDateTime() above via plain string surgery, not Date parsing, since that separator ("/"
+// for both date and, on some engines' toString, ambiguously for time too) isn't reliably
+// cross-browser-parseable back into a Date.
+function formatStoredTimestamp(ts) {
+  const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})/.exec(ts || '');
+  if (!m) return '<span style="color:var(--muted)">—</span>';
+  const [, yyyy, mm, dd, HH, MM] = m;
+  return `${dd}/${mm}/${yyyy.slice(-2)} ${HH}:${MM}`;
+}
+
+// Latest of a device's own record timestamps ("yyyy/mm/dd HH:MM:SS", zero-padded so it sorts
+// correctly as a plain string) — across *all* lines, not just the currently-visible segment, so
+// this still reflects real recency after a Reset. Distinct from device.lastSeen (see above):
+// this is when the newest split/entry actually happened on the phone, not when the server (or
+// this browser, for a pending file) last heard from it.
+function latestLineTimestamp(lines) {
+  let max = null;
+  for (const l of lines) {
+    const ts = l.timestamp ?? l.timestampMillis;
+    if (ts && (!max || ts > max)) max = ts;
+  }
+  return max;
+}
+
 // Mirrors server.js's parseRaceLabelDate/sort exactly — needed client-side because a
 // Bluetooth-pulled, not-yet-pushed file has no server entry to derive/sort a race date from.
 // raceLabel ends "…-YY-MM-DD" (2-digit year first, e.g. "-26-08-04" = 4 August 2026 — confirmed
@@ -149,7 +186,7 @@ function mergePendingIntoRaces(races, pending) {
     const seenUuids = new Set(knownLines.map(l => l.recordUuid).filter(Boolean));
     const lines = [...knownLines, ...p.lines.filter(l => l.recordUuid && !seenUuids.has(l.recordUuid))];
     race.devices = race.devices.filter(d => d.name !== p.deviceName);
-    race.devices.push({ name: p.deviceName, deviceId: p.deviceId, lines, pending: true });
+    race.devices.push({ name: p.deviceName, deviceId: p.deviceId, lines, pending: true, lastSeen: p.pulledAt });
   }
   return sortRaces(merged);
 }
@@ -409,6 +446,8 @@ function flattenDevices(races) {
         location: locationSummary([...timeSegment, ...bibsSegment]),
         bibsVisible: bibsSegment.length,
         timeVisible: timeSegment.length,
+        lastSeen: device.lastSeen || null,
+        lastUpdate: latestLineTimestamp(device.lines),
         incorporationStatus: computeIncorporationStatus(r),
       });
     }
@@ -428,6 +467,8 @@ function buildColumns(isAdminUser) {
     location:  r => r.location,
     bibs:      r => formatCount(r.bibsVisible),
     time:      r => formatCount(r.timeVisible),
+    lastSeen:   r => formatDateTime(r.lastSeen),
+    lastUpdate: r => formatStoredTimestamp(r.lastUpdate),
     actions:   r => r.pending ? `
       <button class="btn-sm" data-action="view">View</button>
       <button class="btn-sm" data-action="raw">Raw</button>
