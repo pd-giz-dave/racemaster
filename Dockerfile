@@ -9,4 +9,4 @@ ENV PORT=80
 
 EXPOSE 80
 
-CMD ["nodemon", "--watch", "server.js", "--signal", "SIGTERM", "server.js"]
+CMD ["nodemon", "--legacy-watch", "--watch", "server.js", "--watch", "server", "--signal", "SIGTERM", "server.js"]
