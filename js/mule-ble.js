@@ -146,6 +146,17 @@ export function getRecommendedPollIntervalMs() {
   return connectedInfo?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 }
 
+// Read-only snapshot of the connected phone's own last-read DeviceInfo — refreshed at connect
+// time (connectAndVerify) and again on every pullFromConnectedPhone() call, same source
+// getConnectedDeviceName()/getRecommendedPollIntervalMs() above already read from. Exposed as a
+// whole object (rather than one getter per field, the way those two do) so a caller like
+// mobile-files.js's poll-status display can surface relayCount — how many other devices this
+// phone is currently relaying data for — without this file needing its own dedicated getter for
+// every individual DeviceInfo field callers might eventually want to echo.
+export function getConnectedDeviceInfo() {
+  return connectedInfo;
+}
+
 // Registers a callback fired whenever the connection ends, whether from disconnectPhone()
 // below or the phone dropping out of range/turning off — the one true place the UI needs to
 // revert its "Disconnect from X" button back to "Connect to Phone…". Called with

@@ -438,7 +438,10 @@ export const HELP = {
         skipping the anonymous picker entirely (Chrome/Edge only — other browsers always use the picker). If the server is reachable the
         pull is then pushed straight there, the same as a normal WiFi sync;
         otherwise it's kept in this browser as <strong>pending upload</strong> until you push it (or discard it) once you're back in signal.
-        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session.
+        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session, and a status line next to it
+        tracks the background auto-poll: <strong>Polling &lt;device&gt;…</strong> while one is in flight, then <strong>Last poll HH:MM:SS</strong>
+        with how many new records came back, across how many device files, and (for a Mule relaying other phones' data) how many devices it's
+        currently relaying — updated on every poll, even one that found nothing new, so it stays visible proof the connection is still alive.
         Tick <strong>Bluetooth logging</strong> to also log routine connect/pull activity to the browser console — off by default, useful
         when troubleshooting a Connect to Phone… problem; the setting is remembered across visits to this page. A genuine connect or pull
         failure is always logged to the console regardless of this setting.</p>

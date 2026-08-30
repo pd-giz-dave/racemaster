@@ -11,7 +11,7 @@ import {
   disconnectPhone, isConnected, getConnectedDeviceName, onDisconnect,
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers, getRecommendedPollIntervalMs,
   isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
-  abandonConnection, forgetKnownDevice,
+  abandonConnection, forgetKnownDevice, getConnectedDeviceInfo,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
 import { entryInfo } from '../safety.js';
@@ -1021,6 +1021,40 @@ function ts() {
 // Gated the same way mule-ble.js's own bleLog is — routine tracing only, off by default.
 function debugLog(...args) { if (isBleLoggingEnabled()) console.log(`[${ts()}]`, ...args); }
 
+// HH:MM:SS only — the poll-status line below is meant for a glance at "when did this last
+// change", not the millisecond precision ts() (above) exists for in debug logging.
+function nowClock() {
+  return new Date().toTimeString().slice(0, 8);
+}
+
+// The most recent real poll outcome ("Last poll …" / "Poll failed …") — kept separately from
+// the DOM so markPollingInProgress() below can append to it rather than replacing it outright.
+// Reset (with the element itself) on disconnect — see updateConnectButtonLabel().
+let lastPollStatusText = '';
+
+// Persistent (until the next poll updates it, or the connection ends) feedback that a
+// background auto-pull is actually happening — separate from showStatus()'s own toast, which
+// auto-clears after ~10s and, for a silent auto-pull tick that found nothing new, was never
+// shown at all (see pullAndSyncConnectedPhone's own silent-and-empty early return, now moved
+// past this update rather than before it). Hidden outright whenever not connected — see
+// updateConnectButtonLabel() below, which already runs on every connect/disconnect transition.
+function updatePollStatus(text) {
+  const el = getEl('mobile-files-poll-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+
+// Appends a "— polling…" suffix to whatever the status line already shows, instead of replacing
+// it outright — a plain updatePollStatus('Polling…') here used to blank the previous tick's own
+// result the instant the next one started, so the record/relay counts it just reported were only
+// ever visible for a fraction of a second before vanishing again. Suffixing keeps that last real
+// result legible for the whole gap between ticks, with only "— polling…" changing at the end to
+// show a fresh one is actually in flight.
+function markPollingInProgress() {
+  updatePollStatus(lastPollStatusText ? `${lastPollStatusText} — polling…` : `Polling ${getConnectedDeviceName()}…`);
+}
+
 function updateConnectButtonLabel() {
   const btn = getEl('btn-connect-phone');
   if (!btn) return;
@@ -1038,6 +1072,8 @@ function updateConnectButtonLabel() {
       pollEl.hidden = false;
     } else {
       pollEl.hidden = true;
+      lastPollStatusText = ''; // stale — a fresh connection's first poll shouldn't inherit it
+      updatePollStatus(null); // no connection left to report poll activity for
     }
   }
 }
@@ -1236,6 +1272,7 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
   }
 
   pullInProgress = true;
+  markPollingInProgress();
   try {
     let pulled;
     try {
@@ -1284,6 +1321,8 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
           showBleLostBanner(name);
         } else {
           showStatus(e.message || 'Failed to pull history from the phone.', true);
+          lastPollStatusText = `Poll failed at ${nowClock()} — ${e.message || 'unknown error'} (retrying)`;
+          updatePollStatus(lastPollStatusText);
         }
       }
       return;
@@ -1293,6 +1332,20 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
     consecutivePullFailures = 0;
     if (connectionIssue) { connectionIssue = false; updateConnectButtonLabel(); }
     const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
+    // Echoes what the phone's own DeviceInfo reported alongside this pull (relayCount — how many
+    // other devices it's currently relaying data for on this Mule's behalf) — refreshed by
+    // pullFromConnectedPhone() itself on every call, so this is always this same poll's own
+    // figure, never a stale connect-time one. Updated on *every* poll, even a silent tick that
+    // found nothing new (the case the early return below used to leave with no visible change at
+    // all) — that's the whole point: proof the background loop is actually still ticking.
+    const info = getConnectedDeviceInfo();
+    const relayPart = info && typeof info.relayCount === 'number'
+      ? `, relaying ${info.relayCount} device${info.relayCount === 1 ? '' : 's'}`
+      : '';
+    lastPollStatusText =
+      `Last poll ${nowClock()} — ${totalLines} new record${totalLines === 1 ? '' : 's'} `
+      + `across ${pulled.length} device file${pulled.length === 1 ? '' : 's'}${relayPart}`;
+    updatePollStatus(lastPollStatusText);
     if (silent && totalLines === 0) return;
 
     let synced = 0, pending = 0;
