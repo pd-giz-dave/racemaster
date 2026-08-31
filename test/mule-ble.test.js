@@ -250,25 +250,30 @@ async function settleOnePull(t) {
 }
 
 // Advances the fake clock past whichever of connectAndVerify's own connect-related delays is
-// next pending — GATT_CONNECT_RETRY_DELAY_MS or DEVICE_INFO_RETRY_DELAY_MS between retried
-// gatt.connect() attempts (see makeFakePhone's failConnectsCount/failDeviceInfoReadsCount), or
-// GATT_CONNECT_SETTLE_MS before every DeviceInfo verification attempt — and lets the resulting
-// promise chain drain. All three are ≤500ms; 600ms comfortably clears any of them without
-// needing this test file to import (and hardcode a duplicate of) the real, unexported constants.
+// next pending — DEVICE_INFO_RETRY_DELAY_MS between retried DeviceInfo reads (see makeFakePhone's
+// failDeviceInfoReadsCount), or GATT_CONNECT_SETTLE_MS before every DeviceInfo verification
+// attempt — and lets the resulting promise chain drain. GATT_CONNECT_SETTLE_MS is the larger of
+// the two (2000ms); 2200ms comfortably clears either without needing this test file to import
+// (and hardcode a duplicate of) the real, unexported constants. NOT sized for
+// RECONNECT_COOLDOWN_MS — see settleReconnectCooldown() below for that, now used between every
+// retried gatt.connect() attempt too (connectAndVerify no longer uses a flat, short delay there).
 async function settleConnectRetry(t) {
   await flushMicrotasks();
-  t.mock.timers.tick(600);
+  t.mock.timers.tick(2200);
   await flushMicrotasks();
 }
 
-// Advances the fake clock past reconnectToKnownDevice()'s own RECONNECT_COOLDOWN_MS wait (a
-// device-specific gate, not a per-call one — see its own doc — so this is only ever needed once,
-// right before that function's first connect attempt, for a test whose device disconnected
-// recently enough for the gate to still be closed). 3200ms comfortably clears the real 3000ms
-// constant without this test file hardcoding a duplicate of it.
+// Advances the fake clock past a RECONNECT_COOLDOWN_MS wait — waitOutReconnectCooldown() checks
+// real elapsed time since the device's own last disconnect (or failed connect attempt — see
+// connectAndVerify's own doc), so this is needed wherever a test's device disconnected or failed
+// to connect too recently for the gate to already be satisfied: reconnectToKnownDevice()'s own
+// first attempt, connectAndVerify's outer GATT_CONNECT_ATTEMPTS retry loop between connect
+// attempts, or its inner DEVICE_INFO_ATTEMPTS retry loop forcing its own reconnect between
+// attempts (see all their own docs). 10_200ms comfortably clears the real 10_000ms constant
+// without this test file hardcoding a duplicate of it.
 async function settleReconnectCooldown(t) {
   await flushMicrotasks();
-  t.mock.timers.tick(3200);
+  t.mock.timers.tick(10_200);
   await flushMicrotasks();
 }
 
@@ -331,8 +336,8 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
     const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // attempt 1 fails, delay before attempt 2
-    await settleConnectRetry(t); // attempt 2 fails, delay before attempt 3
+    await settleReconnectCooldown(t); // attempt 1 fails, RECONNECT_COOLDOWN_MS before attempt 2
+    await settleReconnectCooldown(t); // attempt 2 fails, RECONNECT_COOLDOWN_MS before attempt 3
     await settleConnectRetry(t); // attempt 3 succeeds; GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
     const info = await connectPromise;
 
@@ -349,9 +354,9 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
 
     const connectPromise = connectToPhone();
     const assertion = assert.rejects(() => connectPromise, /Couldn't connect|Connection Error/);
-    await settleConnectRetry(t); // attempt 1 fails
-    await settleConnectRetry(t); // attempt 2 fails
-    await settleConnectRetry(t); // attempt 3 fails — gives up
+    await settleReconnectCooldown(t); // attempt 1 fails, RECONNECT_COOLDOWN_MS before attempt 2
+    await settleReconnectCooldown(t); // attempt 2 fails, RECONNECT_COOLDOWN_MS before attempt 3
+    await settleConnectRetry(t); // attempt 3 fails — gives up, no further wait scheduled
     await assertion;
 
     assert.equal(isConnected(), false);
@@ -369,7 +374,8 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
 
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before attempt 1's DeviceInfo read, which then fails
-    await settleConnectRetry(t); // DEVICE_INFO_RETRY_DELAY_MS before attempt 2's reconnect
+    await settleConnectRetry(t); // DEVICE_INFO_RETRY_DELAY_MS before attempt 2's forced reconnect
+    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before that reconnect's own gatt.connect()
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before attempt 2's DeviceInfo read, which succeeds
     const info = await connectPromise;
 
@@ -744,9 +750,9 @@ describe('mule-ble.js:forgetConnection no longer forgets on a mere unexpected dr
     const reconnectPromise = reconnectToKnownDevice(device);
     const rejectionAssertion = assert.rejects(() => reconnectPromise);
     await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before the first connect attempt even starts
-    await settleConnectRetry(t); // attempt 1 fails, delay before attempt 2
-    await settleConnectRetry(t); // attempt 2 fails, delay before attempt 3
-    await settleConnectRetry(t); // attempt 3 fails — gives up
+    await settleReconnectCooldown(t); // attempt 1 fails, RECONNECT_COOLDOWN_MS before attempt 2
+    await settleReconnectCooldown(t); // attempt 2 fails, RECONNECT_COOLDOWN_MS before attempt 3
+    await settleConnectRetry(t); // attempt 3 fails — gives up, no further wait scheduled
     await rejectionAssertion;
 
     assert.deepEqual(await getKnownDevices(), []); // the connect-failure safety net forgot it

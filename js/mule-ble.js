@@ -655,27 +655,48 @@ export async function getKnownDevices() {
 }
 
 // A fresh gatt.connect() attempted too soon after the *same* device's link just ended — our own
-// deliberate disconnectPhone(), or an unexpected drop — has been observed to fail outright
-// (rejects near-instantly, not even a timeout) rather than transparently retrying past it the
-// way GATT_CONNECT_ATTEMPTS below otherwise would: a real BLE disconnect is an over-the-air
-// handshake the platform's own Bluetooth stack (BlueZ, WinRT, CoreBluetooth) needs a moment to
-// actually finish, and it won't accept a new connection to that same peer until it has. This is
-// exactly what "Reconnect to <name>" (the known-device shortcut, see getKnownDevices() above)
-// looks like failing even seconds after a manual Disconnect click, immediately followed by a
-// fresh Connect to Phone… → Reconnect — going straight from the click to gatt.connect() with no
-// delay at all. A fresh picker pick of the very same phone rarely (if ever) hits this, purely by
-// accident: requestDevice()'s own native chooser has to actively scan before it can resolve or
-// present anything, which already burns several seconds — plenty of time for the stack to have
-// finished tearing the old link down on its own by the time gatt.connect() is finally attempted.
-// reconnectToKnownDevice() below waits out the remainder of this from lastDisconnectAt (see its
-// own doc) before calling connectAndVerify, so the known-device shortcut gets the same real-world
-// grace period the picker path gets for free — chosen generously (well past what a normal BLE
-// disconnect handshake needs) since the cost of waiting when it wasn't actually necessary is just
-// a barely-noticeable pause, versus a reconnect attempt guaranteed to fail without it. Deliberately
-// NOT applied to connectToPhone()'s own picker path too: that one's requestDevice() call already
-// burns real time on its own scan (see above), and gating it the same way would only cost time on
-// the one path that doesn't need it, for no benefit.
-const RECONNECT_COOLDOWN_MS = 3000;
+// deliberate disconnectPhone(), or an unexpected drop — has been observed, in the field, to
+// connect but then fail to actually serve GATT traffic for many seconds afterward (DeviceInfo
+// reads timing out on attempt after attempt) rather than failing outright the way an
+// insufficient wait might suggest: a real BLE disconnect is an over-the-air handshake the
+// platform's own Bluetooth stack (BlueZ, WinRT, CoreBluetooth) needs a real amount of time to
+// actually finish, and a link re-established before it has stays unstable, not merely refused.
+// Confirmed at 6.45s already elapsed since the previous disconnect and *still* failing (three
+// DeviceInfo read timeouts in a row, ending in a genuine mid-verification drop), but succeeding
+// promptly once ~9.5s had passed — this constant is set with real headroom above that single
+// field data point, not tuned to the exact minimum, since BLE stack recovery time isn't something
+// this code can measure and is surely hardware/OS-dependent.
+//
+// This is exactly what "Reconnect to <name>" (the known-device shortcut, see getKnownDevices()
+// above) looks like failing even seconds after a manual Disconnect click, immediately followed by
+// a fresh Connect to Phone… → Reconnect — going straight from the click to gatt.connect() with no
+// delay at all. reconnectToKnownDevice() below waits out the remainder of this from
+// lastDisconnectAt (see its own doc) before its first connectAndVerify() attempt. Deliberately NOT
+// applied there to connectToPhone()'s own picker path too: that one's requestDevice() call already
+// burns real time on its own scan, so gating its first attempt the same way would only cost time
+// on a path that's rarely short enough to need it.
+//
+// The picker's own natural delay, though, only ever covers connectAndVerify's *first* connect
+// attempt — its inner DEVICE_INFO_ATTEMPTS retry loop (a few lines down) forces its own
+// disconnect+reconnect between attempts with no such cushion at all, regardless of which path got
+// it there, and empirically hits this exact same instability (that's what the 6.45s/9.5s field
+// data above actually came from — attempt 1, then two further forced reconnects, all failing
+// identically). So waitOutReconnectCooldown() below is called there too, unconditionally.
+const RECONNECT_COOLDOWN_MS = 10_000;
+
+// Shared by reconnectToKnownDevice() and connectAndVerify()'s own inner retry loop — see
+// RECONNECT_COOLDOWN_MS's own doc for why both need it. A no-op (returns immediately) whenever
+// enough real time has already passed since lastDisconnectAt on its own, which is the common case
+// for a genuinely fresh connect (lastDisconnectAt is 0 — "long ago" — until the very first
+// disconnect ever happens) and for a picker-driven first attempt.
+async function waitOutReconnectCooldown(label, onProgress) {
+  const sinceDisconnect = Date.now() - lastDisconnectAt;
+  if (sinceDisconnect >= RECONNECT_COOLDOWN_MS) return;
+  const wait = RECONNECT_COOLDOWN_MS - sinceDisconnect;
+  bleLog(`[mule-ble] waiting ${wait}ms for the previous Bluetooth link to finish closing before reconnecting to "${label}"`);
+  onProgress?.('Waiting for the previous Bluetooth session to close…');
+  await new Promise(r => setTimeout(r, wait));
+}
 
 // Connects to an already-selected BluetoothDevice (either fresh from requestDevice()'s picker,
 // or a remembered one from getKnownDevices() bypassing it) and reads its DeviceInfo — leaving
@@ -731,8 +752,16 @@ const GATT_RECONNECT_TIMEOUT_MS = 4000;
 // reuse GATT_RECONNECT_TIMEOUT_MS's own reasoning: only the first attempt gets the full
 // GATT_CONNECT_TIMEOUT_MS budget, since a device that was reachable moments ago either connects
 // quickly on a retry or is genuinely gone.
+//
+// Originally spaced these retries by a flat 500ms (GATT_CONNECT_RETRY_DELAY_MS, since removed) —
+// confirmed in the field as nowhere near enough on at least one real deployment: all 3 attempts
+// failed identically, only 500ms apart, with the exact error this loop exists to retry past. A
+// failed attempt now waits out the same RECONNECT_COOLDOWN_MS as an actual disconnect before
+// trying again (see connectAndVerify's own call to waitOutReconnectCooldown, further down) —
+// unlike a flat per-loop delay, that scales with whatever this environment's own Bluetooth stack
+// actually needs, the same real-world grace period a slow *manual* retry click used to provide
+// by accident before this loop's own automation replaced it.
 const GATT_CONNECT_ATTEMPTS = 3;
-const GATT_CONNECT_RETRY_DELAY_MS = 500;
 
 // getPrimaryService()/getCharacteristic()/readValue() below have no spec-guaranteed timeout of
 // their own either — against a connection device.gatt.connected still calls "connected" but that
@@ -755,7 +784,18 @@ const DEVICE_INFO_READ_TIMEOUT_MS = 5000;
 // — this doesn't replace the retry loop below (a genuinely unreachable phone still needs that),
 // it just gives each attempt a better chance of landing inside the settled window instead of the
 // unstable one right after connect(), rather than only ever retrying through it.
-const GATT_CONNECT_SETTLE_MS = 500;
+//
+// 500ms turned out not to be generous enough on at least one real deployment: confirmed via
+// timestamped logs (2026-08-31) — a genuinely fresh connect (no prior session with this device at
+// all that session, the phone's own screen/app confirmed staying foregrounded throughout, so not
+// Android backgrounding it) still failed on all 3 DEVICE_INFO_ATTEMPTS, each one dying with "GATT
+// Server is disconnected" landing almost exactly 500ms after gatt.connect() resolved — i.e. right
+// when this wait ends and the first real GATT call fires, not evidence the link had already died
+// earlier. Raised well past that single data point's minimum, same reasoning as
+// RECONNECT_COOLDOWN_MS's own doc: the cost of settling for longer than strictly necessary is a
+// barely-noticeable pause, versus a verification attempt landing in the unstable window and
+// failing outright.
+const GATT_CONNECT_SETTLE_MS = 2000;
 
 async function readDeviceInfoFromService(service) {
   const infoChar = await service.getCharacteristic(DEVICE_INFO_CHAR_UUID);
@@ -813,7 +853,21 @@ async function connectAndVerify(device, onProgress = () => {}) {
     } catch (e) {
       lastConnectError = e;
       bleWarn(`[mule-ble] GATT connect attempt ${attempt}/${GATT_CONNECT_ATTEMPTS} failed for "${label}"`, e);
-      if (attempt < GATT_CONNECT_ATTEMPTS) await new Promise(r => setTimeout(r, GATT_CONNECT_RETRY_DELAY_MS));
+      if (attempt < GATT_CONNECT_ATTEMPTS) {
+        // GATT_CONNECT_RETRY_DELAY_MS (500ms) alone, confirmed in the field (2026-08-31, three
+        // days after this retry loop was added), is not enough real recovery time on at least
+        // one real deployment: all 3 attempts failed identically with the exact
+        // "Connection attempt failed." error this loop exists to retry past, even after a full
+        // RECONNECT_COOLDOWN_MS wait had already been sat out before attempt 1 itself. Before
+        // this retry loop existed at all, a failed connect needed a fresh *manual* click to
+        // succeed — which, just by requiring a human to notice and react, imposed far more real
+        // spacing between attempts than 500ms ever did; this loop's own automation removed that
+        // incidental grace period without replacing it, which is the regression this restores by
+        // treating a failed attempt exactly like a disconnect (see waitOutReconnectCooldown's own
+        // doc) — a real connection attempt just ended, whether it ever fully connected or not.
+        lastDisconnectAt = Date.now();
+        await waitOutReconnectCooldown(label, onProgress);
+      }
     }
   }
   if (lastConnectError) {
@@ -876,7 +930,24 @@ async function connectAndVerify(device, onProgress = () => {}) {
           // below, never removed) would otherwise report it as an unexpected one.
           deliberateDisconnect = true;
           device.gatt.disconnect();
+        } else {
+          // Confirmed in the field: device.gatt.connected can already read false here — the
+          // previous attempt's own GATT call (e.g. getPrimaryService) already failed with "GATT
+          // Server is disconnected" — without the 'gattserverdisconnected' event ever having
+          // fired (at least not yet — forgetConnection(), which is the only other place
+          // lastDisconnectAt updates, never ran, confirmed by its own bleLog line being absent
+          // from the console around this failure). Left alone, waitOutReconnectCooldown() below
+          // then measures against a stale-or-zero lastDisconnectAt and finds "plenty of time has
+          // passed" when in fact the link only just died — skipping the wait it most needs to do
+          // here. Treating arriving in this branch at all as proof enough that the link just
+          // ended, regardless of whether the browser's own event has (or ever will) confirm it.
+          lastDisconnectAt = Date.now();
         }
+        // See RECONNECT_COOLDOWN_MS's own doc — this forced reconnect is exactly the case that
+        // data came from: it used to go straight to gatt.connect() with no cushion at all,
+        // regardless of which outer path (picker or known-device) got here, and reproduced the
+        // same DeviceInfo-read instability every time.
+        await waitOutReconnectCooldown(label, onProgress);
         server = await withTimeout(
           device.gatt.connect(), GATT_RECONNECT_TIMEOUT_MS,
           `Timed out reconnecting to "${label}".`,
@@ -989,13 +1060,7 @@ export async function reconnectToKnownDevice(device, onProgress) {
   // See RECONNECT_COOLDOWN_MS's own doc — this is the path that skips requestDevice()'s own
   // real-world scan delay, so it's the one that actually needs an explicit wait here, unlike
   // connectToPhone() below.
-  const sinceDisconnect = Date.now() - lastDisconnectAt;
-  if (sinceDisconnect < RECONNECT_COOLDOWN_MS) {
-    const wait = RECONNECT_COOLDOWN_MS - sinceDisconnect;
-    bleLog(`[mule-ble] waiting ${wait}ms for the previous Bluetooth link to finish closing before reconnecting to "${device.name || device.id}"`);
-    onProgress?.('Waiting for the previous Bluetooth session to close…');
-    await new Promise(r => setTimeout(r, wait));
-  }
+  await waitOutReconnectCooldown(device.name || device.id, onProgress);
   return connectAndVerify(device, onProgress);
 }
 
