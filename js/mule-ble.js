@@ -121,6 +121,12 @@ let connectedInfo   = null; // last-read DeviceInfo
 let disconnectListener = null;
 let deliberateDisconnect = false; // set just before disconnectPhone()'s own .gatt.disconnect() call
 
+// When the link last actually ended (deliberate or not — see forgetConnection() below, which
+// sets this) — connectAndVerify() waits out the rest of RECONNECT_COOLDOWN_MS from this before
+// its own first gatt.connect() attempt. 0 (i.e. "long ago") until the first disconnect ever
+// happens, so a device's very first connect is never delayed by this.
+let lastDisconnectAt = 0;
+
 // Cached relay manifest — see pullFromConnectedPhone's own doc for why this exists. Reset
 // alongside connectedDevice/connectedInfo in forgetConnection() below, same lifecycle: a fresh
 // connection should never reuse a manifest fetched from a previous one.
@@ -187,6 +193,7 @@ function forgetConnection() {
   connectedInfo = null;
   cachedRelayEntries = null;
   cachedRelayManifestKey = null;
+  lastDisconnectAt = Date.now(); // see RECONNECT_COOLDOWN_MS's own doc
   disconnectListener?.(wasDeliberate);
 }
 
@@ -600,7 +607,11 @@ const KNOWN_DEVICES_KEY = 'racemaster-ble-known-devices';
 function loadKnownDevices() {
   try { return JSON.parse(localStorage.getItem(KNOWN_DEVICES_KEY) || '{}'); } catch { return {}; }
 }
+// Returns true if this connection replaced a stale, differently-id'd entry for the same phone
+// name — see connectAndVerify's own doc for why that's the signal a rotated BLE address just
+// happened, and how that gets surfaced to the operator (deviceInfo.addressRotated below).
 function rememberDevice(id, name) {
+  let rotated = false;
   try {
     const map = loadKnownDevices();
     // Any other id already remembered under this same name is a stale entry for this same
@@ -608,11 +619,12 @@ function rememberDevice(id, name) {
     // rotated, or it was re-picked after a permission reset) — drop it so getKnownDevices()
     // doesn't offer two "Reconnect to <name>" entries for what is really one phone.
     for (const otherId of Object.keys(map)) {
-      if (otherId !== id && map[otherId] === name) delete map[otherId];
+      if (otherId !== id && map[otherId] === name) { delete map[otherId]; rotated = true; }
     }
     map[id] = name;
     localStorage.setItem(KNOWN_DEVICES_KEY, JSON.stringify(map));
   } catch { /* storage unavailable — best effort only */ }
+  return rotated;
 }
 export function forgetKnownDevice(id) {
   try {
@@ -641,6 +653,29 @@ export async function getKnownDevices() {
   const known = loadKnownDevices();
   return granted.filter(d => known[d.id]).map(d => ({ device: d, name: known[d.id] }));
 }
+
+// A fresh gatt.connect() attempted too soon after the *same* device's link just ended — our own
+// deliberate disconnectPhone(), or an unexpected drop — has been observed to fail outright
+// (rejects near-instantly, not even a timeout) rather than transparently retrying past it the
+// way GATT_CONNECT_ATTEMPTS below otherwise would: a real BLE disconnect is an over-the-air
+// handshake the platform's own Bluetooth stack (BlueZ, WinRT, CoreBluetooth) needs a moment to
+// actually finish, and it won't accept a new connection to that same peer until it has. This is
+// exactly what "Reconnect to <name>" (the known-device shortcut, see getKnownDevices() above)
+// looks like failing even seconds after a manual Disconnect click, immediately followed by a
+// fresh Connect to Phone… → Reconnect — going straight from the click to gatt.connect() with no
+// delay at all. A fresh picker pick of the very same phone rarely (if ever) hits this, purely by
+// accident: requestDevice()'s own native chooser has to actively scan before it can resolve or
+// present anything, which already burns several seconds — plenty of time for the stack to have
+// finished tearing the old link down on its own by the time gatt.connect() is finally attempted.
+// reconnectToKnownDevice() below waits out the remainder of this from lastDisconnectAt (see its
+// own doc) before calling connectAndVerify, so the known-device shortcut gets the same real-world
+// grace period the picker path gets for free — chosen generously (well past what a normal BLE
+// disconnect handshake needs) since the cost of waiting when it wasn't actually necessary is just
+// a barely-noticeable pause, versus a reconnect attempt guaranteed to fail without it. Deliberately
+// NOT applied to connectToPhone()'s own picker path too: that one's requestDevice() call already
+// burns real time on its own scan (see above), and gating it the same way would only cost time on
+// the one path that doesn't need it, for no benefit.
+const RECONNECT_COOLDOWN_MS = 3000;
 
 // Connects to an already-selected BluetoothDevice (either fresh from requestDevice()'s picker,
 // or a remembered one from getKnownDevices() bypassing it) and reads its DeviceInfo — leaving
@@ -905,7 +940,14 @@ async function connectAndVerify(device, onProgress = () => {}) {
   connectedDevice = device;
   connectedInfo = deviceInfo;
   device.addEventListener('gattserverdisconnected', forgetConnection);
-  rememberDevice(device.id, deviceInfo.deviceName || deviceInfo.deviceId);
+  // See rememberDevice's own doc — true here means this same phone (by name) was already known
+  // under a different device.id, the signature of a rotated Android BLE address (this protocol
+  // doesn't bond, so there's no other way to notice — see the rotating-identity doc further up
+  // this file). Attached directly onto the returned DeviceInfo (a fresh object from decodeJson
+  // each call, so this can't leak into anything else) rather than changing this function's own
+  // return shape, since connectToPhone/reconnectToKnownDevice both hand this straight back to
+  // their own caller as-is and existing callers/tests read specific fields off it already.
+  deviceInfo.addressRotated = rememberDevice(device.id, deviceInfo.deviceName || deviceInfo.deviceId);
   bleLog(`[mule-ble] ===== connected to "${label}" =====`, deviceInfo);
 
   return deviceInfo;
@@ -944,6 +986,16 @@ export async function connectToPhone(onProgress) {
 // trusted just because it was chosen by name.
 export async function reconnectToKnownDevice(device, onProgress) {
   bleLog(`[mule-ble] ===== manual connect requested: reconnecting to known device "${device.name || device.id}" =====`);
+  // See RECONNECT_COOLDOWN_MS's own doc — this is the path that skips requestDevice()'s own
+  // real-world scan delay, so it's the one that actually needs an explicit wait here, unlike
+  // connectToPhone() below.
+  const sinceDisconnect = Date.now() - lastDisconnectAt;
+  if (sinceDisconnect < RECONNECT_COOLDOWN_MS) {
+    const wait = RECONNECT_COOLDOWN_MS - sinceDisconnect;
+    bleLog(`[mule-ble] waiting ${wait}ms for the previous Bluetooth link to finish closing before reconnecting to "${device.name || device.id}"`);
+    onProgress?.('Waiting for the previous Bluetooth session to close…');
+    await new Promise(r => setTimeout(r, wait));
+  }
   return connectAndVerify(device, onProgress);
 }
 

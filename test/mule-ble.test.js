@@ -261,6 +261,17 @@ async function settleConnectRetry(t) {
   await flushMicrotasks();
 }
 
+// Advances the fake clock past reconnectToKnownDevice()'s own RECONNECT_COOLDOWN_MS wait (a
+// device-specific gate, not a per-call one — see its own doc — so this is only ever needed once,
+// right before that function's first connect attempt, for a test whose device disconnected
+// recently enough for the gate to still be closed). 3200ms comfortably clears the real 3000ms
+// constant without this test file hardcoding a duplicate of it.
+async function settleReconnectCooldown(t) {
+  await flushMicrotasks();
+  t.mock.timers.tick(3200);
+  await flushMicrotasks();
+}
+
 describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () => {
   // Fake timers are enabled per-test, inside each it() body, not in a shared beforeEach — a
   // hook's TestContext is not the same mock tracker the test body's own `t` sees, so timers
@@ -732,6 +743,7 @@ describe('mule-ble.js:forgetConnection no longer forgets on a mere unexpected dr
 
     const reconnectPromise = reconnectToKnownDevice(device);
     const rejectionAssertion = assert.rejects(() => reconnectPromise);
+    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before the first connect attempt even starts
     await settleConnectRetry(t); // attempt 1 fails, delay before attempt 2
     await settleConnectRetry(t); // attempt 2 fails, delay before attempt 3
     await settleConnectRetry(t); // attempt 3 fails — gives up

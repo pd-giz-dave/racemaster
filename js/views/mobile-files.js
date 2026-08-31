@@ -1526,7 +1526,16 @@ async function onConnectButtonClick() {
   // by that same real name a moment ago, so there's nothing left here to confirm for it.
   if (!chosenDevice) {
     const name = deviceInfo.deviceName || deviceInfo.deviceId;
-    if (!await showConfirmDialog(`Connect to "${name}"?`, 'Connect')) {
+    // See mule-ble.js's rememberDevice()/connectAndVerify() doc — true here means this same
+    // phone (by name) was already a known device under a different id, the signature of Android
+    // having rotated its BLE address since last time (this protocol doesn't bond, so there's no
+    // other way to notice). Surfaced here rather than silently: this is exactly the moment a
+    // "Reconnect to <name>" attempt against the old id would otherwise fail with no explanation,
+    // and a fresh scan succeeding instead — the confusing symptom this whole flow works around.
+    const rotatedNote = deviceInfo.addressRotated
+      ? ` Its Bluetooth address has changed since you last connected (Android does this periodically) — the old "Reconnect to ${name}" entry was stale and is being replaced with this one.`
+      : '';
+    if (!await showConfirmDialog(`Connect to "${name}"?${rotatedNote}`, 'Connect')) {
       disconnectPhone();
       showStatus('Cancelled — disconnected.');
       return;
