@@ -84,6 +84,41 @@ function maxLineNumber(lines) {
   return lines.reduce((max, l) => Math.max(max, l.lineNumber ?? 0), 0);
 }
 
+// ---- "Last actually polled over Bluetooth" tracking ----
+//
+// device.lastSeen (see flattenDevices() below) is either the server's own file mtime for a
+// synced device, or a pending file's own pulledAt — neither of which updates on a poll that
+// found nothing new: pullAndSyncConnectedPhone() skips its push loop entirely whenever
+// totalLines is 0 (see its own doc), so a phone polled repeatedly with nothing new to report
+// would otherwise show the same stale Last Seen from whenever it was first synced, even though
+// this browser just successfully talked to it again a moment ago. This tracks that contact
+// independently of whether it found anything new, persisted (not just in memory, same as
+// LAST_SYNCED_KEY above) so it survives a page reload — keyed the same way rowKey() is, since a
+// pull's own results carry owner/raceLabel/deviceName but no ready-made row object to key off.
+const BLE_LAST_SEEN_KEY = 'racemaster-mobile-ble-last-seen';
+
+function loadBleLastSeen() {
+  try { return JSON.parse(localStorage.getItem(BLE_LAST_SEEN_KEY) || '{}'); } catch { return {}; }
+}
+function recordBleLastSeen(owner, raceLabel, deviceName) {
+  const map = loadBleLastSeen();
+  map[`${owner} ${raceLabel} ${deviceName}`] = new Date().toISOString();
+  try { localStorage.setItem(BLE_LAST_SEEN_KEY, JSON.stringify(map)); } catch { /* storage unavailable/full — best effort only */ }
+}
+function getBleLastSeen(owner, raceLabel, deviceName) {
+  return loadBleLastSeen()[`${owner} ${raceLabel} ${deviceName}`] || null;
+}
+
+// Later of two ISO timestamps (either may be null/undefined) — device.lastSeen and a
+// getBleLastSeen() lookup are both real UTC toISOString() output, so a plain Date comparison is
+// all that's needed; no need for the string-surgery formatStoredTimestamp() below deals with,
+// which is only for the phone's own non-ISO "yyyy/mm/dd HH:MM:SS" wire format.
+function laterIso(a, b) {
+  if (!a) return b || null;
+  if (!b) return a;
+  return new Date(a) > new Date(b) ? a : b;
+}
+
 function formatRaceDate(raceDate) {
   if (!raceDate) return '<span style="color:var(--muted)">Unknown</span>';
   return `${raceDate.dd}/${raceDate.mm}/${raceDate.yy}`;
@@ -446,7 +481,7 @@ function flattenDevices(races) {
         location: locationSummary([...timeSegment, ...bibsSegment]),
         bibsVisible: bibsSegment.length,
         timeVisible: timeSegment.length,
-        lastSeen: device.lastSeen || null,
+        lastSeen: laterIso(device.lastSeen, getBleLastSeen(race.owner, race.raceLabel, device.name)),
         lastUpdate: latestLineTimestamp(device.lines),
         incorporationStatus: computeIncorporationStatus(r),
       });
@@ -1242,14 +1277,27 @@ function onBleDisconnected(wasDeliberate) {
   }
 }
 
+// Re-renders the Devices table from already-cached data (lastKnownRaces + current pending
+// files) — no server fetch, unlike renderMobileFiles() itself. Used by a silent auto-pull tick
+// that found nothing new to sync (see pullAndSyncConnectedPhone below): the table still needs
+// refreshing so its Last Seen column picks up recordBleLastSeen()'s update for this poll (BLE
+// last-seen tracking above), but a full renderMobileFiles() call every ~10s purely for that would
+// mean an extra server round trip, and its own "Loading…" status flicker, on every single tick.
+function refreshDevicesTableFromCache() {
+  const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
+  renderRaceList(mergePendingIntoRaces(lastKnownRaces, pending), getIsAdmin());
+}
+
 // Pulls whatever history the currently-connected phone is holding, pushing each device
 // straight to the server exactly like a WiFi sync would. If the server can't be reached (the
 // expected case out in the field, with no internet), each pull is kept locally as "pending"
 // instead — see storage.js's savePendingMobileFile — until a Push action later succeeds.
-// [silent] suppresses the status toast/re-render when there's nothing new — used by the
-// background auto-pull tick above so it doesn't spam a toast every 10s when the phone simply
-// hasn't recorded anything new since the last pull; an explicit Connect/Refresh click always
-// reports, even when the result is empty, so the operator gets confirmation the action ran.
+// [silent] suppresses the status toast/full server-fetching re-render when there's nothing new
+// (see refreshDevicesTableFromCache() just above for the lighter-weight refresh that still runs)
+// — used by the background auto-pull tick above so it doesn't spam a toast every 10s when the
+// phone simply hasn't recorded anything new since the last pull; an explicit Connect/Refresh
+// click always reports, even when the result is empty, so the operator gets confirmation the
+// action ran.
 async function pullAndSyncConnectedPhone({ silent = false } = {}) {
   debugLog(`[mobile-files] pull requested (silent=${silent})`);
   if (pullInProgress) { debugLog('[mobile-files] pull skipped — a pull is already in progress'); return; }
@@ -1331,6 +1379,11 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
     // below) is proof the link is genuinely working again, not just still nominally connected.
     consecutivePullFailures = 0;
     if (connectionIssue) { connectionIssue = false; updateConnectButtonLabel(); }
+    // Recorded for every leg this pull touched, even one with zero new lines — see
+    // BLE_LAST_SEEN_KEY's own doc above for why device.lastSeen alone (server mtime / a pending
+    // file's own pulledAt, neither of which changes when there's nothing new to write) isn't
+    // enough on its own to reflect "we just successfully talked to this phone".
+    for (const { raceLabel, deviceName } of pulled) recordBleLastSeen(username, raceLabel, deviceName);
     const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
     // Echoes what the phone's own DeviceInfo reported alongside this pull (relayCount — how many
     // other devices it's currently relaying data for on this Mule's behalf) — refreshed by
@@ -1346,7 +1399,7 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
       `Last poll ${nowClock()} — ${totalLines} new record${totalLines === 1 ? '' : 's'} `
       + `across ${pulled.length} device file${pulled.length === 1 ? '' : 's'}${relayPart}`;
     updatePollStatus(lastPollStatusText);
-    if (silent && totalLines === 0) return;
+    if (silent && totalLines === 0) { refreshDevicesTableFromCache(); return; }
 
     let synced = 0, pending = 0;
     for (const { raceLabel, deviceName, deviceId, lines } of pulled) {
