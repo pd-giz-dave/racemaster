@@ -438,10 +438,13 @@ export const HELP = {
         skipping the anonymous picker entirely (Chrome/Edge only — other browsers always use the picker). If the server is reachable the
         pull is then pushed straight there, the same as a normal WiFi sync;
         otherwise it's kept in this browser as <strong>pending upload</strong> until you push it (or discard it) once you're back in signal.
-        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session, and a status line next to it
-        tracks the background auto-poll: <strong>Polling &lt;device&gt;…</strong> while one is in flight, then <strong>Last poll HH:MM:SS</strong>
-        with how many new records came back, across how many device files, and (for a Mule relaying other phones' data) how many devices it's
-        currently relaying — updated on every poll, even one that found nothing new, so it stays visible proof the connection is still alive.
+        Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session, and two status lines next to it
+        track the background auto-poll: <strong>Auto-polling every Ns</strong> shows <strong>— polling…</strong> appended while a poll is
+        actually in flight; <strong>Last poll HH:MM:SS</strong> below it shows how many new records came back on the last one, across how many
+        device files, and (for a Mule relaying other phones' data) how many devices it's currently relaying — updated on every poll, even one
+        that found nothing new, so it stays visible proof the connection is still alive. Kept on separate lines deliberately: the poll-result
+        line's own length varies with what it's reporting, so tacking the in-flight indicator onto it made the whole status area jump every
+        time a poll started or finished.
         Tick <strong>Bluetooth logging</strong> to also log routine connect/pull activity to the browser console — off by default, useful
         when troubleshooting a Connect to Phone… problem; the setting is remembered across visits to this page. A genuine connect or pull
         failure is always logged to the console regardless of this setting.</p>
@@ -524,10 +527,11 @@ export const PAGES = {
           Seen is when the server (or, for a pending Bluetooth-pulled file, this browser) last actually heard from a
           device, updated on every successful poll even one that finds nothing new; Last Update is that device's
           newest recorded entry, so the two can diverge (e.g. a phone still connected but with nothing new to send)</li>
-      <li>A status line next to Connect/Disconnect now shows live Bluetooth poll feedback: "Polling &lt;device&gt;…"
-          while a pull is in flight, then "Last poll HH:MM:SS" with how many new records came back and (for a Mule
-          relaying other phones' data) how many devices it's relaying — the previous poll's own result stays visible
-          the whole gap until the next one actually completes, rather than being blanked the instant a new poll starts</li>
+      <li>Two status lines next to Connect/Disconnect now show live Bluetooth poll feedback: the auto-polling interval
+          line shows "— polling…" while a pull is actually in flight, and a separate "Last poll HH:MM:SS" line below
+          it shows how many new records came back and (for a Mule relaying other phones' data) how many devices it's
+          relaying — kept on its own line, and otherwise untouched while a poll is running, so it stays visible for
+          the whole gap until the next one actually completes instead of being blanked the instant a new one starts</li>
       <li>Fixed several causes of "Reconnect to &lt;phone&gt;" intermittently failing, found via real Bluetooth-logging
           field captures: a reconnect attempted too soon after a disconnect now waits for the previous link to actually
           finish closing before retrying (this needed real recovery time, not just a fixed short delay); the

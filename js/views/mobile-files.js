@@ -1063,9 +1063,11 @@ function nowClock() {
   return new Date().toTimeString().slice(0, 8);
 }
 
-// The most recent real poll outcome ("Last poll …" / "Poll failed …") — kept separately from
-// the DOM so markPollingInProgress() below can append to it rather than replacing it outright.
-// Reset (with the element itself) on disconnect — see updateConnectButtonLabel().
+// The most recent real poll outcome ("Last poll …" / "Poll failed …") — always shown verbatim,
+// in full, on its own line (see updatePollStatus below); never grown with a "— polling…" suffix
+// or anything else, so this line's own length (and so its wrap point) stays fixed for the whole
+// gap between ticks rather than jumping every time one starts or ends. Reset (with the element
+// itself) on disconnect — see updateConnectButtonLabel().
 let lastPollStatusText = '';
 
 // Persistent (until the next poll updates it, or the connection ends) feedback that a
@@ -1081,16 +1083,6 @@ function updatePollStatus(text) {
   el.hidden = !text;
 }
 
-// Appends a "— polling…" suffix to whatever the status line already shows, instead of replacing
-// it outright — a plain updatePollStatus('Polling…') here used to blank the previous tick's own
-// result the instant the next one started, so the record/relay counts it just reported were only
-// ever visible for a fraction of a second before vanishing again. Suffixing keeps that last real
-// result legible for the whole gap between ticks, with only "— polling…" changing at the end to
-// show a fresh one is actually in flight.
-function markPollingInProgress() {
-  updatePollStatus(lastPollStatusText ? `${lastPollStatusText} — polling…` : `Polling ${getConnectedDeviceName()}…`);
-}
-
 function updateConnectButtonLabel() {
   const btn = getEl('btn-connect-phone');
   if (!btn) return;
@@ -1100,11 +1092,17 @@ function updateConnectButtonLabel() {
     : 'Connect to Phone…';
   btn.disabled = connectAttemptInProgress;
   // Echoes getRecommendedPollIntervalMs() so it's visible whether auto-sync is even running and
-  // at what cadence, rather than something only inferable from timestamps in the console.
+  // at what cadence, rather than something only inferable from timestamps in the console. The
+  // "— polling…" suffix (in-flight feedback — see pullInProgress) lives here rather than on the
+  // "Last poll …" line above: that line's own text is what actually varies in length (a record
+  // count, a relay count, an error message), so appending anything to *it* while a poll is
+  // running made the whole status area jump/rewrap every single tick. This line's own text barely
+  // varies (just the interval, and now the suffix), so it doesn't have that problem.
   const pollEl = getEl('mobile-files-poll-interval');
   if (pollEl) {
     if (isConnected()) {
-      pollEl.textContent = `Auto-polling every ${Math.round(getRecommendedPollIntervalMs() / 1000)}s`;
+      const suffix = pullInProgress ? ' — polling…' : '';
+      pollEl.textContent = `Auto-polling every ${Math.round(getRecommendedPollIntervalMs() / 1000)}s${suffix}`;
       pollEl.hidden = false;
     } else {
       pollEl.hidden = true;
@@ -1329,7 +1327,7 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
   }
 
   pullInProgress = true;
-  markPollingInProgress();
+  updateConnectButtonLabel(); // shows "— polling…" on the interval line — see its own doc
   try {
     let pulled;
     try {
@@ -1439,6 +1437,7 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
       : `Pulled ${pulled.length} device file${pulled.length === 1 ? '' : 's'}: ${synced} synced to the server, ${pending} saved locally.`);
   } finally {
     pullInProgress = false;
+    updateConnectButtonLabel(); // clears the "— polling…" suffix now this tick is actually done
   }
 }
 
