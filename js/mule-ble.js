@@ -112,7 +112,8 @@ function bleError(...args) { console.error(`[${ts()}]`, ...args); }
 // filtered, and an explicitly-requested pull is served regardless of staleness) — there's no
 // Kotlin precedent for a *puller* deciding not to ask in the first place, since the real app
 // never had to be one. pullFromConnectedPhone() below is what actually applies this, skipping a
-// leg (its own race, or a relay entry) entirely rather than requesting and discarding it.
+// leg (a relay entry — never its own race, see isRaceLabelStale's own doc) entirely rather than
+// requesting and discarding it.
 const RACE_STALE_AFTER_DAYS_KEY = 'racemaster-race-stale-after-days';
 const DEFAULT_RACE_STALE_AFTER_DAYS = 2;
 
@@ -126,14 +127,8 @@ export function setRaceStaleAfterDays(days) {
 
 // raceLabel's own trailing "-YY-MM-DD" (mirrors server/mobile.js's parseRaceLabelDate — see its
 // own doc — duplicated rather than imported since mule-ble.js has no existing dependency on
-// either the server or view layers and this is the only date-related bit it needs from one) is
-// used as the "how old is this race" signal, standing in for racemaster-mobile's own
-// last-*activity*-timestamp ("touched") tracking: this file has no equivalent local history to
-// draw one from for a race it may never have pulled before, but every real raceLabel this
-// protocol produces already ends with the date it was created on, which is a reasonable proxy in
-// normal use (one-off/per-event race labels, not a long-lived label reused across many days).
-// Returns null (never stale, same as a null "touched" timestamp on the phone side) for a label
-// with no such suffix.
+// either the server or view layers and this is the only date-related bit it needs from one).
+// Returns null (never stale) for a label with no such suffix.
 function raceLabelAgeDays(raceLabel) {
   const m = /-(\d{2})-(\d{2})-(\d{2})$/.exec(raceLabel || '');
   if (!m) return null;
@@ -143,9 +138,29 @@ function raceLabelAgeDays(raceLabel) {
   return (Date.now() - raceDate.getTime()) / (24 * 60 * 60 * 1000);
 }
 
-function isRaceLabelStale(raceLabel) {
+// A race label's own date is when it was *created*, not when it was last touched — fine for a
+// one-off event, wrong for a multi-day one, where the label is set once on day 1 and never
+// changes while the race keeps being actively recorded for days afterward. Confirmed as a real
+// bug: date alone would start skipping a still-running multi-day event's own data the moment its
+// label crossed the configured threshold, silently stopping the sync mid-event. racemaster-
+// mobile's own version avoids this by tracking genuine last-*activity* timestamps locally
+// (SettingsRepository/RaceStaleness.kt) — this file has no equivalent local history for a race it
+// may never have pulled before, but DeviceInfo.lastLineNumber/RelayManifestEntry.lastLineNumber
+// (the highest permanent history line the device currently reports holding for that race) is a
+// real, wire-reported activity signal available regardless: comparing it against
+// getLastPulledLineNumber's own cursor tells whether there's genuinely new data waiting, which a
+// still-running multi-day event always has (its own lastLineNumber keeps climbing past whatever
+// we last pulled), no matter how old its label is. Only treated as stale once BOTH the label is
+// old AND there's nothing left to gain from pulling it anyway.
+//
+// Never called at all for a device's own currently-open race (see pullFromConnectedPhone below)
+// — deviceInfo.raceLabel being reported at all already means it's what the phone is actively
+// recording right now, exactly the case racemaster-mobile's own facility exempts too (see this
+// section's own doc).
+function isRaceLabelStale(raceLabel, deviceId, reportedLastLineNumber) {
   const ageDays = raceLabelAgeDays(raceLabel);
-  return ageDays !== null && ageDays >= getRaceStaleAfterDays();
+  if (ageDays === null || ageDays < getRaceStaleAfterDays()) return false;
+  return (reportedLastLineNumber ?? 0) <= getLastPulledLineNumber(deviceId, sanitiseName(raceLabel));
 }
 
 // Mirrors server.js's own sanitiseName() exactly. A phone reports its raceLabel/deviceName
@@ -1213,14 +1228,10 @@ export async function pullFromConnectedPhone() {
   // data lives) ever get a turn. Skipping it here isn't just an optimization: without it, a
   // slow/impatient operator could give up during that pointless wait and never see the
   // relayed data at all.
-  if (deviceInfo.raceLabel && isRaceLabelStale(deviceInfo.raceLabel)) {
-    // See getRaceStaleAfterDays()'s own doc — this device's own race is older than the
-    // configured threshold, so there's nothing worth spending a round trip on: the operator has
-    // moved on, and racemaster-mobile's own equivalent facility exists for exactly this "stop
-    // bothering with a dead race" reason, even though its own version never actually applies this
-    // check to a phone's own race (only to what it relays — see that doc).
-    bleLog(`[mule-ble] skipping own race "${deviceInfo.raceLabel}" for "${connectedName}" — older than the configured stale threshold (${getRaceStaleAfterDays()}d)`);
-  } else if (deviceInfo.raceLabel) {
+  // Never staleness-checked — see isRaceLabelStale's own doc: deviceInfo.raceLabel being reported
+  // at all already means it's what the phone is actively recording right now, no matter how old
+  // its own label date is (a multi-day event's label is set once on day 1 and never changes).
+  if (deviceInfo.raceLabel) {
     // Sanitised for the cursor key and the result we hand back — never for the wire request
     // itself, but this leg's own PullRequest carries no raceLabel at all (see pullOne below), so
     // there's nothing here that needs to stay raw.
@@ -1279,13 +1290,15 @@ export async function pullFromConnectedPhone() {
     // one connected Mule can be relaying several genuinely different origin devices in the same
     // pull; every message below names the one this particular leg is about.
     const relayDeviceLabel = relay.originDeviceName || relay.originDeviceId || 'unknown device';
-    // See getRaceStaleAfterDays()'s own doc — unlike the own-race leg above, racemaster-mobile's
-    // own equivalent facility DOES already filter a stale relay source out of the manifest on the
-    // phone's own side (PeripheralSyncService.freshRelayManifest), so this is normally redundant
-    // in practice against an up-to-date phone build; kept as a real check anyway (not just relying
-    // on the phone's own filtering) so an older phone build, or a different setting on each side,
-    // still gets the web app's own threshold honoured.
-    if (isRaceLabelStale(relay.originRaceLabel)) {
+    // See getRaceStaleAfterDays()'s own doc — racemaster-mobile's own equivalent facility DOES
+    // already filter a stale relay source out of the manifest on the phone's own side
+    // (PeripheralSyncService.freshRelayManifest), so this is normally redundant in practice
+    // against an up-to-date phone build; kept as a real check anyway (not just relying on the
+    // phone's own filtering) so an older phone build, or a different setting on each side, still
+    // gets the web app's own threshold honoured. lastLineNumber (see isRaceLabelStale's own doc)
+    // is what keeps a still-actively-relayed multi-day event's own old-dated label from being
+    // wrongly excluded here.
+    if (isRaceLabelStale(relay.originRaceLabel, relay.originDeviceId, relay.lastLineNumber)) {
       bleLog(`[mule-ble] skipping relayed race "${relay.originRaceLabel}" for "${relayDeviceLabel}" (relayed via "${connectedName}") — older than the configured stale threshold (${getRaceStaleAfterDays()}d)`);
       continue;
     }

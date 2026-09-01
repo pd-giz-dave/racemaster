@@ -445,10 +445,13 @@ export const HELP = {
         Tick <strong>Bluetooth logging</strong> to also log routine connect/pull activity to the browser console — off by default, useful
         when troubleshooting a Connect to Phone… problem; the setting is remembered across visits to this page. A genuine connect or pull
         failure is always logged to the console regardless of this setting.</p>
-    <p><strong>Skip races older than (days)</strong> stops the app even asking a connected phone for a race once it's this old (judged by the
-        date baked into the end of its own race label) — no BLE pull request is sent for it at all, whether it's the phone's own race or one
-        it's relaying on another device's behalf. Defaults to 2 days and is remembered across visits. This shadows the same facility in the
-        RaceMaster Mobile app itself, which stops relaying (though never stops recording) a race once it's this old.</p>
+    <p><strong>Skip races older than (days)</strong> stops the app asking a connected phone for a race it's relaying on another device's
+        behalf once it's this old (judged by the date baked into the end of its own race label) — no BLE pull request is sent for it at all.
+        Never applies to a device's own currently-recorded race, and never skips a relayed race that's still actively growing (a multi-day
+        event's label is set once on day one and never changes, so age alone can't tell "still running" apart from "abandoned" — a race with
+        new data waiting is always pulled regardless of how old its label is). Defaults to 2 days and is remembered across visits. This
+        shadows the same facility in the RaceMaster Mobile app itself, which stops relaying (though never stops recording) a race once it's
+        this old.</p>
     <p>Tick one or more files and use <strong>Update Progress</strong> to rebuild the Finishers list and the Progress tab
         below together. It needs at least one <strong>Finish</strong> location file (typically one bibs file and one time
         file, paired up by split number, though a single file with both is fine too) — this part is unchanged from before
@@ -515,7 +518,32 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.13-alpha - current version</h3>
+    <h3>v0.0.14-alpha - current version</h3>
+    <ul>
+      <li>Mobile Files Devices list: added <strong>Last Seen</strong> and <strong>Last Update</strong> columns — Last
+          Seen is when the server (or, for a pending Bluetooth-pulled file, this browser) last actually heard from a
+          device, updated on every successful poll even one that finds nothing new; Last Update is that device's
+          newest recorded entry, so the two can diverge (e.g. a phone still connected but with nothing new to send)</li>
+      <li>A status line next to Connect/Disconnect now shows live Bluetooth poll feedback: "Polling &lt;device&gt;…"
+          while a pull is in flight, then "Last poll HH:MM:SS" with how many new records came back and (for a Mule
+          relaying other phones' data) how many devices it's relaying — the previous poll's own result stays visible
+          the whole gap until the next one actually completes, rather than being blanked the instant a new poll starts</li>
+      <li>Fixed several causes of "Reconnect to &lt;phone&gt;" intermittently failing, found via real Bluetooth-logging
+          field captures: a reconnect attempted too soon after a disconnect now waits for the previous link to actually
+          finish closing before retrying (this needed real recovery time, not just a fixed short delay); the
+          confirmation dialog now explains when a phone's Bluetooth address has visibly changed since last time
+          (Android does this periodically) rather than silently replacing the stale "Reconnect to…" entry with no
+          explanation</li>
+      <li>Every Bluetooth log line (with Bluetooth logging ticked) now names the specific device it's about, including
+          which origin device a relayed race belongs to and which Mule is relaying it — makes a field-captured log
+          spanning several devices/reconnects far easier to read back and diagnose</li>
+      <li><strong>Skip races older than (days)</strong> — new Mobile Files setting (default 2, shadowing the
+          equivalent RaceMaster Mobile app setting) that stops asking a connected phone over Bluetooth for a race it's
+          relaying on another device's behalf once it's this old, judged by the date in the race's own label; never
+          skips a device's own currently-recorded race, and never skips a relayed race that's still genuinely gaining
+          new data, so a multi-day event keeps syncing throughout regardless of how old its label gets</li>
+    </ul>
+    <h3>v0.0.13-alpha</h3>
     <ul>
       <li><strong>Bluetooth connection-lost warning</strong> — an unexpected drop (or a connection that's stopped
           responding, even if it still looks connected) now shows a persistent warning banner in the header, visible

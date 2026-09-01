@@ -533,23 +533,30 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     return `${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
-  it("skips pulling its own race when the raceLabel's own date is older than the configured stale threshold", async (t) => {
+  it("never skips its own race for staleness, no matter how old its label is (multi-day events keep syncing)", async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     setRaceStaleAfterDays(2);
-    // 2020-01-01 — many years stale under any sane threshold.
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race-20-01-01', relayCount: 0 };
-    let requestCount = 0;
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => { requestCount++; return []; } });
+    // 2020-01-01 — many years stale under any sane threshold, exactly what a multi-day event's
+    // own label looks like on day 3+: created once, never changes, while still actively
+    // recording. deviceInfo.raceLabel being reported at all must be enough on its own — see
+    // isRaceLabelStale's own doc — regardless of age or lastLineNumber.
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race-20-01-01', relayCount: 0, lastLineNumber: 3 };
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: () => [{ recordUuid: 'r1', action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
+    });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
     await connectPromise;
 
-    const results = await pullFromConnectedPhone();
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t);
+    const results = await pullPromise;
 
-    assert.equal(requestCount, 0); // no pull request sent at all — skipped before ever asking
-    assert.deepEqual(results, []);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].raceLabel, 'test-race-20-01-01');
     disconnectPhone();
   });
 
@@ -585,6 +592,42 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(results.length, 1);
     assert.equal(results[0].raceLabel, `fresh-race-${todayRaceLabelSuffix()}`);
     assert.equal(results[0].deviceId, 'fresh-origin');
+    disconnectPhone();
+  });
+
+  it('does not skip an old-labelled relayed race that is still actively being recorded (multi-day event)', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    setRaceStaleAfterDays(2);
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 1 };
+    // Old label (day 1 of a multi-day event), but lastLineNumber ahead of anything we've pulled
+    // so far — real, wire-reported proof it's still being recorded, which date alone can't tell
+    // apart from a genuinely abandoned old race (see isRaceLabelStale's own doc).
+    const relayManifest = [
+      { originDeviceId: 'multiday-origin', originRaceLabel: 'stage-race-20-01-01', originDeviceName: 'Multi-day Phone', lastLineNumber: 5 },
+    ];
+    let pullRequestCount = 0;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => {
+        if (req.requestRelayManifest) return relayManifest;
+        pullRequestCount++;
+        return [{ recordUuid: 'r1', action: 'Finish', bibNumber: 3, lineNumber: 5, timestampMillis: 1_700_000_000_000 }];
+      },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t); // relay-manifest fetch's own settle delay
+    await settleOnePull(t); // the relayed race's own settle delay
+    const results = await pullPromise;
+
+    assert.equal(pullRequestCount, 1); // pulled despite the old label — lastLineNumber proved it's still active
+    assert.equal(results.length, 1);
+    assert.equal(results[0].raceLabel, 'stage-race-20-01-01');
     disconnectPhone();
   });
 
