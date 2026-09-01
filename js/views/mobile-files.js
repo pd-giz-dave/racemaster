@@ -1070,6 +1070,13 @@ function nowClock() {
 // itself) on disconnect — see updateConnectButtonLabel().
 let lastPollStatusText = '';
 
+// How many poll attempts (auto-tick or manual Connect/Refresh, successful or not — see
+// pullAndSyncConnectedPhone's own increment) have been made since the *current* connection was
+// established. Deliberately NOT reset the instant that connection ends — see
+// updateConnectButtonLabel()'s own doc — only once a fresh one actually succeeds (see
+// onConnectButtonClick), so a disconnect doesn't itself zero out what's still on screen.
+let pollCount = 0;
+
 // Persistent (until the next poll updates it, or the connection ends) feedback that a
 // background auto-pull is actually happening — separate from showStatus()'s own toast, which
 // auto-clears after ~10s and, for a silent auto-pull tick that found nothing new, was never
@@ -1101,11 +1108,25 @@ function updateConnectButtonLabel() {
   const pollEl = getEl('mobile-files-poll-interval');
   if (pollEl) {
     if (isConnected()) {
+      // Poll count sits between the interval and the in-flight suffix — see pollCount's own doc;
+      // includes whichever poll is currently running, so "3 polls — polling…" reads as "this is
+      // the 3rd", not "3 have finished and a 4th, uncounted, is also happening".
       const suffix = pullInProgress ? ' — polling…' : '';
-      pollEl.textContent = `Auto-polling every ${Math.round(getRecommendedPollIntervalMs() / 1000)}s${suffix}`;
+      pollEl.textContent = `Auto-polling every ${Math.round(getRecommendedPollIntervalMs() / 1000)}s`
+        + ` — ${pollCount} poll${pollCount === 1 ? '' : 's'}${suffix}`;
       pollEl.hidden = false;
     } else {
-      pollEl.hidden = true;
+      // pollCount is deliberately NOT reset here — see its own doc: it stays exactly as it was
+      // for the connection that just ended, right up until a fresh one actually succeeds (see
+      // onConnectButtonClick), so it still shows once the link drops rather than vanishing (or
+      // silently zeroing) the instant it does. "Auto-polling every Ns" itself is dropped from
+      // the wording here, though — that part genuinely isn't true any more.
+      if (pollCount > 0) {
+        pollEl.textContent = `${pollCount} poll${pollCount === 1 ? '' : 's'} (disconnected)`;
+        pollEl.hidden = false;
+      } else {
+        pollEl.hidden = true;
+      }
       lastPollStatusText = ''; // stale — a fresh connection's first poll shouldn't inherit it
       updatePollStatus(null); // no connection left to report poll activity for
     }
@@ -1327,7 +1348,8 @@ async function pullAndSyncConnectedPhone({ silent = false } = {}) {
   }
 
   pullInProgress = true;
-  updateConnectButtonLabel(); // shows "— polling…" on the interval line — see its own doc
+  pollCount++; // see its own doc — counts this attempt, whatever its outcome turns out to be
+  updateConnectButtonLabel(); // shows the updated count, and "— polling…", on the interval line
   try {
     let pulled;
     try {
@@ -1558,6 +1580,7 @@ async function onConnectButtonClick() {
   }
 
   lastConnectedDeviceName = getConnectedDeviceName();
+  pollCount = 0; // a genuinely fresh connection — see pollCount's own doc for why this, not the disconnect just gone, is what resets it
   updateConnectButtonLabel();
   showStatus(`Connected to ${getConnectedDeviceName()} — pulling history…`);
   await pullAndSyncConnectedPhone();

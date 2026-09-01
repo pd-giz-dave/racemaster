@@ -439,8 +439,10 @@ export const HELP = {
         pull is then pushed straight there, the same as a normal WiFi sync;
         otherwise it's kept in this browser as <strong>pending upload</strong> until you push it (or discard it) once you're back in signal.
         Once connected, the button becomes <strong>Disconnect from &lt;device&gt;</strong> to end the session, and two status lines next to it
-        track the background auto-poll: <strong>Auto-polling every Ns</strong> shows <strong>— polling…</strong> appended while a poll is
-        actually in flight; <strong>Last poll HH:MM:SS</strong> below it shows how many new records came back on the last one, across how many
+        track the background auto-poll: <strong>Auto-polling every Ns</strong> also shows how many polls have been made since this connection
+        was made, and <strong>— polling…</strong> appended while one is actually in flight; once you disconnect it switches to
+        <strong>N polls (disconnected)</strong>, still showing that same count rather than clearing it, right up until the next connection
+        actually succeeds. <strong>Last poll HH:MM:SS</strong> below it shows how many new records came back on the last one, across how many
         device files, and (for a Mule relaying other phones' data) how many devices it's currently relaying — updated on every poll, even one
         that found nothing new, so it stays visible proof the connection is still alive. Kept on separate lines deliberately: the poll-result
         line's own length varies with what it's reporting, so tacking the in-flight indicator onto it made the whole status area jump every
