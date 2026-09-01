@@ -445,6 +445,10 @@ export const HELP = {
         Tick <strong>Bluetooth logging</strong> to also log routine connect/pull activity to the browser console — off by default, useful
         when troubleshooting a Connect to Phone… problem; the setting is remembered across visits to this page. A genuine connect or pull
         failure is always logged to the console regardless of this setting.</p>
+    <p><strong>Skip races older than (days)</strong> stops the app even asking a connected phone for a race once it's this old (judged by the
+        date baked into the end of its own race label) — no BLE pull request is sent for it at all, whether it's the phone's own race or one
+        it's relaying on another device's behalf. Defaults to 2 days and is remembered across visits. This shadows the same facility in the
+        RaceMaster Mobile app itself, which stops relaying (though never stops recording) a race once it's this old.</p>
     <p>Tick one or more files and use <strong>Update Progress</strong> to rebuild the Finishers list and the Progress tab
         below together. It needs at least one <strong>Finish</strong> location file (typically one bibs file and one time
         file, paired up by split number, though a single file with both is fine too) — this part is unchanged from before

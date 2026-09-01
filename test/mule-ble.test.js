@@ -16,6 +16,7 @@ import {
   isBluetoothAvailable, isBleLoggingEnabled, setBleLoggingEnabled, isConnected,
   getConnectedDeviceName, getRecommendedPollIntervalMs, disconnectPhone, onDisconnect,
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
+  getRaceStaleAfterDays, setRaceStaleAfterDays,
   getKnownDevices, connectToPhone, reconnectToKnownDevice, pullFromConnectedPhone, abandonConnection,
 } from '../js/mule-ble.js';
 
@@ -50,6 +51,23 @@ describe('mule-ble.js:isBleLoggingEnabled / setBleLoggingEnabled', () => {
     assert.equal(isBleLoggingEnabled(), true);
     setBleLoggingEnabled(false);
     assert.equal(isBleLoggingEnabled(), false);
+  });
+});
+
+describe('mule-ble.js:getRaceStaleAfterDays / setRaceStaleAfterDays', () => {
+  it('defaults to 2 days (matching racemaster-mobile) and round-trips through localStorage', () => {
+    assert.equal(getRaceStaleAfterDays(), 2);
+    setRaceStaleAfterDays(5);
+    assert.equal(getRaceStaleAfterDays(), 5);
+    setRaceStaleAfterDays(1);
+    assert.equal(getRaceStaleAfterDays(), 1);
+  });
+
+  it('falls back to the default for a corrupt/invalid stored value rather than throwing', () => {
+    localStorage.setItem('racemaster-race-stale-after-days', 'not-a-number');
+    assert.equal(getRaceStaleAfterDays(), 2);
+    localStorage.setItem('racemaster-race-stale-after-days', '0');
+    assert.equal(getRaceStaleAfterDays(), 2);
   });
 });
 
@@ -503,6 +521,70 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(results.length, 1);
     assert.equal(results[0].raceLabel, 'relayed-race');
     assert.equal(results[0].deviceId, 'origin1');
+    disconnectPhone();
+  });
+
+  // "…-YY-MM-DD" today's date — guaranteed never stale regardless of when this test itself runs,
+  // same trailing-date convention every raceLabel in this protocol uses (see raceLabelAgeDays's
+  // own doc in mule-ble.js).
+  function todayRaceLabelSuffix() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  it("skips pulling its own race when the raceLabel's own date is older than the configured stale threshold", async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    setRaceStaleAfterDays(2);
+    // 2020-01-01 — many years stale under any sane threshold.
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race-20-01-01', relayCount: 0 };
+    let requestCount = 0;
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => { requestCount++; return []; } });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    const results = await pullFromConnectedPhone();
+
+    assert.equal(requestCount, 0); // no pull request sent at all — skipped before ever asking
+    assert.deepEqual(results, []);
+    disconnectPhone();
+  });
+
+  it('skips a stale relayed race but still pulls a fresh one from the same manifest', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    setRaceStaleAfterDays(2);
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 2 };
+    const relayManifest = [
+      { originDeviceId: 'stale-origin', originRaceLabel: 'old-race-20-01-01', originDeviceName: 'Stale Phone' },
+      { originDeviceId: 'fresh-origin', originRaceLabel: `fresh-race-${todayRaceLabelSuffix()}`, originDeviceName: 'Fresh Phone' },
+    ];
+    let pullRequestCount = 0;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => {
+        if (req.requestRelayManifest) return relayManifest;
+        pullRequestCount++;
+        return [{ recordUuid: 'r1', action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }];
+      },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t); // relay-manifest fetch's own settle delay
+    await settleOnePull(t); // the one non-stale relayed race's own settle delay
+    const results = await pullPromise;
+
+    assert.equal(pullRequestCount, 1); // only the fresh race was ever actually requested
+    assert.equal(results.length, 1);
+    assert.equal(results[0].raceLabel, `fresh-race-${todayRaceLabelSuffix()}`);
+    assert.equal(results[0].deviceId, 'fresh-origin');
     disconnectPhone();
   });
 

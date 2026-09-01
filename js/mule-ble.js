@@ -101,6 +101,53 @@ function bleLog(...args)   { if (isBleLoggingEnabled()) console.log(`[${ts()}]`,
 function bleWarn(...args)  { if (isBleLoggingEnabled()) console.warn(`[${ts()}]`, ...args); }
 function bleError(...args) { console.error(`[${ts()}]`, ...args); }
 
+// ---- Stale-race threshold (default 2 days, persisted) ----
+//
+// Shadows racemaster-mobile's own facility (SettingsRepository.raceStaleAfterDays, default
+// DEFAULT_RACE_STALE_AFTER_DAYS = 2, UI label "Skip races older than (days)") — same purpose
+// (don't keep bothering with a race nobody's actually still running), same default, but a
+// necessarily different enforcement point: the phone's own version only ever filters what it
+// *advertises* to a connecting Mule (PeripheralSyncService.freshRelayManifest — a stale relay
+// source is dropped from the manifest, but the phone's own actively-recorded race is never
+// filtered, and an explicitly-requested pull is served regardless of staleness) — there's no
+// Kotlin precedent for a *puller* deciding not to ask in the first place, since the real app
+// never had to be one. pullFromConnectedPhone() below is what actually applies this, skipping a
+// leg (its own race, or a relay entry) entirely rather than requesting and discarding it.
+const RACE_STALE_AFTER_DAYS_KEY = 'racemaster-race-stale-after-days';
+const DEFAULT_RACE_STALE_AFTER_DAYS = 2;
+
+export function getRaceStaleAfterDays() {
+  const n = parseInt(localStorage.getItem(RACE_STALE_AFTER_DAYS_KEY), 10);
+  return Number.isFinite(n) && n >= 1 ? n : DEFAULT_RACE_STALE_AFTER_DAYS;
+}
+export function setRaceStaleAfterDays(days) {
+  try { localStorage.setItem(RACE_STALE_AFTER_DAYS_KEY, String(days)); } catch { /* storage unavailable — best effort only */ }
+}
+
+// raceLabel's own trailing "-YY-MM-DD" (mirrors server/mobile.js's parseRaceLabelDate — see its
+// own doc — duplicated rather than imported since mule-ble.js has no existing dependency on
+// either the server or view layers and this is the only date-related bit it needs from one) is
+// used as the "how old is this race" signal, standing in for racemaster-mobile's own
+// last-*activity*-timestamp ("touched") tracking: this file has no equivalent local history to
+// draw one from for a race it may never have pulled before, but every real raceLabel this
+// protocol produces already ends with the date it was created on, which is a reasonable proxy in
+// normal use (one-off/per-event race labels, not a long-lived label reused across many days).
+// Returns null (never stale, same as a null "touched" timestamp on the phone side) for a label
+// with no such suffix.
+function raceLabelAgeDays(raceLabel) {
+  const m = /-(\d{2})-(\d{2})-(\d{2})$/.exec(raceLabel || '');
+  if (!m) return null;
+  const [, yy, mm, dd] = m;
+  const raceDate = new Date(2000 + Number(yy), Number(mm) - 1, Number(dd));
+  if (isNaN(raceDate.getTime())) return null;
+  return (Date.now() - raceDate.getTime()) / (24 * 60 * 60 * 1000);
+}
+
+function isRaceLabelStale(raceLabel) {
+  const ageDays = raceLabelAgeDays(raceLabel);
+  return ageDays !== null && ageDays >= getRaceStaleAfterDays();
+}
+
 // Mirrors server.js's own sanitiseName() exactly. A phone reports its raceLabel/deviceName
 // as free text (whatever the operator typed) — server.js re-sanitises whatever it receives on
 // every push regardless, so the race/device this pull is about must be identified the same way
@@ -188,7 +235,8 @@ export function onDisconnect(callback) {
 function forgetConnection() {
   const wasDeliberate = deliberateDisconnect;
   deliberateDisconnect = false;
-  bleLog(`[mule-ble] gattserverdisconnected fired (wasDeliberate=${wasDeliberate})`);
+  const name = getConnectedDeviceName() || 'unknown device'; // captured before connectedInfo is cleared below
+  bleLog(`[mule-ble] gattserverdisconnected fired for "${name}" (wasDeliberate=${wasDeliberate})`);
   connectedDevice = null;
   connectedInfo = null;
   cachedRelayEntries = null;
@@ -203,7 +251,7 @@ function forgetConnection() {
 // reasons; logging every call as "manual disconnect requested" regardless made an automatic
 // abandon read as if the operator had clicked something they hadn't.
 export function disconnectPhone(reason = 'manual disconnect requested') {
-  bleLog(`[mule-ble] ===== ${reason} =====`);
+  bleLog(`[mule-ble] ===== ${reason} for "${getConnectedDeviceName() || 'unknown device'}" =====`);
   if (!connectedDevice?.gatt?.connected) return; // nothing live to disconnect
   // Only set once we know .gatt.disconnect() below will actually fire — forgetConnection() is
   // what resets this back to false, so setting it with no real event ever coming (e.g. called
@@ -227,7 +275,7 @@ export function disconnectPhone(reason = 'manual disconnect requested') {
 // while nominally still connected is, in the field, most often the same "mule briefly out of
 // range" case that doc already covers, not confirmation the remembered identity has gone stale.
 export function abandonConnection() {
-  bleWarn('[mule-ble] abandoning a persistently failing connection — leaving reconnection to a fresh, manual Connect to Phone…');
+  bleWarn(`[mule-ble] abandoning a persistently failing connection to "${getConnectedDeviceName() || 'unknown device'}" — leaving reconnection to a fresh, manual Connect to Phone…`);
   disconnectPhone('abandoning a persistently failing connection');
 }
 
@@ -380,14 +428,17 @@ function toStoredLine(r) {
 // milliseconds (their own next GATT call threw immediately) while one leg that happened to have
 // already reached this wait sat blocking for the full 15s regardless — this same leg would fail
 // just as fast as the others once wired up to react to the same event they're reacting to.
-function collectDataStream(dataChar, device) {
+// [label] identifies whose data this leg is — the connected phone's own name for its own race, or
+// a relay's origin device name for a relayed one (see pullFromConnectedPhone's own call sites) —
+// so every line below is self-identifying in a log spanning several legs/devices in one pull.
+function collectDataStream(dataChar, device, label) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let chunkCount = 0;
     const timer = setTimeout(() => {
       cleanup();
       const gotBytes = chunks.reduce((n, c) => n + c.length, 0);
-      bleError(`[mule-ble] pull timed out after ${PULL_TIMEOUT_MS}ms — received ${chunkCount} chunk(s), ${gotBytes} byte(s) before giving up`);
+      bleError(`[mule-ble] pull timed out after ${PULL_TIMEOUT_MS}ms for "${label}" — received ${chunkCount} chunk(s), ${gotBytes} byte(s) before giving up`);
       reject(new Error('No data arrived from the phone — it may not have a race currently open (Bluetooth sync only serves an active race), or may have gone out of range.'));
     }, PULL_TIMEOUT_MS);
 
@@ -399,7 +450,7 @@ function collectDataStream(dataChar, device) {
 
     function onDisconnected() {
       cleanup();
-      bleWarn('[mule-ble] connection dropped while waiting on this leg\'s data stream — giving up immediately rather than waiting out the full pull timeout');
+      bleWarn(`[mule-ble] connection dropped while waiting on "${label}"'s data stream — giving up immediately rather than waiting out the full pull timeout`);
       reject(new Error('GATT Server is disconnected. Cannot perform GATT operations.'));
     }
 
@@ -413,7 +464,7 @@ function collectDataStream(dataChar, device) {
         try {
           const text = new TextDecoder('utf-8').decode(total);
           const records = text ? JSON.parse(text) : [];
-          bleLog(`[mule-ble] pull complete — ${chunkCount} chunk(s), ${total.length} byte(s), ${records.length} record(s)`);
+          bleLog(`[mule-ble] pull complete for "${label}" — ${chunkCount} chunk(s), ${total.length} byte(s), ${records.length} record(s)`);
           resolve(records);
         } catch (e) { reject(e); }
         return;
@@ -439,6 +490,10 @@ function collectDataStream(dataChar, device) {
 const ACK_BATCH_SIZE = 10;
 
 async function sendSinkAck(service, recordUuids) {
+  // Aggregated across every leg this pull touched (own race + however many relay origins), so
+  // there's no single per-leg label to echo the way the pull functions below have — but it's
+  // always sent to whichever phone this connection actually is, which is exactly as useful here.
+  const name = getConnectedDeviceName() || 'unknown device';
   const ackChar = await service.getCharacteristic(ACK_CHAR_UUID);
   for (let i = 0; i < recordUuids.length; i += ACK_BATCH_SIZE) {
     const batch = recordUuids.slice(i, i + ACK_BATCH_SIZE);
@@ -449,13 +504,13 @@ async function sendSinkAck(service, recordUuids) {
         deviceName: 'RaceMaster (web)',
         isSink: true,
       }));
-      bleLog(`[mule-ble] sent sink ack for ${batch.length} record(s)`);
+      bleLog(`[mule-ble] sent sink ack to "${name}" for ${batch.length} record(s)`);
     } catch (e) {
       // Previously swallowed with zero logging — non-fatal to the pull itself (the caller
       // already has the data either way), but a silently-failing ack write here is exactly
       // what "records reach the web app fine but never turn green on the phone" looks like,
       // so this needs to be visible rather than invisible-by-design.
-      bleError(`[mule-ble] sink ack write failed for batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
+      bleError(`[mule-ble] sink ack write failed for "${name}", batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
     }
   }
 }
@@ -479,8 +534,10 @@ function computeRequestKey(originDeviceId, originRaceLabel, sinceLineNumber) {
 // Writes [pullRequest] to CONTROL and returns whatever JSON array streams back over DATA once
 // reassembled — shared by pullOne (SyncRecord[] shape) and pullRelayManifestEntries
 // (RelayManifestEntry[] shape) below, which differ only in what shape the resulting array
-// decodes as and what (if anything) each maps it into afterward.
-async function pullChunkedArray(service, pullRequest) {
+// decodes as and what (if anything) each maps it into afterward. [label] is purely for logging —
+// see collectDataStream's own doc — threaded through from whichever of those two callers knows
+// whose data this actually is.
+async function pullChunkedArray(service, pullRequest, label) {
   // Captured now, before anything else in here awaits — connectedDevice is what
   // collectDataStream listens on for an early 'gattserverdisconnected' (see its own doc); by the
   // time a disconnect actually happens, forgetConnection() has already nulled the module-level
@@ -488,7 +545,7 @@ async function pullChunkedArray(service, pullRequest) {
   const device = connectedDevice;
   const dataChar    = await service.getCharacteristic(DATA_CHAR_UUID);
   const controlChar = await service.getCharacteristic(CONTROL_CHAR_UUID);
-  const streamPromise = collectDataStream(dataChar, device);
+  const streamPromise = collectDataStream(dataChar, device, label);
   try {
     await dataChar.startNotifications();
     await new Promise(r => setTimeout(r, NOTIFY_SETTLE_MS));
@@ -503,7 +560,7 @@ async function pullChunkedArray(service, pullRequest) {
     // phone simply had no fresh data to push, even while this file's own log showed it polling
     // fine every few seconds.
     const requestWithIdentity = { ...pullRequest, isSink: true };
-    bleLog('[mule-ble] sending pull request', requestWithIdentity);
+    bleLog(`[mule-ble] sending pull request for "${label}"`, requestWithIdentity);
     await controlChar.writeValueWithResponse(encodeJson(requestWithIdentity));
   } catch (e) {
     // startNotifications()/writeValueWithResponse() failing (e.g. the connection just dropped)
@@ -523,8 +580,8 @@ async function pullChunkedArray(service, pullRequest) {
   }
 }
 
-async function pullOne(service, pullRequest) {
-  const records = await pullChunkedArray(service, pullRequest);
+async function pullOne(service, pullRequest, label) {
+  const records = await pullChunkedArray(service, pullRequest, label);
   return records.map(toStoredLine);
 }
 
@@ -535,9 +592,11 @@ async function pullOne(service, pullRequest) {
 // devices are being relayed, and DeviceInfo is a single read bounded by
 // ATT_MAX_ATTRIBUTE_VALUE_LENGTH). Only worth calling when DeviceInfo.relayCount was > 0 — see
 // pullFromConnectedPhone below. sinceLineNumber is required by PullRequest's own wire shape but
-// ignored by the phone for this request type; 0 is sent purely to satisfy that.
-async function pullRelayManifestEntries(service) {
-  return pullChunkedArray(service, { sinceLineNumber: 0, requestRelayManifest: true });
+// ignored by the phone for this request type; 0 is sent purely to satisfy that. [label] is the
+// connected phone's own name — the manifest itself is always fetched from the phone we're talking
+// to, never a relayed origin.
+async function pullRelayManifestEntries(service, label) {
+  return pullChunkedArray(service, { sinceLineNumber: 0, requestRelayManifest: true }, label);
 }
 
 // What cachedRelayEntries (see its own doc) is keyed on — prefers relayManifestVersion (see
@@ -921,7 +980,7 @@ async function connectAndVerify(device, onProgress = () => {}) {
       // operation.
       if (attempt > 1) {
         onProgress(`Reconnecting to "${label}"… (attempt ${attempt}/${DEVICE_INFO_ATTEMPTS})`);
-        bleWarn(`[mule-ble] reconnecting before DeviceInfo attempt ${attempt}/${DEVICE_INFO_ATTEMPTS}`);
+        bleWarn(`[mule-ble] reconnecting before DeviceInfo attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} for "${label}"`);
         if (device.gatt.connected) {
           // Marked deliberate first, same as disconnectPhone() itself (see its own doc on why
           // this order matters) — this is our own cleanup disconnect, not a real drop, and a
@@ -970,10 +1029,10 @@ async function connectAndVerify(device, onProgress = () => {}) {
         // failure it is, rather than as a routine bleWarn retry note *and* duplicated again by
         // the generic "gave up" bleError after the loop (see the `attemptsMade`-gated skip
         // there) — the same underlying error doesn't need to appear in the console twice.
-        bleError(`[mule-ble] DeviceInfo read failed permanently on attempt ${attempt} (non-retryable)`, e);
+        bleError(`[mule-ble] DeviceInfo read failed permanently on attempt ${attempt} for "${label}" (non-retryable)`, e);
         break;
       }
-      bleWarn(`[mule-ble] DeviceInfo read attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} failed`, e);
+      bleWarn(`[mule-ble] DeviceInfo read attempt ${attempt}/${DEVICE_INFO_ATTEMPTS} failed for "${label}"`, e);
     }
     if (attempt < DEVICE_INFO_ATTEMPTS) await new Promise(r => setTimeout(r, DEVICE_INFO_RETRY_DELAY_MS));
   }
@@ -999,7 +1058,7 @@ async function connectAndVerify(device, onProgress = () => {}) {
     // inside the loop above — skipped here so it isn't reported a second time under this
     // generic "gave up" wording too.
     if (!lastError?.nonRetryable) {
-      bleError(`[mule-ble] gave up on DeviceInfo after ${attemptsMade} attempt${attemptsMade === 1 ? '' : 's'}`, lastError);
+      bleError(`[mule-ble] gave up on DeviceInfo after ${attemptsMade} attempt${attemptsMade === 1 ? '' : 's'} for "${label}"`, lastError);
     }
     throw new Error(lastError && lastError.nonRetryable
       ? lastError.message
@@ -1096,7 +1155,7 @@ export async function pullFromConnectedPhone() {
     // own doc above) while this very first GATT call already fails, and without this it
     // propagated straight to the caller with nothing logged here at all, making a run of failed
     // auto-pull ticks look like they'd done nothing rather than shown WHY.
-    bleError('[mule-ble] pull failed: could not get the primary service (connection may be dead despite isConnected() still reading true)', e);
+    bleError(`[mule-ble] pull failed for "${getConnectedDeviceName() || 'unknown device'}": could not get the primary service (connection may be dead despite isConnected() still reading true)`, e);
     throw e;
   }
   // Re-read DeviceInfo fresh on every call rather than trusting connectedInfo (the connect-time
@@ -1128,10 +1187,15 @@ export async function pullFromConnectedPhone() {
     // Logged explicitly here for the same reason as the getPrimaryService catch above — this
     // has no try/catch of its own further out to fall into and log via, so without this the
     // failure would propagate silently as far as this file's own diagnostic trail is concerned.
-    bleError('[mule-ble] pull failed: could not refresh DeviceInfo (connection may be dead despite isConnected() still reading true)', e);
+    bleError(`[mule-ble] pull failed for "${getConnectedDeviceName() || 'unknown device'}": could not refresh DeviceInfo (connection may be dead despite isConnected() still reading true)`, e);
     throw e;
   }
   connectedInfo = deviceInfo;
+  // Every device-specific log line for the rest of this pull uses this — the connected phone's
+  // own name for its own race and the relay-manifest fetch, an individual relay's own origin name
+  // for each relayed leg (see the loop below) — so a log spanning several legs/devices stays
+  // self-identifying line by line.
+  const connectedName = deviceInfo.deviceName || deviceInfo.deviceId || 'unknown device';
 
   // Each leg (this device's own race, plus one per relay entry) is pulled independently —
   // one failing (a relay entry the phone can no longer actually serve, a mid-transfer BLE
@@ -1149,7 +1213,14 @@ export async function pullFromConnectedPhone() {
   // data lives) ever get a turn. Skipping it here isn't just an optimization: without it, a
   // slow/impatient operator could give up during that pointless wait and never see the
   // relayed data at all.
-  if (deviceInfo.raceLabel) {
+  if (deviceInfo.raceLabel && isRaceLabelStale(deviceInfo.raceLabel)) {
+    // See getRaceStaleAfterDays()'s own doc — this device's own race is older than the
+    // configured threshold, so there's nothing worth spending a round trip on: the operator has
+    // moved on, and racemaster-mobile's own equivalent facility exists for exactly this "stop
+    // bothering with a dead race" reason, even though its own version never actually applies this
+    // check to a phone's own race (only to what it relays — see that doc).
+    bleLog(`[mule-ble] skipping own race "${deviceInfo.raceLabel}" for "${connectedName}" — older than the configured stale threshold (${getRaceStaleAfterDays()}d)`);
+  } else if (deviceInfo.raceLabel) {
     // Sanitised for the cursor key and the result we hand back — never for the wire request
     // itself, but this leg's own PullRequest carries no raceLabel at all (see pullOne below), so
     // there's nothing here that needs to stay raw.
@@ -1160,15 +1231,15 @@ export async function pullFromConnectedPhone() {
       const ownLines = await pullOne(service, {
         sinceLineNumber: since,
         requestKey: computeRequestKey(null, null, since),
-      });
+      }, connectedName);
       advanceLastPulledLineNumber(deviceInfo.deviceId, raceLabel, ownLines);
       results.push({ raceLabel, deviceName, deviceId: deviceInfo.deviceId, lines: ownLines });
     } catch (e) {
-      bleError('[mule-ble] pull failed for own race', raceLabel, e);
+      bleError(`[mule-ble] pull failed for own race "${raceLabel}" for "${connectedName}"`, e);
       errors.push(e);
     }
   } else {
-    bleLog('[mule-ble] device has no race of its own (pure Mule) — skipping straight to relay entries');
+    bleLog(`[mule-ble] "${connectedName}" has no race of its own (pure Mule) — skipping straight to relay entries`);
   }
 
   // Only bothered with at all when relayCount says there's something to fetch, so a leaf
@@ -1189,11 +1260,11 @@ export async function pullFromConnectedPhone() {
       relayEntries = cachedRelayEntries;
     } else {
       try {
-        relayEntries = await pullRelayManifestEntries(service);
+        relayEntries = await pullRelayManifestEntries(service, connectedName);
         cachedRelayEntries = relayEntries;
         cachedRelayManifestKey = cacheKey;
       } catch (e) {
-        bleError('[mule-ble] failed to fetch relay manifest', e);
+        bleError(`[mule-ble] failed to fetch relay manifest from "${connectedName}"`, e);
         errors.push(e);
       }
     }
@@ -1203,6 +1274,21 @@ export async function pullFromConnectedPhone() {
   }
 
   for (const relay of relayEntries) {
+    // The relayed race's own origin device name, not the connected phone's (connectedName) —
+    // this identifies whose data a given leg actually is, which matters here specifically since
+    // one connected Mule can be relaying several genuinely different origin devices in the same
+    // pull; every message below names the one this particular leg is about.
+    const relayDeviceLabel = relay.originDeviceName || relay.originDeviceId || 'unknown device';
+    // See getRaceStaleAfterDays()'s own doc — unlike the own-race leg above, racemaster-mobile's
+    // own equivalent facility DOES already filter a stale relay source out of the manifest on the
+    // phone's own side (PeripheralSyncService.freshRelayManifest), so this is normally redundant
+    // in practice against an up-to-date phone build; kept as a real check anyway (not just relying
+    // on the phone's own filtering) so an older phone build, or a different setting on each side,
+    // still gets the web app's own threshold honoured.
+    if (isRaceLabelStale(relay.originRaceLabel)) {
+      bleLog(`[mule-ble] skipping relayed race "${relay.originRaceLabel}" for "${relayDeviceLabel}" (relayed via "${connectedName}") — older than the configured stale threshold (${getRaceStaleAfterDays()}d)`);
+      continue;
+    }
     // originDeviceId/originRaceLabel go out on the wire below exactly as the phone itself
     // reported them — that's how it identifies which relayed race to stream back, and must
     // match its own internal records byte for byte. Only the sanitised copies (raceLabel/
@@ -1216,11 +1302,11 @@ export async function pullFromConnectedPhone() {
         originDeviceId: relay.originDeviceId,
         originRaceLabel: relay.originRaceLabel,
         requestKey: computeRequestKey(relay.originDeviceId, relay.originRaceLabel, since),
-      });
+      }, relayDeviceLabel);
       advanceLastPulledLineNumber(relay.originDeviceId, raceLabel, lines);
       results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, lines });
     } catch (e) {
-      bleError('[mule-ble] pull failed for relayed race', raceLabel, e);
+      bleError(`[mule-ble] pull failed for relayed race "${raceLabel}" for "${relayDeviceLabel}" (relayed via "${connectedName}")`, e);
       errors.push(e);
     }
   }

@@ -1225,7 +1225,12 @@
         <button class="btn" id="btn-connect-phone">Connect to Phone…</button>
         <span id="mobile-files-poll-interval" class="entry-status" hidden></span>
         <span id="mobile-files-poll-status" class="entry-status" hidden></span>
-        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto"><input type="checkbox" id="btn-ble-logging"> Bluetooth logging</label>
+        <label style="display:inline-flex;align-items:center;gap:4px;margin-left:auto" title="Skip races older than this many days — no BLE pull request is even sent for them. Shadows the same 'Skip races older than (days)' facility in the RaceMaster Mobile app.">
+          Skip races older than
+          <input type="number" id="mobile-files-stale-days" min="1" max="999" style="width:3.5em">
+          days
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="btn-ble-logging"> Bluetooth logging</label>
       </div>
       <div class="tab-bar" id="mobile-files-tab-bar">
         <button class="active" data-mf-tab="devices">Devices</button>

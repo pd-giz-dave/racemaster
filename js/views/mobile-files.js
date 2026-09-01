@@ -12,6 +12,7 @@ import {
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers, getRecommendedPollIntervalMs,
   isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
   abandonConnection, forgetKnownDevice, getConnectedDeviceInfo,
+  getRaceStaleAfterDays, setRaceStaleAfterDays,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
 import { entryInfo } from '../safety.js';
@@ -1145,7 +1146,7 @@ let pullInProgress = false;
 function scheduleNextAutoPull(baseIntervalMs) {
   const jitteredMs = baseIntervalMs * (1 + (Math.random() * 2 - 1) * JITTER_FRACTION);
   autoPullTimer = setTimeout(async () => {
-    debugLog('[mobile-files] auto-pull tick');
+    debugLog(`[mobile-files] auto-pull tick for "${getConnectedDeviceName() || 'unknown device'}"`);
     // Awaited, not fire-and-forget — a pull can run long (several relay legs pulled
     // sequentially, each its own GATT round trip, occasionally hitting the 15s pull timeout),
     // easily longer than this loop's own ~10s base interval. Scheduling the next tick on a fixed
@@ -1166,7 +1167,7 @@ function scheduleNextAutoPull(baseIntervalMs) {
 function startAutoPull() {
   stopAutoPull();
   const intervalMs = getRecommendedPollIntervalMs();
-  debugLog(`[mobile-files] starting auto-pull every ~${intervalMs}ms (±${JITTER_FRACTION * 100}% jitter)`);
+  debugLog(`[mobile-files] starting auto-pull for "${getConnectedDeviceName() || 'unknown device'}" every ~${intervalMs}ms (±${JITTER_FRACTION * 100}% jitter)`);
   scheduleNextAutoPull(intervalMs);
 }
 
@@ -1251,7 +1252,7 @@ function onBleDisconnected(wasDeliberate) {
   consecutivePullFailures = 0;
   updateConnectButtonLabel();
   if (wasDeliberate) {
-    debugLog('[mobile-files] disconnected (expected)');
+    debugLog(`[mobile-files] disconnected (expected) for "${lastConnectedDeviceName || 'unknown device'}"`);
   } else if (connectAttemptInProgress) {
     // A drop right after gatt.connect() resolves but before DeviceInfo verification settles is
     // an expected part of connectAndVerify's own retry loop (see its own doc on the
@@ -1265,6 +1266,12 @@ function onBleDisconnected(wasDeliberate) {
     // seconds later. Showing it here left a fully successful reconnect looking stuck on "Lost
     // Bluetooth connection" — confirmed in the field as exactly this: a reconnect that plainly
     // worked (pulls succeeding right after) with a stale failure banner still sitting over it.
+    // No device name available here worth trusting: this fires mid-reconnect, before
+    // mule-ble.js's own connectAndVerify has ever assigned connectedInfo for *this* attempt, so
+    // lastConnectedDeviceName (see above) would only echo the *previous* session's name, which
+    // could be flat wrong for a fresh picker pick of a different phone. mule-ble.js's own
+    // "reconnecting before DeviceInfo attempt…" line already names the right device for this
+    // exact moment — this one deliberately doesn't guess.
     debugLog('[mobile-files] disconnected mid-connect-attempt (expected — connectAndVerify is retrying)');
   } else {
     // Never gated behind the logging toggle — same reasoning as mule-ble.js's own bleError: a
@@ -1299,15 +1306,17 @@ function refreshDevicesTableFromCache() {
 // click always reports, even when the result is empty, so the operator gets confirmation the
 // action ran.
 async function pullAndSyncConnectedPhone({ silent = false } = {}) {
-  debugLog(`[mobile-files] pull requested (silent=${silent})`);
-  if (pullInProgress) { debugLog('[mobile-files] pull skipped — a pull is already in progress'); return; }
+  debugLog(`[mobile-files] pull requested (silent=${silent}) for "${getConnectedDeviceName() || 'unknown device'}"`);
+  if (pullInProgress) { debugLog(`[mobile-files] pull skipped — a pull is already in progress for "${getConnectedDeviceName() || 'unknown device'}"`); return; }
   if (!isConnected()) {
     // Real, reproducible case: the phone can drop the GATT link while sitting idle (e.g.
     // Android backgrounding it while the operator is still looking at the "Connect to X?"
     // confirm dialog below) — onDisconnect's own listener already reverted the button, but
     // without this the caller was left showing "Connected… pulling history…" forever with no
     // further feedback, since this returned with nothing at all.
-    debugLog('[mobile-files] pull skipped — not connected');
+    // getConnectedDeviceName() is already null now the link's gone — lastConnectedDeviceName
+    // (see its own doc) is what still names the phone that was just lost.
+    debugLog(`[mobile-files] pull skipped — not connected to "${lastConnectedDeviceName || 'unknown device'}"`);
     if (!silent) showStatus('Lost the Bluetooth connection — click Connect to Phone… again.', true);
     return;
   }
@@ -1595,6 +1604,19 @@ export function wireMobileFiles() {
   if (loggingCb) {
     loggingCb.checked = isBleLoggingEnabled();
     loggingCb.addEventListener('change', () => setBleLoggingEnabled(loggingCb.checked));
+  }
+  const staleDaysInput = document.getElementById('mobile-files-stale-days');
+  if (staleDaysInput) {
+    staleDaysInput.value = String(getRaceStaleAfterDays());
+    // Applied on every real pull from here on (see mule-ble.js's own isRaceLabelStale) — no
+    // separate Save step needed, unlike racemaster-mobile's own version of this control, since
+    // there's no risk here of a half-typed number being read mid-keystroke: 'change' only fires
+    // once the field is committed (blur, Enter, or the spinner arrows), not on every keypress.
+    staleDaysInput.addEventListener('change', () => {
+      const days = parseInt(staleDaysInput.value, 10);
+      if (Number.isFinite(days) && days >= 1) setRaceStaleAfterDays(days);
+      staleDaysInput.value = String(getRaceStaleAfterDays()); // reflect back whatever actually got saved (rejects e.g. 0, blank, negative)
+    });
   }
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
