@@ -195,6 +195,20 @@ let lastDisconnectAt = 0;
 let cachedRelayEntries = null;    // RelayManifestEntry[] | null
 let cachedRelayManifestKey = null; // the value relayManifestCacheKey() returned when the cache above was fetched
 
+// True only for the brief window between pullFromConnectedPhone()'s own withGattRecovery()
+// issuing its recovery disconnect and the resulting reconnect actually completing (see
+// withGattRecovery's own doc). That disconnect still fires the exact same 'gattserverdisconnected'
+// event a genuine drop does — Web Bluetooth gives no other way to end a link — so a caller
+// registered via onDisconnect() needs this to tell "just an internal mid-pull recovery, the
+// session is continuing" apart from "the connection actually, meaningfully ended". mobile-files.js's
+// own onBleDisconnected checks this first and skips its own stopAutoPull()/UI-reset entirely when
+// it's set, leaving the recovery to finish quietly rather than tearing down the whole session for
+// what both sides already expect to be a few-second blip.
+let recoveringGattOperation = false;
+export function isRecoveringGattOperation() {
+  return recoveringGattOperation;
+}
+
 export function isConnected() {
   return !!connectedDevice?.gatt?.connected;
 }
@@ -1150,7 +1164,79 @@ export async function reconnectToKnownDevice(device, onProgress) {
 // disconnectPhone() explicitly once done.
 export async function pullFromConnectedPhone() {
   if (!isConnected()) throw new Error('Not connected to a phone.');
+  // Captured now, before anything else in here awaits — same reasoning as pullChunkedArray's own
+  // identical capture (see its own doc): forgetConnection() nulls the module-level connectedDevice
+  // out the moment any disconnect event fires, including withGattRecovery's own recovery
+  // disconnect below, so reconnecting needs a reference that survives that.
+  const device = connectedDevice;
   let service;
+
+  // Runs [fn] and, on failure, forces a disconnect+reconnect (respecting RECONNECT_COOLDOWN_MS —
+  // see waitOutReconnectCooldown's own doc) and retries [fn] exactly once more before giving up.
+  // Mirrors connectAndVerify's own DeviceInfo retry loop, which already relies on exactly this to
+  // recover from the same underlying problem during the initial connect (see its own doc) — but
+  // until now nothing did the equivalent once actually connected. Confirmed in the field
+  // (2026-09-02): a single relay leg's pull genuinely timing out left every later GATT call on
+  // that connection — the next leg in the same tick, and the next two auto-pull ticks' own
+  // DeviceInfo refresh — failing instantly with a generic `NotSupportedError: GATT operation
+  // failed for unknown reason`, cascading into a full abandonConnection() for what started as one
+  // stuck operation on an otherwise perfectly healthy link (6500+ prior polls had succeeded). A
+  // second field log the same day caught this same instant collision hitting the top-of-tick
+  // getPrimaryService/DeviceInfo-refresh calls directly (not just as poisoning from a leg above),
+  // so both are wrapped here too now, not just the three legs below. Web Bluetooth allows only
+  // one GATT operation in flight per device with no way to cancel one still pending, so tearing
+  // the link down and rebuilding it — the same recovery this file already trusts elsewhere — is
+  // the closest thing to actually clearing it.
+  //
+  // Sets recoveringGattOperation (see its own doc) around the whole recovery so mobile-files.js's
+  // onBleDisconnected can tell this apart from a real drop and leave auto-poll running rather than
+  // tearing the whole session down for what both sides already expect to be a few-second blip. The
+  // recovery disconnect still fires forgetConnection() like any other — nulling connectedDevice/
+  // connectedInfo — so both are explicitly restored once reconnected, or every caller downstream
+  // (isConnected(), getConnectedDeviceName(), this same function's own remaining legs) would keep
+  // reading "disconnected" despite the recovery having actually worked. `service` is re-fetched
+  // fresh too: the old one (and anything obtained from it) is tied to the connection session that
+  // just ended, and this function's own remaining legs all close over this same `service` binding,
+  // so refreshing it here is enough for them to keep working too, not just the call that failed.
+  async function withGattRecovery(label, fn) {
+    try {
+      return await fn();
+    } catch (e) {
+      // A genuine timeout (see withTimeout's own doc) already waited out its full budget with
+      // zero response, unlike the instant "GATT operation failed for unknown reason" collision
+      // this function exists to recover from — DEVICE_INFO_READ_TIMEOUT_MS's own doc treats that
+      // as the connection being genuinely dead, not a one-off collision a reconnect could clear,
+      // and mobile-files.js's own auto-pull loop relies on seeing it tagged .isTimeout to abandon
+      // immediately rather than retry (see "gives up on a stuck mid-pull DeviceInfo refresh..." in
+      // the test file). Retrying it here anyway would just delay that correct call by a further,
+      // pointless reconnect cycle.
+      if (e.isTimeout) throw e;
+      bleWarn(`[mule-ble] GATT call failed for "${label}" — reconnecting once before giving up`, e);
+      recoveringGattOperation = true;
+      const savedConnectedInfo = connectedInfo;
+      try {
+        if (device.gatt.connected) {
+          deliberateDisconnect = true;
+          device.gatt.disconnect();
+        } else {
+          lastDisconnectAt = Date.now();
+        }
+        await waitOutReconnectCooldown(label);
+        await withTimeout(
+          device.gatt.connect(), GATT_RECONNECT_TIMEOUT_MS,
+          `Timed out reconnecting to "${label}".`,
+        );
+        await new Promise(r => setTimeout(r, GATT_CONNECT_SETTLE_MS));
+        service = await device.gatt.getPrimaryService(SERVICE_UUID);
+        connectedDevice = device;
+        connectedInfo = savedConnectedInfo;
+      } finally {
+        recoveringGattOperation = false;
+      }
+      return await fn();
+    }
+  }
+
   try {
     // Raced against a timeout like every other bare GATT call in this file (see
     // DEVICE_INFO_READ_TIMEOUT_MS's own doc) — without it, a phone that's just gone out of range
@@ -1159,10 +1245,21 @@ export async function pullFromConnectedPhone() {
     // mobile-files.js's own auto-pull loop started awaiting each pull before scheduling the next
     // (see scheduleNextAutoPull's own doc) — an unbounded hang here now stalls the *entire* loop,
     // not just this one tick.
-    service = await withTimeout(
-      connectedDevice.gatt.getPrimaryService(SERVICE_UUID), DEVICE_INFO_READ_TIMEOUT_MS,
+    //
+    // Wrapped in withGattRecovery, like every leg below — originally left out on the theory that
+    // a failure here means this whole tick has nothing to work with yet, so recovering the
+    // connection down at the leg level would already keep it from ever poisoning a *later* tick's
+    // own copy of this same call. Confirmed wrong in the field (2026-09-02): this call can be hit
+    // directly by the exact same instant "GATT operation failed for unknown reason" collision,
+    // independent of any leg, and without recovery here it just burns ticks toward
+    // PERSISTENT_FAILURE_THRESHOLD (mobile-files.js) — that watchdog decides when to give up, it
+    // doesn't recover anything — extending the outage all the way to a full abandon+reconnect for
+    // what a single retry here would have cleared. withGattRecovery itself still leaves a genuine
+    // withTimeout hang (isTimeout-tagged) alone rather than retrying it — see its own doc.
+    service = await withGattRecovery(getConnectedDeviceName() || 'unknown device', () => withTimeout(
+      device.gatt.getPrimaryService(SERVICE_UUID), DEVICE_INFO_READ_TIMEOUT_MS,
       'Timed out getting the primary service — the connection may be dead despite isConnected() still reading true.',
-    );
+    ));
   } catch (e) {
     // Unlike every leg below, this one has no try/catch of its own to fall into and log via —
     // confirmed in the field as a real, silent gap: isConnected() can still read true (a link
@@ -1192,12 +1289,18 @@ export async function pullFromConnectedPhone() {
   // time just cascaded into the exact same "GATT Server is disconnected" failure on every relay
   // leg below, one after another, for nothing but log noise — the fallback never once actually
   // salvaged a leg the abort-early path would have missed.
+  //
+  // Wrapped in withGattRecovery, same as the getPrimaryService call just above — this is in fact
+  // the exact call the 2026-09-02 field evidence for wrapping that one was drawn from: "pull
+  // failed ... could not refresh DeviceInfo ... GATT operation failed for unknown reason", an
+  // instant collision, not a genuine DEVICE_INFO_READ_TIMEOUT_MS hang (that case stays
+  // unretried — see withGattRecovery's own isTimeout guard).
   let deviceInfo;
   try {
-    deviceInfo = await withTimeout(
+    deviceInfo = await withGattRecovery(getConnectedDeviceName() || 'unknown device', () => withTimeout(
       readDeviceInfoFromService(service), DEVICE_INFO_READ_TIMEOUT_MS,
       'Timed out refreshing DeviceInfo before pulling.',
-    );
+    ));
   } catch (e) {
     // Logged explicitly here for the same reason as the getPrimaryService catch above — this
     // has no try/catch of its own further out to fall into and log via, so without this the
@@ -1239,10 +1342,10 @@ export async function pullFromConnectedPhone() {
     const deviceName = sanitiseName(deviceInfo.deviceName || deviceInfo.deviceId) || 'unknown-device';
     const since = getLastPulledLineNumber(deviceInfo.deviceId, raceLabel);
     try {
-      const ownLines = await pullOne(service, {
+      const ownLines = await withGattRecovery(connectedName, () => pullOne(service, {
         sinceLineNumber: since,
         requestKey: computeRequestKey(null, null, since),
-      }, connectedName);
+      }, connectedName));
       advanceLastPulledLineNumber(deviceInfo.deviceId, raceLabel, ownLines);
       results.push({ raceLabel, deviceName, deviceId: deviceInfo.deviceId, lines: ownLines });
     } catch (e) {
@@ -1271,7 +1374,7 @@ export async function pullFromConnectedPhone() {
       relayEntries = cachedRelayEntries;
     } else {
       try {
-        relayEntries = await pullRelayManifestEntries(service, connectedName);
+        relayEntries = await withGattRecovery(connectedName, () => pullRelayManifestEntries(service, connectedName));
         cachedRelayEntries = relayEntries;
         cachedRelayManifestKey = cacheKey;
       } catch (e) {
@@ -1310,12 +1413,12 @@ export async function pullFromConnectedPhone() {
     const deviceName = sanitiseName(relay.originDeviceName || relay.originDeviceId) || 'unknown-device';
     const since = getLastPulledLineNumber(relay.originDeviceId, raceLabel);
     try {
-      const lines = await pullOne(service, {
+      const lines = await withGattRecovery(relayDeviceLabel, () => pullOne(service, {
         sinceLineNumber: since,
         originDeviceId: relay.originDeviceId,
         originRaceLabel: relay.originRaceLabel,
         requestKey: computeRequestKey(relay.originDeviceId, relay.originRaceLabel, since),
-      }, relayDeviceLabel);
+      }, relayDeviceLabel));
       advanceLastPulledLineNumber(relay.originDeviceId, raceLabel, lines);
       results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, lines });
     } catch (e) {

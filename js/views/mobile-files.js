@@ -12,7 +12,7 @@ import {
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers, getRecommendedPollIntervalMs,
   isBleLoggingEnabled, setBleLoggingEnabled, getKnownDevices, reconnectToKnownDevice,
   abandonConnection, forgetKnownDevice, getConnectedDeviceInfo,
-  getRaceStaleAfterDays, setRaceStaleAfterDays,
+  getRaceStaleAfterDays, setRaceStaleAfterDays, isRecoveringGattOperation,
 } from '../mule-ble.js';
 import { getEntry } from '../entries.js';
 import { entryInfo } from '../safety.js';
@@ -1122,7 +1122,7 @@ function updateConnectButtonLabel() {
       // silently zeroing) the instant it does. "Auto-polling every Ns" itself is dropped from
       // the wording here, though — that part genuinely isn't true any more.
       if (pollCount > 0) {
-        pollEl.textContent = `${pollCount} poll${pollCount === 1 ? '' : 's'} (disconnected)`;
+        pollEl.textContent = `${pollCount} poll${pollCount === 1 ? '' : 's'}`;
         pollEl.hidden = false;
       } else {
         pollEl.hidden = true;
@@ -1244,7 +1244,7 @@ function showBleLostBanner(name) {
   el.style.padding = '2px 6px';
   el.style.borderRadius = '3px';
   el.textContent = '';
-  el.append(` ⚠ Lost Bluetooth connection to "${name || 'phone'}" `); // text node — safe even though name is phone-reported, untrusted text
+  el.append(` ⚠ Lost connection to "${name || 'phone'}" `); // text node — safe even though name is phone-reported, untrusted text
   const dismissBtn = document.createElement('button');
   dismissBtn.type = 'button';
   dismissBtn.textContent = 'I know';
@@ -1266,6 +1266,14 @@ function hideBleLostBanner() {
 // (see onConnectButtonClick's disconnect branch) could leave stuck true past the one disconnect
 // it was meant for, misreporting a later, genuinely unexpected drop as expected too.
 function onBleDisconnected(wasDeliberate) {
+  // mule-ble.js's own pullFromConnectedPhone() is already reconnecting to clear a stuck GATT
+  // operation (see withGattRecovery's own doc) — this event is just that recovery's own
+  // disconnect, not the session actually ending, so there's nothing here to react to: no
+  // stopAutoPull(), no button/UI change, nothing. Checked first, before any of that runs.
+  if (isRecoveringGattOperation()) {
+    debugLog(`[mobile-files] disconnected mid-recovery (expected — mule-ble.js is reconnecting to clear a stuck GATT operation) for "${lastConnectedDeviceName || 'unknown device'}"`);
+    return;
+  }
   stopAutoPull();
   connectionIssue = false; // moot once the link has formally ended — don't let it linger into a later, genuinely fresh connection
   consecutivePullFailures = 0;

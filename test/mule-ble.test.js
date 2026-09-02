@@ -156,36 +156,64 @@ function makeFakeDataChar() {
 
 // deviceInfo: the DeviceInfo object this fake phone reports. recordsByRequest(pullRequest) is
 // called on every CONTROL write and must return the SyncRecord[] (or RelayManifestEntry[]) to
-// stream back for that specific request. failConnectsFrom (default: never), if given, makes the
-// Nth-and-every-later gatt.connect() call reject instead of succeeding — the 1-indexed call
-// count includes the very first connect, so failConnectsFrom: 2 means "connects fine once, then
-// every reconnect after that fails". failConnectsCount (default: 0), if given, makes exactly the
-// first N gatt.connect() calls reject with a transient-looking error before every call after
-// that succeeds normally — simulates the real, field-confirmed `NetworkError: Connection Error:
-// Connection attempt failed.` connectAndVerify's own GATT_CONNECT_ATTEMPTS retry loop exists to
-// recover from, as distinct from failConnectsFrom's permanent failure. failWrite (default:
-// false), if true, makes the CONTROL write itself reject every time — simulates the connection
-// dropping between a pull starting and its write landing. dropAfterConnect (default: never), if
-// given, fires a real 'gattserverdisconnected' event synchronously right after the Nth
-// gatt.connect() call succeeds — simulates a flaky link dropping again immediately mid-attempt.
-// failDeviceInfoReadsCount (default: 0), if given, makes exactly the first N DeviceInfo
-// characteristic reads reject, with device.gatt.connected deliberately left reading true
-// throughout (unlike dropAfterConnect) — simulates connectAndVerify's own DEVICE_INFO_READ_TIMEOUT_MS
-// giving up on a read that's still genuinely in flight underneath, the scenario its retry loop
-// must reconnect before retrying rather than reusing the same still-busy connection.
-// neverRespondToWrites (default: false), if true, makes the CONTROL write itself resolve
-// normally (unlike failWrite) but never queue the matching data-stream response — simulates a
-// pull that's genuinely in flight, purely waiting on incoming notifications, when the
-// connection then drops for real (see _simulateUnexpectedDisconnect). hangDeviceInfoReadsFrom
-// (default: never), if given, makes the Nth-and-every-later DeviceInfo characteristic read
-// return a promise that never settles at all, rather than rejecting — simulates a real GATT
-// call against a phone that's just gone out of range, which has no spec-guaranteed timeout of
-// its own and was observed hanging indefinitely before callers raced it against one.
-function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infinity, failConnectsCount = 0, failWrite = false, dropAfterConnect = null, failDeviceInfoReadsCount = 0, neverRespondToWrites = false, hangDeviceInfoReadsFrom = Infinity }) {
+// stream back for that specific request. Every other failure/latency knob lives under the single
+// [faults] object below, all optional — a test passes only the ones it needs:
+//
+//   connectsFrom (default: never) — makes the Nth-and-every-later gatt.connect() call reject
+//     instead of succeeding. The 1-indexed call count includes the very first connect, so
+//     connectsFrom: 2 means "connects fine once, then every reconnect after that fails".
+//   connectsCount (default: 0) — makes exactly the first N gatt.connect() calls reject with a
+//     transient-looking error before every call after that succeeds normally — simulates the
+//     real, field-confirmed `NetworkError: Connection Error: Connection attempt failed.`
+//     connectAndVerify's own GATT_CONNECT_ATTEMPTS retry loop exists to recover from, as distinct
+//     from connectsFrom's permanent failure.
+//   write (default: false) — makes the CONTROL write itself reject every time — simulates the
+//     connection dropping between a pull starting and its write landing.
+//   writeCount (default: 0) — makes exactly the first N CONTROL writes reject with the real,
+//     field-confirmed `NotSupportedError: GATT operation failed for unknown reason` before every
+//     write after that succeeds normally — simulates a leg's own pull colliding with a still
+//     in-flight prior GATT operation (e.g. one that just genuinely timed out), the scenario
+//     pullFromConnectedPhone's own withGattRecovery exists to recover from, as distinct from
+//     write's permanent failure.
+//   dropAfterConnect (default: never) — fires a real 'gattserverdisconnected' event synchronously
+//     right after the Nth gatt.connect() call succeeds — simulates a flaky link dropping again
+//     immediately mid-attempt.
+//   deviceInfoReadsCount (default: 0) — makes exactly the first N DeviceInfo characteristic reads
+//     reject, with device.gatt.connected deliberately left reading true throughout (unlike
+//     dropAfterConnect) — simulates connectAndVerify's own DEVICE_INFO_READ_TIMEOUT_MS giving up
+//     on a read that's still genuinely in flight underneath, the scenario its retry loop must
+//     reconnect before retrying rather than reusing the same still-busy connection.
+//   neverRespondToWrites (default: false) — makes the CONTROL write itself resolve normally
+//     (unlike write) but never queue the matching data-stream response — simulates a pull that's
+//     genuinely in flight, purely waiting on incoming notifications, when the connection then
+//     drops for real (see _simulateUnexpectedDisconnect).
+//   hangDeviceInfoReadsFrom (default: never) — makes the Nth-and-every-later DeviceInfo
+//     characteristic read return a promise that never settles at all, rather than rejecting —
+//     simulates a real GATT call against a phone that's just gone out of range, which has no
+//     spec-guaranteed timeout of its own and was observed hanging indefinitely before callers
+//     raced it against one.
+//   deviceInfoReadAt (default: none) — makes exactly the Nth DeviceInfo characteristic read
+//     (1-indexed, counting connectToPhone()'s own initial read too) reject instantly with that
+//     same real, field-confirmed collision error — every other read, including the very next
+//     retry, succeeds normally. Distinct from deviceInfoReadsCount (which fails a run of leading
+//     reads with a *timeout*-flavoured message and is only ever exercised during
+//     connectAndVerify) and from hangDeviceInfoReadsFrom (which never settles at all) — this
+//     simulates the same instant collision writeCount does, but on pullFromConnectedPhone's own
+//     top-of-tick getPrimaryService/DeviceInfo-refresh calls specifically (2026-09-02 field
+//     evidence), the scenario those calls' own withGattRecovery wrapping exists to recover from.
+function makeFakePhone({ deviceInfo, recordsByRequest, faults = {} }) {
+  const {
+    connectsFrom = Infinity, connectsCount = 0, write = false, writeCount = 0,
+    dropAfterConnect = null, deviceInfoReadsCount = 0, neverRespondToWrites = false,
+    hangDeviceInfoReadsFrom = Infinity, deviceInfoReadAt = null,
+  } = faults;
   const dataChar = makeFakeDataChar();
+  let writeCallCount = 0;
   const controlChar = {
     writeValueWithResponse: async (bytes) => {
-      if (failWrite) throw new Error('GATT Server is disconnected. Cannot perform GATT operations.');
+      writeCallCount++;
+      if (write) throw new Error('GATT Server is disconnected. Cannot perform GATT operations.');
+      if (writeCallCount <= writeCount) throw new Error('GATT operation failed for unknown reason.');
       if (neverRespondToWrites) return;
       const req = JSON.parse(new TextDecoder().decode(bytes));
       queueMicrotask(() => dataChar.emitRecords(recordsByRequest(req)));
@@ -195,8 +223,9 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
   const infoChar = {
     readValue: async () => {
       infoReadCallCount++;
+      if (infoReadCallCount === deviceInfoReadAt) throw new Error('GATT operation failed for unknown reason.');
       if (infoReadCallCount >= hangDeviceInfoReadsFrom) return new Promise(() => {}); // never settles
-      if (infoReadCallCount <= failDeviceInfoReadsCount) throw new Error(`Timed out reading DeviceInfo from "that device".`);
+      if (infoReadCallCount <= deviceInfoReadsCount) throw new Error(`Timed out reading DeviceInfo from "that device".`);
       return jsonDataView(deviceInfo);
     },
   };
@@ -219,8 +248,8 @@ function makeFakePhone({ deviceInfo, recordsByRequest, failConnectsFrom = Infini
       connected: false,
       connect: async () => {
         connectCallCount++;
-        if (connectCallCount <= failConnectsCount) throw new Error('Connection Error: Connection attempt failed.');
-        if (connectCallCount >= failConnectsFrom) throw new Error('out of range');
+        if (connectCallCount <= connectsCount) throw new Error('Connection Error: Connection attempt failed.');
+        if (connectCallCount >= connectsFrom) throw new Error('out of range');
         device.gatt.connected = true;
         if (connectCallCount === dropAfterConnect) {
           device.gatt.connected = false;
@@ -350,7 +379,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     // Fails the first 2 of GATT_CONNECT_ATTEMPTS (3) initial connect attempts with the real,
     // field-confirmed transient error, then succeeds on the 3rd.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsCount: 2 });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { connectsCount: 2 } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
     const connectPromise = connectToPhone();
@@ -367,7 +396,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
   it('gives up after GATT_CONNECT_ATTEMPTS consecutive initial connect failures and forgets the device', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsCount: Infinity });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { connectsCount: Infinity } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
     const connectPromise = connectToPhone();
@@ -387,7 +416,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     // device.gatt.connected is deliberately left true throughout — the exact condition that,
     // before this loop reconnected unconditionally on every retry, meant attempt 2 retried
     // readDeviceInfo() straight against the same still-open connection instead.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failDeviceInfoReadsCount: 1 });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { deviceInfoReadsCount: 1 } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
     const connectPromise = connectToPhone();
@@ -408,7 +437,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
   it('does not leave an unhandled rejection when the CONTROL write fails after the stream listener is already armed', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failWrite: true });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { write: true } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
@@ -424,6 +453,13 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       // flags as an unhandled rejection of its own before this test ever gets to check anything.
       const rejectionAssertion = assert.rejects(() => pullPromise, /GATT Server is disconnected/);
       await settleOnePull(t); // NOTIFY_SETTLE_MS before the (failing) CONTROL write
+      // The write's failure now triggers withGattRecovery's own one-shot reconnect-and-retry (see
+      // its own doc) before this ultimately rejects the same way it always did — failWrite makes
+      // every write fail identically, so the retry's own write fails too, but only after a full
+      // reconnect cycle's worth of waits.
+      await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before withGattRecovery's own reconnect attempt
+      await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS after that reconnect succeeds
+      await settleOnePull(t); // NOTIFY_SETTLE_MS before the retry's own (also failing) CONTROL write
       await rejectionAssertion;
       // collectDataStream's own internal PULL_TIMEOUT_MS (15s) timer would otherwise still be
       // pending at this point and fire much later as a genuinely unhandled rejection — advance
@@ -440,7 +476,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
   it('rejects a pull immediately when the connection drops while it is purely waiting on data, instead of waiting out the full pull timeout', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], neverRespondToWrites: true });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { neverRespondToWrites: true } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
@@ -452,9 +488,18 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
 
     // The real disconnect landing here — mid-pull, purely waiting on incoming notifications with
     // no outbound GATT call left to reject on its own — is exactly the gap collectDataStream's
-    // own 'gattserverdisconnected' listener now closes.
+    // own 'gattserverdisconnected' listener now closes. No 15s PULL_TIMEOUT_MS tick needed to
+    // notice it either way (rejects synchronously off the disconnect event itself).
     device._simulateUnexpectedDisconnect();
-    await rejectionAssertion; // no 15s timer tick needed — proves this didn't wait on PULL_TIMEOUT_MS
+    // That rejection now feeds withGattRecovery's own one-shot reconnect-and-retry (see its own
+    // doc) rather than failing the whole pull outright — neverRespondToWrites means the retry's
+    // own write also never streams anything back, so a second disconnect here proves the fast,
+    // no-15s-wait detection still holds even through a recovery retry, not just the first attempt.
+    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before withGattRecovery's own reconnect attempt
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS after that reconnect succeeds
+    await settleOnePull(t); // NOTIFY_SETTLE_MS before the retry's own CONTROL write
+    device._simulateUnexpectedDisconnect();
+    await rejectionAssertion;
   });
 
   it('gives up on a stuck mid-pull DeviceInfo refresh after a bounded timeout, instead of hanging indefinitely', async (t) => {
@@ -463,7 +508,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     // The very first DeviceInfo read (during connectToPhone()) succeeds normally; every read
     // after that — i.e. pullFromConnectedPhone's own fresh-every-call refresh — hangs forever,
     // simulating a phone that's just gone out of range.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], hangDeviceInfoReadsFrom: 2 });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { hangDeviceInfoReadsFrom: 2 } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
@@ -628,6 +673,64 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(pullRequestCount, 1); // pulled despite the old label — lastLineNumber proved it's still active
     assert.equal(results.length, 1);
     assert.equal(results[0].raceLabel, 'stage-race-20-01-01');
+    disconnectPhone();
+  });
+
+  it("recovers a leg's pull that collides with a still-stuck prior GATT operation by reconnecting once, rather than failing the whole pull", async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    // First CONTROL write fails instantly with the real, field-confirmed generic GATT error a
+    // still-in-flight prior operation leaves behind (2026-09-02) — the second (the retry, after
+    // withGattRecovery's own reconnect) succeeds normally.
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [{ recordUuid: 'r1', action: 'Finish', bibNumber: 4, lineNumber: 1, timestampMillis: 1_700_000_000_000 }], faults: { writeCount: 1 } });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+    const connectCallCountBeforePull = device._connectCallCount;
+
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t); // NOTIFY_SETTLE_MS before the first (failing) CONTROL write
+    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before withGattRecovery's own reconnect attempt
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS after that reconnect succeeds
+    await settleOnePull(t); // NOTIFY_SETTLE_MS before the retry's own (successful) CONTROL write
+    const results = await pullPromise; // resolves, not rejects — the recovery salvaged this leg
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].lines.length, 1);
+    // Proves a real reconnect actually happened, not just a lucky second attempt on the same link.
+    assert.equal(device._connectCallCount, connectCallCountBeforePull + 1);
+    disconnectPhone();
+  });
+
+  it('recovers a pull whose own top-of-tick DeviceInfo refresh collides with a still-stuck prior GATT operation, rather than failing the whole tick', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: () => [{ recordUuid: 'r1', action: 'Finish', bibNumber: 4, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
+      // Read #1 is connectToPhone()'s own initial verification and must succeed; read #2 is
+      // pullFromConnectedPhone()'s own top-of-tick refresh — the exact call the 2026-09-02 field
+      // log's "pull failed ... could not refresh DeviceInfo ... GATT operation failed for unknown
+      // reason" was drawn from — and fails instantly, once.
+      faults: { deviceInfoReadAt: 2 },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+    const connectCallCountBeforePull = device._connectCallCount;
+
+    const pullPromise = pullFromConnectedPhone();
+    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before withGattRecovery's own reconnect attempt
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS after that reconnect succeeds
+    await settleOnePull(t); // NOTIFY_SETTLE_MS before the retry's own (successful) CONTROL write
+    const results = await pullPromise; // resolves, not rejects — the recovery salvaged the whole tick
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].lines.length, 1);
+    // Proves a real reconnect actually happened, not just a lucky second attempt on the same link.
+    assert.equal(device._connectCallCount, connectCallCountBeforePull + 1);
     disconnectPhone();
   });
 
@@ -863,7 +966,7 @@ describe('mule-ble.js:forgetConnection no longer forgets on a mere unexpected dr
     // Connects fine the first time (so it becomes known), but every gatt.connect() call from the
     // 2nd onward fails outright — simulates the identity having genuinely gone stale (e.g. its
     // BLE address rotated) by the time a later reconnect is attempted.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], failConnectsFrom: 2 });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { connectsFrom: 2 } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
