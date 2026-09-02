@@ -1230,6 +1230,27 @@ export async function pullFromConnectedPhone() {
         service = await device.gatt.getPrimaryService(SERVICE_UUID);
         connectedDevice = device;
         connectedInfo = savedConnectedInfo;
+      } catch (recoveryError) {
+        // The recovery itself failed — not just the original call this was trying to paper over.
+        // Confirmed in the field (2026-09-02, a separate log from the one that motivated
+        // withGattRecovery in the first place): every leg from here on is doomed against this same
+        // now-dead connection, yet nothing was telling mobile-files.js that. forgetConnection()'s
+        // own disconnectListener call already fired for the disconnect just above, with
+        // recoveringGattOperation true — mobile-files.js's onBleDisconnected saw that and
+        // deliberately ignored it (see recoveringGattOperation's own doc), on the expectation this
+        // reconnect would shortly succeed. Now that it hasn't, this fires the "real" notification
+        // that call was withheld pending — flipping the flag back first, or onBleDisconnected
+        // ignores this one too. Without it, connectedDevice stayed null (forgetConnection() already
+        // cleared it, and it's never reached the restore two lines up) while nothing ever ran
+        // stopAutoPull() or told the operator — every later auto-pull tick just silently no-opped
+        // on isConnected() being false, forever, with the UI still reading "connected".
+        recoveringGattOperation = false;
+        disconnectListener?.(false);
+        // Lets pullFromConnectedPhone's own per-leg loop tell "this leg's recovery failed, but the
+        // connection may still be fine for the next one" (no tag) apart from "the connection itself
+        // is gone, every remaining leg is doomed too" (tagged) — see its own doc at each catch site.
+        recoveryError.connectionLost = true;
+        throw recoveryError;
       } finally {
         recoveringGattOperation = false;
       }
@@ -1322,6 +1343,13 @@ export async function pullFromConnectedPhone() {
   // throwing away e.g. this device's own already-pulled history along with it.
   const results = [];
   const errors = [];
+  // Set the moment any leg's own withGattRecovery reconnect attempt definitively fails (see its
+  // own connectionLost-tagging doc) — every GATT call left in this tick is against that exact
+  // same now-dead connection, so there's nothing left worth spending a whole further ~14s
+  // recovery cycle (RECONNECT_COOLDOWN_MS + GATT_RECONNECT_TIMEOUT_MS) attempting per leg.
+  // Confirmed in the field (2026-09-02): a second relay leg tried and failed its own doomed
+  // recovery cycle right after the first one already proved the link was gone.
+  let connectionLost = false;
 
   // A pure Mule phone (no race of its own — e.g. its operator is only there to bridge
   // Time/Bibs phones to the server, never recording anything itself) has an empty raceLabel
@@ -1351,6 +1379,7 @@ export async function pullFromConnectedPhone() {
     } catch (e) {
       bleError(`[mule-ble] pull failed for own race "${raceLabel}" for "${connectedName}"`, e);
       errors.push(e);
+      if (e.connectionLost) connectionLost = true;
     }
   } else {
     bleLog(`[mule-ble] "${connectedName}" has no race of its own (pure Mule) — skipping straight to relay entries`);
@@ -1368,7 +1397,10 @@ export async function pullFromConnectedPhone() {
   // the own-race leg above already retrieved, and never left cached under a key it wasn't
   // actually fetched for.
   let relayEntries = [];
-  if (deviceInfo.relayCount > 0) {
+  if (connectionLost) {
+    // Skip the fetch entirely (never mind attempting it and catching another doomed failure) —
+    // no cache update either, since it was never actually fetched this tick.
+  } else if (deviceInfo.relayCount > 0) {
     const cacheKey = relayManifestCacheKey(deviceInfo);
     if (cachedRelayEntries && cachedRelayManifestKey === cacheKey) {
       relayEntries = cachedRelayEntries;
@@ -1380,6 +1412,7 @@ export async function pullFromConnectedPhone() {
       } catch (e) {
         bleError(`[mule-ble] failed to fetch relay manifest from "${connectedName}"`, e);
         errors.push(e);
+        if (e.connectionLost) connectionLost = true;
       }
     }
   } else {
@@ -1388,6 +1421,9 @@ export async function pullFromConnectedPhone() {
   }
 
   for (const relay of relayEntries) {
+    // Bails out of every remaining relay leg the instant one leg's own recovery has already
+    // proven the connection dead — see connectionLost's own doc above.
+    if (connectionLost) break;
     // The relayed race's own origin device name, not the connected phone's (connectedName) —
     // this identifies whose data a given leg actually is, which matters here specifically since
     // one connected Mule can be relaying several genuinely different origin devices in the same
@@ -1424,6 +1460,7 @@ export async function pullFromConnectedPhone() {
     } catch (e) {
       bleError(`[mule-ble] pull failed for relayed race "${raceLabel}" for "${relayDeviceLabel}" (relayed via "${connectedName}")`, e);
       errors.push(e);
+      if (e.connectionLost) connectionLost = true;
     }
   }
 
@@ -1433,7 +1470,9 @@ export async function pullFromConnectedPhone() {
   // intermediate orange "relayed to somebody" one (see AckPayload's own doc in
   // ~/racemaster-mobile's MuleGattProfile.kt) — this connection's whole purpose is bringing
   // data home to the racemaster server, so it always identifies as a sink.
-  if (results.length) {
+  // Skipped once connectionLost — the connection's already confirmed dead, and unlike every call
+  // above, this one has no timeout of its own to bound how long a doomed attempt could hang for.
+  if (results.length && !connectionLost) {
     await sendSinkAck(service, results.flatMap(r => r.lines.map(l => l.recordUuid)));
   }
 

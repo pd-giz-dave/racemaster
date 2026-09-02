@@ -734,6 +734,53 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     disconnectPhone();
   });
 
+  it("tells the disconnect listener and abandons the rest of the tick once a leg's own recovery reconnect itself fails, instead of leaving the session silently orphaned", async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 1 };
+    let recordsRequested = 0;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => { recordsRequested++; return []; },
+      // The own-race leg's first CONTROL write collides and fails instantly, same as every
+      // other withGattRecovery test above — but this time the recovery's own reconnect attempt
+      // (gatt.connect() call #2, right after the one during connectToPhone() itself) fails too,
+      // simulating the connection actually being gone rather than one operation merely stuck.
+      faults: { writeCount: 1, connectsFrom: 2 },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    // 2026-09-02 field evidence: forgetConnection()'s own disconnectListener call for the
+    // recovery's own disconnect is suppressed (isRecoveringGattOperation — see its own doc) on
+    // the expectation the reconnect below would shortly succeed. Without withGattRecovery's own
+    // failure path notifying this listener a second time once that reconnect itself fails,
+    // mobile-files.js's onBleDisconnected never runs — no stopAutoPull(), no UI reset, nothing —
+    // and connectedDevice stays null forever with every later auto-pull tick silently no-oping.
+    const seen = [];
+    onDisconnect(wasDeliberate => seen.push(wasDeliberate));
+
+    const pullPromise = pullFromConnectedPhone();
+    const rejectionAssertion = assert.rejects(() => pullPromise);
+    await settleOnePull(t); // NOTIFY_SETTLE_MS before the (failing) CONTROL write
+    // The recovery's own reconnect attempt rejects near-instantly here (a real error, not a
+    // timeout), so RECONNECT_COOLDOWN_MS is the only wait needed — no further
+    // GATT_RECONNECT_TIMEOUT_MS tick on top.
+    await settleReconnectCooldown(t);
+    await rejectionAssertion;
+
+    assert.equal(isConnected(), false);
+    // The mid-recovery disconnect (suppressed at the time) followed by this new "the recovery
+    // itself failed" notification — in that order, wasDeliberate: false for the second since
+    // nothing about the connection actually ending here was anything the operator did.
+    assert.deepEqual(seen, [true, false]);
+    // The relay manifest fetch — let alone the relay leg itself — must never even be attempted
+    // once the connection's confirmed dead; every remaining GATT call this tick would be doomed
+    // too (see connectionLost's own doc).
+    assert.equal(recordsRequested, 0);
+  });
+
   it('reuses the cached relay manifest across pulls when relayCount is unchanged', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: '', relayCount: 1 };
