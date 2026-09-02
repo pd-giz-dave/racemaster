@@ -1614,6 +1614,19 @@ export function wireMobileFiles() {
   on('btn-update-progress', 'click', updateProgress);
   on('btn-clear-progress', 'click', clearProgress);
   onDisconnect(onBleDisconnected);
+  // A page reload/close while still connected — applying an app update via connect.js's own
+  // location.reload(), or just closing the tab — otherwise leaves the phone's own BLE stack with
+  // no clean disconnect signal at all: the JS-side connection object is simply destroyed along
+  // with everything else, with no chance for a real gatt.disconnect() to run first. Confirmed in
+  // the field (2026-09-02): the very next connect attempt after exactly this got stuck on
+  // "Unknown or Unsupported Device" from the picker (a name-less advertisement is what a
+  // still-GATT-connected peripheral often shows on a re-scan) and failed every one of its 3
+  // retry attempts identically with "GATT Server is disconnected" — consistent with the phone
+  // still believing it has a live central connection from the now-destroyed session, refusing
+  // the new one until its own link supervision timeout eventually expires on its own.
+  // disconnectPhone() is synchronous and fire-and-forget (gatt.disconnect() returns void, not a
+  // promise — see its own doc), so it's safe to call here with nothing to await.
+  window.addEventListener('beforeunload', () => { if (isConnected()) disconnectPhone(); });
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
   document.getElementById('bib-allocations-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');

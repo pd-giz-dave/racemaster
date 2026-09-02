@@ -1211,7 +1211,20 @@ export async function pullFromConnectedPhone() {
       // the test file). Retrying it here anyway would just delay that correct call by a further,
       // pointless reconnect cycle.
       if (e.isTimeout) throw e;
-      bleWarn(`[mule-ble] GATT call failed for "${label}" — reconnecting once before giving up`, e);
+      // [label] names whichever leg's own data call is what actually failed — a relayed leg's own
+      // origin device name (e.g. "vivid-viper"), never a Bluetooth peer of its own — but the GATT
+      // link being torn down and rebuilt below is always this same physical phone, for every leg
+      // of this pull (see `device`'s own capture above). Confirmed misleading in the field
+      // (2026-09-02): "waiting ... before reconnecting to 'vivid-viper'" read as if that were a
+      // separate device actually being connected to, when the only GATT link that ever exists
+      // this whole call is to the phone named here. connectedInfo.deviceName (the phone's own
+      // self-reported name — same source getConnectedDeviceName()/connectedName above use) is
+      // preferred over the raw BluetoothDevice itself: device.name came through empty for a real
+      // phone in the field (2026-09-02), Web Bluetooth advertisement data doesn't always carry
+      // it, falling all the way through to device.id — an opaque, unreadable blob like
+      // "EL9DWAAS1YE+wvR0uFTVZA==" — instead of a name meaning anything to whoever's reading it.
+      const deviceLabel = connectedInfo?.deviceName || connectedInfo?.deviceId || device.name || device.id || 'the phone';
+      bleWarn(`[mule-ble] GATT call failed for "${label}" — reconnecting to "${deviceLabel}" once before giving up`, e);
       recoveringGattOperation = true;
       const savedConnectedInfo = connectedInfo;
       try {
@@ -1221,10 +1234,10 @@ export async function pullFromConnectedPhone() {
         } else {
           lastDisconnectAt = Date.now();
         }
-        await waitOutReconnectCooldown(label);
+        await waitOutReconnectCooldown(deviceLabel);
         await withTimeout(
           device.gatt.connect(), GATT_RECONNECT_TIMEOUT_MS,
-          `Timed out reconnecting to "${label}".`,
+          `Timed out reconnecting to "${deviceLabel}".`,
         );
         await new Promise(r => setTimeout(r, GATT_CONNECT_SETTLE_MS));
         service = await device.gatt.getPrimaryService(SERVICE_UUID);
