@@ -2,8 +2,8 @@
 
 import { importSIEntries, verifySIEntries, clearSIEntries, getSortedPreEntries } from '../si-entries.js';
 import { mergeSIEntries } from '../data.js';
-import { cleanName, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, showConfirmDialog, escHtml, pickFile, renderTable, tableColumns, wireTabBar } from '../ui.js';
+import { cleanName, showBusy, escHtml } from '../utils.js';
+import { on, setHTML, showStatus, showConfirmDialog, pickFile, renderTable, tableColumns, wireTabBar } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { renderPeople } from './people.js';
 

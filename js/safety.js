@@ -6,7 +6,7 @@ import { derivePairGender, getCategoryPriority } from './categories.js';
 import { getOutstandingCount } from './finishers.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from './si-results.js';
 import { formatResults } from './results.js';
-import { COURSE } from './strings.js';
+import { COURSE } from './constants.js';
 
 export function getFinishedBibs() {
   const bibs = new Set(

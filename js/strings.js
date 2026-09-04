@@ -870,13 +870,3 @@ export const TABLES = {
     { id: 'cp',         label: 'CP',     title: 'Approximate elapsed time at this checkpoint — raw, timestamp-based, not authoritative or offset-adjusted' },
   ],
 };
-
-export const GENDER = {
-  FEMALE: 'Female',
-  MALE:   'Male',
-};
-
-export const COURSE = {
-  JUNIORS: 'Juniors',
-  SENIORS: 'Seniors',
-};

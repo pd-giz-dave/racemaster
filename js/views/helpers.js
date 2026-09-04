@@ -4,12 +4,12 @@ import { state, saveRoles } from '../state.js';
 import { createRole } from '../schema.js';
 import { submitHelper, updateHelper, deleteHelper, getHelper, getSortedHelpers, clearAllHelpers, getNextHelperNumber } from '../helpers.js';
 import {
-  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm, escHtml,
+  val, on, setHTML, showConfirmDialog, showStatus, clearForm, fillForm,
   updateDatalistClubs, updateDatalistRoles, wireFormFocusTrap, clearRowEditing, wireNameTypeahead, wireClubTypeahead, wireRoleTypeahead,
   renderTable, tableColumns,
 } from '../ui.js';
 import { TABLES } from '../strings.js';
-import { capitalise, ciEq, showBusy, normaliseClub, normaliseGender } from '../utils.js';
+import { capitalise, ciEq, showBusy, normaliseClub, normaliseGender, escHtml } from '../utils.js';
 import { isBanned } from '../entries.js';
 
 const HELPER_COLS = tableColumns(TABLES.helpers, {

@@ -4,8 +4,8 @@ import { state }                           from '../state.js';
 import { formatResults, computeAvgTop10, getSplitsRows } from '../results.js';
 import { getEntryName } from '../entries.js';
 import { getCategoryPriority }             from '../categories.js';
-import { toISODate }           from '../utils.js';
-import { sanitise, escHtml }   from '../ui.js';
+import { toISODate, escHtml }  from '../utils.js';
+import { sanitise }            from '../ui.js';
 import { TABLES }              from '../strings.js';
 
 function wrap(title, body) {

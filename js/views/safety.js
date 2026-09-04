@@ -5,7 +5,8 @@ import { recordFinisher, deleteFinisher } from '../finishers.js';
 import { isEntryBanned, getEntryName } from '../entries.js';
 import { derivePairGender } from '../categories.js';
 import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable, tableColumns } from '../ui.js';
-import { TABLES, COURSE } from '../strings.js';
+import { TABLES } from '../strings.js';
+import { COURSE } from '../constants.js';
 import { showBusy } from '../utils.js';
 import { renderHome } from './home.js';
 import {

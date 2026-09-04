@@ -3,10 +3,10 @@
 import { state, savePeople } from '../state.js';
 import { createPerson } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, showStatus, showConfirmDialog, showInputDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable, tableColumns } from '../ui.js';
+import { on, showStatus, showConfirmDialog, showInputDialog, setHTML, downloadText, pickFile, sanitise, wireClubTypeahead, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
-import { toISODate, fromISODate, normaliseClub, findSimilarPairs } from '../utils.js';
+import { toISODate, fromISODate, normaliseClub, findSimilarPairs, escHtml } from '../utils.js';
 import { isBanned } from '../entries.js';
 import { laterDate, normalisePeopleRows } from '../data.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';

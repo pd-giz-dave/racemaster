@@ -1,6 +1,23 @@
 'use strict';
 
-import { GENDER } from './strings.js';
+import { GENDER } from './constants.js';
+
+// Moved here from ui.js — pure string manipulation, no DOM, so callers that need it but must
+// stay DOM-free themselves (e.g. js/mobile-files-devices.js) can import it without dragging in
+// ui.js's own module-level `document` access.
+export function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// HH:MM:SS.mmm — pulled out of js/views/mobile-files-ble.js's own former duplicate (see that
+// file's own doc, which pointed at js/mule-ble.js's still-separate copy). mule-ble.js's own copy
+// is deliberately left as its own private duplicate rather than switched to this one — that file
+// has zero imports of its own by design, and this one function is stable and small enough that
+// preserving that isolation is worth more than removing the last bit of duplication.
+export function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
 
 /** Normalise a time string to HH:MM:SS. Returns '' on failure.
  *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.

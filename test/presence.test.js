@@ -1,7 +1,7 @@
 'use strict';
 
-// strings.js is pure declarative data (TOOLTIPS/HELP/PAGES/TABLES/GENDER/COURSE constants, no
-// functions) — skipped, same reasoning as roles.js/si-schema.js/csv-schema.js. presence.js has
+// strings.js is pure declarative data (TOOLTIPS/HELP/PAGES/TABLES constants, no functions) —
+// skipped, same reasoning as roles.js/si-schema.js/csv-schema.js. presence.js has
 // real cross-tab coordination logic worth testing, using Node's real BroadcastChannel (no need
 // to mock it) with the test acting as a second "tab" on the same channel.
 

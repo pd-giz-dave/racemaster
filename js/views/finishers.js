@@ -8,10 +8,10 @@ import {
   getAllSpecials, lineLabel, getPrevTime, parseFinishTime,
 } from '../finishers.js';
 import { getEntry, getEntriesOnCourse, getSortedEntries, isEntryBanned, getEntryName } from '../entries.js';
-import { COURSE } from '../strings.js';
+import { COURSE } from '../constants.js';
 import { derivePairGender } from '../categories.js';
-import { timeToSeconds, showBusy } from '../utils.js';
-import { on, setHTML, showStatus, escHtml, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable, tableColumns, wireTypeahead } from '../ui.js';
+import { timeToSeconds, showBusy, escHtml } from '../utils.js';
+import { on, setHTML, showStatus, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable, tableColumns, wireTypeahead } from '../ui.js';
 import { TABLES } from '../strings.js';
 
 const FINISHER_COLS = tableColumns(TABLES.finishers, {

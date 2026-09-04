@@ -1,7 +1,8 @@
 'use strict';
 
 import { state, savePeople } from '../state.js';
-import { escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistClubs, renderTable, tableColumns } from '../ui.js';
+import { setHTML, showStatus, showConfirmDialog, updateDatalistClubs, renderTable, tableColumns } from '../ui.js';
+import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { isBanned } from '../entries.js';
 import { personEditCells, readPersonCells } from './people.js';

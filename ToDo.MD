@@ -33,7 +33,7 @@
       required information to allow that, the mobile files contain all the same information as can be
       gleaned from the finishers list with the addition of the CP mode times, they must be in
       the formatted results in a similar way to the SI results
-- [ ] change the results tab name to "Progress", the "Compute Results" to "Update Progress" and "Clear Results" to "Clear Progress",
+- [x] change the results tab name to "Progress", the "Compute Results" to "Update Progress" and "Clear Results" to "Clear Progress",
 - [ ] the Progress tab fulfills 2 roles: provide information required to produce results and provide feedback about where runners are on the course,
       to that end the ordering should be by bib number and not position (as it no longer knows that)
 - [ ] the progress page should also show explicit start actions if a bib has done an early/late start
@@ -80,11 +80,11 @@
 - [ ] if the list is populated those CP are compulsory and a runner missing one is disqualified 
       and flagged as such in the results
 - [ ] such disqualifications appear in the splits tab on the results page as DSQ
-- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a commpulsory 
+- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a compulsory 
       CP add a button in that 'slot' - "Grant" - that when selected considers that runner to have passed that
       CP, this is intended to correct genuine mis-recordings at the CP, such corrections must be preserved
       across "Update progress" actions, the rest of the system must react as if there was a time there
-      (ie. they may longer be considered as a DSQ)
+      (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
 
 ## Re-think dataset structure?
 
@@ -129,3 +129,5 @@ Hmmm... how to handle public/private?
 Or part of setup is to pick people/cats/roles/dibbers then public/private is part of file name as now.
 Then auto update only allowed to 'self' or anybody if an admin.
 Export produces a zip file with all tables in it, and import unzips them.
+But then the 2-tier log-in system gets more complicated...
+

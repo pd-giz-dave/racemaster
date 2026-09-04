@@ -1,7 +1,7 @@
 'use strict';
 
 import { state } from '../state.js';
-import { escHtml } from '../ui.js';
+import { escHtml } from '../utils.js';
 import { openPrintPreview } from './preview.js';
 
 const PAGE_CSS = '@page { size: A4 portrait; margin: 0; }';

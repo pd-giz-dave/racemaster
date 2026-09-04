@@ -1,7 +1,8 @@
 'use strict';
 
 import { state } from '../state.js';
-import { escHtml, showStatus } from '../ui.js';
+import { showStatus } from '../ui.js';
+import { escHtml } from '../utils.js';
 import { calculateCategory } from '../categories.js';
 import { openPopup } from './preview.js';
 

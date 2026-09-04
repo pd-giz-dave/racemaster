@@ -3,7 +3,8 @@
 import { state, saveRoles } from '../state.js';
 import { createRole } from '../schema.js';
 import { CSV } from '../csv-schema.js';
-import { on, escHtml, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable, tableColumns, wireTabBar } from '../ui.js';
+import { on, setHTML, showStatus, showConfirmDialog, updateDatalistRoles, downloadText, pickFile, sanitise, renderTable, tableColumns, wireTabBar } from '../ui.js';
+import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { BUILTIN_ROLES } from '../roles.js';

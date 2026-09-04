@@ -2,8 +2,8 @@
 
 import { state } from '../state.js';
 import { importSIResults, clearSIResults } from '../si-results.js';
-import { on, setHTML, showStatus, escHtml, pickFile, wireTabBar, showConfirmDialog } from '../ui.js';
-import { showBusy } from '../utils.js';
+import { on, setHTML, showStatus, pickFile, wireTabBar, showConfirmDialog } from '../ui.js';
+import { showBusy, escHtml } from '../utils.js';
 
 export function renderSIResults() {
   const tbody = document.getElementById('si-results-tbody');

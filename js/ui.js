@@ -2,9 +2,13 @@
 
 import { state } from './state.js';
 import { getMaleCategories, getFemaleCategories } from './categories.js';
-import { normaliseDate, normaliseTime } from './utils.js';
+import { normaliseDate, normaliseTime, escHtml } from './utils.js';
 
 // ---- DOM helpers ----
+
+// Pulled in from js/views/mobile-files.js and mobile-files-ble.js's own former duplicates —
+// the one bare "just get the element" accessor every other helper below already does inline.
+export function getEl(id) { return document.getElementById(id); }
 
 export function on(id, event, handler) {
   const el = document.getElementById(id);
@@ -39,10 +43,6 @@ export function clearForm(containerId) {
     if (el.type === 'checkbox') el.checked = false;
     else el.value = '';
   });
-}
-
-export function escHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 export function updateBannerEventName(name) {

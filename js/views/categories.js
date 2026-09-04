@@ -5,9 +5,9 @@ import { CSV } from '../csv-schema.js';
 import { builtinFRARows, builtinWFRARows } from '../categories.js';
 import { createCategory } from '../schema.js';
 import { parseCSV, formatCSV } from '../csv.js';
-import { on, escHtml, showStatus, showConfirmDialog, wireTabBar, renderThead, pickFile, downloadText } from '../ui.js';
+import { on, showStatus, showConfirmDialog, wireTabBar, renderThead, pickFile, downloadText } from '../ui.js';
 import { TABLES } from '../strings.js';
-import { normaliseTime } from '../utils.js';
+import { normaliseTime, escHtml } from '../utils.js';
 
 const FIELDS = CSV.categories.fields;
 const WIDTHS = CSV.categories.widths;

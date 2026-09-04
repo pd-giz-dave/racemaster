@@ -10,11 +10,11 @@ import { SI } from '../si-schema.js';
 
 import { getNextBibNumber, getNextDibberNumber } from '../data.js';
 import { calculateCategory, calculateCourse, calculatePairCategory, derivePairGender } from '../categories.js';
-import { COURSE } from '../strings.js';
-import { cleanName, capitalise, showBusy, normaliseClub, normaliseGender } from '../utils.js';
+import { COURSE } from '../constants.js';
+import { cleanName, capitalise, showBusy, normaliseClub, normaliseGender, escHtml } from '../utils.js';
 import { usingDibbers } from '../time-utils.js';
 import {
-  val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog, escHtml,
+  val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
   downloadText, sanitise, wireFormFocusTrap, clearRowEditing, wireNameTypeahead, wireClubTypeahead,
   renderTable, tableColumns,
