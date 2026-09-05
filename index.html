@@ -12,6 +12,19 @@
 </head>
 <body>
 
+<!-- Icon sprite: symbol defs referenced by <use> below, so path data for an icon used more than
+     once (e.g. every .btn-toggle-password eye/eye-off pair) lives in exactly one place. Hidden
+     via absolute-positioned zero-size + overflow, not the `hidden` attribute — an SVG root's
+     UA-stylesheet support for `hidden` is less consistently relied on than this classic pattern. -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="icon-eye" viewBox="0 0 24 24">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>
+  </symbol>
+  <symbol id="icon-eye-off" viewBox="0 0 24 24">
+    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>
+  </symbol>
+</svg>
+
 <!-- ============================================================
      App Shell
      ============================================================ -->
@@ -22,7 +35,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.14-alpha)</button></h1>
+    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.15-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -1129,11 +1142,22 @@
               <label for="df-password">Password</label>
               <div class="password-field-wrap">
                 <input id="df-password" type="password" autocomplete="current-password" style="width:100%">
-                <button type="button" id="df-toggle-password" class="btn-toggle-password" aria-label="Show password" tabindex="-1">
-                  <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                <button type="button" class="btn-toggle-password" data-target="df-password" aria-label="Show password" tabindex="-1">
+                  <svg class="icon-eye" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+                  <svg class="icon-eye-off" viewBox="0 0 24 24" hidden><use href="#icon-eye-off"></use></svg>
                 </button>
               </div>
+            </div>
+            <div class="form-field" style="margin-bottom:12px">
+              <label for="df-confirm-password">Confirm password</label>
+              <div class="password-field-wrap">
+                <input id="df-confirm-password" type="password" autocomplete="new-password" style="width:100%">
+                <button type="button" class="btn-toggle-password" data-target="df-confirm-password" aria-label="Show password" tabindex="-1">
+                  <svg class="icon-eye" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+                  <svg class="icon-eye-off" viewBox="0 0 24 24" hidden><use href="#icon-eye-off"></use></svg>
+                </button>
+              </div>
+              <p style="margin:4px 0 0;font-size:0.75rem;color:var(--muted)">Only checked when creating an account — retype it, don't paste it, so a copy-paste slip doesn't sail through unnoticed.</p>
             </div>
             <div class="btn-row">
               <button id="df-btn-login" class="btn btn-primary">Sign In</button>
@@ -1151,6 +1175,24 @@
               <h3 style="margin:0 0 8px;font-size:1rem">Users</h3>
               <div id="df-user-list"></div>
               <p id="df-user-status" style="margin:6px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+              <hr style="margin:12px 0;border:none;border-top:1px solid var(--border,#ddd)">
+              <p style="margin:0 0 6px;font-size:0.875rem;font-weight:600">Add user:</p>
+              <input id="df-new-user-name" type="text" placeholder="username" aria-label="New username" autocomplete="off" style="width:100%;margin-bottom:8px">
+              <div class="password-field-wrap" style="margin-bottom:8px">
+                <input id="df-new-user-password" type="password" placeholder="password" aria-label="New user password" autocomplete="new-password" style="width:100%">
+                <button type="button" class="btn-toggle-password" data-target="df-new-user-password" aria-label="Show password" tabindex="-1">
+                  <svg class="icon-eye" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+                  <svg class="icon-eye-off" viewBox="0 0 24 24" hidden><use href="#icon-eye-off"></use></svg>
+                </button>
+              </div>
+              <div class="password-field-wrap" style="margin-bottom:8px">
+                <input id="df-new-user-password-confirm" type="password" placeholder="confirm password" aria-label="Confirm new user password" autocomplete="new-password" style="width:100%">
+                <button type="button" class="btn-toggle-password" data-target="df-new-user-password-confirm" aria-label="Show password" tabindex="-1">
+                  <svg class="icon-eye" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+                  <svg class="icon-eye-off" viewBox="0 0 24 24" hidden><use href="#icon-eye-off"></use></svg>
+                </button>
+              </div>
+              <button id="df-btn-add-user" class="btn btn-primary" style="width:100%">Add User</button>
             </div>
           </div>
         </div>

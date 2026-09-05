@@ -6,7 +6,7 @@ import {
   getUsername, setUsername, getIsAdmin, setIsAdmin,
   setStandalone, isDirty, hasCachedData,
   apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset, apiChangeVisibility,
-  apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiSetUserAdmin, apiDeleteUser,
+  apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiCreateUser, apiSetUserAdmin, apiDeleteUser,
   dumpState, restoreState,
 } from '../storage.js';
 import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise } from '../ui.js';
@@ -46,17 +46,40 @@ export function hasUnconfirmedLogin() {
 
 function getEl(id) { return document.getElementById(id); }
 
-// Reset the password field back to masked, regardless of whether the user peeked at
-// it — covers logging in, logging out back to the form, and freshly entering the view.
+// Blocks paste/copy/cut on a "confirm password" field — the primary password field it's
+// confirming stays pasteable (e.g. from a password manager), but this one has to be retyped by
+// hand, so a copy-paste of the same (possibly mistyped) value can't sail through both fields
+// unnoticed and defeat the whole point of asking twice.
+function blockClipboard(el) {
+  if (!el) return;
+  ['paste', 'copy', 'cut'].forEach(evt => el.addEventListener(evt, e => e.preventDefault()));
+}
+
+// Every password field on this view shares this eyeball-toggle markup (see index.html's
+// .btn-toggle-password buttons, each carrying data-target="<input id>") — wired generically here
+// rather than once per field, so a newly added password field just needs the markup, no new JS.
+function togglePasswordVisibility(btn) {
+  const input = getEl(btn.dataset.target);
+  if (!input) return;
+  const willShow = input.type === 'password';
+  input.type = willShow ? 'text' : 'password';
+  // SVG elements don't reflect the .hidden property back to the attribute the way
+  // HTMLElement does, so toggle the attribute directly rather than the property.
+  btn.querySelector('.icon-eye').toggleAttribute('hidden', willShow);
+  btn.querySelector('.icon-eye-off').toggleAttribute('hidden', !willShow);
+  btn.setAttribute('aria-label', willShow ? 'Hide password' : 'Show password');
+}
+
+// Reset every password field back to masked, regardless of whether it was peeked at —
+// covers logging in, logging out back to the form, and freshly entering the view.
 function resetPasswordVisibility() {
-  const passwordInput    = getEl('df-password');
-  const togglePasswordBtn = getEl('df-toggle-password');
-  if (passwordInput)     passwordInput.type = 'password';
-  if (togglePasswordBtn) {
-    togglePasswordBtn.querySelector('.icon-eye')?.toggleAttribute('hidden', false);
-    togglePasswordBtn.querySelector('.icon-eye-off')?.toggleAttribute('hidden', true);
-    togglePasswordBtn.setAttribute('aria-label', 'Show password');
-  }
+  document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+    const input = getEl(btn.dataset.target);
+    if (input) input.type = 'password';
+    btn.querySelector('.icon-eye')?.toggleAttribute('hidden', false);
+    btn.querySelector('.icon-eye-off')?.toggleAttribute('hidden', true);
+    btn.setAttribute('aria-label', 'Show password');
+  });
 }
 
 function updateServerHiddenButton() {
@@ -197,7 +220,12 @@ function renderInlineRow() {
       </div>
     </td></tr>`;
   }
-  if (p.status === 'error') {
+  // Connect has no editable fields to correct — a rejected connect (rare: only the "genuinely
+  // unexpected" catch in doConnectDataset()) just gets a bare error + Cancel. Copy is different:
+  // its error is usually the entered name failing a constraint (taken, or invalid), so that case
+  // falls through to the same form below with the error banner added on top, rather than
+  // discarding what the user typed and making them start the whole form over.
+  if (p.status === 'error' && p.type === 'connect') {
     return `<tr class="df-inline-row"><td colspan="6">
       <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
         <p style="margin:0 0 8px;font-size:0.875rem;color:var(--danger)">${escHtml(p.error)}</p>
@@ -205,7 +233,7 @@ function renderInlineRow() {
       </div>
     </td></tr>`;
   }
-  // status === 'confirming'
+  // status === 'confirming' (or 'error' for copy — see above)
   if (p.type === 'connect') {
     const buttons = p.hasPushOption
       ? `<button class="btn btn-primary df-inline-connect-push">Push &amp; Connect</button>
@@ -234,8 +262,12 @@ function renderInlineRow() {
   const ownerField = isAdminUser
     ? `<select class="df-inline-copy-owner" aria-label="Copy to user" style="flex:1;min-width:100px">${ownerOptions}</select>`
     : '';
+  const errorBanner = p.status === 'error'
+    ? `<p style="margin:0 0 8px;font-size:0.875rem;color:var(--danger)">${escHtml(p.error)}</p>`
+    : '';
   return `<tr class="df-inline-row"><td colspan="6">
     <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
+      ${errorBanner}
       <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong>${escHtml(p.name)} (${escHtml(p.owner)})</strong> to:</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input class="df-inline-copy-name" type="text" placeholder="new-name" aria-label="New dataset name" value="${escHtml(p.nameValue || '')}" style="flex:1;min-width:100px">
@@ -506,6 +538,12 @@ export function wireDatasets(onConnect) {
       setStatus('df-auth-status', 'Username can only contain letters, numbers and hyphens (a-z, A-Z, 0-9, -).', true);
       return;
     }
+    // Confirm-password is only meaningful (and only checked) when creating an account — Sign
+    // In ignores whatever's sitting in that field.
+    if (isCreate && password !== getEl('df-confirm-password').value) {
+      setStatus('df-auth-status', 'Passwords do not match.', true);
+      return;
+    }
     setStatus('df-auth-status', isCreate ? 'Creating account…' : 'Signing in…');
     const call = isCreate ? apiCreateAccount(username, password) : apiLogin(username, password);
     call.then(result => {
@@ -529,20 +567,12 @@ export function wireDatasets(onConnect) {
   getEl('df-btn-login').onclick          = () => handleLogin(false);
   getEl('df-btn-create-account').onclick = () => handleLogin(true);
   getEl('df-password').onkeydown         = e => { if (e.key === 'Enter') handleLogin(false); };
+  getEl('df-confirm-password').onkeydown = e => { if (e.key === 'Enter') handleLogin(true); };
+  blockClipboard(getEl('df-confirm-password'));
 
-  const togglePasswordBtn = getEl('df-toggle-password');
-  const passwordInput     = getEl('df-password');
-  if (togglePasswordBtn && passwordInput) {
-    togglePasswordBtn.onclick = () => {
-      const willShow = passwordInput.type === 'password';
-      passwordInput.type = willShow ? 'text' : 'password';
-      // SVG elements don't reflect the .hidden property back to the attribute the way
-      // HTMLElement does, so toggle the attribute directly rather than the property.
-      togglePasswordBtn.querySelector('.icon-eye').toggleAttribute('hidden', willShow);
-      togglePasswordBtn.querySelector('.icon-eye-off').toggleAttribute('hidden', !willShow);
-      togglePasswordBtn.setAttribute('aria-label', willShow ? 'Hide password' : 'Show password');
-    };
-  }
+  document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+    btn.onclick = () => togglePasswordVisibility(btn);
+  });
 
   getEl('df-btn-standalone').onclick = () => {
     clearSession();
@@ -608,6 +638,33 @@ export function wireDatasets(onConnect) {
     if (e.key === 'Enter') getEl('df-btn-create-dataset').click();
   };
 
+  blockClipboard(getEl('df-new-user-password-confirm'));
+
+  getEl('df-btn-add-user').onclick = () => {
+    const nameInput     = getEl('df-new-user-name');
+    const passwordInput = getEl('df-new-user-password');
+    const confirmInput  = getEl('df-new-user-password-confirm');
+    const username = nameInput.value.trim();
+    const password = passwordInput.value;
+    if (!username || !password) { setStatus('df-user-status', 'Enter a username and password.', true); return; }
+    if (!/^[a-zA-Z0-9-]+$/.test(username)) {
+      setStatus('df-user-status', 'Username can only contain letters, numbers and hyphens (a-z, A-Z, 0-9, -).', true);
+      return;
+    }
+    if (password !== confirmInput.value) { setStatus('df-user-status', 'Passwords do not match.', true); return; }
+    setStatus('df-user-status', 'Adding user…');
+    apiCreateUser(activeToken, username, password).then(result => {
+      if (result.error) { setStatus('df-user-status', result.error, true); return; }
+      nameInput.value = '';
+      passwordInput.value = '';
+      confirmInput.value = '';
+      setStatus('df-user-status', `"${username}" added.`);
+      loadUsers();
+    }).catch(() => reportError('df-user-status', 'Server unreachable — cannot add this user right now, try again once back online.'));
+  };
+
+  getEl('df-new-user-password-confirm').onkeydown = e => { if (e.key === 'Enter') getEl('df-btn-add-user').click(); };
+
   getEl('df-btn-logout').onclick = () => {
     clearSession();
     clearCredentials();
@@ -615,6 +672,7 @@ export function wireDatasets(onConnect) {
     activeUsername = null;
     getEl('df-username').value = '';
     getEl('df-password').value = '';
+    getEl('df-confirm-password').value = '';
     showPanel('auth', false);
     updateDataFileButton();
   };

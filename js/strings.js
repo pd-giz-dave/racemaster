@@ -178,6 +178,7 @@ export const TOOLTIPS = {
   // Data file / auth
   'df-username':                 'Your RaceMaster username — use only letters, numbers and hyphens',
   'df-password':                 'Your RaceMaster password — use anything, its encrypted on the server',
+  'df-confirm-password':         "Retype the password above — only checked when creating an account; pasting here is blocked so a copy-paste slip can't sail through unnoticed",
   'df-btn-login':                'Sign in to your RaceMaster account',
   'df-btn-create-account':       'Create a new RaceMaster account',
   'df-btn-standalone':           'Use RaceMaster without a server — data is stored locally in this browser only',
@@ -194,6 +195,10 @@ export const TOOLTIPS = {
   'df-btn-create-dataset':       'Create a new empty dataset',
   'df-btn-save-as':              'Save the current data as a new dataset with a different name',
   'df-btn-logout':               'Sign out of your RaceMaster account',
+  'df-new-user-name':            'Username for the new account — use only letters, numbers and hyphens',
+  'df-new-user-password':        'Password for the new account',
+  'df-new-user-password-confirm': "Retype the password above — pasting here is blocked so a copy-paste slip can't sail through unnoticed",
+  'df-btn-add-user':             'Create this account directly, without them signing themself up',
 };
 
 export const HELP = {
@@ -370,8 +375,13 @@ export const HELP = {
     <p><strong>Account</strong> (top-left) — sign in, create a free account, or
         <strong>Continue without signing in</strong> to work purely locally with no server at all
         (use <strong>Export</strong>/<strong>Import</strong>, top of the page, to save/restore a local
-        JSON snapshot in that mode). Admin accounts get an extra <strong>Users</strong> section here
-        for granting/revoking admin and deleting accounts.</p>
+        JSON snapshot in that mode). Creating an account asks for the password twice —
+        <strong>Confirm password</strong> has to be retyped by hand, pasting into it is deliberately
+        blocked, so a copy-paste slip can't sail through both fields unnoticed. Every password field
+        has a small eye icon to reveal what you typed. Admin accounts get an extra
+        <strong>Users</strong> section here listing every account, with per-user buttons to
+        grant/revoke admin and delete accounts, plus an <strong>Add user</strong> form (same
+        double-entry password check) to create one directly without them signing themself up.</p>
     <p><strong>Field-Use Testing</strong> — a <strong>Hide Server</strong> toggle that simulates the
         server being completely unreachable, exactly as it would be out on the course with no
         signal. Use it to check that offline behaviour (cached data, the local sync queue, connecting
@@ -402,14 +412,20 @@ export const HELP = {
           currently loaded. If you have unsaved local changes it asks whether to push them to the
           server first or discard them before connecting.</li>
       <li><strong>Copy</strong> — duplicate <em>any</em> dataset you can see (yours or someone else's
-          public one) into a new dataset of your own, under a new name, without touching what's
-          currently connected. Use this to start a new event from an existing template, or to grab a
-          copy of a public dataset to work from.</li>
+          public one) into a new dataset, under a new name, without touching what's currently
+          connected. Normally lands in your own account; admins get an extra <strong>as user</strong>
+          dropdown to redirect the copy into any existing user's account instead, and can copy a
+          private dataset they don't own (everyone else can only copy their own private datasets, or
+          anyone's public one). Use this to start a new event from an existing template, hand a
+          template to another user, or grab a copy of a public dataset to work from.</li>
       <li><strong>Delete</strong> (owners/admins only) — permanently removes a dataset and everything
           in it. If it's the one currently connected, you're disconnected first.</li>
     </ul>
     <p>Connect/Copy each open their confirmation right below the row you clicked, rather than at the
-        bottom of the page, so a long dataset list never needs scrolling to see or act on them.</p>
+        bottom of the page, so a long dataset list never needs scrolling to see or act on them. If a
+        Copy is rejected — e.g. the name's already taken — the form stays open with what you typed
+        still in it and the error shown above it, so you can just fix the name and try again rather
+        than starting the whole form over.</p>
     <p>When not signed in you'll see just the login panel: sign in to an existing account, create a
         new one (free, no catches), or select <strong>Continue without signing in</strong> to skip
         accounts entirely and work purely locally via Export/Import.</p>
@@ -523,7 +539,21 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.14-alpha - current version</h3>
+    <h3>v0.0.15-alpha - current version</h3>
+    <ul>
+      <li>Datasets page: admins can now redirect a <strong>Copy</strong> into any existing user's account via an
+          "as user" dropdown, instead of it always landing in their own — and can copy a private dataset they don't
+          own, which the Copy button was already shown for but previously failed with "Cannot copy a private dataset
+          you do not own". A rejected Copy (e.g. the name's already taken) now keeps the form open with what you
+          typed still in it and the error shown above it, instead of collapsing to a bare error you had to dismiss
+          and start the whole form over from</li>
+      <li>Admins can add a new user account directly from the Users panel (username + password), without that
+          person needing to sign themself up</li>
+      <li>Creating an account, and the new Add User form, now ask for the password twice — pasting into the
+          Confirm password field is deliberately blocked, so a copy-paste slip can't sail through both fields
+          unnoticed. Every password field on the Datasets page now has a show/hide eye icon</li>
+    </ul>
+    <h3>v0.0.14-alpha</h3>
     <ul>
       <li>Mobile Files Devices list: added <strong>Last Seen</strong> and <strong>Last Update</strong> columns — Last
           Seen is when the server (or, for a pending Bluetooth-pulled file, this browser) last actually heard from a

@@ -306,6 +306,52 @@ describe('server integration: admin users routes', () => {
     assert.equal(r.status, 403);
   });
 
+  it('an admin can create a user without it starting a session for them', async () => {
+    // 'first-user' from the earlier auth test is this run's admin.
+    const adminToken = await (await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'first-user', password: 'secret123' }),
+    }).then(r => r.json())).token;
+
+    const create = await fetch(`${base}/api/users`, {
+      method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin-made-user', password: 'secret123' }),
+    });
+    assert.equal(create.status, 200);
+    assert.deepEqual(await create.json(), { ok: true, username: 'admin-made-user' });
+
+    // The new account can log in with the password the admin set...
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin-made-user', password: 'secret123' }),
+    });
+    assert.equal(login.status, 200);
+    assert.equal((await login.json()).isAdmin, false);
+  });
+
+  it('a non-admin cannot create a user', async () => {
+    const token = await createAndLogin('create-user-plain');
+    const r = await fetch(`${base}/api/users`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'sneaky-user', password: 'secret123' }),
+    });
+    assert.equal(r.status, 403);
+  });
+
+  it('rejects creating a user with a name that already exists', async () => {
+    const adminToken = await (await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'first-user', password: 'secret123' }),
+    }).then(r => r.json())).token;
+    await createAndLogin('dupe-user');
+
+    const r = await fetch(`${base}/api/users`, {
+      method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'dupe-user', password: 'secret123' }),
+    });
+    assert.equal(r.status, 409);
+  });
+
   it('deleting a user revokes their existing session', async () => {
     // 'first-user' from the earlier test is this run's admin.
     const adminToken = await (await fetch(`${base}/api/auth/login`, {

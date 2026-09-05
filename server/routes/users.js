@@ -2,7 +2,7 @@
 
 import { readBody, jsonReply } from '../http-utils.js';
 import { sanitiseName } from '../datasets.js';
-import { getAuthUser, isAdmin, readUsers, writeUsers, readAdmins, writeAdmins, deleteSessionsForUser, saveSessions } from '../auth.js';
+import { getAuthUser, isAdmin, readUsers, writeUsers, readAdmins, writeAdmins, deleteSessionsForUser, saveSessions, hashPw } from '../auth.js';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleUserRoutes(req, res, pathname) {
@@ -15,6 +15,28 @@ export async function handleUserRoutes(req, res, pathname) {
     const admins = readAdmins();
     const list = Object.keys(users).sort().map(u => ({ username: u, isAdmin: admins.has(u) }));
     jsonReply(res, 200, list);
+    return true;
+  }
+
+  // POST /api/users  — admin only, create a new user account (no session/token issued —
+  // unlike /api/auth/create, this isn't the new user signing themself in)
+  if (pathname === '/api/users' && req.method === 'POST') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    if (!isAdmin(username)) { jsonReply(res, 403, { error: 'Admin only' }); return true; }
+    const body = JSON.parse(await readBody(req));
+    const target = sanitiseName(body.username || '').slice(0, 32);
+    const password = (body.password || '').trim();
+    if (!target || password.length < 4) {
+      jsonReply(res, 400, { error: 'Username required; password must be at least 4 characters' });
+      return true;
+    }
+    const users = readUsers();
+    if (users[target]) { jsonReply(res, 409, { error: `Username "${target}" already exists` }); return true; }
+    users[target] = hashPw(password);
+    writeUsers(users);
+    console.log(`User created by admin ${username}: ${target}`);
+    jsonReply(res, 200, { ok: true, username: target });
     return true;
   }
 

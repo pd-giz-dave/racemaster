@@ -299,6 +299,15 @@ export async function apiListUsers(token) {
   return res.json();
 }
 
+export async function apiCreateUser(token, username, password) {
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ username, password }),
+  });
+  return res.json();
+}
+
 export async function apiSetUserAdmin(token, username, makeAdmin) {
   const res = await fetch(`/api/users/${encodeURIComponent(username)}`, {
     method: 'PATCH',

@@ -408,7 +408,15 @@ input:focus, select:focus, textarea:focus {
   cursor: pointer;
 }
 .btn-toggle-password:hover, .btn-toggle-password:focus-visible { color: var(--text); }
-.btn-toggle-password svg { width: 17px; height: 17px; }
+.btn-toggle-password svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 /* The UA [hidden]{display:none} rule doesn't reliably apply to SVG elements, so the
    two icon SVGs would otherwise render stacked on top of each other regardless of
    which one has the hidden attribute. */
