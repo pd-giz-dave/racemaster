@@ -20,13 +20,15 @@ let activeUsername = null;
 let isAdminUser    = false;
 let _onConnect     = null;
 let lastKnownDatasets = []; // last successfully-fetched list — see loadDatasets()'s catch branch
+let knownUsernames = []; // last successfully-fetched usernames (admin only) — populates the
+                          // copy form's "as user" dropdown, see loadUsers() and renderInlineRow()
 
 // The one dataset row currently showing inline Connect/Copy UI instead of its normal action
 // buttons — rendered as an extra <tr> right after that row (see renderDatasetList()) rather
 // than a fixed div below the whole list, so it's never out of view on a long list. Only one at
 // a time: opening Connect/Copy on a different row replaces whatever was open.
 // { type: 'connect'|'copy', owner, fullName, name, status: 'confirming'|'busy'|'error',
-//   hasPushOption?, busyLabel?, error?, nameValue?, visValue? }
+//   hasPushOption?, busyLabel?, error?, nameValue?, visValue?, ownerValue? }
 let pendingRow = null;
 let currentDatasets = []; // last list renderDatasetList() drew, so pendingRow changes alone
                           // can redraw without a server refetch
@@ -134,6 +136,7 @@ function loadUsers() {
   apiListUsers(activeToken).then(users => {
     if (!Array.isArray(users)) throw new Error(users?.error || 'Unexpected response');
     setStatus('df-user-status', '');
+    knownUsernames = users.map(u => u.username);
     const list = getEl('df-user-list');
     if (!list) return;
     list.innerHTML = users.map(u => {
@@ -219,11 +222,25 @@ function renderInlineRow() {
     </td></tr>`;
   }
   // p.type === 'copy'
+  // Only an admin gets to redirect the copy to someone else's folder — everyone else always
+  // copies into their own, so the field is hidden rather than shown-but-locked for them. Options
+  // come from knownUsernames (populated by loadUsers(), same admin-only fetch that fills the
+  // Users panel) rather than free text, so a copy can't be misdirected by a typo into creating
+  // an orphaned dataset under a nonexistent username.
+  const selectedOwner = p.ownerValue ?? activeUsername ?? '';
+  const ownerOptions = (knownUsernames.length ? knownUsernames : [activeUsername].filter(Boolean))
+    .map(u => `<option value="${escHtml(u)}" ${u === selectedOwner ? 'selected' : ''}>${escHtml(u)}</option>`)
+    .join('');
+  const ownerField = isAdminUser
+    ? `<select class="df-inline-copy-owner" aria-label="Copy to user" style="flex:1;min-width:100px">${ownerOptions}</select>`
+    : '';
   return `<tr class="df-inline-row"><td colspan="6">
     <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
       <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong>${escHtml(p.name)} (${escHtml(p.owner)})</strong> to:</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input class="df-inline-copy-name" type="text" placeholder="new-name" aria-label="New dataset name" value="${escHtml(p.nameValue || '')}" style="flex:1;min-width:100px">
+        ${isAdminUser ? '<span style="font-size:0.875rem;color:var(--muted)">as user</span>' : ''}
+        ${ownerField}
         <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-inline-copy-vis" value="private" ${p.visValue !== 'public' ? 'checked' : ''}> Private</label>
         <label style="white-space:nowrap;font-size:0.875rem"><input type="radio" name="df-inline-copy-vis" value="public" ${p.visValue === 'public' ? 'checked' : ''}> Public</label>
       </div>
@@ -302,6 +319,7 @@ function renderDatasetList(datasets) {
   list.querySelector('.df-inline-cancel')?.addEventListener('click', () => { pendingRow = null; rerenderDatasetList(); });
   list.querySelector('.df-inline-copy-submit')?.addEventListener('click', submitInlineCopy);
   list.querySelector('.df-inline-copy-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
+  list.querySelector('.df-inline-copy-owner')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
 }
 
 function disconnectDataset() {
@@ -389,23 +407,32 @@ function showCopyForm(owner, fullName, name) {
 }
 
 function submitInlineCopy() {
-  const toName     = getEl('df-dataset-list').querySelector('.df-inline-copy-name')?.value.trim() || '';
+  const list       = getEl('df-dataset-list');
+  const toName     = list.querySelector('.df-inline-copy-name')?.value.trim() || '';
   const visibility = radioValue('df-inline-copy-vis');
+  // Only present for admins (see renderInlineRow()) — everyone else copies into their own
+  // folder, which the server already defaults to when toOwner is omitted.
+  const toOwner    = isAdminUser ? (list.querySelector('.df-inline-copy-owner')?.value.trim() || '') : undefined;
   if (!toName) {
-    pendingRow = { ...pendingRow, status: 'error', error: 'Enter a name for the copy.', nameValue: toName, visValue: visibility };
+    pendingRow = { ...pendingRow, status: 'error', error: 'Enter a name for the copy.', nameValue: toName, visValue: visibility, ownerValue: toOwner };
     rerenderDatasetList();
     return;
   }
   const nameError = validateDatasetName(toName);
   if (nameError) {
-    pendingRow = { ...pendingRow, status: 'error', error: nameError, nameValue: toName, visValue: visibility };
+    pendingRow = { ...pendingRow, status: 'error', error: nameError, nameValue: toName, visValue: visibility, ownerValue: toOwner };
+    rerenderDatasetList();
+    return;
+  }
+  if (isAdminUser && !toOwner) {
+    pendingRow = { ...pendingRow, status: 'error', error: 'Enter the username to copy this dataset to.', nameValue: toName, visValue: visibility, ownerValue: toOwner };
     rerenderDatasetList();
     return;
   }
   const { owner, fullName } = pendingRow;
-  pendingRow = { ...pendingRow, status: 'busy', nameValue: toName, visValue: visibility };
+  pendingRow = { ...pendingRow, status: 'busy', nameValue: toName, visValue: visibility, ownerValue: toOwner };
   rerenderDatasetList();
-  apiCopyDataset(activeToken, owner, fullName, toName, visibility)
+  apiCopyDataset(activeToken, owner, fullName, toName, visibility, toOwner)
     .then(result => {
       if (result.error) {
         pendingRow = { ...pendingRow, status: 'error', error: result.error };

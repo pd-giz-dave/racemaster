@@ -151,6 +151,76 @@ describe('server integration: datasets', () => {
     });
     assert.equal(r.status, 403);
   });
+
+  it('a non-admin cannot copy a dataset into another user\'s folder', async () => {
+    const token = await createAndLogin('copy-plain-user');
+    await createAndLogin('copy-plain-target');
+    await fetch(`${base}/api/datasets`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'own-race', visibility: 'private' }),
+    });
+    const r = await fetch(`${base}/api/datasets/copy`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fromOwner: 'copy-plain-user', fromFullName: 'own-race-private',
+        toName: 'copied-race', visibility: 'private', toOwner: 'copy-plain-target',
+      }),
+    });
+    assert.equal(r.status, 403);
+  });
+
+  it('an admin can copy a dataset into a different, existing user\'s folder', async () => {
+    // 'first-user' from the earlier auth test is this run's admin.
+    const adminToken = await (await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'first-user', password: 'secret123' }),
+    }).then(r => r.json())).token;
+    const sourceToken = await createAndLogin('copy-admin-source');
+    const targetToken = await createAndLogin('copy-admin-target');
+    await fetch(`${base}/api/datasets`, {
+      method: 'POST', headers: { Authorization: `Bearer ${sourceToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'donor-race', visibility: 'private' }),
+    });
+
+    const copy = await fetch(`${base}/api/datasets/copy`, {
+      method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fromOwner: 'copy-admin-source', fromFullName: 'donor-race-private',
+        toName: 'donor-race-copy', visibility: 'private', toOwner: 'copy-admin-target',
+      }),
+    });
+    assert.equal(copy.status, 200);
+    assert.deepEqual(await copy.json(), {
+      ok: true, name: 'donor-race-copy', fullName: 'donor-race-copy-private',
+      owner: 'copy-admin-target', visibility: 'private',
+    });
+
+    const got = await fetch(`${base}/api/data/copy-admin-target/donor-race-copy-private`, {
+      headers: { Authorization: `Bearer ${targetToken}` },
+    });
+    assert.equal(got.status, 200);
+  });
+
+  it('rejects an admin copy to a user that does not exist', async () => {
+    const adminToken = await (await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'first-user', password: 'secret123' }),
+    }).then(r => r.json())).token;
+    const sourceToken = await createAndLogin('copy-admin-source2');
+    await fetch(`${base}/api/datasets`, {
+      method: 'POST', headers: { Authorization: `Bearer ${sourceToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'donor-race2', visibility: 'private' }),
+    });
+
+    const r = await fetch(`${base}/api/datasets/copy`, {
+      method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fromOwner: 'copy-admin-source2', fromFullName: 'donor-race2-private',
+        toName: 'donor-race2-copy', visibility: 'private', toOwner: 'no-such-user',
+      }),
+    });
+    assert.equal(r.status, 404);
+  });
 });
 
 describe('server integration: mobile sync', () => {

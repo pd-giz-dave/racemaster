@@ -147,14 +147,14 @@ export async function apiChangeVisibility(token, owner, fullName, visibility) {
   return res.json();
 }
 
-export async function apiCopyDataset(token, fromOwner, fromFullName, toName, visibility) {
+export async function apiCopyDataset(token, fromOwner, fromFullName, toName, visibility, toOwner) {
   const res = await fetch('/api/datasets/copy', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ fromOwner, fromFullName, toName, visibility }),
+    body: JSON.stringify({ fromOwner, fromFullName, toName, visibility, toOwner }),
   });
   return res.json();
 }

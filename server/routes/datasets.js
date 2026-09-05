@@ -3,7 +3,7 @@
 import fs from 'fs';
 import { readBody, jsonReply, parseDataPath } from '../http-utils.js';
 import { sanitiseName, containsVisibility, dataFilePath, readDataset, writeDataset, emptyDataset, getDatasetsForUser } from '../datasets.js';
-import { getAuthUser, isAdmin } from '../auth.js';
+import { getAuthUser, isAdmin, readUsers } from '../auth.js';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleDatasetRoutes(req, res, pathname, force) {
@@ -25,15 +25,28 @@ export async function handleDatasetRoutes(req, res, pathname, force) {
     const fromFullName = sanitiseName(body.fromFullName || '');
     if (!fromOwner || !fromFullName) { jsonReply(res, 400, { error: 'fromOwner and fromFullName required' }); return true; }
 
-    // Permission: must own the source or it must be public
+    // Permission: must own the source, it must be public, or the requester must be an admin
+    // (admins can already see every private dataset in the list — see getDatasetsForUser()).
     const srcVisibility = fromFullName.endsWith('-public') ? 'public' : 'private';
-    if (srcVisibility === 'private' && fromOwner !== username) {
+    if (srcVisibility === 'private' && fromOwner !== username && !isAdmin(username)) {
       jsonReply(res, 403, { error: 'Cannot copy a private dataset you do not own' });
       return true;
     }
     if (!fs.existsSync(dataFilePath(fromOwner, fromFullName))) {
       jsonReply(res, 404, { error: 'Source dataset not found' });
       return true;
+    }
+
+    // Destination owner: defaults to the requester, but an admin may redirect the copy to any
+    // existing user's folder instead — a non-admin naming anyone but themselves is rejected.
+    let toOwner = username;
+    if (body.toOwner) {
+      const requestedOwner = sanitiseName(body.toOwner);
+      if (requestedOwner !== username) {
+        if (!isAdmin(username)) { jsonReply(res, 403, { error: 'Only an admin can copy a dataset to another user' }); return true; }
+        if (!readUsers()[requestedOwner]) { jsonReply(res, 404, { error: `User "${requestedOwner}" does not exist` }); return true; }
+      }
+      toOwner = requestedOwner;
     }
 
     const toName = sanitiseName(body.toName || '');
@@ -45,15 +58,15 @@ export async function handleDatasetRoutes(req, res, pathname, force) {
     }
 
     const toFullName = `${toName}-${toVisibility}`;
-    if (fs.existsSync(dataFilePath(username, toFullName))) {
-      jsonReply(res, 409, { error: `You already have a dataset named "${toName}" (${toVisibility})` });
+    if (fs.existsSync(dataFilePath(toOwner, toFullName))) {
+      jsonReply(res, 409, { error: `"${toOwner}" already has a dataset named "${toName}" (${toVisibility})` });
       return true;
     }
 
     const srcData = readDataset(fromOwner, fromFullName);
-    writeDataset(username, toFullName, srcData);
-    console.log(`Dataset copied: ${fromOwner}/${fromFullName} → ${username}/${toFullName}`);
-    jsonReply(res, 200, { ok: true, name: toName, fullName: toFullName, owner: username, visibility: toVisibility });
+    writeDataset(toOwner, toFullName, srcData);
+    console.log(`Dataset copied: ${fromOwner}/${fromFullName} → ${toOwner}/${toFullName}`);
+    jsonReply(res, 200, { ok: true, name: toName, fullName: toFullName, owner: toOwner, visibility: toVisibility });
     return true;
   }
 
