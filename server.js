@@ -20,9 +20,12 @@ installConsoleLogging();
 loadSessions();
 
 // Dev convenience: restart on code change. Watches server.js itself plus every file under the
-// server/ directory (the module breakdown this file used to be) — an external process
-// supervisor (e.g. docker-compose's `restart: unless-stopped`) is expected to bring the process
-// back up after this exit, same as before the breakup.
+// server/ directory (the module breakdown this file used to be) — relies on the Dockerfile's
+// CMD (a plain `while true; do node server.js; ...; done` loop) to relaunch the process after
+// this exit. That loop relaunches on ANY exit unconditionally, so it doesn't matter why this
+// happened — unlike an outer watcher (nodemon was tried here previously) with its own separate
+// watch list, which has to independently track every file this already watches and silently
+// stops noticing restarts the moment that list drifts out of sync with this one.
 //
 // fs.watchFile (stat-polling) for every file individually, NOT fs.watch(dir, {recursive:true})
 // — deliberately. fs.watch relies on inotify, which does not reliably deliver events through a
