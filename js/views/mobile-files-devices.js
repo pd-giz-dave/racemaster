@@ -118,12 +118,12 @@ function buildColumns(isAdminUser) {
   return tableColumns(TABLES['mobile-files'], {
     select:    r => `<input type="checkbox" class="mobile-file-select" data-idx="${r.idx}" aria-label="Select ${escHtml(r.device.name)}"${selectedKeys.has(rowKey(r)) ? ' checked' : ''}>`,
     owner:     isAdminUser ? r => escHtml(r.owner) : undefined,
-    raceLabel: r => escHtml(r.raceLabel),
+    raceLabel: r => `<span title="${escHtml(r.raceLabel)}">${escHtml(r.raceLabel)}</span>`,
     raceDate:  r => formatRaceDate(r.raceDate),
     device:    r => escHtml(r.device.name) + (r.pending
       ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
       : ''),
-    location:  r => r.location,
+    location:  r => `<span title="${escHtml(r.location)}">${escHtml(r.location)}</span>`,
     bibs:      r => formatCount(r.bibsVisible),
     time:      r => formatCount(r.timeVisible),
     lastSeen:   r => formatDateTime(r.lastSeen),

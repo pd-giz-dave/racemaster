@@ -9,7 +9,7 @@ import {
   apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiCreateUser, apiSetUserAdmin, apiDeleteUser,
   dumpState, restoreState,
 } from '../storage.js';
-import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise } from '../ui.js';
+import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise, applyStickyColumns } from '../ui.js';
 import { showBusy, escHtml } from '../utils.js';
 import { updateDataFileButton, pingServerNow } from '../connect.js';
 import { renderAll, showView } from '../app.js';
@@ -312,7 +312,7 @@ function renderDatasetList(datasets) {
       : '';
     const muted = '<span style="color:var(--muted)">—</span>';
     const row = `<tr class="${isOwn ? 'df-row-own' : 'df-row-other'}${isSelected ? ' df-row-selected' : ''}${isPending ? ' row-editing' : ''}">
-      <td>${d.name}</td>
+      <td class="sticky-col sticky-col-last sticky-col-wrap">${d.name}</td>
       <td>${d.eventName || muted}</td>
       <td>${d.eventDate || muted}</td>
       <td>${d.owner}${d.orphaned ? ' <span style="color:var(--muted);font-size:0.8em">(orphaned)</span>' : ''}</td>
@@ -323,10 +323,11 @@ function renderDatasetList(datasets) {
   }).join('');
   list.innerHTML = `<table class="data-table">
     <thead><tr>
-      <th>Dataset</th><th>Event</th><th>Date</th><th>Owner</th><th>Visibility</th><th>Actions</th>
+      <th class="sticky-col sticky-col-last sticky-col-wrap">Dataset</th><th>Event</th><th>Date</th><th>Owner</th><th>Visibility</th><th>Actions</th>
     </tr></thead>
-    <tbody>${rows}</tbody>
+    <tbody id="df-dataset-tbody">${rows}</tbody>
   </table>`;
+  applyStickyColumns('df-dataset-tbody');
 
   list.querySelectorAll('.df-ds-disconnect').forEach(btn => {
     btn.onclick = () => disconnectDataset();

@@ -7,6 +7,13 @@ export function startUpdateCheck() {
   function showUpdateButton() {
     const btn = document.getElementById('btn-app-update');
     if (btn) btn.hidden = false;
+    // The button itself lives at the scrollable end of the header, so on a narrow
+    // phone it can be scrolled out of reach — flag the always-visible title too.
+    const title = document.getElementById('app-title-text');
+    if (title) {
+      title.classList.add('app-title-update-ready');
+      title.title = 'An update is ready — scroll the title bar right for the Update available button';
+    }
   }
   if (window._swWaiting) showUpdateButton();
   window.addEventListener('sw-update-ready', showUpdateButton);

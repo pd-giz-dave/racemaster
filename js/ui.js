@@ -504,6 +504,20 @@ export function tableColumns(defs, renders) {
   });
 }
 
+// A leading run of columns marked `sticky: true` (see TABLES in strings.js) freezes
+// against horizontal scroll — .sticky-col in app.css. `wrap: true` caps a free-text
+// sticky column's width (a name or race label would otherwise size the column to
+// whatever's currently longest, one row at a time, and swallow the rest of a narrow
+// phone screen) at applyStickyColumns()'s default, in ui.js — override with `cap: N`
+// (px) for a column that should get a narrower one, e.g. a short location code.
+function cellAttrs(c) {
+  const cls = [c.class, c.sticky && 'sticky-col', c.wrap && 'sticky-col-wrap'].filter(Boolean).join(' ');
+  let a = '';
+  if (cls) a += ` class="${cls}"`;
+  if (c.wrap && c.cap) a += ` data-sticky-cap="${c.cap}"`;
+  return a;
+}
+
 export function renderThead(tbodyId, columns) {
   const tbody = document.getElementById(tbodyId);
   const thead = tbody?.closest('table')?.querySelector('thead');
@@ -512,7 +526,7 @@ export function renderThead(tbodyId, columns) {
     let a = '';
     if (c.title) a += ` title="${c.title}"`;
     if (c.align) a += ` style="text-align:${c.align}"`;
-    if (c.class) a += ` class="${c.class}"`;
+    a += cellAttrs(c);
     return `<th${a}>${c.label}</th>`;
   }).join('') + '</tr>';
 }
@@ -531,11 +545,82 @@ export function renderTable(tbodyId, columns, rows, { rowAttrs } = {}) {
     tr += '>' + columns.map(c => {
       let td = '<td';
       if (c.align) td += ` style="text-align:${c.align}"`;
+      td += cellAttrs(c);
       return td + `>${c.render ? c.render(r) : ''}</td>`;
     }).join('') + '</tr>';
     return tr;
   }).join('');
+  applyStickyColumns(tbodyId);
   return tbody;
+}
+
+// .sticky-col-wrap's default cap — see applyStickyColumns() below for why this is
+// enforced from JS rather than a CSS max-width. Override per-column with `cap: N` in
+// TABLES (strings.js) — see cellAttrs() above.
+const STICKY_WRAP_CAP_PX = 140;
+
+// Positions each .sticky-col cell (see cellAttrs() above) with the `left` offset it
+// actually needs — the running sum of the *rendered* widths of the sticky columns before
+// it — instead of a hardcoded pixel guess. A column is exactly as wide as its content
+// needs (header label or its data), the way an ordinary un-frozen table column already
+// behaves; sticky columns just need this run each time the table's content changes,
+// since CSS alone can't measure a sibling's rendered width. Marking the last one —
+// sticky-col-last, for its divider border/shadow — happens here too, since which column
+// is last depends on how many are marked sticky.
+export function applyStickyColumns(tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  const table = tbody?.closest('table');
+  const theadRow = table?.tHead?.rows[0];
+  if (!theadRow) return;
+
+  const stickyThs = [...theadRow.cells].filter(th => th.classList.contains('sticky-col'));
+  if (!stickyThs.length) return;
+
+  // A row whose cell at this index spans multiple columns (colspan > 1 — a "No results"
+  // message, a category separator, an inline edit panel taking over the row) isn't part
+  // of the normal column grid and must be left alone, not squeezed into one column's width.
+  const allRows = [theadRow, ...tbody.rows];
+  const cellAt = (r, idx) => { const c = r.cells[idx]; return c && c.colSpan <= 1 ? c : null; };
+
+  // Clear old widths/offsets before measuring — a previous, possibly wider, run (or a
+  // previous forced cap) must not inflate this one (e.g. a long race name that got
+  // filtered out since last render).
+  stickyThs.forEach(th => {
+    const idx = th.cellIndex;
+    allRows.forEach(r => { const c = cellAt(r, idx); if (c) { c.style.left = ''; c.style.width = ''; } });
+  });
+
+  let offset = 0;
+  stickyThs.forEach((th, pos) => {
+    const idx = th.cellIndex;
+    const isLast = pos === stickyThs.length - 1;
+    // A free-text column (a name, a race label) needs a cap, or one long value on one
+    // row sizes the whole frozen block to match it and — on a narrow phone — leaves
+    // nothing readable for the columns after it. table-layout:auto doesn't reliably
+    // honour max-width on a <td> as an actual ceiling (verified: a 27-char value still
+    // rendered well past a 135px max-width), but explicit width does reliably constrain
+    // one — so measure what the column naturally wants first, and only force a width
+    // down to the cap if it actually exceeds it. Short content is unaffected — the
+    // column still shrinks to fit it, same as any other uncapped sticky column.
+    // (A single-line ellipsis-truncated column can't use this trick — white-space:nowrap
+    // gives the column an unshrinkable minimum width equal to its longest value's full
+    // rendered length, which auto-layout enforces over any explicit width — so every
+    // capped sticky column wraps instead, same as this one; `cap` just makes it a
+    // narrower wrap for a column that's normally short, like a location code.)
+    const cap = th.classList.contains('sticky-col-wrap') ? (+th.dataset.stickyCap || STICKY_WRAP_CAP_PX) : null;
+    const naturalWidth = th.getBoundingClientRect().width;
+    const width = cap ? Math.min(naturalWidth, cap) : naturalWidth;
+    if (cap && naturalWidth > cap) {
+      allRows.forEach(r => { const c = cellAt(r, idx); if (c) c.style.width = `${cap}px`; });
+    }
+    allRows.forEach(r => {
+      const cell = cellAt(r, idx);
+      if (!cell) return;
+      cell.classList.toggle('sticky-col-last', isLast);
+      cell.style.left = `${offset}px`;
+    });
+    offset += width;
+  });
 }
 
 export function wireFormFocusTrap(containerId, onEnter) {

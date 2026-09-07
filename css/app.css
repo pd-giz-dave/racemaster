@@ -106,6 +106,10 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 }
 
 .app-header h1 { font-size: 1.1rem; font-weight: 600; }
+/* Flagged once an update is ready — the "Update available" button lives at the
+   scrollable end of the header, so on a narrow phone it can be scrolled out of
+   view; this stays visible at the (always-in-view) start of the title. */
+#app-title-text.app-title-update-ready { color: var(--header-warn); }
 .app-header .event-name { font-size: 0.9rem; opacity: 0.85; }
 .app-header .app-icon { width: 28px; height: 28px; flex-shrink: 0; }
 .app-header .btn { color: var(--header-fg); border-color: var(--header-fg); }
@@ -550,6 +554,50 @@ button.df-badge-connected:hover { background: var(--danger); }
 #df-dataset-list .df-row-other:hover td  { background: var(--df-other-hover); }
 #df-dataset-list .df-row-selected td     { outline: 2px solid var(--accent); outline-offset: -1px; font-weight: 500; }
 
+/* Freeze the dataset-name column so it stays visible while scrolling right to
+   reach the Connect/Copy/Delete actions on narrow screens. No explicit
+   background needed here — every row is already .df-row-own or
+   .df-row-other, both of which set an opaque td background (above), and
+   both selectors are more specific than the generic .sticky-col one so they
+   still win. datasets.js builds this table by hand rather than through
+   renderTable(), so it calls applyStickyColumns() itself after rendering. */
+#df-panel-datasets { min-width: 300px; }
+
+/* ---- Sticky (frozen) leading table columns ----
+   Marked via `sticky: true` (+ optionally `wrap`/`truncate`) on a column
+   in TABLES (strings.js); renderTable()/renderThead() (ui.js) stamp the
+   classes below, and applyStickyColumns() (also ui.js, called from
+   renderTable() automatically) positions each one's `left` from its
+   *actual rendered width* — a column is exactly as wide as its content
+   needs, the same as an ordinary column, not a hardcoded pixel guess. */
+.sticky-col {
+  position: sticky;
+  z-index: 1;
+  background: var(--panel);
+}
+/* .data-table th already has a background (opaque) and a lower-specificity
+   position:sticky (vertical only, top:0) — this just adds the horizontal
+   left-offset on top and raises it above other rows' sticky cells so a
+   frozen top-left corner cell stays above both axes' worth of scrolled
+   content. */
+.data-table th.sticky-col { z-index: 2; }
+.data-table tr:hover td.sticky-col { background: var(--table-hover); }
+/* The last sticky column in a stack gets the divider — not every one, or
+   adjacent frozen columns (e.g. a select checkbox next to Name) would each
+   grow their own seam. */
+.sticky-col.sticky-col-last {
+  border-right: 1px solid var(--border);
+  box-shadow: 2px 0 4px -2px var(--shadow-sm);
+}
+/* Behaviour for free-text sticky columns (a name, a race label) once they hit their
+   cap — applyStickyColumns() (ui.js) is what actually enforces the cap width, since
+   table-layout:auto doesn't reliably honour max-width on a <td> as a real ceiling.
+   Always wraps rather than truncating: white-space:nowrap (needed for a single-line
+   ellipsis) gives a table cell an unshrinkable minimum width equal to its longest
+   value's full rendered length, which auto-layout enforces over any explicit width —
+   so a capped column has to be able to wrap, or the cap can't actually apply. */
+.sticky-col.sticky-col-wrap { overflow-wrap: break-word; }
+
 #header-dataset-name { color: var(--header-fg-dim); font-size: 0.875rem; }
 
 /* ---- Status bar ---- */
@@ -730,9 +778,15 @@ button.df-badge-connected:hover { background: var(--danger); }
 .btn-dupe-b { background: #fde68a; color: #5f4a00; border: none; border-radius: 3px; padding: 3px 8px; font-size: 0.78rem; cursor: pointer; }
 .btn-dupe-b:hover { opacity: 0.85; }
 
-/* narrow: form takes natural height, table fills the rest */
+/* narrow: form takes natural height, table follows below.
+   Plain "1fr" collapses to 0 whenever the form's own height already exceeds
+   the space .split-layout is given (any registration form with more than a
+   few fields, on a phone-height viewport) — that hides the whole table with
+   no way to reach it, even though .table-scroll's own overflow-y:auto looks
+   like it should let it scroll internally. minmax() puts a floor under it so
+   there's always a usable, internally-scrolling table area. */
 @media (max-width: 900px) {
-  .view-split .split-layout { grid-template-rows: auto 1fr; }
+  .view-split .split-layout { grid-template-rows: auto minmax(220px, 1fr); }
 }
 
 @media (max-width: 640px) {
@@ -742,8 +796,14 @@ button.df-badge-connected:hover { background: var(--danger); }
 
   /* Without min-width:0, the header's flex min-content inflates the 1fr track
      beyond the viewport — app-main ends up wider than the viewport and its
-     scrollbar lands off-screen, making content appear clipped with no scroll. */
-  .app-header { min-width: 0; overflow: hidden; }
+     scrollbar lands off-screen, making content appear clipped with no scroll.
+     overflow-x:auto (not hidden) lets the header itself scroll instead of
+     clipping — otherwise items past the fold (server status, "Update
+     available") are permanently unreachable, not just hidden until resize.
+     flex-shrink:0 on every child keeps each at its natural width rather than
+     squeezing text before the row actually needs to scroll. */
+  .app-header { min-width: 0; overflow-x: auto; overflow-y: hidden; }
+  .app-header > * { flex-shrink: 0; }
 
   .btn-hamburger { display: flex; }
 
@@ -769,6 +829,33 @@ button.df-badge-connected:hover { background: var(--danger); }
 
   /* Pin .app-main to its 1fr grid track so it can't inflate past the viewport */
   .app-main { min-width: 0; }
+
+  /* Same inflation bug, one level deeper: the datasets card is a flex item wrapping
+     a wide table.table-scroll — without min-width:0 here too, the table's min-content
+     width pushes the card (and the whole page) wider than the viewport instead of
+     letting .table-scroll's own overflow-x:auto handle it. */
+  #df-panels-row,
+  #df-panel-datasets { min-width: 0; }
+
+  /* Home summary: Statistics/Event Details/Getting Started never wrap (no
+     flex-wrap), and the two fit-content cards never shrink (flex:0 0 auto) — all
+     the squeeze lands on Getting Started, crushing it into an unreadable strip.
+     Stack them instead. */
+  .home-info-row { flex-direction: column; align-items: stretch; }
+  .home-stats-card,
+  .home-event-card { width: auto; }
+
+  /* Event Settings footer: .card is flex:0 0 auto (never shrinks), so a card
+     with a long paragraph (e.g. "New Race Setup") forces its max-content width
+     rather than wrapping, pushing .app-main wider than the viewport. */
+  .event-footer-row .card { flex: 1 1 auto; min-width: 0; }
+
+  /* Tab bars (Results, Safety Check, SI Results, Categories, ...) don't wrap or
+     shrink enough to fit several tabs' labels on a phone, so the row pushes
+     .app-main wider than the viewport. Let it scroll horizontally instead —
+     the usual mobile pattern for a row of tabs. */
+  .tab-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab-bar button { flex-shrink: 0; }
 
   /* Let view headers wrap rather than overflow horizontally */
   .view-header { flex-wrap: wrap; }

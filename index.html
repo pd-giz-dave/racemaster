@@ -35,7 +35,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1>RaceMaster <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.15-alpha)</button></h1>
+    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.16-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -1242,7 +1242,7 @@
         <div id="df-panels-row" style="display:none;gap:1rem;align-items:flex-start;flex:1;flex-basis:100%;flex-wrap:wrap">
 
           <!-- Datasets card -->
-          <div id="df-panel-datasets" class="card" style="flex:1;min-width:300px">
+          <div id="df-panel-datasets" class="card" style="flex:1">
             <p style="margin:0 0 8px;font-size:0.875rem;color:var(--muted,#666)">Your datasets and public datasets from other users (select connect to use one):</p>
             <div id="df-dataset-list" class="table-scroll" style="margin-bottom:10px"></div>
             <p id="df-dataset-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>

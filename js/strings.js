@@ -527,6 +527,8 @@ export const PAGES = {
       <li><strong>People database</strong> — persistent runner history across events</li>
       <li><strong>Paperwork</strong> — printable entry forms, finish sheets, number matrix, and A5 race bibs</li>
       <li><strong>Multi-device</strong> — conflict detection when two sessions edit the same dataset simultaneously</li>
+      <li><strong>Mobile-friendly</strong> — a collapsing menu, frozen table columns, and responsive layouts make the
+          app usable on a phone in the field, not just at a laptop</li>
     </ul>
     <h3>Data storage</h3>
     <p>All data is held in JSON files on the local server and cached in the browser.
@@ -539,7 +541,31 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.15-alpha - current version</h3>
+    <h3>v0.0.16-alpha - current version</h3>
+    <ul>
+      <li><strong>Mobile-friendly pass</strong> — this release is a sweep of the web app (not the published results
+          pages) for use on a phone in the field, ahead of junior race results being checked that way:</li>
+      <li>Fixed several layout bugs that only showed up on a narrow screen: the Home summary's Statistics/Event
+          Details/Getting Started cards now stack instead of crushing Getting Started into an unreadable strip; a
+          long paragraph on Event Settings no longer pushes the whole page into a horizontal scroll; tab bars
+          (Results, Safety Check, SI Results, Categories) that didn't fit now scroll horizontally instead of
+          overflowing the page</li>
+      <li>Fixed a serious one: on a phone-height screen, the Entries/Helpers/Finishers table could shrink to zero
+          height and disappear completely, with no way to scroll to it — the registration form alone was often
+          taller than the space available for form + table together</li>
+      <li>The header/title bar now scrolls horizontally on a phone instead of clipping — previously, on a narrow
+          screen, the "Update available" button and online-status dot could scroll out of reach with no way back;
+          the title text also now turns yellow whenever an update is ready, so that's visible without scrolling</li>
+      <li>The Bib/Line/Num/Name/Dataset/Race/Location columns on Entries, Finishers, Helpers, People, Dibbers,
+          Datasets, and Mobile Files (Devices and Bib Allocations tabs) now stay frozen in place while you scroll
+          sideways to reach Actions or later columns, sized dynamically to fit their content rather than a fixed
+          width — a short value takes up less room, a long one wraps rather than pushing other frozen columns off
+          disproportionately</li>
+      <li>Mobile Files Devices tab: Race and Location are now the first two columns (previously Owner/Race
+          Date/Device came first), and Location is relabelled "Where" — together these leave more of a narrow
+          screen free for the columns after them</li>
+    </ul>
+    <h3>v0.0.15-alpha</h3>
     <ul>
       <li>Datasets page: admins can now redirect a <strong>Copy</strong> into any existing user's account via an
           "as user" dropdown, instead of it always landing in their own — and can copy a private dataset they don't
@@ -677,8 +703,8 @@ export const PAGES = {
 
 export const TABLES = {
   entries: [
-    { id: 'bib',     label: 'Bib',     title: 'Race number' },
-    { id: 'name',    label: 'Name',    title: "Competitor's name" },
+    { id: 'bib',     label: 'Bib',     title: 'Race number', sticky: true },
+    { id: 'name',    label: 'Name',    title: "Competitor's name", sticky: true, wrap: true },
     { id: 'club',    label: 'Club',    title: 'Running club' },
     { id: 'dob',     label: 'DoB',     title: 'Date of birth' },
     { id: 'cat',     label: 'Cat',     title: 'Age category' },
@@ -688,8 +714,8 @@ export const TABLES = {
     { id: 'actions', label: 'Actions', title: 'Edit or delete this entry' },
   ],
   helpers: [
-    { id: 'number',  label: '#',       title: 'Helper number' },
-    { id: 'name',    label: 'Name',    title: "Helper's name" },
+    { id: 'number',  label: '#',       title: 'Helper number', sticky: true },
+    { id: 'name',    label: 'Name',    title: "Helper's name", sticky: true, wrap: true },
     { id: 'club',    label: 'Club',    title: 'Running club' },
     { id: 'role',    label: 'Role',    title: "Helper's role" },
     { id: 'actions', label: 'Actions', title: 'Edit or delete' },
@@ -719,7 +745,7 @@ export const TABLES = {
     { id: 'car_reg',       label: 'Car Reg',       title: 'Car registration' },
   ],
   finishers: [
-    { id: 'line',    label: 'Line',    title: 'Stopwatch split number' },
+    { id: 'line',    label: 'Line',    title: 'Stopwatch split number', sticky: true },
     { id: 'event',   label: 'Event',   title: 'Type of event (Finish, Start, Retire)' },
     { id: 'clock',   label: 'Clock',   title: 'Recorded time' },
     { id: 'bib',     label: 'Bib',     title: 'Race number' },
@@ -828,8 +854,8 @@ export const TABLES = {
     { id: 'finish_time', label: 'Finish', title: 'Total race time (upper) / last leg (lower) time to finish' },
   ],
   people: [
-    { id: 'select',       label: '',             title: 'Select for bulk delete' },
-    { id: 'name',         label: 'Name',         title: "Person's name" },
+    { id: 'select',       label: '',             title: 'Select for bulk delete', sticky: true },
+    { id: 'name',         label: 'Name',         title: "Person's name", sticky: true, wrap: true },
     { id: 'gender',       label: 'G',            title: 'Gender' },
     { id: 'dob',          label: 'DoB',          title: 'Date of birth' },
     { id: 'club',         label: 'Club',         title: 'Running club' },
@@ -862,7 +888,7 @@ export const TABLES = {
     { id: 'actions',   label: 'Actions',    title: 'Edit or delete' },
   ],
   dibbers: [
-    { id: 'short_code', label: 'Short Code', title: 'Short (3-digit) SI card number' },
+    { id: 'short_code', label: 'Num', title: 'Short (3-digit) SI card number', sticky: true },
     { id: 'long_code',  label: 'Long Code',  title: 'Full SI card number' },
     { id: 'owner',      label: 'Owner',      title: 'Who owns this card' },
     { id: 'lost',       label: 'Lost',       title: 'Date this dibber was lost — lost dibbers are excluded from allocation' },
@@ -870,12 +896,12 @@ export const TABLES = {
     { id: 'actions',    label: 'Actions',    title: 'Edit or delete' },
   ],
   'mobile-files': [
-    { id: 'select',    label: '',          title: 'Select for bulk actions' },
+    { id: 'select',    label: '',          title: 'Select for bulk actions', sticky: true },
+    { id: 'raceLabel', label: 'Race',      title: 'Race label as recorded on the phone', sticky: true, wrap: true },
+    { id: 'location',  label: 'Where',     title: 'Course location stamped on this device\'s currently-visible lines — every line should agree', sticky: true, wrap: true, cap: 80 },
     { id: 'owner',     label: 'Owner',     title: 'Account this file was uploaded under (admins only)' },
-    { id: 'raceLabel', label: 'Race',      title: 'Race label as recorded on the phone' },
     { id: 'raceDate',  label: 'Race Date', title: 'Race date parsed from the race label' },
     { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },
-    { id: 'location',  label: 'Location',  title: 'Course location stamped on this device\'s currently-visible lines — every line should agree' },
     { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset)' },
     { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset)' },
     { id: 'lastSeen',   label: 'Last Seen',   title: 'When the server (or, for a Bluetooth-pulled pending file, this browser) last actually heard from this device' },
@@ -883,8 +909,8 @@ export const TABLES = {
     { id: 'actions',   label: 'Actions',   title: 'View, view raw, or delete this file' },
   ],
   'bib-allocations': [
+    { id: 'raceLabel',   label: 'Race',       title: 'Race label this allocation was generated for', sticky: true, wrap: true },
     { id: 'owner',       label: 'Owner',      title: 'Account this race is recorded under (admins only)' },
-    { id: 'raceLabel',   label: 'Race',       title: 'Race label this allocation was generated for' },
     { id: 'raceDate',    label: 'Race Date',  title: 'Race date parsed from the race label' },
     { id: 'bibCount',    label: 'Bibs',       title: 'Number of bib numbers allocated' },
     { id: 'generatedAt', label: 'Generated',  title: 'When this file was last generated by the web app' },

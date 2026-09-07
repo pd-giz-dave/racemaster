@@ -60,7 +60,7 @@ export function renderBibAllocationsList(races, isAdminUser) {
     .map((r, idx) => ({ idx, owner: r.owner, raceLabel: r.raceLabel, raceDate: r.raceDate, ba: r.bibAllocations }));
   renderTable('bib-allocations-tbody', tableColumns(TABLES['bib-allocations'], {
     owner:       isAdminUser ? r => escHtml(r.owner) : undefined,
-    raceLabel:   r => escHtml(r.raceLabel),
+    raceLabel:   r => `<span title="${escHtml(r.raceLabel)}">${escHtml(r.raceLabel)}</span>`,
     raceDate:    r => formatRaceDate(r.raceDate),
     bibCount:    r => String(r.ba.entries.length),
     generatedAt: r => escHtml(r.ba.generatedAt || ''),

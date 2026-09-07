@@ -86,6 +86,13 @@
       across "Update progress" actions, the rest of the system must react as if there was a time there
       (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
 
+## Re-jig to be mobile friendly
+
+- [ ] Tweak the CSS, et al, so the pages render better on a mobile phone, e.g. use a collapsing ham burger menu,
+      in particular the results pages/system (not just the published pages, the app pages too), the objective is once 
+      the mobile app is complete the junior race results can be seen in the field on a mobile phone, the mobile app will
+      eventually auto update results via a connected web-app which would be on another mobile phone.
+
 ## Re-think dataset structure?
 
 Instead of a single dataset with everything embedded consider people, categories, dibbers, roles being separate tables?
