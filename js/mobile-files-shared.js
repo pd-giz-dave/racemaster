@@ -7,6 +7,8 @@
 // safely import from without any risk of a circular import.
 
 import { state } from './state.js';
+import { getSession } from './storage.js';
+import { getRaceStaleAfterDays, raceLabelAgeDays } from './mule-ble.js';
 
 // Ticked checkboxes, keyed by identity rather than row index — row indices are reassigned on
 // every render (races/devices can appear in a different order once sorted), so persisting
@@ -15,10 +17,22 @@ import { state } from './state.js';
 export const selectedKeys = new Set();
 export function rowKey(r) { return `${r.owner} ${r.raceLabel} ${r.device.name}`; }
 
+// The connected dataset's own identity — owner/fullName, exactly what the server itself uses
+// to address it (see storage.js's own use of session.dataset) — for guarding persisted
+// selection/auto-progress state below against a dataset switch. Deliberately NOT event
+// name+date: that's only a heuristic, and a real collision is easy to hit in practice — a Copy
+// of a dataset, or two genuinely unrelated ones, sharing the exact same event name and date
+// while holding completely different entries/mobile files. Standalone (no session) has no
+// dataset identity of its own, but there's only ever one standalone dataset per browser, so a
+// constant stands in for it.
+export function currentDatasetContext() {
+  return getSession()?.dataset || 'standalone';
+}
+
 // Persisted (unlike selectedKeys' own in-memory Set, which this only ever seeds/mirrors) so
 // the Results & Prize List page's autoUpdateProgress() (see mobile-files-progress.js) can find
-// "what was last ticked here" even after a page reload, with the event name+date stored
-// alongside so a later dataset switch doesn't get an old event's selection silently replayed
+// "what was last ticked here" even after a page reload, with the dataset identity stored
+// alongside so a later dataset switch doesn't get an old dataset's selection silently replayed
 // against a new one.
 const SELECTED_KEYS_STORAGE_KEY = 'racemaster-mobile-selected-keys';
 
@@ -31,9 +45,30 @@ export function loadSelectedKeys() {
 export function saveSelectedKeys() {
   try {
     localStorage.setItem(SELECTED_KEYS_STORAGE_KEY, JSON.stringify({
-      eventName: state.event.name, eventDate: state.event.date, keys: [...selectedKeys],
+      context: currentDatasetContext(), keys: [...selectedKeys],
     }));
   } catch { /* storage unavailable/full — best effort only, same as other persisted state here */ }
+}
+
+// selectedKeys itself is only ever in-memory — a real page reload (F5, not just navigating
+// within the app) starts it as an empty Set with nothing to repopulate it, even though the
+// persisted copy above (and anything gated behind it, e.g. #mf-auto-progress — see
+// mobile-files-progress.js) survives fine. Previously the only place that ever read the
+// persisted copy back in was autoUpdateProgress()'s own inline restore, which only runs when
+// the Results page is opened — landing straight on Mobile Files after a reload left the ticked
+// checkboxes empty (and #mf-auto-progress, watching an empty selection, with nothing to do)
+// until the operator either re-ticked them by hand or happened to visit Results first. Called
+// from renderMobileFiles() (see js/views/mobile-files.js) so it also covers that path — safe to
+// call more than once (autoUpdateProgress() still does its own restore too, for its own reasons
+// — see its doc), every call after the first for a given page load is a no-op.
+let selectionRestoredForSession = false;
+export function restoreSelectedKeysOnce() {
+  if (selectionRestoredForSession) return;
+  selectionRestoredForSession = true;
+  const persisted = loadSelectedKeys();
+  if (!persisted || persisted.context !== currentDatasetContext()) return;
+  selectedKeys.clear();
+  for (const k of persisted.keys) selectedKeys.add(k);
 }
 
 // ---- "New since last Compute Results" tracking ----
@@ -230,4 +265,80 @@ export function byLineNumber(a, b) { return (a.lineNumber ?? 0) - (b.lineNumber 
 export function computeIncorporationStatus(r) {
   if (!selectedKeys.has(rowKey(r))) return 'none';
   return maxLineNumber(r.device.lines) > getLastSyncedLineNumber(r) ? 'outstanding' : 'incorporated';
+}
+
+// ---- Background server poll (ToDo.MD line 42's server-side half) ----
+
+// How often the web app asks the server whether anything's new (js/views/mobile-files.js's own
+// background poll) while Auto-update progress is ticked — same persistence shape as
+// getRaceStaleAfterDays/setRaceStaleAfterDays (mule-ble.js): plain localStorage, no JSON
+// wrapper, clamped/defaulted only in the getter. Floored at 5s rather than 1s like stale-days'
+// own floor — this drives a real HTTP round trip every tick (see GET /api/mobile/status,
+// server/routes/mobile.js), not just a local decision, so it's worth a slightly higher floor to
+// discourage setting it low enough to needlessly hammer the server.
+const SERVER_POLL_INTERVAL_KEY = 'racemaster-mobile-server-poll-seconds';
+const DEFAULT_SERVER_POLL_INTERVAL_SECONDS = 30;
+
+export function getServerPollIntervalSeconds() {
+  const n = parseInt(localStorage.getItem(SERVER_POLL_INTERVAL_KEY), 10);
+  return Number.isFinite(n) && n >= 5 ? n : DEFAULT_SERVER_POLL_INTERVAL_SECONDS;
+}
+export function setServerPollIntervalSeconds(seconds) {
+  try { localStorage.setItem(SERVER_POLL_INTERVAL_KEY, String(seconds)); } catch { /* storage unavailable — best effort only */ }
+}
+
+// Compares a GET /api/mobile/status response (device name -> {mtime, size}, no `lines` — see
+// server/mobile.js's own getMobileRacesStatusForUser) against what's already cached from the
+// last full fetch (races' own device.lastSeen — the exact same file mtime the status endpoint
+// reports as `mtime`, both ultimately one fs.statSync server-side) to decide whether the full
+// GET /api/mobile fetch is actually worth making. No separate client-side cache needed —
+// lastKnownRaces (js/views/mobile-files.js) already carries everything required. Any
+// difference at all — a new/removed device or race, or a changed mtime — counts as "something's
+// new"; an identical listing (the overwhelmingly common case for a quiet poll tick) is detected
+// without transferring a single line of actual data.
+export function hasNewMobileData(status, lastKnownRaces) {
+  const key = (owner, raceLabel, deviceName) => `${owner} ${raceLabel} ${deviceName}`;
+  const known = new Map();
+  for (const race of lastKnownRaces) {
+    for (const device of race.devices) known.set(key(race.owner, race.raceLabel, device.name), device.lastSeen);
+  }
+  const current = new Map();
+  for (const race of status) {
+    for (const device of race.devices) current.set(key(race.owner, race.raceLabel, device.name), device.mtime);
+  }
+  if (known.size !== current.size) return true;
+  for (const [k, mtime] of current) {
+    if (known.get(k) !== mtime) return true;
+  }
+  return false;
+}
+
+// Hides a race whose label is older than getRaceStaleAfterDays() from the whole Mobile Files
+// page — extending that option (previously BLE-pull-only, see js/mule-ble.js's own
+// isRaceLabelStale) to races fetched from the server too. Carries the exact same safety
+// exemption as the BLE version and for the same reason (see isRaceLabelStale's own doc — a
+// multi-day event's label is set once on day one and never changes while the race keeps
+// recording for days after; date alone would otherwise start hiding a still-running event's own
+// data mid-race): a race stays visible if *any* of its devices has a line timestamped within
+// the staleness window, even with an old label. There's no BLE-style "already pulled" cursor to
+// compare against here — server data is already in hand once fetched, so recency is judged
+// directly from the data itself via latestLineTimestamp() rather than a delta-sync cursor.
+export function filterStaleRaces(races) {
+  const staleAfterDays = getRaceStaleAfterDays();
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return races.filter(race => {
+    const ageDays = raceLabelAgeDays(race.raceLabel);
+    if (ageDays === null || ageDays < staleAfterDays) return true;
+    return race.devices.some(device => {
+      const ts = latestLineTimestamp(device.lines || []);
+      if (!ts) return false;
+      // "yyyy/mm/dd HH:MM:SS" — reuse formatDateTime's own parsing shape rather than a new one.
+      const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(ts);
+      if (!m) return false;
+      const [, yyyy, mm, dd, HH, MM, SS] = m;
+      const lineDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(HH), Number(MM), Number(SS));
+      if (isNaN(lineDate.getTime())) return false;
+      return (Date.now() - lineDate.getTime()) / msPerDay < staleAfterDays;
+    });
+  });
 }

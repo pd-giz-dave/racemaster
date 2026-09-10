@@ -35,7 +35,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.16-alpha)</button></h1>
+    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.17-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -1264,10 +1264,18 @@
         <button class="btn btn-secondary" id="btn-refresh-mobile-files">Refresh</button>
         <button class="btn btn-secondary" id="btn-update-progress">Update Progress</button>
         <button class="btn btn-secondary" id="btn-clear-progress">Clear Progress</button>
+        <label id="mf-auto-progress-label" style="display:inline-flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mf-auto-progress" disabled> Auto-update progress
+        </label>
         <button class="btn" id="btn-connect-phone">Connect to Phone…</button>
         <span id="mobile-files-poll-interval" class="entry-status" hidden></span>
         <span id="mobile-files-poll-status" class="entry-status" hidden></span>
-        <label style="display:inline-flex;align-items:center;gap:4px;margin-left:auto" title="Skip races older than this many days — no BLE pull request is even sent for them. Shadows the same 'Skip races older than (days)' facility in the RaceMaster Mobile app.">
+        <label style="display:inline-flex;align-items:center;gap:4px;margin-left:auto" title="While Auto-update progress is ticked, how often the web app asks the server whether any ticked file's data has changed — a cheap check, not a full re-fetch — and updates progress automatically if so.">
+          Poll server every
+          <input type="number" id="mobile-files-poll-seconds" min="5" max="999" style="width:3.5em">
+          seconds
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:4px" title="Skip races older than this many days — no BLE pull request is even sent for them, and once fetched from the server they're hidden from this page entirely (unless still genuinely active — see the Auto-update progress help below). Shadows the same 'Skip races older than (days)' facility in the RaceMaster Mobile app.">
           Skip races older than
           <input type="number" id="mobile-files-stale-days" min="1" max="999" style="width:3.5em">
           days

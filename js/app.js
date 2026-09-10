@@ -81,6 +81,21 @@ export async function init() {
   startUpdateCheck();
   startConflictWatch();
   window.addEventListener('racemaster-dirty-change', updateDataFileButton);
+  // Progress can change in the background — the new server poll, a Bluetooth auto-pull,
+  // Update Progress run from any of the three places that can trigger it — while the operator
+  // is looking at any page that reads state.mobileProgress/state.mobileCheckpoints live (Home,
+  // Safety Check, Results & Prize List — see applyComputedResults()'s own doc in
+  // mobile-files-progress.js). Re-render all three unconditionally (same pattern renderAll()
+  // below already uses for Home/Safety after a full data reload), plus whatever view is actually
+  // showing right now in case it's a fourth page with its own dependency on this state (e.g.
+  // Event Settings' "Mobile Progress" count) — cheap and safe to call redundantly, same as
+  // renderAll() already relies on.
+  window.addEventListener('racemaster-progress-updated', () => {
+    renderHome();
+    renderSafety();
+    renderResults();
+    renderView(currentView);
+  });
   wireDatasets(connectAndLoad);
   wireNav();
   wireEvents();

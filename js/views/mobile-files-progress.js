@@ -17,7 +17,7 @@ import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { getMobileCheckpointNumbers } from '../mobile-checkpoints.js';
 import { state } from '../state.js';
-import { selectedKeys, computeIncorporationStatus, loadSelectedKeys } from '../mobile-files-shared.js';
+import { selectedKeys, computeIncorporationStatus, loadSelectedKeys, currentDatasetContext } from '../mobile-files-shared.js';
 import {
   validateAndCompute, clearProgressData, applyComputedResults,
   buildProgressColumns, buildProgressRows,
@@ -37,6 +37,64 @@ function getSelectedRows() {
     .filter(Boolean);
 }
 
+// ---- Auto-update progress (ToDo.MD line 42) ----
+//
+// #mf-auto-progress starts disabled — there's nothing to trust it against until a manual
+// Update Progress run has actually succeeded once, proving this dataset's own setup
+// (categories, entries, etc.) is correct for it. There is exactly one of these — a single
+// localStorage key holding the one dataset it's currently valid for (currentDatasetContext(),
+// see mobile-files-shared.js — the dataset's own owner/fullName identity, NOT event name+date:
+// that's only a heuristic, and two different datasets — a Copy of one, or two genuinely
+// unrelated events — can easily share the same name and date). Switching to a different
+// dataset just means the stored context no longer matches, so loadAutoProgressState() below
+// returns null for it — nothing needs deleting or juggling per-dataset, there's only ever the
+// one flag, valid for at most one dataset at a time.
+const AUTO_PROGRESS_KEY = 'racemaster-mobile-auto-progress';
+
+function loadAutoProgressState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(AUTO_PROGRESS_KEY) || 'null');
+    if (!parsed || parsed.context !== currentDatasetContext()) return null;
+    return parsed;
+  } catch { return null; }
+}
+function saveAutoProgressState(patch) {
+  try {
+    const current = loadAutoProgressState() || { unlocked: false, enabled: false };
+    localStorage.setItem(AUTO_PROGRESS_KEY, JSON.stringify({
+      context: currentDatasetContext(), ...current, ...patch,
+    }));
+  } catch { /* storage unavailable/full — best effort only, same as other persisted state here */ }
+}
+// A failed attempt — for whatever reason: a bib not in Entries, a network error mid-validation,
+// anything — is reason enough to distrust the unlock, not just leave it as-is: whatever gave it
+// that trust clearly isn't holding any more, and #mf-auto-progress re-running unattended against
+// the same broken state would just repeat the same failure indefinitely with nobody watching.
+// Removing the key outright (rather than writing unlocked:false) means a stale entry for some
+// other dataset can never accidentally read back as "locked, but valid" once this dataset
+// reconnects — there's nothing to leave behind describing this one at all.
+function clearAutoProgressState() {
+  try { localStorage.removeItem(AUTO_PROGRESS_KEY); } catch { /* best effort */ }
+}
+
+export function isProgressAutoUnlocked() { return !!loadAutoProgressState()?.unlocked; }
+export function isProgressAutoEnabled()  { return isProgressAutoUnlocked() && !!loadAutoProgressState()?.enabled; }
+export function setProgressAutoEnabled(enabled) { saveAutoProgressState({ enabled }); }
+
+// Reflects current unlocked/enabled state into the checkbox — called once at wire time and
+// again every render (renderMobileProgressTable(), below), since which dataset is connected
+// (and therefore whether it's unlocked) can change without a page reload.
+function syncAutoProgressCheckbox() {
+  const cb = document.getElementById('mf-auto-progress');
+  if (!cb) return;
+  const unlocked = isProgressAutoUnlocked();
+  cb.disabled = !unlocked;
+  cb.checked = unlocked && isProgressAutoEnabled();
+  cb.title = unlocked
+    ? 'Automatically re-run Update Progress whenever a ticked file\'s data changes — a Bluetooth pull, Refresh, Push, or Discard'
+    : 'Run Update Progress successfully at least once for this dataset to unlock this option';
+}
+
 export async function clearProgress() {
   if (!state.mobileProgress.length && !state.mobileCheckpoints.length) {
     showStatus('No computed progress to clear.');
@@ -48,6 +106,10 @@ export async function clearProgress() {
     'Clear Progress', true
   )) return;
   await clearProgressData();
+  // Deleting the computed data undermines the same trust a failed Update Progress attempt
+  // would — see clearAutoProgressState()'s own doc above. renderMobileProgressTable() below
+  // already calls syncAutoProgressCheckbox() itself, so the checkbox reflects this immediately.
+  clearAutoProgressState();
   renderMobileProgressTable();
   showStatus('Progress cleared.');
 }
@@ -59,10 +121,20 @@ export async function updateProgress() {
   await renderAll();
 
   const selected = getSelectedRows();
-  if (!selected.length) { showStatus('Select one or more mobile files first.', true); return; }
+  if (!selected.length) {
+    showStatus('Select one or more mobile files first.', true);
+    clearAutoProgressState();
+    syncAutoProgressCheckbox();
+    return;
+  }
 
   const result = await validateAndCompute(selected);
-  if (result.error) { showStatus(result.error, true); return; }
+  if (result.error) {
+    showStatus(result.error, true);
+    clearAutoProgressState();
+    syncAutoProgressCheckbox();
+    return;
+  }
   const { finishRows, cpBuckets, expected, cpTimesByCp } = result;
 
   const existingCount = state.mobileProgress.length;
@@ -73,6 +145,12 @@ export async function updateProgress() {
   if (!await showConfirmDialog(confirmMsg, 'Update Progress')) return;
 
   const { added } = await applyComputedResults(expected, cpTimesByCp, selected);
+
+  // A successful manual run is exactly the proof #mf-auto-progress needs to unlock — see this
+  // file's own AUTO_PROGRESS_KEY doc above. Set before the re-render below so
+  // renderMobileProgressTable()'s own syncAutoProgressCheckbox() call reflects it immediately,
+  // not on some later render.
+  saveAutoProgressState({ unlocked: true });
 
   // Re-render so each transferred file's row immediately reflects its new incorporation status
   // (red/green) rather than waiting for the next Refresh/pull — see the ordering note above
@@ -100,11 +178,10 @@ export async function updateProgress() {
 export async function autoUpdateProgress() {
   const persisted = loadSelectedKeys();
   if (!persisted || !persisted.keys.length) return;
-  // Event name+date is a heuristic, not a guaranteed-unique dataset identity (two different
-  // datasets could coincidentally share both) — good enough to guard against the realistic
-  // case (switching datasets in place, via Datasets' Connect, without a page reload) without
-  // needing a true cross-dataset identifier, which nothing in this codebase currently tracks.
-  if (persisted.eventName !== state.event.name || persisted.eventDate !== state.event.date) return;
+  // Guards against the realistic case of switching datasets in place (via Datasets' Connect,
+  // without a page reload) using a real dataset identity — see currentDatasetContext()'s own
+  // doc in mobile-files-shared.js for why this isn't event name+date.
+  if (persisted.context !== currentDatasetContext()) return;
 
   selectedKeys.clear();
   for (const k of persisted.keys) selectedKeys.add(k);
@@ -116,6 +193,38 @@ export async function autoUpdateProgress() {
 
   const result = await validateAndCompute(selected);
   if (result.error) { console.warn('[mobile-files] Progress auto-update skipped:', result.error); return; }
+
+  await applyComputedResults(result.expected, result.cpTimesByCp, selected);
+  renderMobileProgressTable();
+}
+
+// #mf-auto-progress's own trigger — called from mobile-files.js's own renderMobileFiles() once
+// it's finished re-rendering, which happens after every action that can change a selected
+// file's data (Refresh, Push, Discard, Delete, a Bluetooth pull that found something new — see
+// that file's own doc) — that's what "whenever the selected files change, from any source"
+// (ToDo.MD line 42) means in practice here. Deliberately not the same function as
+// autoUpdateProgress() above: that one reloads the *persisted* selection and calls renderAll()
+// itself, for the Results page's own case of arriving with nothing live rendered yet — calling
+// it from here would recurse, since renderMobileFiles() has already just done both. This one
+// instead trusts the selection already live on screen and does no rendering of its own beyond
+// the progress table.
+export async function maybeAutoUpdateProgress() {
+  if (!isProgressAutoEnabled()) return;
+  const selected = getSelectedRows();
+  if (!selected.length) return;
+  if (!selected.some(r => computeIncorporationStatus(r) === 'outstanding')) return; // nothing new since the last run
+
+  const result = await validateAndCompute(selected);
+  if (result.error) {
+    // Same "any failed attempt clears the trust" rule as updateProgress()'s own manual failure
+    // paths — an unattended run that's started failing shouldn't just keep silently failing
+    // again on every future change with nobody watching; lock it back down and let a manual
+    // Update Progress re-prove it once whatever's wrong is fixed.
+    console.warn('[mobile-files] Progress auto-update skipped:', result.error);
+    clearAutoProgressState();
+    syncAutoProgressCheckbox();
+    return;
+  }
 
   await applyComputedResults(result.expected, result.cpTimesByCp, selected);
   renderMobileProgressTable();
@@ -134,9 +243,12 @@ export function renderMobileProgressTable() {
   };
   for (const n of cpNumbers) renderers[`cp_${n}`] = r => escHtml(r.cpTimes?.[n] || '');
   renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), renderers), rows);
+  syncAutoProgressCheckbox();
 }
 
 export function wireProgressTab() {
   on('btn-update-progress', 'click', updateProgress);
   on('btn-clear-progress', 'click', clearProgress);
+  document.getElementById('mf-auto-progress')?.addEventListener('change', e => setProgressAutoEnabled(e.target.checked));
+  syncAutoProgressCheckbox();
 }

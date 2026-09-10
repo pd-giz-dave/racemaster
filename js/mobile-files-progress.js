@@ -55,18 +55,32 @@ function findStartTimestamp(finishTimeRows) {
 // this is genuinely just (crossing timestamp − start timestamp). A bib appearing twice in one
 // CP file (e.g. an operator's accidental double-tap) keeps its earliest crossing, sorted by
 // lineNumber — the file's own unambiguous record order.
+//
+// A DNF row (a retire recorded at this checkpoint, not just at Finish) gets the CP_RETIRE
+// sentinel instead of a computed elapsed time — there's no crossing to time in the first place,
+// and treating it as an ordinary bib would produce a nonsense "time" for someone who didn't
+// continue past here. Recorded regardless of whether a valid Start timestamp exists (unlike an
+// ordinary crossing): a retire needs no arithmetic against it, and is worth keeping even when
+// the Start row itself is missing/corrupt. validateAndCompute() below scans the returned map
+// for this sentinel to also mark the bib DNF in state.mobileProgress — see its own doc — and
+// every other consumer of state.mobileCheckpoints (buildProgressRows() here, the Splits tab's
+// adjustedFinishTime() in results.js, Safety Check's "Last CP" hint) already treats a CP time as
+// an opaque display string, so no further special-casing is needed there.
+export const CP_RETIRE = 'Retire';
 function computeCpTimes(bibsRows, startMs) {
   const byBib = new Map();
   for (const r of [...bibsRows].sort(byLineNumber)) {
     const bib = +r.bibNumber;
-    if (!Number.isFinite(bib) || bib <= 0 || byBib.has(bib) || startMs == null) continue;
+    if (!Number.isFinite(bib) || bib <= 0 || byBib.has(bib)) continue;
+    if (r.action === 'DNF') { byBib.set(bib, CP_RETIRE); continue; }
+    if (startMs == null) continue;
     const ts = parseTimestamp(r.timestamp);
     if (ts == null) continue;
     const elapsed = Math.round((ts - startMs) / 1000);
     if (elapsed < 0) continue; // bad data/clock skew — leave blank rather than show nonsense
     byBib.set(bib, secondsToTime(elapsed));
   }
-  return byBib; // bib -> 'HH:MM:SS'
+  return byBib; // bib -> 'HH:MM:SS' | CP_RETIRE
 }
 
 // Derives what state.mobileProgress *should* contain for one file's current segment — bib-driven
@@ -236,6 +250,25 @@ export async function validateAndCompute(selected) {
   }
 
   const expected = expectedFinisherEntries(bibs, times);
+
+  // A bib retired at a checkpoint (CP_RETIRE, see computeCpTimes' own doc) may never reach the
+  // Finish location at all — exactly the safety-relevant case buildProgressRows() already
+  // exists for ("a bib seen only at a CP, with no finish"). Surface it as a DNF the same way a
+  // Finish-location retire already does (FinishTime shows "DNF"), rather than leaving it
+  // silently absent from Progress/Safety Check's finished/outstanding counts/the Results Splits
+  // tab's status — all three read state.mobileProgress for a 'DNF' action (see isRecordedDnf()
+  // in results.js, getFinishedBibs() in safety.js). Finish stays authoritative when there IS a
+  // genuine Finish-location record for this bib (Start/Finish/DNF) — this only fills the gap
+  // for a bib with no Finish entry at all.
+  const finishKnownBibs = new Set(expected.map(e => e.number).filter(n => n > 0));
+  const cpRetiredBibs = new Set();
+  for (const cpMap of cpTimesByCp.values()) {
+    for (const [bib, time] of cpMap) if (time === CP_RETIRE) cpRetiredBibs.add(bib);
+  }
+  for (const bib of cpRetiredBibs) {
+    if (!finishKnownBibs.has(bib)) expected.push({ action: 'DNF', number: bib, time: '' });
+  }
+
   return { finishRows, cpBuckets, expected, cpTimesByCp };
 }
 
@@ -268,6 +301,20 @@ export async function applyComputedResults(expected, cpTimesByCp, selected) {
   // Mark every selected file as "seen as of now" — this run covered whatever these files held at
   // this moment. See mobile-files-shared.js's own tracking block for why a lineNumber is enough.
   for (const r of selected) setLastSyncedLineNumber(r);
+
+  // Home/Safety Check/Results & Prize List all read state.mobileProgress/state.mobileCheckpoints
+  // live (see this function's own doc above) — correct the moment this function returns, but
+  // only actually reflected on screen the next time each page happens to render. That's fine
+  // when *this* run was itself triggered by opening one of those pages (they re-render right
+  // after anyway), but this can just as easily run in the background — the new server poll, a
+  // Bluetooth auto-pull, autoUpdateProgress() from a Results-page visit that's since been left
+  // open — while the operator is looking at any of those pages already, in which case nothing
+  // would otherwise tell the page it's now stale. app.js listens for this and re-renders them
+  // (and whatever view is actually showing right now) — a plain DOM CustomEvent rather than a
+  // direct call so this pure, DOM-free module doesn't need to import any of the view layer to
+  // reach them; same decoupling storage.js's own 'racemaster-dirty-change'/'racemaster-conflict'
+  // events already use for the equivalent problem.
+  window.dispatchEvent(new CustomEvent('racemaster-progress-updated'));
 
   return { added: expected.length };
 }

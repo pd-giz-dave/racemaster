@@ -23,15 +23,21 @@
 // file's own module graph to load.
 
 import {
-  getSession, getIsAdmin, getUsername, apiListMobileFiles, apiDeleteMobileFile,
+  getSession, getIsAdmin, getUsername, apiListMobileFiles, apiGetMobileStatus, apiDeleteMobileFile,
   apiPushMobileSync, getPendingMobileFiles, removePendingMobileFile,
 } from '../storage.js';
 import { showConfirmDialog, showStatus, wireTabBar, getEl } from '../ui.js';
 import { isBluetoothAvailable, resetLastPulledLineNumber, resetAllLastPulledLineNumbers } from '../mule-ble.js';
-import { rowKey, selectedKeys, saveSelectedKeys, computeIncorporationStatus, mergePendingIntoRaces } from '../mobile-files-shared.js';
+import {
+  rowKey, selectedKeys, saveSelectedKeys, computeIncorporationStatus, mergePendingIntoRaces, restoreSelectedKeysOnce,
+  getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
+} from '../mobile-files-shared.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
 import { renderBibAllocationsList, wireBibAllocationsTab } from './mobile-files-bib-allocations.js';
-import { renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress } from './mobile-files-progress.js';
+import {
+  renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
+  isProgressAutoEnabled,
+} from './mobile-files-progress.js';
 import { initBle, wireBleControls, updateConnectButtonLabel } from './mobile-files-ble.js';
 
 export { autoUpdateProgress };
@@ -157,6 +163,20 @@ export function wireMobileFiles() {
       else if (r.incorporationStatus === 'incorporated') tr.classList.add('row-incorporated');
     }
   });
+  const pollSecondsInput = document.getElementById('mobile-files-poll-seconds');
+  if (pollSecondsInput) {
+    pollSecondsInput.value = String(getServerPollIntervalSeconds());
+    // Same 'change'-not-'input' / reflect-back-whatever-actually-saved pattern as
+    // #mobile-files-stale-days (see mobile-files-ble.js) — restartServerPoll() re-schedules
+    // immediately so an edited interval takes effect on the spot, not on the next page load.
+    pollSecondsInput.addEventListener('change', () => {
+      const seconds = parseInt(pollSecondsInput.value, 10);
+      if (Number.isFinite(seconds) && seconds >= 5) setServerPollIntervalSeconds(seconds);
+      pollSecondsInput.value = String(getServerPollIntervalSeconds());
+      restartServerPoll();
+    });
+  }
+  restartServerPoll();
 }
 
 // Genuinely awaitable (not fire-and-forget) so a caller — e.g. mobile-files-progress.js's own
@@ -164,14 +184,28 @@ export function wireMobileFiles() {
 // finish. Resolves true if the server fetch succeeded, false if it fell back to a local/offline
 // view (with its own status message already shown either way, so callers don't need to notify
 // separately on top of it).
-export async function renderMobileFiles() {
+//
+// silent (used only by pollServerForChanges() below): suppresses every showStatus() call in
+// this function. A background poll tick can fire while the operator is looking at a completely
+// different page — showStatus() writes to the app's one global status bar (see ui.js), so
+// "Loading…" flashing there, or a "Server unreachable…" toast every N seconds purely because
+// this tick happened to catch a transient blip, would stomp on whatever that page's own last
+// message was for no reason the operator asked for. The header's own online/offline indicator
+// (js/connect.js's pingServerNow()) already covers connectivity; this function's job on a
+// silent tick is just to quietly update the data.
+export async function renderMobileFiles({ silent = false } = {}) {
+  // A real page reload (F5) starts selectedKeys empty with no route back to what was ticked
+  // before — see restoreSelectedKeysOnce()'s own doc in mobile-files-shared.js for why this is
+  // needed here specifically (previously only autoUpdateProgress() ever restored it, and only
+  // when the Results page happened to be opened).
+  restoreSelectedKeysOnce();
   const session  = getSession();
   const count    = getEl('mobile-files-count');
   const connectBtn = getEl('btn-connect-phone');
   if (connectBtn) connectBtn.hidden = !isBluetoothAvailable();
   updateConnectButtonLabel();
   if (!session) {
-    showStatus('Sign in on the Datasets page to view mobile files.');
+    if (!silent) showStatus('Sign in on the Datasets page to view mobile files.');
     renderRaceList([], false);
     renderBibAllocationsList([], false);
     renderMobileProgressTable();
@@ -180,28 +214,67 @@ export async function renderMobileFiles() {
   }
   const isAdminUser = getIsAdmin();
   const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
-  showStatus('Loading…');
+  if (!silent) showStatus('Loading…');
   try {
     const races = await apiListMobileFiles(session.token);
     lastKnownRaces = Array.isArray(races) ? races : [];
-    const merged = mergePendingIntoRaces(lastKnownRaces, pending);
+    const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
     renderBibAllocationsList(merged, isAdminUser);
     renderMobileProgressTable();
-    showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
+    if (!silent) showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
+    await maybeAutoUpdateProgress();
     return true;
   } catch {
     // Server unreachable — keep showing whatever was last successfully loaded rather than
     // wiping the list down to only locally-pulled pending files.
-    const merged = mergePendingIntoRaces(lastKnownRaces, pending);
+    const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
     renderBibAllocationsList(merged, isAdminUser);
     renderMobileProgressTable();
-    showStatus(merged.length
-      ? 'Server unreachable — showing the last known list plus anything pulled locally.'
-      : 'Server unreachable, and no locally-pulled files yet.', !merged.length);
+    if (!silent) {
+      showStatus(merged.length
+        ? 'Server unreachable — showing the last known list plus anything pulled locally.'
+        : 'Server unreachable, and no locally-pulled files yet.', !merged.length);
+    }
+    // Auto-update reads whatever's already local (state + any pending Bluetooth pulls) — it
+    // doesn't need the server, so a failed fetch here shouldn't skip it: new data can still have
+    // arrived locally even while offline.
+    await maybeAutoUpdateProgress();
     return false;
   }
+}
+
+// ---- Background server poll (ToDo.MD line 42's server-side half) ----
+//
+// While ticked, #mf-auto-progress (mobile-files-progress.js) only ever reacted to *this
+// browser's own* actions (Refresh, Push, Discard, Delete, a Bluetooth pull) — nothing here
+// noticed a WiFi sync, or another admin's upload, until some unrelated action happened to call
+// renderMobileFiles() again. This polls the server every getServerPollIntervalSeconds() while
+// online, but cheaply: GET /api/mobile/status (server/routes/mobile.js) costs one fs.statSync
+// per device file, no content read — hasNewMobileData() compares that against lastKnownRaces,
+// and only then is the full renderMobileFiles({silent:true}) (itself already ending in
+// maybeAutoUpdateProgress()) actually worth calling.
+async function pollServerForChanges() {
+  if (!isProgressAutoEnabled()) return; // nothing to do — not even the lightweight fetch is worth making
+  const session = getSession();
+  if (!session) return;
+  let status;
+  try { status = await apiGetMobileStatus(session.token); }
+  catch { return; } // offline — try again next tick, same as any other silent background failure
+  if (!Array.isArray(status) || !hasNewMobileData(status, lastKnownRaces)) return;
+  await renderMobileFiles({ silent: true });
+}
+
+// Not page-scoped — started once at wire time (see wireMobileFiles() below) and keeps ticking
+// for the app's whole life, same one-time-at-init, app-wide convention startServerPing() uses
+// (js/connect.js, wired from js/app.js's init()), not tied to which view happens to be showing.
+// Cleared and rescheduled (rather than left running at a stale period) whenever the interval
+// setting itself changes, via the #mobile-files-poll-seconds 'change' handler below.
+let pollTimer = null;
+function restartServerPoll() {
+  if (pollTimer !== null) clearInterval(pollTimer);
+  pollTimer = setInterval(pollServerForChanges, getServerPollIntervalSeconds() * 1000);
 }

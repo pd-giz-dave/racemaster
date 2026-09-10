@@ -6,7 +6,7 @@
 - [x] server logic
 - [ ] view logic?
 
-## Add importing results from other sources
+## Add importing results from other sources?
 
 - [ ] CSV file - make SI Results a generic CSV import as long as the file has required columns (in any order)
 
@@ -24,7 +24,7 @@
 - [x] allow for CP mode entries, assume the course is in CP location order, e.g. CP1 -> CP2 -> .. CPn,
       compute elapsed times through CPs as their time-of-day minus time-of-day when the clock started
 - [x] add the results tab here as another results source when generating the results page
-- [ ] i think i've got muddled here: the idea of the results tab is to collate all the information
+- [x] i think i've got muddled here: the idea of the results tab is to collate all the information
       in the selected mobile files in such a manner as they can be incorporated in the race results
       as rendered on the results page, currently there are 2 sources: the finishers list and the SI results
       list, the intention is these mobile files results set are a third source, i like the safety features
@@ -33,21 +33,17 @@
       required information to allow that, the mobile files contain all the same information as can be
       gleaned from the finishers list with the addition of the CP mode times, they must be in
       the formatted results in a similar way to the SI results
-- [x] change the results tab name to "Progress", the "Compute Results" to "Update Progress" and "Clear Results" to "Clear Progress",
-- [ ] the Progress tab fulfills 2 roles: provide information required to produce results and provide feedback about where runners are on the course,
-      to that end the ordering should be by bib number and not position (as it no longer knows that)
-- [ ] the progress page should also show explicit start actions if a bib has done an early/late start
-- [ ] when the results page is shown it should do an auto "Update Progress" when the context is appropriate
+- [x] change the results tab name to "Progress", the "Compute Results" to "Update Progress" and "Clear Results" to 
+      "Clear Progress",
+- [x] the Progress tab fulfills 2 roles: provide information required to produce results and provide feedback about 
+      where runners are on the course, to that end the ordering should be by bib number and not position (as it no 
+      longer knows that)
+- [x] the progress page should also show explicit start actions if a bib has done an early/late start
+- [x] when appropriate auto update progress whenever the selected files change (from any source)
 - [ ] on the safety page Last CP column, add "Start @..." for explicit early/late starts
       as we know we saw them there, also show the time-of-day not the elapsed time,
       also use time-of-day and not start time on the early starters tab,
       fallback to elapsed time if time-of-day is not available
-- [ ] another possible change of tack on results: the only thing the finishers page cannot do is CP splits,
-      for the SI case they are shown dynamically in the splits tab of the results, so the conventional results
-      can be accommodated on the finishers page, explore the idea of consolidating all results sources into
-      the finishers page and doing splits separately, the finishers page would need a 'source' column so that
-      multiple sources can mix (e.g. juniors manual via stopwatch, seniors auto via SI), so the sources are (at present):
-      manual, SI, bluetooth, would that simplify things?
 
 ## Data loss prevention
 
@@ -73,7 +69,7 @@
 - [ ] an admin user can change any password
 - [ ] the mobile password must be different to the web-app and its constraint must always be applied (a-zA-Z0-9)
 
-## Race details
+## Race details to mimic SI wrt course CPs?
 
 - [ ] in event settings add a section that lists CP numbers that must be passed and in what order
 - [ ] if the list is empty CP records are optional and purely for safety purposes
@@ -88,7 +84,7 @@
 
 ## Re-jig to be mobile friendly
 
-- [ ] Tweak the CSS, et al, so the pages render better on a mobile phone, e.g. use a collapsing ham burger menu,
+- [x] Tweak the CSS, et al, so the pages render better on a mobile phone, e.g. use a collapsing ham burger menu,
       in particular the results pages/system (not just the published pages, the app pages too), the objective is once 
       the mobile app is complete the junior race results can be seen in the field on a mobile phone, the mobile app will
       eventually auto update results via a connected web-app which would be on another mobile phone.

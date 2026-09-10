@@ -175,6 +175,19 @@ export async function apiListMobileFiles(token) {
   return res.json();
 }
 
+// Lightweight counterpart — same shape/scoping as apiListMobileFiles() above, but each device
+// costs the server one fs.statSync (mtime+size) rather than a full read+parse, and the response
+// carries no `lines` (see GET /api/mobile/status, server/routes/mobile.js). Used by the Mobile
+// Files page's own background poll (js/views/mobile-files.js) to check "anything new" cheaply
+// before paying for the full apiListMobileFiles() fetch.
+export async function apiGetMobileStatus(token) {
+  const res = await fetch('/api/mobile/status', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function apiDeleteMobileFile(token, owner, raceLabel, deviceName) {
   const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/${encodeURIComponent(deviceName)}`, {
     method: 'DELETE',

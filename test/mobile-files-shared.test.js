@@ -5,13 +5,15 @@ import assert from 'node:assert/strict';
 
 import { state } from '../js/state.js';
 import { installLocalStorageMock } from './helpers/mock-browser.js';
+import { setRaceStaleAfterDays } from '../js/mule-ble.js';
 import {
-  selectedKeys, rowKey, loadSelectedKeys, saveSelectedKeys,
+  selectedKeys, rowKey, loadSelectedKeys, saveSelectedKeys, currentDatasetContext,
   loadLastSynced, saveLastSynced, getLastSyncedLineNumber, setLastSyncedLineNumber, maxLineNumber,
   loadBleLastSeen, recordBleLastSeen, getBleLastSeen,
   laterIso, formatRaceDate, formatDateTime, formatStoredTimestamp, latestLineTimestamp,
   parseRaceLabelDate, raceNameOf, sortRaces, mergePendingIntoRaces,
   byLineNumber, computeIncorporationStatus,
+  getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
 } from '../js/mobile-files-shared.js';
 
 beforeEach(() => {
@@ -35,14 +37,24 @@ describe('mobile-files-shared.js:rowKey', () => {
   });
 });
 
+describe('mobile-files-shared.js:currentDatasetContext', () => {
+  it('is "standalone" with no session', () => {
+    assert.equal(currentDatasetContext(), 'standalone');
+  });
+
+  it('is the session\'s own owner/fullName dataset identity when signed in', () => {
+    localStorage.setItem('racemaster-token', 'tok123');
+    localStorage.setItem('racemaster-dataset', 'alice/race-2026');
+    assert.equal(currentDatasetContext(), 'alice/race-2026');
+  });
+});
+
 describe('mobile-files-shared.js:loadSelectedKeys / saveSelectedKeys', () => {
-  it('round-trips the current selection plus the event identity it was saved under', () => {
-    state.event.name = 'Test Event';
-    state.event.date = '2026-08-30';
+  it('round-trips the current selection plus the dataset identity it was saved under', () => {
     selectedKeys.add('alice test-race Phone One');
     saveSelectedKeys();
     assert.deepEqual(loadSelectedKeys(), {
-      eventName: 'Test Event', eventDate: '2026-08-30', keys: ['alice test-race Phone One'],
+      context: 'standalone', keys: ['alice test-race Phone One'],
     });
   });
 
@@ -231,5 +243,91 @@ describe('mobile-files-shared.js:computeIncorporationStatus', () => {
     selectedKeys.add(rowKey(r));
     setLastSyncedLineNumber(r);
     assert.equal(computeIncorporationStatus(r), 'incorporated');
+  });
+});
+
+describe('mobile-files-shared.js:getServerPollIntervalSeconds / setServerPollIntervalSeconds', () => {
+  it('defaults to 30 seconds and round-trips through localStorage', () => {
+    assert.equal(getServerPollIntervalSeconds(), 30);
+    setServerPollIntervalSeconds(60);
+    assert.equal(getServerPollIntervalSeconds(), 60);
+    setServerPollIntervalSeconds(5);
+    assert.equal(getServerPollIntervalSeconds(), 5);
+  });
+
+  it('falls back to the default for a corrupt, missing, or too-low stored value rather than throwing', () => {
+    assert.equal(getServerPollIntervalSeconds(), 30);
+    localStorage.setItem('racemaster-mobile-server-poll-seconds', 'not a number');
+    assert.equal(getServerPollIntervalSeconds(), 30);
+    localStorage.setItem('racemaster-mobile-server-poll-seconds', '4');
+    assert.equal(getServerPollIntervalSeconds(), 30);
+  });
+});
+
+describe('mobile-files-shared.js:hasNewMobileData', () => {
+  function statusRace(devices) { return { owner: 'alice', raceLabel: 'race-26-08-30', devices }; }
+
+  it('is false when the status response matches lastKnownRaces exactly', () => {
+    const known  = [statusRace([{ name: 'PhoneA', lastSeen: '2026-08-30T10:00:00.000Z' }])];
+    const status = [statusRace([{ name: 'PhoneA', mtime: '2026-08-30T10:00:00.000Z' }])];
+    assert.equal(hasNewMobileData(status, known), false);
+  });
+
+  it('is true when a device\'s mtime differs from its known lastSeen', () => {
+    const known  = [statusRace([{ name: 'PhoneA', lastSeen: '2026-08-30T10:00:00.000Z' }])];
+    const status = [statusRace([{ name: 'PhoneA', mtime: '2026-08-30T11:00:00.000Z' }])];
+    assert.equal(hasNewMobileData(status, known), true);
+  });
+
+  it('is true when a new device appears', () => {
+    const known  = [statusRace([])];
+    const status = [statusRace([{ name: 'PhoneA', mtime: '2026-08-30T10:00:00.000Z' }])];
+    assert.equal(hasNewMobileData(status, known), true);
+  });
+
+  it('is true when a device disappears', () => {
+    const known  = [statusRace([{ name: 'PhoneA', lastSeen: '2026-08-30T10:00:00.000Z' }])];
+    const status = [statusRace([])];
+    assert.equal(hasNewMobileData(status, known), true);
+  });
+});
+
+describe('mobile-files-shared.js:filterStaleRaces', () => {
+  // "…-YY-MM-DD" today's date — guaranteed never stale regardless of when this test runs, same
+  // convention as test/mule-ble.test.js's own todayRaceLabelSuffix().
+  function todayRaceLabel(name) {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${name}-${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  function nowTimestamp() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  // 2020-01-01 — many years stale under any sane threshold, same fixed old date
+  // test/mule-ble.test.js's own staleness tests use.
+  const OLD_LABEL = 'race-20-01-01';
+
+  beforeEach(() => setRaceStaleAfterDays(2));
+
+  it('drops a race whose label is old and has no device with recent activity', () => {
+    const races = [{ owner: 'alice', raceLabel: OLD_LABEL, devices: [{ name: 'PhoneA', lines: [{ timestamp: '2020/01/01 10:00:00' }] }] }];
+    assert.deepEqual(filterStaleRaces(races), []);
+  });
+
+  it('keeps an old-labelled race if any device has a recent line timestamp (a still-running multi-day event)', () => {
+    const races = [{ owner: 'alice', raceLabel: OLD_LABEL, devices: [{ name: 'PhoneA', lines: [{ timestamp: nowTimestamp() }] }] }];
+    assert.equal(filterStaleRaces(races).length, 1);
+  });
+
+  it('keeps a race with an unparseable label regardless of activity', () => {
+    const races = [{ owner: 'alice', raceLabel: 'no-date-here', devices: [{ name: 'PhoneA', lines: [{ timestamp: '2020/01/01 10:00:00' }] }] }];
+    assert.equal(filterStaleRaces(races).length, 1);
+  });
+
+  it('keeps a race whose label is younger than the threshold', () => {
+    const races = [{ owner: 'alice', raceLabel: todayRaceLabel('race'), devices: [{ name: 'PhoneA', lines: [{ timestamp: '2020/01/01 10:00:00' }] }] }];
+    assert.equal(filterStaleRaces(races).length, 1);
   });
 });

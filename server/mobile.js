@@ -77,17 +77,15 @@ export function parseRaceLabelDate(raceLabel) {
   return m ? { yy: m[1], mm: m[2], dd: m[3] } : null;
 }
 
-// Returns array of { owner, raceLabel, raceDate, devices: [{name, records, lines}], recordCount },
-// newest race date first (by yy, then mm, then dd — races whose label has no trailing date
-// sort last). adminAccess=true returns every user's races; otherwise only `username`'s own.
-// `lines` is each device's full raw record array (see readMobileDeviceFile) — sent up front,
-// same as the counts, so the Mobile Files page can render a device's segment view (View button)
-// without a second round trip; these files are small per-device logs, never bulk data.
-export function getMobileRacesForUser(username, adminAccess = false) {
-  const results = [];
+// Shared directory walk for both getMobileRacesForUser() and getMobileRacesStatusForUser()
+// below — same owner/adminAccess scoping, same "skip anything that isn't actually a directory
+// or can't be read" tolerance, yielding one {owner, raceLabel, raceDirPath, files} per race
+// folder found. Kept as a generator (not an array-builder) so neither caller pays for building
+// an intermediate list it doesn't need.
+function* walkMobileRaceDirs(username, adminAccess) {
   let owners;
   try { owners = fs.readdirSync(MOBILE_DIR); }
-  catch { return results; }
+  catch { return; }
 
   for (const owner of owners) {
     if (!adminAccess && owner !== username) continue;
@@ -108,31 +106,12 @@ export function getMobileRacesForUser(username, adminAccess = false) {
       try { files = fs.readdirSync(raceDirPath); }
       catch { continue; }
 
-      const devices = [];
-      let recordCount = 0;
-      for (const file of files) {
-        if (!file.endsWith('.json') || file === 'bib-allocations.json') continue;
-        const deviceName = file.slice(0, -'.json'.length);
-        const records = readMobileDeviceFile(owner, raceLabel, deviceName);
-        recordCount += records.length;
-        // File mtime — i.e. when the server last actually received a sync from this device —
-        // distinct from the records' own `timestamp` fields (when each split/entry happened on
-        // the phone): a device can go quiet mid-race with its last-recorded data timestamp
-        // frozen in the past, so the Mobile Files page shows both to tell "we haven't heard from
-        // this phone in a while" apart from "this phone hasn't recorded anything new".
-        let lastSeen = null;
-        try { lastSeen = fs.statSync(path.join(raceDirPath, file)).mtime.toISOString(); } catch { /* races with readdirSync above are vanishingly rare and harmless to just omit */ }
-        devices.push({ name: deviceName, records: records.length, lines: records, lastSeen });
-      }
-      devices.sort((a, b) => a.name.localeCompare(b.name));
-
-      results.push({
-        owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel),
-        bibAllocations: readBibAllocations(owner, raceLabel),
-      });
+      yield { owner, raceLabel, raceDirPath, files };
     }
   }
+}
 
+function sortByRaceDateDesc(results) {
   return results.sort((a, b) => {
     if (a.raceDate && b.raceDate) {
       return b.raceDate.yy !== a.raceDate.yy ? b.raceDate.yy.localeCompare(a.raceDate.yy)
@@ -143,4 +122,66 @@ export function getMobileRacesForUser(username, adminAccess = false) {
     if (b.raceDate) return 1;
     return a.raceLabel.localeCompare(b.raceLabel);
   });
+}
+
+// Returns array of { owner, raceLabel, raceDate, devices: [{name, records, lines}], recordCount },
+// newest race date first (by yy, then mm, then dd — races whose label has no trailing date
+// sort last). adminAccess=true returns every user's races; otherwise only `username`'s own.
+// `lines` is each device's full raw record array (see readMobileDeviceFile) — sent up front,
+// same as the counts, so the Mobile Files page can render a device's segment view (View button)
+// without a second round trip; these files are small per-device logs, never bulk data.
+export function getMobileRacesForUser(username, adminAccess = false) {
+  const results = [];
+  for (const { owner, raceLabel, raceDirPath, files } of walkMobileRaceDirs(username, adminAccess)) {
+    const devices = [];
+    let recordCount = 0;
+    for (const file of files) {
+      if (!file.endsWith('.json') || file === 'bib-allocations.json') continue;
+      const deviceName = file.slice(0, -'.json'.length);
+      const records = readMobileDeviceFile(owner, raceLabel, deviceName);
+      recordCount += records.length;
+      // File mtime — i.e. when the server last actually received a sync from this device —
+      // distinct from the records' own `timestamp` fields (when each split/entry happened on
+      // the phone): a device can go quiet mid-race with its last-recorded data timestamp
+      // frozen in the past, so the Mobile Files page shows both to tell "we haven't heard from
+      // this phone in a while" apart from "this phone hasn't recorded anything new".
+      let lastSeen = null;
+      try { lastSeen = fs.statSync(path.join(raceDirPath, file)).mtime.toISOString(); } catch { /* races with readdirSync above are vanishingly rare and harmless to just omit */ }
+      devices.push({ name: deviceName, records: records.length, lines: records, lastSeen });
+    }
+    devices.sort((a, b) => a.name.localeCompare(b.name));
+
+    results.push({
+      owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel),
+      bibAllocations: readBibAllocations(owner, raceLabel),
+    });
+  }
+
+  return sortByRaceDateDesc(results);
+}
+
+// Lightweight counterpart to getMobileRacesForUser() above, for a client that already holds a
+// previous copy of the full listing and just wants to know whether anything's actually changed
+// before paying for it again (see GET /api/mobile/status in server/routes/mobile.js, and
+// js/views/mobile-files.js's own background poll). Same walk, same scoping, but a single
+// fs.statSync per device file instead of reading and JSON.parse-ing its full content — no
+// readMobileDeviceFile call, no `lines` in the response. `mtime` is the exact same value
+// getMobileRacesForUser() reports as a device's `lastSeen`, so a client can compare this
+// response directly against data it already fetched from that endpoint with no translation.
+export function getMobileRacesStatusForUser(username, adminAccess = false) {
+  const results = [];
+  for (const { owner, raceLabel, raceDirPath, files } of walkMobileRaceDirs(username, adminAccess)) {
+    const devices = [];
+    for (const file of files) {
+      if (!file.endsWith('.json') || file === 'bib-allocations.json') continue;
+      const deviceName = file.slice(0, -'.json'.length);
+      try {
+        const st = fs.statSync(path.join(raceDirPath, file));
+        devices.push({ name: deviceName, mtime: st.mtime.toISOString(), size: st.size });
+      } catch { /* races with readdirSync above are vanishingly rare and harmless to just omit */ }
+    }
+    devices.sort((a, b) => a.name.localeCompare(b.name));
+    results.push({ owner, raceLabel, devices });
+  }
+  return results;
 }

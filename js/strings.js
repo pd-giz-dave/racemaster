@@ -468,11 +468,12 @@ export const HELP = {
         failure is always logged to the console regardless of this setting.</p>
     <p><strong>Skip races older than (days)</strong> stops the app asking a connected phone for a race it's relaying on another device's
         behalf once it's this old (judged by the date baked into the end of its own race label) — no BLE pull request is sent for it at all.
-        Never applies to a device's own currently-recorded race, and never skips a relayed race that's still actively growing (a multi-day
-        event's label is set once on day one and never changes, so age alone can't tell "still running" apart from "abandoned" — a race with
-        new data waiting is always pulled regardless of how old its label is). Defaults to 2 days and is remembered across visits. This
-        shadows the same facility in the RaceMaster Mobile app itself, which stops relaying (though never stops recording) a race once it's
-        this old.</p>
+        The same cutoff also hides a race that old from this page entirely once it's the server's own copy — the Devices, Bib Allocations
+        and Progress tabs simply act as if it doesn't exist. Neither ever applies to a race that's still genuinely active: a device's own
+        currently-recorded race is never skipped over Bluetooth, and a race fetched from the server stays visible as long as any of its
+        devices has a recent entry, even with an old label — a multi-day event's label is set once on day one and never changes, so age
+        alone can't tell "still running" apart from "abandoned". Defaults to 2 days and is remembered across visits. This shadows the same
+        facility in the RaceMaster Mobile app itself, which stops relaying (though never stops recording) a race once it's this old.</p>
     <p>Tick one or more files and use <strong>Update Progress</strong> to rebuild the Finishers list and the Progress tab
         below together. It needs at least one <strong>Finish</strong> location file (typically one bibs file and one time
         file, paired up by split number, though a single file with both is fine too) — this part is unchanged from before
@@ -494,9 +495,32 @@ export const HELP = {
     <p>Opening the Results &amp; Prize List page automatically re-runs Update Progress in the background using whatever
         selection was last ticked here, but only when something has actually changed since (new data pulled from a phone) —
         it never silently re-runs otherwise, so it can't quietly discard a manual Finishers-page edit with no visible sign.</p>
+    <p>Tick <strong>Auto-update progress</strong> to also re-run it right here, the moment a ticked file's data
+        changes from any source — a Bluetooth pull (whether from the background auto-poll or a manual Connect/Refresh),
+        Refresh, Push, Discard, or the background server poll described below — rather than only when the Results page
+        happens to be opened next. Starts disabled: it only unlocks once Update Progress has been run manually, at
+        least once, successfully, for the connected dataset — proof the setup here (categories, entries, and so on) is
+        actually correct for it, before anything is allowed to recompute unattended. There's only ever one such unlock
+        remembered at a time, for whichever dataset earned it most recently — connecting to a different dataset starts
+        locked again, and switching back to an earlier one doesn't restore it either, even if it was unlocked before;
+        run Update Progress there again to re-earn it. Its own on/off state is remembered the same way. Re-locked
+        immediately by any failed attempt (manual or automatic — e.g. a bib not yet in Entries; an unattended run that's
+        started failing shouldn't just keep silently failing again on every future change with nobody watching) or by
+        <strong>Clear Progress</strong> below (deleting the computed data undermines the same trust a failed attempt
+        would). A manual failure shows the same error it always did; an automatic one is logged to the browser console
+        rather than shown, since nothing here is a direct response to a user action. Same safeguard as the Results-page
+        auto-refresh above either way: only runs when something's actually new for a ticked file, never
+        unconditionally.</p>
+    <p>While ticked, the app also asks the server every <strong>Poll server every (seconds)</strong> — remembered the
+        same way, defaults to 30, floored at 5 — whether anything's changed, so a WiFi sync or another admin's upload
+        can trigger this too, not just something done in this browser. That check is deliberately cheap: it costs each
+        device file one timestamp comparison server-side, not a transfer of its actual data, so most ticks (nothing
+        new) cost almost nothing — only when the timestamps disagree does it go on to pull the real data, the same as
+        a manual Refresh would.</p>
     <p>Use <strong>Clear Progress</strong> to delete the finishers list and all checkpoint data without selecting or
         recomputing anything — this also clears their effects everywhere else that reads them, e.g. Safety Check's
-        finished/outstanding counts and "Last CP" hint.</p>
+        finished/outstanding counts and "Last CP" hint — and re-locks Auto-update progress above, the same as a
+        failed Update Progress attempt would.</p>
     <p>The <strong>Bib Allocations</strong> tab shows, per race, a bib number / name / course list generated automatically from
         this dataset's own Entries and the Event's name and date — there's no button to press, it's kept up to date within a
         couple of seconds of any relevant edit. This is what lets a phone in Bibs or Checkpoint mode know which bib belongs to
@@ -541,7 +565,31 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.16-alpha - current version</h3>
+    <h3>v0.0.17-alpha - current version</h3>
+    <ul>
+      <li><strong>Automate results update from mobiles</strong> — the Progress tab's data can now keep itself up to
+          date on its own, from any source, without needing to be sat on Mobile Files:</li>
+      <li>Tick the new <strong>Auto-update progress</strong> checkbox to have Update Progress re-run itself the
+          moment a ticked file's data actually changes — a Bluetooth pull, Refresh, Push, Discard, or the new
+          background server poll below — instead of only when the Results page happens to be opened next. It starts
+          locked until you've run Update Progress here manually at least once successfully for the connected
+          dataset, and re-locks itself on any failed attempt or on Clear Progress, so an unattended run can't keep
+          silently failing with nobody watching</li>
+      <li>New <strong>Poll server every (seconds)</strong> option (default 30, remembered like "Skip races older
+          than") — while Auto-update progress is ticked, the app now also asks the server on this interval whether
+          anything's changed (a WiFi sync, another admin's upload), not just what happened in this browser. The
+          check itself is cheap — a timestamp comparison per device file, not a data transfer — so most ticks cost
+          almost nothing</li>
+      <li>"Skip races older than (days)" now also hides a race that old from the Mobile Files page entirely once
+          it's the server's own copy, not just skipping its Bluetooth pull — still never hiding a race that's still
+          genuinely active, regardless of how old its label is</li>
+      <li>Whenever progress actually changes, Home, Safety Check, and Results &amp; Prize List all refresh
+          themselves live to match — even if none of them is the page currently on screen</li>
+      <li>The Progress tab now honours a retire recorded at a checkpoint, not just at Finish: it shows
+          <strong>Retire</strong> in that checkpoint's column and <strong>DNF</strong> in the Finish column, the
+          same as a Finish-line DNF — and flows through to Safety Check and Results the same way</li>
+    </ul>
+    <h3>v0.0.16-alpha</h3>
     <ul>
       <li><strong>Mobile-friendly pass</strong> — this release is a sweep of the web app (not the published results
           pages) for use on a phone in the field, ahead of junior race results being checked that way:</li>
@@ -899,11 +947,11 @@ export const TABLES = {
     { id: 'select',    label: '',          title: 'Select for bulk actions', sticky: true },
     { id: 'raceLabel', label: 'Race',      title: 'Race label as recorded on the phone', sticky: true, wrap: true },
     { id: 'location',  label: 'Where',     title: 'Course location stamped on this device\'s currently-visible lines — every line should agree', sticky: true, wrap: true, cap: 80 },
+    { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset)' },
+    { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset)' },
     { id: 'owner',     label: 'Owner',     title: 'Account this file was uploaded under (admins only)' },
     { id: 'raceDate',  label: 'Race Date', title: 'Race date parsed from the race label' },
     { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },
-    { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset)' },
-    { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset)' },
     { id: 'lastSeen',   label: 'Last Seen',   title: 'When the server (or, for a Bluetooth-pulled pending file, this browser) last actually heard from this device' },
     { id: 'lastUpdate', label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, across all lines (not just those currently visible)' },
     { id: 'actions',   label: 'Actions',   title: 'View, view raw, or delete this file' },

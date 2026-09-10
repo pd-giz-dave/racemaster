@@ -6,7 +6,7 @@ import { sanitiseName } from '../datasets.js';
 import { getAuthUser, isAdmin } from '../auth.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
-  writeBibAllocations, getMobileRacesForUser,
+  writeBibAllocations, getMobileRacesForUser, getMobileRacesStatusForUser,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
@@ -188,6 +188,20 @@ export async function handleMobileRoutes(req, res, pathname) {
       result[deviceName] = maxLineNumber(readMobileDeviceFile(username, raceLabel, deviceName));
     }
     jsonReply(res, 200, result);
+    return true;
+  }
+
+  // GET /api/mobile/status  —  lightweight "has anything changed" probe for the whole listing
+  // (unlike GET /api/mobile/:raceLabel/status above, which is per-race and the requesting
+  // user's own folder only). Same owner/admin scoping as GET /api/mobile below, but each
+  // device file costs one fs.statSync (mtime+size) instead of a full read+parse — see
+  // getMobileRacesStatusForUser's own doc in server/mobile.js. Used by the web app's own
+  // background poll (js/views/mobile-files.js) to decide whether the full GET /api/mobile
+  // fetch is actually worth making this tick.
+  if (pathname === '/api/mobile/status' && req.method === 'GET') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    jsonReply(res, 200, getMobileRacesStatusForUser(username, isAdmin(username)));
     return true;
   }
 

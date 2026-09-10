@@ -10,7 +10,7 @@ import { ensureDirs, MOBILE_DIR } from '../../server/config.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
   bibAllocationsFilePath, readBibAllocations, writeBibAllocations, parseRaceLabelDate,
-  getMobileRacesForUser,
+  getMobileRacesForUser, getMobileRacesStatusForUser,
 } from '../../server/mobile.js';
 
 beforeEach(() => {
@@ -112,5 +112,48 @@ describe('server/mobile.js:getMobileRacesForUser', () => {
     writeMobileDeviceFile('alice', 'undated-race', 'PhoneZ', []);
     const races = getMobileRacesForUser('alice');
     assert.equal(races[races.length - 1].raceLabel, 'undated-race');
+  });
+});
+
+describe('server/mobile.js:getMobileRacesStatusForUser', () => {
+  beforeEach(() => {
+    writeMobileDeviceFile('alice', 'race-26-08-23', 'PhoneB', [{ recordUuid: 'u1' }]);
+    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ recordUuid: 'u2' }, { recordUuid: 'u3' }]);
+    writeMobileDeviceFile('bob',   'race-26-08-25', 'PhoneC', []);
+  });
+
+  it('lists only the requesting user\'s own races by default, admin access includes every user\'s', () => {
+    const own = getMobileRacesStatusForUser('alice');
+    assert.deepEqual(own.map(r => r.raceLabel).sort(), ['race-26-08-20', 'race-26-08-23']);
+    const all = getMobileRacesStatusForUser('alice', true);
+    assert.ok(all.some(r => r.owner === 'bob'));
+  });
+
+  it('reports mtime+size per device, sorted alphabetically, with no `lines` field', () => {
+    const race = getMobileRacesStatusForUser('alice').find(r => r.raceLabel === 'race-26-08-20');
+    assert.equal(race.devices[0].name, 'PhoneA');
+    assert.equal(typeof race.devices[0].mtime, 'string');
+    assert.equal(typeof race.devices[0].size, 'number');
+    assert.equal('lines' in race.devices[0], false);
+    assert.equal('records' in race.devices[0], false);
+  });
+
+  it('excludes bib-allocations.json from device enumeration', () => {
+    writeBibAllocations('alice', 'race-26-08-23', { raceName: 'X', raceDate: '', entries: [] });
+    const race = getMobileRacesStatusForUser('alice').find(r => r.raceLabel === 'race-26-08-23');
+    assert.equal(race.devices.some(d => d.name === 'bib-allocations'), false);
+  });
+
+  it('reports the exact same mtime as getMobileRacesForUser\'s own lastSeen, and a changed file changes it', async () => {
+    const full = getMobileRacesForUser('alice').find(r => r.raceLabel === 'race-26-08-20');
+    const status = getMobileRacesStatusForUser('alice').find(r => r.raceLabel === 'race-26-08-20');
+    assert.equal(status.devices[0].mtime, full.devices[0].lastSeen);
+
+    const before = status.devices[0];
+    await new Promise(r => setTimeout(r, 5));
+    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ recordUuid: 'u2' }, { recordUuid: 'u3' }, { recordUuid: 'u4' }]);
+    const after = getMobileRacesStatusForUser('alice').find(r => r.raceLabel === 'race-26-08-20').devices[0];
+    assert.notEqual(after.mtime, before.mtime);
+    assert.notEqual(after.size, before.size);
   });
 });

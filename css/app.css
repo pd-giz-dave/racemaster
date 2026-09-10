@@ -686,6 +686,12 @@ button.df-badge-connected:hover { background: var(--danger); }
 .text-sm    { font-size: 0.78rem; }
 .mb-8       { margin-bottom: 8px; }
 
+/* #mf-auto-progress starts disabled (until unlocked by a successful manual Update Progress —
+   see mobile-files-progress.js) — its label shouldn't show a pointer cursor / full-opacity text
+   while that's true, which would read as clickable when it isn't. */
+#mf-auto-progress-label { cursor: pointer; }
+#mf-auto-progress-label:has(input:disabled) { cursor: default; opacity: 0.6; }
+
 /* ---- Entries view: inline status message ---- */
 .entry-status {
   font-size: 0.95rem;

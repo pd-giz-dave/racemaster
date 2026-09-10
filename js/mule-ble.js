@@ -127,9 +127,11 @@ export function setRaceStaleAfterDays(days) {
 
 // raceLabel's own trailing "-YY-MM-DD" (mirrors server/mobile.js's parseRaceLabelDate — see its
 // own doc — duplicated rather than imported since mule-ble.js has no existing dependency on
-// either the server or view layers and this is the only date-related bit it needs from one).
-// Returns null (never stale) for a label with no such suffix.
-function raceLabelAgeDays(raceLabel) {
+// either the server or view layers and this is the only date-related bit it needed from one).
+// Returns null (never stale) for a label with no such suffix. Exported so
+// js/mobile-files-shared.js's own filterStaleRaces() can apply the exact same age check to
+// server-fetched races, not just this file's own BLE relay-pull decision below.
+export function raceLabelAgeDays(raceLabel) {
   const m = /-(\d{2})-(\d{2})-(\d{2})$/.exec(raceLabel || '');
   if (!m) return null;
   const [, yy, mm, dd] = m;

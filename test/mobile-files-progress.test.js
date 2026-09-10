@@ -7,7 +7,7 @@ import { state } from '../js/state.js';
 import { installLocalStorageMock, installWindowMock } from './helpers/mock-browser.js';
 import {
   validateAndCompute, clearProgressData, applyComputedResults,
-  buildProgressColumns, buildProgressRows,
+  buildProgressColumns, buildProgressRows, CP_RETIRE,
 } from '../js/mobile-files-progress.js';
 
 beforeEach(() => {
@@ -121,6 +121,33 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const result = await validateAndCompute([noStart, cp]);
     assert.match(result.error, /no Start record/);
   });
+
+  it('marks a checkpoint retire with CP_RETIRE, not a computed time, and adds a synthetic DNF for a bib with no Finish record', async () => {
+    // Bib 2 (Bob) retires at CP1 — never reaches Finish, so has no Finish-location entry at all.
+    const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
+      { lineNumber: 1, action: 'DNF', bibNumber: '2', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
+    ] } });
+    const result = await validateAndCompute([finishRow(), cp]);
+    assert.equal(result.error, undefined);
+    assert.equal(result.cpTimesByCp.get(1).get(2), CP_RETIRE);
+    // Bib 1's own real Finish record is untouched, and bib 2 gets a synthetic DNF added.
+    assert.deepEqual(result.expected, [
+      { action: 'Finish', number: 1, time: '00:20:00' },
+      { action: 'DNF', number: 2, time: '' },
+    ]);
+  });
+
+  it('does not add a duplicate DNF when the CP-retired bib already has its own Finish-location record', async () => {
+    // Bib 1 both finishes at Finish *and* has a (presumably stray/inconsistent) DNF row at CP1 —
+    // Finish is authoritative, so no second entry should be added for it.
+    const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
+      { lineNumber: 1, action: 'DNF', bibNumber: '1', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
+    ] } });
+    const result = await validateAndCompute([finishRow(), cp]);
+    assert.equal(result.error, undefined);
+    assert.equal(result.expected.length, 1);
+    assert.deepEqual(result.expected[0], { action: 'Finish', number: 1, time: '00:20:00' });
+  });
 });
 
 describe('mobile-files-progress.js:clearProgressData / applyComputedResults', () => {
@@ -190,5 +217,14 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
     state.mobileProgress = [{ action: 'Finish', number: 2, time: '' }, { action: 'Finish', number: 1, time: '' }];
     const rows = buildProgressRows();
     assert.deepEqual(rows.map(r => r.bibNumber), [1, 2]);
+  });
+
+  it('passes a CP_RETIRE cpTimes value straight through to the row, alongside the DNF finishTime', () => {
+    state.mobileProgress = [{ action: 'DNF', number: 2, time: '' }];
+    state.mobileCheckpoints = [{ bibNumber: 2, cpTimes: { 1: CP_RETIRE } }];
+    const rows = buildProgressRows();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].finishTime, 'DNF');
+    assert.deepEqual(rows[0].cpTimes, { 1: CP_RETIRE });
   });
 });
