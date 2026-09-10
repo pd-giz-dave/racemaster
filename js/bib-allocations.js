@@ -10,12 +10,19 @@ function sanitiseName(s) {
   return (s || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64).toLowerCase();
 }
 
-// Same "<name>-dd-mm-yy" convention a phone's own raceLabel already uses (see server.js's
-// parseRaceLabelDate) — state.event.date is stored dd/mm/yyyy.
+// Same "<name>-yy-mm-dd" convention a phone's own raceLabel already uses (2-digit year FIRST —
+// see server/mobile.js's parseRaceLabelDate and js/mule-ble.js's raceLabelAgeDays, both of which
+// parse a label's trailing "-dd-dd-dd" strictly as yy-mm-dd) — state.event.date is stored
+// dd/mm/yyyy, so the day and year swap position here. Getting this order wrong doesn't error —
+// it just silently misdates the race for every consumer of that shared parsing (stale-race
+// filtering on this page's own Bib Allocations tab, and getMobileRacesForUser()'s own date
+// sort), which is exactly what was happening before this was fixed: a label like
+// "race-29-07-26" parsed as yy-mm-dd reads as 2029, so an old bib-allocations-only race could
+// sit exempt from "Skip races older than" indefinitely instead of aging out like any other.
 function deriveRaceLabel(event) {
   const [dd, mm, yyyy] = (event.date || '').split('/');
   if (!dd || !mm || !yyyy || !event.name) return '';
-  return `${sanitiseName(event.name) || 'race'}-${dd}-${mm}-${yyyy.slice(-2)}`;
+  return `${sanitiseName(event.name) || 'race'}-${yyyy.slice(-2)}-${mm}-${dd}`;
 }
 
 function buildPayload() {
@@ -26,6 +33,7 @@ function buildPayload() {
       bibNumber: +e.bibNumber,
       name: getEntryName(e),
       course: e.course || '',
+      category: e.category || '',
     })),
   };
 }

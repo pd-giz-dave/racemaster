@@ -14,9 +14,9 @@ import path from 'path';
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleMobileRoutes(req, res, pathname) {
   // POST /api/mobile/:owner/:raceLabel/bib-allocations — the web app pushes a race-wide
-  // {raceName, raceDate, entries: [{bibNumber, name, course}]} export so any phone syncing
-  // this race (WiFi or Mule/BLE) can learn which bib belongs to which course, without needing
-  // registration to have closed first.
+  // {raceName, raceDate, entries: [{bibNumber, name, course, category}]} export so any phone
+  // syncing this race (WiFi or Mule/BLE) can learn which bib belongs to which course, without
+  // needing registration to have closed first.
   // Checked before the broader POST /api/mobile/:raceLabel below, which would otherwise
   // swallow this path too once decoded (both start with `/api/mobile/`).
   // owner is the dataset's own owner (js/bib-allocations.js sends session.dataset's owner
@@ -44,6 +44,7 @@ export async function handleMobileRoutes(req, res, pathname) {
           bibNumber: Number(e?.bibNumber) || 0,
           name: typeof e?.name === 'string' ? e.name : '',
           course: typeof e?.course === 'string' ? e.course : '',
+          category: typeof e?.category === 'string' ? e.category : '',
         }))
         .filter(e => e.bibNumber > 0),
     };

@@ -538,12 +538,14 @@ export const HELP = {
         recomputing anything — this also clears their effects everywhere else that reads them, e.g. Safety Check's
         finished/outstanding counts and "Last CP" hint — and re-locks Auto-update progress above, the same as a
         failed Update Progress attempt would.</p>
-    <p>The <strong>Bib Allocations</strong> tab shows, per race, a bib number / name / course list generated automatically from
-        this dataset's own Entries and the Event's name and date — there's no button to press, it's kept up to date within a
-        couple of seconds of any relevant edit. This is what lets a phone in Bibs or Checkpoint mode know which bib belongs to
-        which course before registration has even closed. <strong>View</strong> shows the full list for a race, sorted by bib
-        number. The underlying file (<code>bib-allocations.json</code>, alongside that race's device files) is public and
-        needs no sign-in to fetch, so it deliberately carries only bib number, name and course — never anything else from an entry.</p>
+    <p>The <strong>Bib Allocations</strong> tab shows, per race, a bib number / name / course / category list generated
+        automatically from this dataset's own Entries and the Event's name and date — there's no button to press, it's kept
+        up to date within a couple of seconds of any relevant edit. This is what lets a phone in Bibs or Checkpoint mode know
+        which bib belongs to which course before registration has even closed. <strong>View</strong> shows the full list for
+        a race, sorted by bib number. The underlying file (<code>bib-allocations.json</code>, alongside that race's device
+        files) is public and
+        needs no sign-in to fetch, so it deliberately carries only bib number, name, course and category — never anything
+        else from an entry (no DOB, club, or contact details).</p>
     <p>The <strong>Progress</strong> tab shows the raw, pre-adjustment table built by the most recent
         <strong>Update Progress</strong> run: BibNumber, Name, Category, Course, Start (an explicit individual start time,
         if this bib had a recorded early/late start), FinishTime (the raw, unadjusted value — the adjusted race time is on

@@ -49,8 +49,9 @@ export function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
   fs.writeFileSync(mobileDeviceFilePath(username, raceLabel, deviceName), JSON.stringify(lines, null, 2), 'utf8');
 }
 
-// bib-allocations.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course}]}
-// file the web app pushes (see POST .../bib-allocations), not a per-device sync file, so it
+// bib-allocations.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course,
+// category}]} file the web app pushes (see POST .../bib-allocations), not a per-device sync
+// file, so it
 // lives in the same owner-scoped race dir but is deliberately excluded from device enumeration
 // in getMobileRacesForUser() below.
 export function bibAllocationsFilePath(username, raceLabel) {

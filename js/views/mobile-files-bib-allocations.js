@@ -24,10 +24,10 @@ let lastSentKey = null;
 function bibAllocKey(r) { return `${r.owner} ${r.raceLabel}`; }
 
 // bib-allocations.json's contents (see js/bib-allocations.js) — the web app's own bib/name/
-// course export for this race, not anything pulled from a phone.
+// category/course export for this race, not anything pulled from a phone.
 function showBibAllocationsModal(owner, raceLabel, ba) {
   const sorted = [...ba.entries].sort((a, b) => a.bibNumber - b.bibNumber);
-  const rows = sorted.map(e => `<tr><td>${e.bibNumber}</td><td>${escHtml(e.name)}</td><td>${escHtml(e.course)}</td></tr>`).join('');
+  const rows = sorted.map(e => `<tr><td>${e.bibNumber}</td><td>${escHtml(e.name)}</td><td>${escHtml(e.course)}</td><td>${escHtml(e.category || '')}</td></tr>`).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-backdrop';
@@ -37,8 +37,8 @@ function showBibAllocationsModal(owner, raceLabel, ba) {
       <p style="margin:0 0 12px;font-size:0.875rem">Generated ${escHtml(ba.generatedAt || '')}</p>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Bib</th><th>Name</th><th>Course</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="3" style="color:var(--muted)">No bib allocations.</td></tr>'}</tbody>
+          <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4" style="color:var(--muted)">No bib allocations.</td></tr>'}</tbody>
         </table>
       </div>
       <div class="modal-actions">
