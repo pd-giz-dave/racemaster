@@ -298,9 +298,24 @@ export const HELP = {
         These records do not get a split number.</p>
   `,
   'view-safety': `
-    <p>In the <strong>Outstanding</strong> tab, shows all entrants who have <strong>not yet been recorded as finishers or retired</strong>. 
+    <p>In the <strong>Outstanding</strong> tab, shows all entrants who have <strong>not yet been recorded as finishers or retired</strong>.
         Use this at the end of the race to confirm that everyone is accounted for.</p>
     <p>When the list is empty, all entrants have either finished or been marked as DNF. Use the other tabs to get more specific lists.</p>
+    <p>The <strong>Race start</strong> / <strong>Time now</strong> line above the tabs is there to judge how long ago
+        someone was actually last seen. <strong>Last CP</strong> (Outstanding tabs), <strong>Start time</strong>
+        (Early Starters) and <strong>When</strong> (Retirees/DNFs, below) are all shown as an actual time-of-day, not
+        elapsed race time. Wherever the sighting came from a phone pulled via Mobile Files, that's the phone's own
+        clock reading for it, used directly — not race start plus elapsed, which would be thrown off by any gap
+        between the phone's own Start row and the race's actual official start. Only a stopwatch/manually-entered
+        record (no phone reading of its own) falls back to converting its elapsed time against the race start, and
+        falls back once more to showing that elapsed value raw if there's no race start time to convert against
+        either. An entrant with no checkpoint sighting yet but a known early/late start shows
+        <strong>Start @&hellip;</strong> in Last CP instead of a blank — that start is itself the last place we
+        know they were.</p>
+    <p>The <strong>Retirees / DNFs</strong> tab shows <strong>Where</strong> (Finish, or a checkpoint — CPn —
+        for a mobile-recorded retire) each retirement was actually recorded, alongside <strong>When</strong> as
+        described above. Both are blank when there's genuinely nothing to show — a manual retirement with no time
+        given, or one that only came from SI results, which carries no location or time of its own.</p>
   `,
   'view-si-results': `
     <p>Import finish times from an SI Timing (processable) results export. The import matches competitors by bib number. 
@@ -809,7 +824,7 @@ export const TABLES = {
     { id: 'name',    label: 'Name',    title: "Competitor's name" },
     { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
     { id: 'cat',     label: 'Cat',     title: 'Age category' },
-    { id: 'lastCP',  label: 'Last CP', title: 'Most recent checkpoint sighting from Mobile Files, if any — an approximate elapsed time, not authoritative' },
+    { id: 'lastCP',  label: 'Last CP', title: 'Most recent checkpoint sighting from Mobile Files, if any, as a time-of-day — approximate, not authoritative' },
     { id: 'actions', label: 'Actions', title: 'Mark as DNF or take action' },
   ],
   'safety-dnf': [
@@ -817,6 +832,8 @@ export const TABLES = {
     { id: 'name',    label: 'Name',    title: "Competitor's name" },
     { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
     { id: 'cat',     label: 'Cat',     title: 'Age category' },
+    { id: 'where',   label: 'Where',   title: 'Where the retirement was recorded — Finish, or a checkpoint (CPn) — blank if unknown (e.g. from SI results)' },
+    { id: 'when',    label: 'When',    title: 'Time-of-day the retirement was recorded, blank if no time was captured for it' },
     { id: 'actions', label: 'Actions', title: 'Edit or delete' },
   ],
   'safety-finished': [

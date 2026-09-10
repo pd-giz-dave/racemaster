@@ -36,9 +36,18 @@ describe('mobile-checkpoints.js:getMobileCheckpointNumbers', () => {
 });
 
 describe('mobile-checkpoints.js:getLatestCheckpoint', () => {
-  it('returns the highest CP number reached and its time', () => {
+  it('returns the highest CP number reached and its time, with an empty timeOfDay when none is stored', () => {
     state.mobileCheckpoints = [{ bibNumber: '1', cpTimes: { 1: '00:05:00', 3: '00:15:00', 2: '00:10:00' } }];
-    assert.deepEqual(getLatestCheckpoint(1), { cp: 3, time: '00:15:00' });
+    assert.deepEqual(getLatestCheckpoint(1), { cp: 3, time: '00:15:00', timeOfDay: '' });
+  });
+
+  it('includes the device time-of-day for the highest CP when one is stored', () => {
+    state.mobileCheckpoints = [{
+      bibNumber: '1',
+      cpTimes: { 1: '00:05:00', 2: '00:10:00' },
+      cpTimesOfDay: { 1: '19:35:00', 2: '19:40:00' },
+    }];
+    assert.deepEqual(getLatestCheckpoint(1), { cp: 2, time: '00:10:00', timeOfDay: '19:40:00' });
   });
 
   it('returns null for a bib with no sighting at all', () => {

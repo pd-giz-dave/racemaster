@@ -7,6 +7,7 @@ import { getOutstandingCount } from './finishers.js';
 import { getSIAccountedBibs, getSIBib, getSIRaceTime, getSIStatus } from './si-results.js';
 import { formatResults } from './results.js';
 import { COURSE } from './constants.js';
+import { getMobileCheckpointTimes, CP_RETIRE } from './mobile-checkpoints.js';
 
 export function getFinishedBibs() {
   const bibs = new Set(
@@ -85,6 +86,31 @@ export function getOutstandingRows(course) {
     .sort((a, b) => +a.bibNumber - +b.bibNumber);
 }
 
+// Where (literal "Finish", or "CPn") and when (raw elapsed-since-start, '' if unknown) a bib
+// actually retired — for the Retirees tab. A stopwatch retiree is always "Finish" (the
+// Finishers page has no checkpoint concept); its time is whatever the operator typed, or ''
+// for the common case of no time given at all. A mobile retiree's time comes already computed
+// (see computeCpTimes'/expectedFinisherEntries' own docs in mobile-files-progress.js — a real
+// elapsed value when derivable, '' otherwise), and its location is "Finish" unless
+// state.mobileCheckpoints shows the CP_RETIRE sentinel at some checkpoint for this bib, in
+// which case that checkpoint is where it actually happened. An SI-only DNF has no location or
+// time concept at all — both come back blank rather than guessing.
+function getRetireDetails(bib, idx) {
+  if (idx >= 0) {
+    const time = state.finishers[idx].time || '';
+    // '-' is finishers.js's own "no time given" marker; a stopwatch record has no device
+    // time-of-day concept at all.
+    return { where: 'Finish', when: time === '-' ? '' : time, whenTimeOfDay: '' };
+  }
+  const mobile = state.mobileProgress.find(f => f.action === 'DNF' && +f.number === bib);
+  if (mobile) {
+    const cpRow = state.mobileCheckpoints.find(r => +r.bibNumber === bib);
+    const cpEntry = cpRow && Object.entries(getMobileCheckpointTimes(cpRow)).find(([, t]) => t === CP_RETIRE);
+    return { where: cpEntry ? `CP${cpEntry[0]}` : 'Finish', when: mobile.time || '', whenTimeOfDay: mobile.timeOfDay || '' };
+  }
+  return { where: '', when: '', whenTimeOfDay: '' }; // SI-only DNF
+}
+
 export function getDnfRows() {
   const swDnfs = state.finishers
     .map((f, idx) => ({ bib: +f.number, idx }))
@@ -107,7 +133,8 @@ export function getDnfRows() {
     .sort((a, b) => a.bib - b.bib)
     .map(({ bib, idx }) => {
       const r = entryInfo(bib);
-      return { bib, idx, name: r.name, course: r.course, category: r.category };
+      const { where, when, whenTimeOfDay } = getRetireDetails(bib, idx);
+      return { bib, idx, name: r.name, course: r.course, category: r.category, where, when, whenTimeOfDay };
     });
 }
 
@@ -138,6 +165,22 @@ export function getFinishedRows() {
     });
 }
 
+// This bib's own explicit Start record — an early/late start actually SEEN (stopwatch or
+// mobile), not merely assumed to be the scheduled race start — or null if there isn't one. A
+// plain per-bib lookup rather than reusing getEarlyStarterRows() below: the Safety Check page's
+// "Last CP" column renders one bib at a time, so building that function's full combined list on
+// every row would be wasted work. `timeOfDay` (mobile source only — see
+// mobile-files-progress.js's expectedFinisherEntries doc) is the phone's own device time-of-day
+// for this Start row, the view layer's preferred source over converting `time` (elapsed) via
+// the race start; '' when there isn't one (a stopwatch Start has no such concept at all).
+export function getExplicitStart(bib) {
+  const b = +bib;
+  const sw = state.finishers.find(f => f.action === 'Start' && +f.number === b);
+  if (sw) return { time: sw.time || '', timeOfDay: '' };
+  const mobile = state.mobileProgress.find(f => f.action === 'Start' && +f.number === b);
+  return mobile ? { time: mobile.time || '', timeOfDay: mobile.timeOfDay || '' } : null;
+}
+
 export function getEarlyStarterRows() {
   const swStarts = state.finishers.filter(f => f.action === 'Start' && +f.number > 0);
   const swStartBibs = new Set(swStarts.map(f => +f.number));
@@ -148,7 +191,10 @@ export function getEarlyStarterRows() {
     .sort((a, b) => +a.number - +b.number)
     .map(f => {
       const r = entryInfo(+f.number);
-      return { number: f.number, name: r.name, course: r.course, category: r.category, startTime: f.time || '' };
+      return {
+        number: f.number, name: r.name, course: r.course, category: r.category,
+        startTime: f.time || '', startTimeOfDay: f.timeOfDay || '',
+      };
     });
 }
 

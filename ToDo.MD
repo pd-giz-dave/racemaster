@@ -40,10 +40,11 @@
       longer knows that)
 - [x] the progress page should also show explicit start actions if a bib has done an early/late start
 - [x] when appropriate auto update progress whenever the selected files change (from any source)
-- [ ] on the safety page Last CP column, add "Start @..." for explicit early/late starts
+- [x] on the safety page Last CP column, add "Start @..." for explicit early/late starts
       as we know we saw them there, also show the time-of-day not the elapsed time,
       also use time-of-day and not start time on the early starters tab,
-      fallback to elapsed time if time-of-day is not available
+      fallback to elapsed time if time-of-day is not available,
+      echo the race start time and the time now on a line above the table
 
 ## Data loss prevention
 

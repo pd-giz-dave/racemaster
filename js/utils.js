@@ -119,6 +119,18 @@ export function isValidRaceTime(t) {
   return !!normaliseTime(String(t));
 }
 
+// Every stopwatch/mobile time in this app (a finish, a split, a Start record's own time) is
+// elapsed-since-race-start, not a literal clock reading — this converts one back to an actual
+// time-of-day for display, given the race's own scheduled start (state.event.startTime).
+// Returns '' if either input isn't a real time (missing, "-", "Retire", garbled) — the caller's
+// own job to fall back to showing the raw elapsed value in that case, same as any other
+// best-effort display conversion in this app. Wraps past midnight (% 86400) for a race that
+// starts late evening and finishes the next day.
+export function elapsedToTimeOfDay(elapsed, raceStartTime) {
+  if (!isValidRaceTime(elapsed) || !isValidRaceTime(raceStartTime)) return '';
+  return secondsToTime((timeToSeconds(raceStartTime) + timeToSeconds(elapsed)) % 86400);
+}
+
 /** Parse a date string (DD/MM/YYYY) to a Date object */
 export function parseDate(d) {
   const s = normaliseDate(d);

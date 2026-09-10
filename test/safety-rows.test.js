@@ -10,7 +10,7 @@ import { state } from '../js/state.js';
 import { builtinFRARows } from '../js/categories.js';
 import {
   getFinishedBibs, getFinishedOnlyBibs, entryInfo, getOutstandingRows, getDnfRows,
-  getFinishedRows, getEarlyStarterRows, buildNoShows, getSafetyCounts,
+  getFinishedRows, getEarlyStarterRows, getExplicitStart, buildNoShows, getSafetyCounts,
 } from '../js/safety.js';
 
 beforeEach(() => {
@@ -101,6 +101,53 @@ describe('safety.js:getDnfRows', () => {
     assert.deepEqual(rows.map(r => r.bib), [1, 2, 3]);
     assert.equal(rows[0].name, 'A');
   });
+
+  it('a stopwatch retiree is Finish, with whatever time (if any) the operator gave it', () => {
+    state.entries   = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.finishers = [{ action: 'DNF', number: '1', time: '00:15:00' }];
+    const rows = getDnfRows();
+    assert.deepEqual(rows[0], { bib: 1, idx: 0, name: 'A', course: 'Seniors', category: 'MSEN', where: 'Finish', when: '00:15:00', whenTimeOfDay: '' });
+  });
+
+  it('a stopwatch retiree with no time given comes back with when blank', () => {
+    state.entries   = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.finishers = [{ action: 'DNF', number: '1', time: '-' }];
+    const rows = getDnfRows();
+    assert.equal(rows[0].where, 'Finish');
+    assert.equal(rows[0].when, '');
+  });
+
+  it('a mobile retiree with no checkpoint record is Finish, with its own computed elapsed time', () => {
+    state.entries        = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.mobileProgress  = [{ action: 'DNF', number: '1', time: '00:20:00' }];
+    const rows = getDnfRows();
+    assert.deepEqual(rows[0].where, 'Finish');
+    assert.equal(rows[0].when, '00:20:00');
+  });
+
+  it('a mobile retiree with a CP_RETIRE checkpoint record shows that checkpoint as where', () => {
+    state.entries         = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.mobileProgress   = [{ action: 'DNF', number: '1', time: '00:10:00' }];
+    state.mobileCheckpoints = [{ bibNumber: 1, cpTimes: { 1: 'Retire' } }];
+    const rows = getDnfRows();
+    assert.equal(rows[0].where, 'CP1');
+    assert.equal(rows[0].when, '00:10:00');
+  });
+
+  it('a mobile retiree carries its device timeOfDay through when one is stored', () => {
+    state.entries        = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.mobileProgress  = [{ action: 'DNF', number: '1', time: '00:20:00', timeOfDay: '19:50:00' }];
+    const rows = getDnfRows();
+    assert.equal(rows[0].whenTimeOfDay, '19:50:00');
+  });
+
+  it('an SI-only retiree has no location or time concept — both come back blank', () => {
+    state.entries   = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.siResults = [{ RaceNumber: '1', Status: 'DNF' }];
+    const rows = getDnfRows();
+    assert.equal(rows[0].where, '');
+    assert.equal(rows[0].when, '');
+  });
 });
 
 describe('safety.js:getFinishedRows', () => {
@@ -126,6 +173,28 @@ describe('safety.js:getEarlyStarterRows', () => {
     const rows = getEarlyStarterRows();
     assert.deepEqual(rows.map(r => r.number), ['1', '2']); // f.number passed through verbatim, not coerced
     assert.equal(rows[0].startTime, '00:01:00');
+  });
+});
+
+describe('safety.js:getExplicitStart', () => {
+  it('finds a stopwatch Start record, with no timeOfDay (no such concept for a stopwatch record)', () => {
+    state.finishers = [{ action: 'Start', number: '1', time: '00:05:00' }];
+    assert.deepEqual(getExplicitStart(1), { time: '00:05:00', timeOfDay: '' });
+  });
+
+  it('finds a mobile Start record when there is no stopwatch one, including its device timeOfDay', () => {
+    state.mobileProgress = [{ action: 'Start', number: '2', time: '00:01:00', timeOfDay: '19:31:00' }];
+    assert.deepEqual(getExplicitStart(2), { time: '00:01:00', timeOfDay: '19:31:00' });
+  });
+
+  it('prefers the stopwatch record when both exist', () => {
+    state.finishers      = [{ action: 'Start', number: '3', time: '00:05:00' }];
+    state.mobileProgress = [{ action: 'Start', number: '3', time: '00:01:00', timeOfDay: '19:31:00' }];
+    assert.deepEqual(getExplicitStart(3), { time: '00:05:00', timeOfDay: '' });
+  });
+
+  it('returns null when there is no explicit Start record for this bib', () => {
+    assert.equal(getExplicitStart(4), null);
   });
 });
 

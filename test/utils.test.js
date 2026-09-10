@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   normaliseTime, normaliseDate, timeToSeconds, secondsToTime, isValidRaceTime, parseDate,
   today, capitalise, cleanName, normaliseClub, findSimilarPairs, ciEq, sortBy, toISODate,
-  fromISODate, normaliseGender,
+  fromISODate, normaliseGender, elapsedToTimeOfDay,
 } from '../js/utils.js';
 
 // utils.js's showBusy() touches `document` (DOM wiring) — deliberately not covered here.
@@ -90,6 +90,27 @@ describe('utils.js:isValidRaceTime', () => {
     assert.equal(isValidRaceTime('01:02:03'), true);
     assert.equal(isValidRaceTime('DNF'), false);
     assert.equal(isValidRaceTime(''), false);
+  });
+});
+
+describe('utils.js:elapsedToTimeOfDay', () => {
+  it('adds elapsed time to the race start time-of-day', () => {
+    assert.equal(elapsedToTimeOfDay('00:10:00', '19:30:00'), '19:40:00');
+  });
+
+  it('wraps past midnight', () => {
+    assert.equal(elapsedToTimeOfDay('05:00:00', '22:00:00'), '03:00:00');
+  });
+
+  it('returns empty string when the elapsed value is not a real time', () => {
+    assert.equal(elapsedToTimeOfDay('Retire', '19:30:00'), '');
+    assert.equal(elapsedToTimeOfDay('', '19:30:00'), '');
+    assert.equal(elapsedToTimeOfDay('-', '19:30:00'), '');
+  });
+
+  it('returns empty string when the race start time is not a real time', () => {
+    assert.equal(elapsedToTimeOfDay('00:10:00', ''), '');
+    assert.equal(elapsedToTimeOfDay('00:10:00', undefined), '');
   });
 });
 

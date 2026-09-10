@@ -135,7 +135,7 @@ export async function updateProgress() {
     syncAutoProgressCheckbox();
     return;
   }
-  const { finishRows, cpBuckets, expected, cpTimesByCp } = result;
+  const { finishRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp } = result;
 
   const existingCount = state.mobileProgress.length;
   const cpSummary = cpBuckets.size ? ` and checkpoint times from ${cpBuckets.size} CP file(s)` : '';
@@ -144,7 +144,7 @@ export async function updateProgress() {
     : `Add ${expected.length} progress record(s) from ${finishRows.length} Finish file(s)${cpSummary}?`;
   if (!await showConfirmDialog(confirmMsg, 'Update Progress')) return;
 
-  const { added } = await applyComputedResults(expected, cpTimesByCp, selected);
+  const { added } = await applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp);
 
   // A successful manual run is exactly the proof #mf-auto-progress needs to unlock — see this
   // file's own AUTO_PROGRESS_KEY doc above. Set before the re-render below so
@@ -194,7 +194,7 @@ export async function autoUpdateProgress() {
   const result = await validateAndCompute(selected);
   if (result.error) { console.warn('[mobile-files] Progress auto-update skipped:', result.error); return; }
 
-  await applyComputedResults(result.expected, result.cpTimesByCp, selected);
+  await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp);
   renderMobileProgressTable();
 }
 
@@ -226,7 +226,7 @@ export async function maybeAutoUpdateProgress() {
     return;
   }
 
-  await applyComputedResults(result.expected, result.cpTimesByCp, selected);
+  await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp);
   renderMobileProgressTable();
 }
 

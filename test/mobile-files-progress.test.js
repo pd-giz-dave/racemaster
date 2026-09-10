@@ -110,6 +110,22 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     assert.equal(result.cpBuckets.size, 1);
     const cpTimes = result.cpTimesByCp.get(1);
     assert.equal(cpTimes.get(1), '00:10:00'); // 09:10 - 09:00 start
+    // cpTimeOfDayByCp carries the crossing row's own device timestamp alongside, unconditionally
+    // (not dependent on the elapsed calc succeeding) — Safety Check's Last CP column prefers it.
+    assert.equal(result.cpTimeOfDayByCp.get(1).get(1), '09:10:00');
+  });
+
+  it('gives a late-start bib its own device timeOfDay too, alongside its paired elapsed time', async () => {
+    const withLateStart = finishRow();
+    withLateStart.device.lines.push(
+      { lineNumber: 4, action: 'Start', splitNumber: 2, bibNumber: '2', timestamp: '2026/08/30 09:05:00.00', location: 'Finish' },
+      { lineNumber: 5, action: 'Split', splitNumber: 2, splitTime: '00:05:00.00', timestamp: '2026/08/30 09:05:00.00', location: 'Finish' },
+    );
+    const result = await validateAndCompute([withLateStart]);
+    assert.equal(result.error, undefined);
+    const startEntry = result.expected.find(e => e.action === 'Start' && e.number === 2);
+    assert.equal(startEntry.time, '00:05:00');
+    assert.equal(startEntry.timeOfDay, '09:05:00');
   });
 
   it('rejects a checkpoint file when the Finish file\'s time-mode Start row is missing', async () => {
@@ -122,7 +138,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     assert.match(result.error, /no Start record/);
   });
 
-  it('marks a checkpoint retire with CP_RETIRE, not a computed time, and adds a synthetic DNF for a bib with no Finish record', async () => {
+  it('marks a checkpoint retire with CP_RETIRE (not a computed time) in cpTimesByCp, and adds a synthetic DNF carrying its real elapsed retire time for a bib with no Finish record', async () => {
     // Bib 2 (Bob) retires at CP1 — never reaches Finish, so has no Finish-location entry at all.
     const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
       { lineNumber: 1, action: 'DNF', bibNumber: '2', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
@@ -130,10 +146,26 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const result = await validateAndCompute([finishRow(), cp]);
     assert.equal(result.error, undefined);
     assert.equal(result.cpTimesByCp.get(1).get(2), CP_RETIRE);
-    // Bib 1's own real Finish record is untouched, and bib 2 gets a synthetic DNF added.
+    // Bib 1's own real Finish record is untouched. Bib 2 gets a synthetic DNF added, its time
+    // the actual elapsed-since-start moment of the CP1 retire (09:10 - the Finish file's own
+    // 09:00 Start), not blank, plus its own device timeOfDay straight off the CP1 row's own
+    // timestamp — Safety Check's Retirees tab "when" column prefers that over the elapsed value.
     assert.deepEqual(result.expected, [
       { action: 'Finish', number: 1, time: '00:20:00' },
-      { action: 'DNF', number: 2, time: '' },
+      { action: 'DNF', number: 2, time: '00:10:00', timeOfDay: '09:10:00' },
+    ]);
+  });
+
+  it('gives a Finish-location retire its own real elapsed time and device timeOfDay too, from its own row timestamp against the Finish file\'s Start', async () => {
+    const withRetiree = finishRow();
+    withRetiree.device.lines.push(
+      { lineNumber: 4, action: 'DNF', bibNumber: '2', timestamp: '2026/08/30 09:15:00.00', location: 'Finish' },
+    );
+    const result = await validateAndCompute([withRetiree]);
+    assert.equal(result.error, undefined);
+    assert.deepEqual(result.expected, [
+      { action: 'Finish', number: 1, time: '00:20:00' },
+      { action: 'DNF', number: 2, time: '00:15:00', timeOfDay: '09:15:00' },
     ]);
   });
 
@@ -172,6 +204,28 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
     await applyComputedResults([], cpTimesByCp, [finishRow()]);
     assert.equal(state.mobileCheckpoints.length, 1);
     assert.deepEqual(state.mobileCheckpoints[0], { bibNumber: 1, cpTimes: { 1: '00:10:00', 2: '00:15:00' } });
+  });
+
+  it('applyComputedResults persists timeOfDay on a mobileProgress entry that has one', async () => {
+    const expected = [
+      { action: 'Finish', number: 1, time: '00:20:00' },
+      { action: 'DNF', number: 2, time: '00:10:00', timeOfDay: '09:10:00' },
+    ];
+    await applyComputedResults(expected, new Map(), [finishRow()]);
+    assert.deepEqual(state.mobileProgress, expected);
+  });
+
+  it('applyComputedResults adds cpTimesOfDay to a mobileCheckpoints row when cpTimeOfDayByCp has an entry for it', async () => {
+    const cpTimesByCp = new Map([[1, new Map([[1, '00:10:00']])]]);
+    const cpTimeOfDayByCp = new Map([[1, new Map([[1, '19:40:00']])]]);
+    await applyComputedResults([], cpTimesByCp, [finishRow()], cpTimeOfDayByCp);
+    assert.deepEqual(state.mobileCheckpoints[0], { bibNumber: 1, cpTimes: { 1: '00:10:00' }, cpTimesOfDay: { 1: '19:40:00' } });
+  });
+
+  it('applyComputedResults omits cpTimesOfDay entirely when cpTimeOfDayByCp is not given', async () => {
+    const cpTimesByCp = new Map([[1, new Map([[1, '00:10:00']])]]);
+    await applyComputedResults([], cpTimesByCp, [finishRow()]);
+    assert.deepEqual(state.mobileCheckpoints[0], { bibNumber: 1, cpTimes: { 1: '00:10:00' } });
   });
 });
 

@@ -7,7 +7,7 @@
 
 import { getEntry } from './entries.js';
 import { entryInfo } from './safety.js';
-import { getMobileCheckpointTimes } from './mobile-checkpoints.js';
+import { getMobileCheckpointTimes, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime } from './utils.js';
 import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
 import { byLineNumber, setLastSyncedLineNumber } from './mobile-files-shared.js';
@@ -42,6 +42,17 @@ function parseTimestamp(ts) {
   return Number.isFinite(t.getTime()) ? t.getTime() : null;
 }
 
+// "yyyy/MM/dd HH:mm:ss[.cc]" → "HH:mm:ss" — the phone's own wall-clock reading for a row,
+// straight out of its timestamp, no arithmetic at all. Preferred over race-start-plus-elapsed
+// wherever it's available (Safety Check — see safety.js/views/safety.js) since it doesn't
+// depend on the phone's own Start row lining up exactly with the race's official start time;
+// plain string extraction rather than round-tripping through Date, so there's no local-timezone
+// parsing/formatting mismatch to worry about either. Returns '' on anything not in this shape.
+function deviceTimeOfDay(ts) {
+  const m = /^\d{4}\/\d{2}\/\d{2} (\d{2}:\d{2}:\d{2})/.exec(ts || '');
+  return m ? m[1] : '';
+}
+
 // "The time mode start line" — the one Start row in a Time-mode device's file, whose own
 // timestamp is wall-clock zero for every elapsed time computed against it (both FinishTime's
 // existing splitNumber pairing and the new CP timestamp arithmetic use this same instant).
@@ -57,30 +68,60 @@ function findStartTimestamp(finishTimeRows) {
 // lineNumber — the file's own unambiguous record order.
 //
 // A DNF row (a retire recorded at this checkpoint, not just at Finish) gets the CP_RETIRE
-// sentinel instead of a computed elapsed time — there's no crossing to time in the first place,
-// and treating it as an ordinary bib would produce a nonsense "time" for someone who didn't
-// continue past here. Recorded regardless of whether a valid Start timestamp exists (unlike an
-// ordinary crossing): a retire needs no arithmetic against it, and is worth keeping even when
-// the Start row itself is missing/corrupt. validateAndCompute() below scans the returned map
-// for this sentinel to also mark the bib DNF in state.mobileProgress — see its own doc — and
-// every other consumer of state.mobileCheckpoints (buildProgressRows() here, the Splits tab's
-// adjustedFinishTime() in results.js, Safety Check's "Last CP" hint) already treats a CP time as
-// an opaque display string, so no further special-casing is needed there.
-export const CP_RETIRE = 'Retire';
+// sentinel instead of a computed elapsed time in the returned `cpTimes` map — there's no
+// crossing to time in the *course* sense, and treating it as an ordinary bib would produce a
+// nonsense split for someone who didn't continue past here. Recorded regardless of whether a
+// valid Start timestamp exists (unlike an ordinary crossing): a retire needs no arithmetic
+// against it for this map, and is worth keeping even when the Start row itself is missing/
+// corrupt. validateAndCompute() below scans `cpTimes` for this sentinel to also mark the bib
+// DNF in state.mobileProgress — see its own doc — and every other consumer of
+// state.mobileCheckpoints (buildProgressRows() here, the Splits tab's adjustedFinishTime() in
+// results.js, Safety Check's "Last CP" hint) already treats a CP time as an opaque display
+// string, so no further special-casing is needed there.
+//
+// `retireElapsed` is the separate, genuine elapsed-since-start moment a retire row's own
+// timestamp represents — when it's computable (a valid Start timestamp and a parseable row
+// timestamp), the same arithmetic an ordinary crossing gets. Kept apart from `cpTimes` rather
+// than overwriting the CP_RETIRE sentinel there: the Progress tab's CP column must keep showing
+// literal "Retire" text, not a time, but Safety Check's Retirees tab (validateAndCompute()'s own
+// caller) wants exactly this moment for its "when" column — the two displays have opposite
+// needs for the same underlying fact.
+//
+// CP_RETIRE itself is re-exported here (defined in mobile-checkpoints.js) purely so existing
+// importers of this module don't need to change where they get it from.
+export { CP_RETIRE };
 function computeCpTimes(bibsRows, startMs) {
-  const byBib = new Map();
+  const cpTimes = new Map();
+  const cpTimeOfDay = new Map(); // bib -> 'HH:MM:SS', the crossing row's own device timestamp
+  const retireElapsed = new Map();
   for (const r of [...bibsRows].sort(byLineNumber)) {
     const bib = +r.bibNumber;
-    if (!Number.isFinite(bib) || bib <= 0 || byBib.has(bib)) continue;
-    if (r.action === 'DNF') { byBib.set(bib, CP_RETIRE); continue; }
+    if (!Number.isFinite(bib) || bib <= 0 || cpTimes.has(bib)) continue;
+    const tod = deviceTimeOfDay(r.timestamp);
+    if (r.action === 'DNF') {
+      cpTimes.set(bib, CP_RETIRE);
+      if (tod) cpTimeOfDay.set(bib, tod);
+      if (startMs != null) {
+        const ts = parseTimestamp(r.timestamp);
+        if (ts != null) {
+          const elapsed = Math.round((ts - startMs) / 1000);
+          if (elapsed >= 0) retireElapsed.set(bib, secondsToTime(elapsed));
+        }
+      }
+      continue;
+    }
+    if (tod) cpTimeOfDay.set(bib, tod);
     if (startMs == null) continue;
     const ts = parseTimestamp(r.timestamp);
     if (ts == null) continue;
     const elapsed = Math.round((ts - startMs) / 1000);
     if (elapsed < 0) continue; // bad data/clock skew — leave blank rather than show nonsense
-    byBib.set(bib, secondsToTime(elapsed));
+    cpTimes.set(bib, secondsToTime(elapsed));
   }
-  return byBib; // bib -> 'HH:MM:SS' | CP_RETIRE
+  // cpTimes: bib -> 'HH:MM:SS' elapsed | CP_RETIRE; cpTimeOfDay: bib -> 'HH:MM:SS' time-of-day
+  // (independent of startMs/elapsed validity — Safety Check's own preferred source, see
+  // deviceTimeOfDay's own doc); retireElapsed: bib -> 'HH:MM:SS' elapsed, retirees only.
+  return { cpTimes, cpTimeOfDay, retireElapsed };
 }
 
 // Derives what state.mobileProgress *should* contain for one file's current segment — bib-driven
@@ -104,16 +145,42 @@ function computeCpTimes(bibsRows, startMs) {
 //
 // This is the single source of truth both the red/green status check and the actual rebuild
 // below are computed from, so they can never disagree with each other.
-function expectedFinisherEntries(bibs, times) {
+//
+// startMs (the Finish bucket's own Time-mode Start timestamp, when one exists — see
+// findStartTimestamp) gives a retire recorded directly at Finish a real elapsed-since-start
+// "when", the same timestamp arithmetic a checkpoint retire gets in computeCpTimes' own
+// retireElapsed — a DNF row has no paired split (NO_SPLIT_ACTIONS in finishers.js), so this is
+// the only source such a time can come from.
+//
+// `timeOfDay` — a Start or DNF row's own device timestamp, straight out of deviceTimeOfDay, no
+// arithmetic — is Safety Check's preferred source for the Early Starters/Retirees tabs (see
+// that file's own doc); unlike `time` above it needs no startMs at all, so it's set whenever the
+// row itself has one, independent of whether the elapsed figure could be computed.
+function expectedFinisherEntries(bibs, times, startMs) {
   const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
   return [...bibs].sort(byLineNumber).map(b => {
     const action = BIBS_ACTION_TO_FINISHER[b.action];
     const number = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action) ? +b.bibNumber : 0;
     const paired = timeBySplit.get(b.splitNumber);
-    const time = action === 'DNF' ? ''
-      : action === 'Clock' ? (b.note || '')
-      : (paired ? stripCentiseconds(paired.splitTime) : '');
-    return { action, number, time };
+    const timeOfDay = (action === 'DNF' || action === 'Start') ? deviceTimeOfDay(b.timestamp) : '';
+    let time = '';
+    if (action === 'DNF') {
+      if (startMs != null) {
+        const ts = parseTimestamp(b.timestamp);
+        if (ts != null) {
+          const elapsed = Math.round((ts - startMs) / 1000);
+          if (elapsed >= 0) time = secondsToTime(elapsed);
+        }
+      }
+    } else if (action === 'Clock') {
+      time = b.note || '';
+    } else {
+      time = paired ? stripCentiseconds(paired.splitTime) : '';
+    }
+    // Only actually carried when non-empty (Start/DNF with a usable device timestamp) — keeps
+    // every other entry's shape exactly as before rather than padding it with a field it has no
+    // use for.
+    return timeOfDay ? { action, number, time, timeOfDay } : { action, number, time };
   });
 }
 
@@ -228,11 +295,19 @@ export async function validateAndCompute(selected) {
     return { error: `Cannot compute results — bib number(s) not in entries: ${invalidBibs.join(', ')}.` };
   }
 
-  // Checkpoint buckets need the Finish bucket's own Time-mode Start row as the universal t=0
-  // reference — without it, no elapsed time (CP or otherwise) can be computed at all.
+  // The Finish bucket's own Time-mode Start row is the universal t=0 reference for every
+  // timestamp-based elapsed calc below — checkpoint crossings, a checkpoint retire's own "when"
+  // (computeCpTimes' retireElapsed), and now a Finish-location retire's "when" too
+  // (expectedFinisherEntries below). Found unconditionally (not just when cpBuckets.size), since
+  // a Finish-only selection still wants it for that last case.
+  const startMs = findStartTimestamp(times);
+
+  // Checkpoint buckets need it to compute anything at all.
   const cpTimesByCp = new Map(); // cp number -> Map<bib, 'HH:MM:SS'>
+  const cpTimeOfDayByCp = new Map(); // cp number -> Map<bib, 'HH:MM:SS'> — see computeCpTimes' own doc
+  const retireElapsedByBib = new Map(); // bib -> 'HH:MM:SS', checkpoint retirees only
+  const retireTimeOfDayByBib = new Map(); // bib -> 'HH:MM:SS', checkpoint retirees only
   if (cpBuckets.size) {
-    const startMs = findStartTimestamp(times);
     if (startMs == null) {
       return { error: 'Cannot compute checkpoint times — no Start record found in the Finish location\'s time file; select it too.' };
     }
@@ -242,14 +317,18 @@ export async function validateAndCompute(selected) {
       const cpRows = bibsSegment.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action));
       const bad = [...new Set(cpRows.map(b => +b.bibNumber).filter(n => !Number.isFinite(n) || n <= 0 || !getEntry(n)))];
       if (bad.length) { invalidCpBibs.push(`CP${cpNumber}: ${bad.join(', ')}`); continue; }
-      cpTimesByCp.set(cpNumber, computeCpTimes(cpRows, startMs));
+      const { cpTimes, cpTimeOfDay, retireElapsed } = computeCpTimes(cpRows, startMs);
+      cpTimesByCp.set(cpNumber, cpTimes);
+      cpTimeOfDayByCp.set(cpNumber, cpTimeOfDay);
+      for (const [bib, t] of retireElapsed) retireElapsedByBib.set(bib, t);
+      for (const [bib, t] of cpTimeOfDay) if (cpTimes.get(bib) === CP_RETIRE) retireTimeOfDayByBib.set(bib, t);
     }
     if (invalidCpBibs.length) {
       return { error: `Cannot compute results — bib number(s) not in entries: ${invalidCpBibs.join('; ')}.` };
     }
   }
 
-  const expected = expectedFinisherEntries(bibs, times);
+  const expected = expectedFinisherEntries(bibs, times, startMs);
 
   // A bib retired at a checkpoint (CP_RETIRE, see computeCpTimes' own doc) may never reach the
   // Finish location at all — exactly the safety-relevant case buildProgressRows() already
@@ -259,17 +338,22 @@ export async function validateAndCompute(selected) {
   // tab's status — all three read state.mobileProgress for a 'DNF' action (see isRecordedDnf()
   // in results.js, getFinishedBibs() in safety.js). Finish stays authoritative when there IS a
   // genuine Finish-location record for this bib (Start/Finish/DNF) — this only fills the gap
-  // for a bib with no Finish entry at all.
+  // for a bib with no Finish entry at all. Its own retire moment (elapsed and, preferably, its
+  // real device time-of-day) comes along with it, for Safety Check's Retirees tab "when" column.
   const finishKnownBibs = new Set(expected.map(e => e.number).filter(n => n > 0));
   const cpRetiredBibs = new Set();
   for (const cpMap of cpTimesByCp.values()) {
     for (const [bib, time] of cpMap) if (time === CP_RETIRE) cpRetiredBibs.add(bib);
   }
   for (const bib of cpRetiredBibs) {
-    if (!finishKnownBibs.has(bib)) expected.push({ action: 'DNF', number: bib, time: '' });
+    if (finishKnownBibs.has(bib)) continue;
+    const entry = { action: 'DNF', number: bib, time: retireElapsedByBib.get(bib) || '' };
+    const tod = retireTimeOfDayByBib.get(bib);
+    if (tod) entry.timeOfDay = tod;
+    expected.push(entry);
   }
 
-  return { finishRows, cpBuckets, expected, cpTimesByCp };
+  return { finishRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp };
 }
 
 // The actual mutation, shared by both the button handler and the silent auto-update path —
@@ -283,18 +367,21 @@ export async function validateAndCompute(selected) {
 // adjustedFinishTime() in results.js/formatResults(), not this page; this page's job is only to
 // provide the raw information that needs. Never touches the manually-entered Finishers list.
 // Returns { added } for the caller's own status message.
-export async function applyComputedResults(expected, cpTimesByCp, selected) {
+export async function applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp = new Map()) {
   await clearProgressData();
 
-  state.mobileProgress = expected.map(({ action, number, time }) => ({ action, number, time }));
+  state.mobileProgress = expected.map(({ action, number, time, timeOfDay }) =>
+    timeOfDay ? { action, number, time, timeOfDay } : { action, number, time });
   await saveMobileProgress();
 
   const bibsSeen = new Set();
   for (const cpMap of cpTimesByCp.values()) for (const bib of cpMap.keys()) bibsSeen.add(bib);
   state.mobileCheckpoints = [...bibsSeen].map(bib => {
     const cpTimes = {};
+    const cpTimesOfDay = {};
     for (const [cpNumber, cpMap] of cpTimesByCp) if (cpMap.has(bib)) cpTimes[cpNumber] = cpMap.get(bib);
-    return { bibNumber: bib, cpTimes };
+    for (const [cpNumber, todMap] of cpTimeOfDayByCp) if (todMap.has(bib)) cpTimesOfDay[cpNumber] = todMap.get(bib);
+    return Object.keys(cpTimesOfDay).length ? { bibNumber: bib, cpTimes, cpTimesOfDay } : { bibNumber: bib, cpTimes };
   });
   await saveMobileCheckpoints();
 
