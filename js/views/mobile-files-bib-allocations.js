@@ -25,7 +25,7 @@ function bibAllocKey(r) { return `${r.owner} ${r.raceLabel}`; }
 
 // bib-allocations.json's contents (see js/bib-allocations.js) — the web app's own bib/name/
 // category/course export for this race, not anything pulled from a phone.
-function showBibAllocationsModal(owner, raceLabel, ba) {
+export function showBibAllocationsModal(owner, raceLabel, ba) {
   const sorted = [...ba.entries].sort((a, b) => a.bibNumber - b.bibNumber);
   const rows = sorted.map(e => `<tr><td>${e.bibNumber}</td><td>${escHtml(e.name)}</td><td>${escHtml(e.course)}</td><td>${escHtml(e.category || '')}</td></tr>`).join('');
 

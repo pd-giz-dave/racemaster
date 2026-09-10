@@ -6,7 +6,7 @@
 
 import { escHtml } from './utils.js';
 import {
-  byLineNumber, computeIncorporationStatus, getBleLastSeen, laterIso, latestLineTimestamp,
+  byLineNumber, computeIncorporationStatus, getBleLastSeen, laterIso, latestLineTimestamp, parsePhoneTimestamp,
 } from './mobile-files-shared.js';
 
 // ---- Segment view (mirrors racemaster-mobile's observeCurrentSegment + foldLatestVisible) ----
@@ -137,5 +137,49 @@ export function flattenDevices(races) {
       });
     }
   }
+  return rows;
+}
+
+// A row's own effective "last activity" instant, as epoch ms — a device row's lastUpdate is the
+// phone's own wire format, a bib-allocations row's is a plain ISO generatedAt (see flattenAllFiles
+// below), so this needs to know which parser applies. Unparseable/missing sorts last (oldest),
+// the conservative choice for a list whose whole purpose is surfacing what's safe to delete.
+function rowSortMs(row) {
+  const t = row.kind === 'bib-allocations' ? new Date(row.lastUpdate || '').getTime() : parsePhoneTimestamp(row.lastUpdate);
+  return Number.isFinite(t) ? t : -Infinity;
+}
+
+// Every device row from flattenDevices(), plus one extra row per race for its bib-allocations.json
+// (if it has one) — for the Mobile Files page's "All Files" tab (js/views/mobile-files-all.js),
+// the one place both kinds of server-side file are browsable/deletable together. `device.name` on
+// a bib-allocations row is deliberately the literal string 'bib-allocations' — that's what makes
+// deleteRow() (js/views/mobile-files.js) resolve to the right file via the ordinary device-delete
+// API (mobileDeviceFilePath and bibAllocationsFilePath build the identical path for that name —
+// see server/mobile.js), no new server route needed.
+//
+// Sorted newest-first by each row's own last-activity date (not race date — two files under the
+// same race can easily have very different ages, and this tab's whole purpose is surfacing the
+// genuinely neglected ones regardless of which race they're filed under). Ties (including two
+// unparseable dates) break by race label then file name, so the order is stable/deterministic
+// rather than depending on the server's own directory-walk order. This order is what "Delete
+// from here" (js/views/mobile-files.js) means by "below" — everything later in this same array.
+export function flattenAllFiles(races) {
+  const rows = flattenDevices(races).map(r => ({ ...r, kind: 'device' }));
+  for (const race of races) {
+    if (!race.bibAllocations) continue;
+    rows.push({
+      kind: 'bib-allocations',
+      owner: race.owner,
+      raceLabel: race.raceLabel,
+      raceDate: race.raceDate,
+      device: { name: 'bib-allocations' },
+      ba: race.bibAllocations,
+      bibsVisible: race.bibAllocations.entries.length,
+      lastUpdate: race.bibAllocations.generatedAt,
+    });
+  }
+  rows.sort((a, b) =>
+    rowSortMs(b) - rowSortMs(a) || a.raceLabel.localeCompare(b.raceLabel) || a.device.name.localeCompare(b.device.name));
+  rows.forEach((r, i) => { r.idx = i; });
   return rows;
 }

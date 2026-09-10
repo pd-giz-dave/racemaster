@@ -33,7 +33,8 @@ import {
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
 } from '../mobile-files-shared.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
-import { renderBibAllocationsList, wireBibAllocationsTab } from './mobile-files-bib-allocations.js';
+import { renderBibAllocationsList, wireBibAllocationsTab, showBibAllocationsModal } from './mobile-files-bib-allocations.js';
+import { renderAllFilesList, currentAllFilesRows } from './mobile-files-all.js';
 import {
   renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
   isProgressAutoEnabled,
@@ -60,12 +61,17 @@ function formatRaceCount(races) {
   return `${n} race${n === 1 ? '' : 's'}`;
 }
 
-// Each of these three re-renders the list *before* announcing its own outcome, not after —
-// renderMobileFiles() does its own server fetch and shows its own status ("Loading…", then
-// "Server unreachable…" if that fails, the expected case out in the field with no network),
-// which would otherwise immediately overwrite the specific confirmation below it.
-async function deleteRow(r) {
-  if (!await showConfirmDialog(`Delete "${r.device.name}" from "${r.raceLabel}"? This cannot be undone.`, 'Delete', true)) return;
+// r.device.name is 'bib-allocations' (literal) for a bib-allocations row (see flattenAllFiles()
+// in js/mobile-files-devices.js) — that's what makes apiDeleteMobileFile below resolve to the
+// right file with no server change needed; this is only for what's shown to the user.
+function fileLabel(r) {
+  return r.kind === 'bib-allocations' ? 'Bib Allocations' : r.device.name;
+}
+
+// The actual server delete, with no confirm dialog and no user-facing status message of its own
+// — both deleteRow() (one file, one confirm) and deleteFromHere() (a batch, one combined confirm)
+// own those themselves. Returns null on success, or a short error string on failure.
+async function deleteFileOnServer(r) {
   const session = getSession();
   let result;
   try {
@@ -74,22 +80,81 @@ async function deleteRow(r) {
     // Server unreachable (e.g. offline in the field, or the Datasets "Hide Server" test toggle)
     // — fetch() itself rejects rather than resolving with an {error} shape, and this row has no
     // local-only fallback the way a pending row's Discard does, so there's genuinely nothing
-    // more to do here than tell the operator to try again once the server's back.
-    showStatus('Server unreachable — cannot delete right now, try again once back online.', true);
-    return;
+    // more to do here than tell the caller to try again once the server's back.
+    return 'server unreachable';
   }
-  if (result.error) { showStatus(result.error, true); return; }
+  if (result.error) return result.error;
   // Without this, mule-ble.js's own delta cursor stays advanced past the data just deleted from
   // the server, so a later Bluetooth pull from this same device would only fetch what's new
   // since then — silently skipping everything that used to be there, even though the server no
   // longer has it either. A server-known device row never carries its own protocol deviceId
   // (that's only ever tracked for a BLE-pulled pending file — see savePendingMobileFile), so
   // there's no way to target just this one device's cursor; clearing every cursor is the same
-  // fallback discardPendingRow() uses for the equivalent no-deviceId case.
-  if (r.device.deviceId) resetLastPulledLineNumber(r.device.deviceId, r.raceLabel);
-  else resetAllLastPulledLineNumbers();
+  // fallback discardPendingRow() uses for the equivalent no-deviceId case. None of this applies
+  // to a bib-allocations delete — it has nothing to do with what a phone has already pulled.
+  if (r.kind !== 'bib-allocations') {
+    if (r.device.deviceId) resetLastPulledLineNumber(r.device.deviceId, r.raceLabel);
+    else resetAllLastPulledLineNumbers();
+  }
+  return null;
+}
+
+// Each of these re-renders the list *before* announcing its own outcome, not after —
+// renderMobileFiles() does its own server fetch and shows its own status ("Loading…", then
+// "Server unreachable…" if that fails, the expected case out in the field with no network),
+// which would otherwise immediately overwrite the specific confirmation below it.
+async function deleteRow(r) {
+  const label = fileLabel(r);
+  // Naming the owner too when admin: this is the one page an admin can see two different users'
+  // similarly-named races side by side, so the plain race/file name alone isn't always enough to
+  // be sure which one's about to be deleted.
+  if (!await showConfirmDialog(
+    `Delete "${label}" from "${r.raceLabel}"${getIsAdmin() ? ` (owner: ${r.owner})` : ''}? This cannot be undone.`,
+    'Delete', true
+  )) return;
+  const error = await deleteFileOnServer(r);
+  if (error) {
+    showStatus(error === 'server unreachable'
+      ? 'Server unreachable — cannot delete right now, try again once back online.'
+      : error, true);
+    return;
+  }
   await renderMobileFiles();
-  showStatus(`"${r.device.name}" deleted.`);
+  showStatus(`"${label}" deleted.`);
+}
+
+// "Delete from here" — an All Files tab row that's already stale (see mobile-files-all.js's own
+// `stale` field on each row) offers this alongside its ordinary Delete. Bulk-deletes the clicked
+// row and every OTHER stale row *after* it in the tab's current order (newest-first by each row's
+// own last-activity date — see flattenAllFiles()'s own doc in js/mobile-files-devices.js), quietly
+// skipping any fresh row in between rather than stopping at it. One combined confirm dialog names
+// every file up front — a batch like this can easily run to double digits, so a per-file confirm
+// would be both tedious and easy to click through without really reading.
+async function deleteFromHere(startRow) {
+  const idx = currentAllFilesRows.indexOf(startRow);
+  if (idx < 0) return;
+  const toDelete = currentAllFilesRows.slice(idx).filter(r => r.stale);
+  if (!toDelete.length) return; // the button only ever appears on an already-stale row
+
+  const list = toDelete.map(r => `${r.raceLabel} — ${fileLabel(r)}`).join('\n');
+  const message = `Delete this file and every other stale file below it in the current `
+    + `(newest-first) list — any fresh file in between is left alone. ${toDelete.length} `
+    + `file${toDelete.length === 1 ? '' : 's'} will be permanently removed:\n\n${list}\n\n`
+    + `This cannot be undone.`;
+  if (!await showConfirmDialog(message, `Delete ${toDelete.length}`, true)) return;
+
+  const failed = [];
+  for (const r of toDelete) {
+    const error = await deleteFileOnServer(r);
+    if (error) failed.push(`${fileLabel(r)} (${error})`);
+  }
+  await renderMobileFiles();
+  showStatus(
+    failed.length
+      ? `Deleted ${toDelete.length - failed.length} of ${toDelete.length} — failed: ${failed.join('; ')}`
+      : `Deleted ${toDelete.length} stale file${toDelete.length === 1 ? '' : 's'}.`,
+    !!failed.length
+  );
 }
 
 async function pushPendingRow(r) {
@@ -142,9 +207,27 @@ export function wireMobileFiles() {
     if (!r) return;
     if (btn.dataset.action === 'view')          showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
     else if (btn.dataset.action === 'raw')      showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
-    else if (btn.dataset.action === 'delete')   deleteRow(r);
     else if (btn.dataset.action === 'push')     pushPendingRow(r);
     else if (btn.dataset.action === 'discard')  discardPendingRow(r);
+  });
+  // All Files tab — the one place View/Raw/Delete are all still offered, for either a device
+  // file or a race's bib-allocations file (see currentAllFilesRows' own `kind` field, set by
+  // flattenAllFiles() in js/mobile-files-devices.js).
+  document.getElementById('mobile-files-all-tbody')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const r = currentAllFilesRows[+btn.closest('[data-idx]')?.dataset.idx];
+    if (!r) return;
+    if (btn.dataset.action === 'view') {
+      if (r.kind === 'bib-allocations') showBibAllocationsModal(r.owner, r.raceLabel, r.ba);
+      else showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    } else if (btn.dataset.action === 'raw') {
+      showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    } else if (btn.dataset.action === 'delete') {
+      deleteRow(r);
+    } else if (btn.dataset.action === 'delete-from-here') {
+      deleteFromHere(r);
+    }
   });
   document.getElementById('mobile-files-tbody')?.addEventListener('change', e => {
     const cb = e.target.closest('input.mobile-file-select');
@@ -208,6 +291,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
     if (!silent) showStatus('Sign in on the Datasets page to view mobile files.');
     renderRaceList([], false);
     renderBibAllocationsList([], false);
+    renderAllFilesList([], false);
     renderMobileProgressTable();
     if (count) count.textContent = '0';
     return false;
@@ -222,6 +306,9 @@ export async function renderMobileFiles({ silent = false } = {}) {
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
     renderBibAllocationsList(merged, isAdminUser);
+    // Deliberately NOT `merged` — the All Files tab is the one place that skips both
+    // filterStaleRaces() and mergePendingIntoRaces() on purpose, see its own module doc.
+    renderAllFilesList(lastKnownRaces, isAdminUser);
     renderMobileProgressTable();
     if (!silent) showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
     await maybeAutoUpdateProgress();
@@ -233,6 +320,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
     renderBibAllocationsList(merged, isAdminUser);
+    renderAllFilesList(lastKnownRaces, isAdminUser);
     renderMobileProgressTable();
     if (!silent) {
       showStatus(merged.length

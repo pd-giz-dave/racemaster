@@ -917,17 +917,33 @@ button.df-badge-connected:hover { background: var(--danger); }
   max-width: 340px;
   width: 90%;
   box-shadow: 0 4px 24px var(--shadow-lg);
+  /* A long message (e.g. mobile-files.js's own deleteFromHere(), itemising a large batch of
+     files) must never grow this box past the viewport and push its own buttons off-screen —
+     cap the box and let only the message scroll internally, so Delete/Cancel always stay put
+     and reachable regardless of how long the list is. */
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 .choice-dialog-msg {
   margin: 0 0 16px;
   font-size: 0.95rem;
   color: var(--text);
+  /* Lets a caller build a genuinely multi-line explanation via real "\n"s in the message — plain
+     text still wraps normally, this only stops newlines collapsing away. */
+  white-space: pre-line;
+  /* min-height:0 overrides the flex-item default (min-height:auto), which would otherwise force
+     this to its full content height regardless of overflow — without it, overflow-y:auto never
+     actually gets a chance to kick in inside a flex-column parent. */
+  overflow-y: auto;
+  min-height: 0;
 }
 .choice-dialog-btns {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-start;
+  flex-shrink: 0;
 }
 .choice-dialog-cancel { margin-left: auto; }
 .choice-dialog-box--wide { max-width: 480px; }

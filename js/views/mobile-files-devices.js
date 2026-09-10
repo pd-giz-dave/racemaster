@@ -137,8 +137,7 @@ function buildColumns(isAdminUser) {
       <button class="btn-sm btn-save" data-action="push">Push</button>
       <button class="btn-sm btn-delete" data-action="discard">Discard</button>` : `
       <button class="btn-sm" data-action="view">View</button>
-      <button class="btn-sm" data-action="raw">Raw</button>
-      <button class="btn-sm btn-delete" data-action="delete">Delete</button>`,
+      <button class="btn-sm" data-action="raw">Raw</button>`,
   });
 }
 

@@ -446,9 +446,10 @@ export const HELP = {
         accounts entirely and work purely locally via Export/Import.</p>
   `,
   'view-mobile-files': `
-    <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app, split across three tabs:
-        <strong>Devices</strong> (one row per physical phone), <strong>Bib Allocations</strong> (see below) and
-        <strong>Progress</strong> (see below). You see your own uploads; admins see everyone's.</p>
+    <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app, split across four tabs:
+        <strong>Devices</strong> (one row per physical phone), <strong>Bib Allocations</strong> (see below),
+        <strong>Progress</strong> (see below), and <strong>All Files</strong> (see below). You see your own
+        uploads; admins see everyone's.</p>
     <p>Each device's file interleaves two independent record types: <strong>Bibs</strong> (bib-number entries, from Bibs or Checkpoint mode)
         and <strong>Time</strong> (stopwatch splits, from Time mode). The counts shown are only what's currently <em>visible</em> —
         the entries since that device's own last Reset — the same view the phone's own screen would show; a blank count means none of that type exist at all.</p>
@@ -460,7 +461,8 @@ export const HELP = {
         e.g. a phone still connected but with nothing new to send.</p>
     <p><strong>View</strong> shows the Bibs and Time entries side by side, aligned by split number, with the location
         and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
-        useful for troubleshooting. <strong>Delete</strong> permanently removes a device's file from the server.</p>
+        useful for troubleshooting. Deleting a device's file is done from the <strong>All Files</strong> tab now (see below),
+        not here.</p>
     <p>Use <strong>Refresh</strong> to reload the list from the server and from anything already pulled locally over Bluetooth.</p>
     <p><strong>Connect to Phone…</strong> pulls a device's history directly over Bluetooth from a nearby phone running RaceMaster Mobile —
         no network needed, for use out on the course. The browser's own device picker can't show a meaningful name, so the first time you
@@ -552,6 +554,21 @@ export const HELP = {
         Results &amp; Prize List, not here), and one column per checkpoint actually selected. Sorted by bib number, not
         position — this tab has no notion of finishing position, only Results &amp; Prize List does. A bib seen only at a
         checkpoint, with no finish yet, still gets its own row with a blank FinishTime — that's the safety-relevant case.</p>
+    <p>The <strong>All Files</strong> tab lists every file actually stored on the server for you (or, if admin, everyone) —
+        every device file <em>and</em> every race's <code>bib-allocations.json</code> — regardless of "Skip races older
+        than". This is the one place <strong>Delete</strong> lives now; it's gone from the Devices tab. A file whose race
+        label is older than "Skip races older than" and that specific file has no recent activity of its own (a device
+        with no recent line, or a bib-allocations file that hasn't been regenerated recently) is highlighted rather than
+        hidden — this is judged per file, not per race, so it can disagree with a race still being visible elsewhere on
+        this page: an old-labelled race with one still-active phone stays visible on Devices/Bib Allocations, but another,
+        genuinely abandoned phone in that same race is still flagged here for review.</p>
+    <p>Rows are sorted newest first by each file's own last activity — a device's newest recorded entry, or when a
+        bib-allocations file was last generated — not by race, so the genuinely oldest files across every race sink to
+        the bottom together regardless of which race they belong to. A stale row also offers <strong>Delete from
+        here</strong>, alongside its ordinary Delete: this removes that row <em>and</em> every other stale row below it
+        in this same newest-first order, skipping over any fresh row it happens to pass rather than stopping at it — a
+        quick way to clear out a whole trailing run of old junk in one go. One confirmation lists every file it's about
+        to remove before anything is deleted.</p>
   `,
 };
 
@@ -628,6 +645,12 @@ export const PAGES = {
       <li>Mobile Files' Devices and Bib Allocations tabs no longer repeat the race's date in the Race column —
           it's already shown right next to it in Race Date. Bib Allocations' <strong>Generated</strong> column
           and its View modal now show a readable date/time instead of a raw timestamp</li>
+      <li>New <strong>All Files</strong> tab on Mobile Files — every device file and every race's bib-allocations
+          file you own (or everyone's, if admin), regardless of "Skip races older than", each still viewable and
+          now deletable from here — old ones are highlighted rather than hidden. <strong>Delete</strong> has moved
+          here from the Devices tab, which no longer offers it. Rows sort newest first by their own last activity;
+          a stale row also offers <strong>Delete from here</strong>, clearing it and every other stale row below it
+          in one confirmed sweep</li>
     </ul>
     <h3>v0.0.16-alpha</h3>
     <ul>
@@ -996,7 +1019,19 @@ export const TABLES = {
     { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },
     { id: 'lastSeen',   label: 'Last Seen',   title: 'When the server (or, for a Bluetooth-pulled pending file, this browser) last actually heard from this device' },
     { id: 'lastUpdate', label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, across all lines (not just those currently visible)' },
-    { id: 'actions',   label: 'Actions',   title: 'View, view raw, or delete this file' },
+    { id: 'actions',   label: 'Actions',   title: 'View or view raw this file' },
+  ],
+  'mobile-files-all': [
+    { id: 'raceLabel',  label: 'Race',        title: 'Race name (date suffix dropped — see Race Date; hover for the full race label)', sticky: true, wrap: true },
+    { id: 'location',   label: 'Where',       title: 'Course location for a device file — blank for a bib-allocations file', sticky: true, wrap: true, cap: 80 },
+    { id: 'bibs',       label: 'Bibs',        title: 'Bib entries visible on a device file, or bibs allocated for a bib-allocations file' },
+    { id: 'time',       label: 'Time',        title: 'Time splits currently visible — blank for a bib-allocations file' },
+    { id: 'owner',      label: 'Owner',       title: 'Account this file belongs to (admins only)' },
+    { id: 'raceDate',   label: 'Race Date',   title: 'Race date parsed from the race label' },
+    { id: 'device',     label: 'Device / File', title: 'Physical phone that recorded this file, or "Bib Allocations" for that race\'s bib-allocations.json' },
+    { id: 'lastSeen',    label: 'Last Seen',   title: 'When the server last actually heard from this device — blank for a bib-allocations file' },
+    { id: 'lastUpdate',  label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, or when the bib-allocations file was last generated — rows are sorted by this, newest first' },
+    { id: 'actions',    label: 'Actions',     title: 'View, or view raw, or delete this file; a stale row also offers Delete from here, removing it and every other stale row below it' },
   ],
   'bib-allocations': [
     { id: 'raceLabel',   label: 'Race',       title: 'Race name this allocation was generated for (date suffix dropped — see Race Date; hover for the full race label)', sticky: true, wrap: true },

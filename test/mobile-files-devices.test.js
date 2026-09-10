@@ -8,7 +8,7 @@ import { installLocalStorageMock } from './helpers/mock-browser.js';
 import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
-  flattenDevices,
+  flattenDevices, flattenAllFiles,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -165,5 +165,67 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     selectedKeys.add(rowKey({ owner: 'alice', raceLabel: 'race-a', device: { name: 'A' } }));
     const rows = flattenDevices(races);
     assert.equal(rows[0].incorporationStatus, 'outstanding');
+  });
+});
+
+describe('mobile-files-devices.js:flattenAllFiles', () => {
+  it('produces both device rows and a bib-allocations row for a race that has both, tagged with kind', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [] }],
+      bibAllocations: { generatedAt: '2026-01-01T00:00:00.000Z', entries: [{ bibNumber: 1 }, { bibNumber: 2 }] },
+    }];
+    const rows = flattenAllFiles(races);
+    assert.equal(rows.length, 2);
+    assert.deepEqual([...rows.map(r => r.kind)].sort(), ['bib-allocations', 'device']);
+    const baRow = rows.find(r => r.kind === 'bib-allocations');
+    assert.equal(baRow.device.name, 'bib-allocations');
+    assert.equal(baRow.bibsVisible, 2);
+    assert.equal(baRow.lastUpdate, '2026-01-01T00:00:00.000Z');
+  });
+
+  it('sorts rows newest-first by each row\'s own last-activity date, mixing device and bib-allocations rows together', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [
+        { name: 'Old', lines: [{ timestamp: '2020/01/01 10:00:00' }] },
+        { name: 'New', lines: [{ timestamp: '2026/06/01 10:00:00' }] },
+      ],
+      bibAllocations: { generatedAt: '2023-01-01T00:00:00.000Z', entries: [] },
+    }];
+    const rows = flattenAllFiles(races);
+    assert.deepEqual(rows.map(r => r.kind === 'bib-allocations' ? 'bib-allocations' : r.device.name), ['New', 'bib-allocations', 'Old']);
+  });
+
+  it('sorts a row with no parseable date last, not first', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [
+        { name: 'NoDate', lines: [] },
+        { name: 'Dated', lines: [{ timestamp: '2026/01/01 10:00:00' }] },
+      ],
+    }];
+    const rows = flattenAllFiles(races);
+    assert.deepEqual(rows.map(r => r.device.name), ['Dated', 'NoDate']);
+  });
+
+  it('produces device rows only for a race with no bibAllocations', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [] }],
+    }];
+    const rows = flattenAllFiles(races);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].kind, 'device');
+  });
+
+  it('assigns a sequential idx spanning device and bib-allocations rows together', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [] }, { name: 'B', lines: [] }],
+      bibAllocations: { generatedAt: '2026-01-01T00:00:00.000Z', entries: [] },
+    }];
+    const rows = flattenAllFiles(races);
+    assert.deepEqual(rows.map(r => r.idx), [0, 1, 2]);
   });
 });

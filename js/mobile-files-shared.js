@@ -316,6 +316,41 @@ export function hasNewMobileData(status, lastKnownRaces) {
   return false;
 }
 
+// Shared "is this race label old enough for staleness to even be a question" gate — a young or
+// unparseable label always means "not stale", regardless of any device/file's own activity.
+function isRaceLabelOld(raceLabel, staleAfterDays) {
+  const ageDays = raceLabelAgeDays(raceLabel);
+  return ageDays !== null && ageDays >= staleAfterDays;
+}
+
+// "yyyy/mm/dd HH:MM:SS" (a device line's own timestamp) → epoch ms, or null if unparseable.
+// Exported for js/mobile-files-devices.js's own flattenAllFiles(), which needs a real epoch
+// value (not just a threshold check) to sort All Files tab rows by date across both device and
+// bib-allocations rows, whose own timestamps come in two different wire formats.
+export function parsePhoneTimestamp(ts) {
+  const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(ts || '');
+  if (!m) return null;
+  const [, yyyy, mm, dd, HH, MM, SS] = m;
+  const t = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(HH), Number(MM), Number(SS)).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function deviceHasRecentActivity(lines, staleAfterDays) {
+  const t = parsePhoneTimestamp(latestLineTimestamp(lines || []));
+  if (t == null) return false;
+  return (Date.now() - t) / (24 * 60 * 60 * 1000) < staleAfterDays;
+}
+
+// bib-allocations.json's own generatedAt is a plain ISO string (server-stamped — see
+// server/routes/mobile.js's bib-allocations POST handler), a different wire format from a
+// device line's "yyyy/mm/dd HH:mm:ss", so it needs its own (simpler) recency check.
+function isoWithinDays(iso, staleAfterDays) {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return false;
+  return (Date.now() - t) / (24 * 60 * 60 * 1000) < staleAfterDays;
+}
+
 // Hides a race whose label is older than getRaceStaleAfterDays() from the whole Mobile Files
 // page — extending that option (previously BLE-pull-only, see js/mule-ble.js's own
 // isRaceLabelStale) to races fetched from the server too. Carries the exact same safety
@@ -328,20 +363,29 @@ export function hasNewMobileData(status, lastKnownRaces) {
 // directly from the data itself via latestLineTimestamp() rather than a delta-sync cursor.
 export function filterStaleRaces(races) {
   const staleAfterDays = getRaceStaleAfterDays();
-  const msPerDay = 24 * 60 * 60 * 1000;
   return races.filter(race => {
-    const ageDays = raceLabelAgeDays(race.raceLabel);
-    if (ageDays === null || ageDays < staleAfterDays) return true;
-    return race.devices.some(device => {
-      const ts = latestLineTimestamp(device.lines || []);
-      if (!ts) return false;
-      // "yyyy/mm/dd HH:MM:SS" — reuse formatDateTime's own parsing shape rather than a new one.
-      const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(ts);
-      if (!m) return false;
-      const [, yyyy, mm, dd, HH, MM, SS] = m;
-      const lineDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(HH), Number(MM), Number(SS));
-      if (isNaN(lineDate.getTime())) return false;
-      return (Date.now() - lineDate.getTime()) / msPerDay < staleAfterDays;
-    });
+    if (!isRaceLabelOld(race.raceLabel, staleAfterDays)) return true;
+    return race.devices.some(device => deviceHasRecentActivity(device.lines, staleAfterDays));
   });
+}
+
+// Per-file (not race-level) staleness, for *highlighting* (not hiding) a row on the Mobile Files
+// page's "All Files" tab (js/views/mobile-files-all.js) — deliberately narrower than
+// filterStaleRaces' own "keep the race if ANY device is recent" rule above. That rule protects a
+// still-running multi-day event's whole race from disappearing; this exists specifically so an
+// individually-abandoned file can still be flagged for review/deletion even inside an otherwise-
+// active race (e.g. last year's watch nobody wiped, sitting next to this year's live phones under
+// a similarly-old label) — the two are intentionally allowed to disagree, not accidentally so.
+export function isDeviceStale(raceLabel, device) {
+  const staleAfterDays = getRaceStaleAfterDays();
+  if (!isRaceLabelOld(raceLabel, staleAfterDays)) return false;
+  return !deviceHasRecentActivity(device.lines, staleAfterDays);
+}
+
+// Same idea as isDeviceStale() above, for a race's bib-allocations.json — judged by its own
+// generatedAt rather than a device's recorded lines.
+export function isBibAllocationsStale(raceLabel, bibAllocations) {
+  const staleAfterDays = getRaceStaleAfterDays();
+  if (!isRaceLabelOld(raceLabel, staleAfterDays)) return false;
+  return !isoWithinDays(bibAllocations?.generatedAt, staleAfterDays);
 }

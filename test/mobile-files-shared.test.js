@@ -14,6 +14,7 @@ import {
   parseRaceLabelDate, raceNameOf, sortRaces, mergePendingIntoRaces,
   byLineNumber, computeIncorporationStatus,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
+  isDeviceStale, isBibAllocationsStale,
 } from '../js/mobile-files-shared.js';
 
 beforeEach(() => {
@@ -333,5 +334,76 @@ describe('mobile-files-shared.js:filterStaleRaces', () => {
   it('keeps a race whose label is younger than the threshold', () => {
     const races = [{ owner: 'alice', raceLabel: todayRaceLabel('race'), devices: [{ name: 'PhoneA', lines: [{ timestamp: '2020/01/01 10:00:00' }] }] }];
     assert.equal(filterStaleRaces(races).length, 1);
+  });
+});
+
+describe('mobile-files-shared.js:isDeviceStale', () => {
+  function todayRaceLabel(name) {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${name}-${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  function nowTimestamp() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  const OLD_LABEL = 'race-20-01-01';
+
+  beforeEach(() => setRaceStaleAfterDays(2));
+
+  it('is true for an old-labelled race whose device has no recent activity', () => {
+    assert.equal(isDeviceStale(OLD_LABEL, { lines: [{ timestamp: '2020/01/01 10:00:00' }] }), true);
+  });
+
+  it('is false for an old-labelled race whose device DOES have recent activity', () => {
+    assert.equal(isDeviceStale(OLD_LABEL, { lines: [{ timestamp: nowTimestamp() }] }), false);
+  });
+
+  it('is false for a young-labelled race regardless of device activity', () => {
+    assert.equal(isDeviceStale(todayRaceLabel('race'), { lines: [{ timestamp: '2020/01/01 10:00:00' }] }), false);
+  });
+
+  it('is false for an unparseable label regardless of device activity', () => {
+    assert.equal(isDeviceStale('no-date-here', { lines: [{ timestamp: '2020/01/01 10:00:00' }] }), false);
+  });
+
+  it('disagrees with filterStaleRaces on purpose: a race kept because ONE device is recent still flags its OTHER, individually-stale device', () => {
+    const staleDevice = { name: 'Old', lines: [{ timestamp: '2020/01/01 10:00:00' }] };
+    const freshDevice = { name: 'New', lines: [{ timestamp: nowTimestamp() }] };
+    const races = [{ owner: 'alice', raceLabel: OLD_LABEL, devices: [staleDevice, freshDevice] }];
+    // filterStaleRaces keeps the whole race (existing behaviour, covered above)...
+    assert.equal(filterStaleRaces(races).length, 1);
+    // ...but isDeviceStale still tells the two devices apart within it.
+    assert.equal(isDeviceStale(OLD_LABEL, staleDevice), true);
+    assert.equal(isDeviceStale(OLD_LABEL, freshDevice), false);
+  });
+});
+
+describe('mobile-files-shared.js:isBibAllocationsStale', () => {
+  function todayRaceLabel(name) {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${name}-${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  const OLD_LABEL = 'race-20-01-01';
+
+  beforeEach(() => setRaceStaleAfterDays(2));
+
+  it('is true for an old-labelled race with an old generatedAt', () => {
+    assert.equal(isBibAllocationsStale(OLD_LABEL, { generatedAt: '2020-01-01T10:00:00.000Z' }), true);
+  });
+
+  it('is false for an old-labelled race with a recent generatedAt', () => {
+    assert.equal(isBibAllocationsStale(OLD_LABEL, { generatedAt: new Date().toISOString() }), false);
+  });
+
+  it('is false for a young-labelled race regardless of generatedAt', () => {
+    assert.equal(isBibAllocationsStale(todayRaceLabel('race'), { generatedAt: '2020-01-01T10:00:00.000Z' }), false);
+  });
+
+  it('is true for an old-labelled race with a missing/invalid generatedAt — nothing proves it\'s fresh', () => {
+    assert.equal(isBibAllocationsStale(OLD_LABEL, {}), true);
+    assert.equal(isBibAllocationsStale(OLD_LABEL, { generatedAt: 'not a date' }), true);
   });
 });
