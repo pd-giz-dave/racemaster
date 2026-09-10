@@ -590,29 +590,43 @@ export function applyStickyColumns(tbodyId) {
     allRows.forEach(r => { const c = cellAt(r, idx); if (c) { c.style.left = ''; c.style.width = ''; } });
   });
 
+  // Pass 1: force any wrap column whose natural width exceeds its cap down to that cap. A
+  // free-text column (a name, a race label) needs this, or one long value on one row sizes
+  // the whole frozen block to match it and — on a narrow phone — leaves nothing readable for
+  // the columns after it. table-layout:auto doesn't reliably honour max-width on a <td> as an
+  // actual ceiling (verified: a 27-char value still rendered well past a 135px max-width), but
+  // explicit width does reliably constrain one — so measure what the column naturally wants
+  // first, and only force a width down to the cap if it actually exceeds it. Short content is
+  // unaffected — the column still shrinks to fit it, same as any other uncapped sticky column.
+  // (A single-line ellipsis-truncated column can't use this trick — white-space:nowrap gives
+  // the column an unshrinkable minimum width equal to its longest value's full rendered
+  // length, which auto-layout enforces over any explicit width — so every capped sticky
+  // column wraps instead, same as this one; `cap` just makes it a narrower wrap for a column
+  // that's normally short, like a location code.)
+  stickyThs.forEach(th => {
+    const idx = th.cellIndex;
+    const cap = th.classList.contains('sticky-col-wrap') ? (+th.dataset.stickyCap || STICKY_WRAP_CAP_PX) : null;
+    if (!cap) return;
+    const naturalWidth = th.getBoundingClientRect().width;
+    if (naturalWidth > cap) {
+      allRows.forEach(r => { const c = cellAt(r, idx); if (c) c.style.width = `${cap}px`; });
+    }
+  });
+
+  // Pass 2: offsets from each column's ACTUAL rendered width, measured only now — after every
+  // cap above is already in place — rather than the width just requested of it. table-layout:
+  // auto treats an explicit width as a hint, not a floor: once the table's total column demand
+  // exceeds the space actually available (several capped columns whose caps alone don't fit a
+  // narrow phone, or a browser window resized narrower since this table last rendered — see
+  // the resize listener below), a capped column can end up rendered thinner than its own cap.
+  // Basing the offset on the cap instead of that reality would then push the next sticky
+  // column out over whatever comes after it — exactly the "later column hides underneath a
+  // frozen one" bug this two-pass split exists to avoid.
   let offset = 0;
   stickyThs.forEach((th, pos) => {
     const idx = th.cellIndex;
     const isLast = pos === stickyThs.length - 1;
-    // A free-text column (a name, a race label) needs a cap, or one long value on one
-    // row sizes the whole frozen block to match it and — on a narrow phone — leaves
-    // nothing readable for the columns after it. table-layout:auto doesn't reliably
-    // honour max-width on a <td> as an actual ceiling (verified: a 27-char value still
-    // rendered well past a 135px max-width), but explicit width does reliably constrain
-    // one — so measure what the column naturally wants first, and only force a width
-    // down to the cap if it actually exceeds it. Short content is unaffected — the
-    // column still shrinks to fit it, same as any other uncapped sticky column.
-    // (A single-line ellipsis-truncated column can't use this trick — white-space:nowrap
-    // gives the column an unshrinkable minimum width equal to its longest value's full
-    // rendered length, which auto-layout enforces over any explicit width — so every
-    // capped sticky column wraps instead, same as this one; `cap` just makes it a
-    // narrower wrap for a column that's normally short, like a location code.)
-    const cap = th.classList.contains('sticky-col-wrap') ? (+th.dataset.stickyCap || STICKY_WRAP_CAP_PX) : null;
-    const naturalWidth = th.getBoundingClientRect().width;
-    const width = cap ? Math.min(naturalWidth, cap) : naturalWidth;
-    if (cap && naturalWidth > cap) {
-      allRows.forEach(r => { const c = cellAt(r, idx); if (c) c.style.width = `${cap}px`; });
-    }
+    const width = th.getBoundingClientRect().width;
     allRows.forEach(r => {
       const cell = cellAt(r, idx);
       if (!cell) return;
@@ -622,6 +636,31 @@ export function applyStickyColumns(tbodyId) {
     offset += width;
   });
 }
+
+// A capped sticky column's actual rendered width is a function of the viewport, and resizing
+// the window (dragging it narrower, rotating a device, DevTools' responsive slider) after a
+// table has already rendered doesn't run any of this app's own render functions — so without
+// this listener, applyStickyColumns()'s offsets above would go stale the moment the window
+// changed size, silently letting a later column drift underneath a frozen one until the next
+// unrelated re-render happened to fix it back up. Re-run for every sticky table currently on
+// screen, debounced against a drag-resize's flood of events; a hidden view's table is skipped
+// (offsetParent is null) since it measures as zero-width and would only corrupt its own
+// offsets — it gets a full, correct re-render from its own view function the next time it's
+// shown anyway, same as any other view switch already does.
+let stickyResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(stickyResizeTimer);
+  stickyResizeTimer = setTimeout(() => {
+    const seen = new Set();
+    document.querySelectorAll('.data-table thead th.sticky-col').forEach(th => {
+      const tbody = th.closest('table')?.querySelector('tbody[id]');
+      if (tbody && !seen.has(tbody.id) && tbody.offsetParent !== null) {
+        seen.add(tbody.id);
+        applyStickyColumns(tbody.id);
+      }
+    });
+  }, 150);
+});
 
 export function wireFormFocusTrap(containerId, onEnter) {
   const container = document.getElementById(containerId);
