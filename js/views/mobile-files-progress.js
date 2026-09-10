@@ -91,7 +91,7 @@ function syncAutoProgressCheckbox() {
   cb.disabled = !unlocked;
   cb.checked = unlocked && isProgressAutoEnabled();
   cb.title = unlocked
-    ? 'Automatically re-run Update Progress whenever a ticked file\'s data changes — a Bluetooth pull, Refresh, Push, or Discard'
+    ? 'Automatically re-run Update Progress whenever a ticked file\'s data changes — a Bluetooth pull, Refresh, Push, or Discard. Ticking this checks immediately too, to catch up on anything missed while it was off.'
     : 'Run Update Progress successfully at least once for this dataset to unlock this option';
 }
 
@@ -249,6 +249,15 @@ export function renderMobileProgressTable() {
 export function wireProgressTab() {
   on('btn-update-progress', 'click', updateProgress);
   on('btn-clear-progress', 'click', clearProgress);
-  document.getElementById('mf-auto-progress')?.addEventListener('change', e => setProgressAutoEnabled(e.target.checked));
+  document.getElementById('mf-auto-progress')?.addEventListener('change', async e => {
+    setProgressAutoEnabled(e.target.checked);
+    // Ticking this on doesn't just arm it for the *next* change — it also catches up on
+    // whatever happened while it was off: a fresh server fetch (renderAll(), the same one
+    // Refresh itself runs) picks up anything missed by the background poll not running, and
+    // its own trailing maybeAutoUpdateProgress() call recomputes progress if any already-
+    // selected file turns out to have unincorporated data waiting. Nothing to catch up on
+    // (unticking, or nothing was actually missed) just costs one fetch — same as Refresh.
+    if (e.target.checked) await renderAll();
+  });
   syncAutoProgressCheckbox();
 }

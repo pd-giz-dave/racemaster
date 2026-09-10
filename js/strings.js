@@ -498,7 +498,9 @@ export const HELP = {
     <p>Tick <strong>Auto-update progress</strong> to also re-run it right here, the moment a ticked file's data
         changes from any source — a Bluetooth pull (whether from the background auto-poll or a manual Connect/Refresh),
         Refresh, Push, Discard, or the background server poll described below — rather than only when the Results page
-        happens to be opened next. Starts disabled: it only unlocks once Update Progress has been run manually, at
+        happens to be opened next. Ticking it on also runs one check immediately, the same as a manual Refresh
+        would, so it catches up right away on anything that happened while it was off instead of waiting for the
+        next change. Starts disabled: it only unlocks once Update Progress has been run manually, at
         least once, successfully, for the connected dataset — proof the setup here (categories, entries, and so on) is
         actually correct for it, before anything is allowed to recompute unattended. There's only ever one such unlock
         remembered at a time, for whichever dataset earned it most recently — connecting to a different dataset starts

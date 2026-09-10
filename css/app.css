@@ -698,6 +698,21 @@ button.df-badge-connected:hover { background: var(--danger); }
 #mf-auto-progress-label { cursor: pointer; }
 #mf-auto-progress-label:has(input:disabled) { cursor: default; opacity: 0.6; }
 
+/* Mobile Files' own settings (poll interval, stale-race cutoff, Bluetooth logging) sit on
+   their own row above the action buttons, each in a bordered box — .btn-row's plain gap
+   isn't enough to read as a boundary once there are three unrelated options side by side. */
+.mf-options-row { margin-bottom: 10px; }
+.mf-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-alt);
+  cursor: pointer;
+}
+
 /* ---- Entries view: inline status message ---- */
 .entry-status {
   font-size: 0.95rem;
