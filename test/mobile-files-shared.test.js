@@ -140,6 +140,10 @@ describe('mobile-files-shared.js:formatRaceDate / formatDateTime / formatStoredT
     assert.match(formatDateTime(new Date('2026-08-30T12:34:00Z').toISOString()), /^\d{2}\/\d{2}\/\d{2} \d{2}:\d{2}$/);
   });
 
+  it('formatDateTime with {seconds: true} appends :SS', () => {
+    assert.match(formatDateTime(new Date('2026-08-30T12:34:56Z').toISOString(), { seconds: true }), /^\d{2}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+
   it('formatStoredTimestamp reformats the phone\'s own "yyyy/mm/dd HH:MM:SS" wire format', () => {
     assert.equal(formatStoredTimestamp('2026/08/30 12:34:56'), '30/08/26 12:34');
     assert.match(formatStoredTimestamp(''), /—/);

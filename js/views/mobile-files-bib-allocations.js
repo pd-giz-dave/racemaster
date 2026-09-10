@@ -9,7 +9,7 @@ import { getIsAdmin } from '../storage.js';
 import { showStatus, renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
-import { formatRaceDate } from '../mobile-files-shared.js';
+import { formatRaceDate, formatDateTime, raceNameOf } from '../mobile-files-shared.js';
 
 // One row per race that has a bib-allocations.json (see js/bib-allocations.js) — races with
 // none yet (nothing pushed, or none of this user's races have an event/entries set up) are
@@ -34,7 +34,7 @@ function showBibAllocationsModal(owner, raceLabel, ba) {
   overlay.innerHTML = `
     <div class="modal-box" style="width:520px">
       <h2>Bib Allocations — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
-      <p style="margin:0 0 12px;font-size:0.875rem">Generated ${escHtml(ba.generatedAt || '')}</p>
+      <p style="margin:0 0 12px;font-size:0.875rem">Generated ${formatDateTime(ba.generatedAt, { seconds: true })}</p>
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th></tr></thead>
@@ -60,10 +60,13 @@ export function renderBibAllocationsList(races, isAdminUser) {
     .map((r, idx) => ({ idx, owner: r.owner, raceLabel: r.raceLabel, raceDate: r.raceDate, ba: r.bibAllocations }));
   renderTable('bib-allocations-tbody', tableColumns(TABLES['bib-allocations'], {
     owner:       isAdminUser ? r => escHtml(r.owner) : undefined,
-    raceLabel:   r => `<span title="${escHtml(r.raceLabel)}">${escHtml(r.raceLabel)}</span>`,
+    // Date suffix dropped from the visible text — redundant with the Race Date column right
+    // next to it — but kept in the title tooltip and everywhere else (the View modal's own
+    // heading, Send to Phone) which still use the full raceLabel.
+    raceLabel:   r => `<span title="${escHtml(r.raceLabel)}">${escHtml(raceNameOf(r.raceLabel))}</span>`,
     raceDate:    r => formatRaceDate(r.raceDate),
     bibCount:    r => String(r.ba.entries.length),
-    generatedAt: r => escHtml(r.ba.generatedAt || ''),
+    generatedAt: r => formatDateTime(r.ba.generatedAt, { seconds: true }),
     actions:     () => `
       <button class="btn-sm" data-action="view">View</button>
       <button class="btn-sm" data-action="send">Send to Phone</button>`,

@@ -142,14 +142,17 @@ export function formatRaceDate(raceDate) {
 }
 
 // ISO string (device.lastSeen — either a server file mtime or a pending file's local pulledAt,
-// see mobile-files-devices.js's flattenDevices()) → "dd/mm/yy HH:MM" local time, matching
-// formatRaceDate()'s own dd/mm/yy convention elsewhere on this page.
-export function formatDateTime(iso) {
+// see mobile-files-devices.js's flattenDevices() — or bib-allocations.json's own generatedAt) →
+// "dd/mm/yy HH:MM" local time, matching formatRaceDate()'s own dd/mm/yy convention elsewhere on
+// this page. `seconds: true` appends ":SS" — off by default (Last Seen has no use for that
+// precision), on for the Bib Allocations tab's own Generated column.
+export function formatDateTime(iso, { seconds = false } = {}) {
   if (!iso) return '<span style="color:var(--muted)">—</span>';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '<span style="color:var(--muted)">—</span>';
   const pad = n => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}` + (seconds ? `:${pad(d.getSeconds())}` : '');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)} ${time}`;
 }
 
 // device.lastUpdate (see mobile-files-devices.js's latestLineTimestamp()) is the phone's own

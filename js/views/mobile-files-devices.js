@@ -11,7 +11,7 @@ import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
-import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp } from '../mobile-files-shared.js';
+import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf } from '../mobile-files-shared.js';
 import { buildSegmentView, whenOf, locationSummary, formatCount, flattenDevices } from '../mobile-files-devices.js';
 
 export function showDeviceModal(owner, raceLabel, deviceName, lines) {
@@ -118,7 +118,10 @@ function buildColumns(isAdminUser) {
   return tableColumns(TABLES['mobile-files'], {
     select:    r => `<input type="checkbox" class="mobile-file-select" data-idx="${r.idx}" aria-label="Select ${escHtml(r.device.name)}"${selectedKeys.has(rowKey(r)) ? ' checked' : ''}>`,
     owner:     isAdminUser ? r => escHtml(r.owner) : undefined,
-    raceLabel: r => `<span title="${escHtml(r.raceLabel)}">${escHtml(r.raceLabel)}</span>`,
+    // Date suffix dropped from the visible text — it's redundant with the Race Date column
+    // right next to it — but kept in the title tooltip, the full raceLabel is still the exact
+    // identifier this row's own file paths/API calls use under the hood.
+    raceLabel: r => `<span title="${escHtml(r.raceLabel)}">${escHtml(raceNameOf(r.raceLabel))}</span>`,
     raceDate:  r => formatRaceDate(r.raceDate),
     device:    r => escHtml(r.device.name) + (r.pending
       ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
