@@ -427,8 +427,14 @@ input:focus, select:focus, textarea:focus {
 .btn-toggle-password svg[hidden] { display: none; }
 
 /* ---- Tables ---- */
+/* width:auto (not 100%) — a table is only ever as wide as its columns actually need, the same
+   shrink-to-fit sizing a block element with no explicit width already gets, rather than table-
+   layout:auto stretching every column to fill whatever's left over in a wide window. Narrowing
+   the window is unaffected either way: table-layout:auto still shrinks columns toward their
+   content's min-width exactly as before, and .table-scroll's overflow-x:auto still takes over
+   once even that no longer fits. */
 .data-table {
-  width: 100%;
+  width: auto;
   border-collapse: collapse;
   font-size: 0.82rem;
 }
@@ -731,10 +737,6 @@ button.df-badge-connected:hover { background: var(--danger); }
   overflow-x: auto;
   overflow-y: auto;
 }
-#view-si-results .data-table {
-  width: max-content;
-  min-width: 100%;
-}
 
 /* ---- Pre-entries view: flex column, card fixed, table fills remaining space ---- */
 #view-pre-entries:not([hidden]) {
@@ -758,10 +760,6 @@ button.df-badge-connected:hover { background: var(--danger); }
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
-}
-#view-pre-entries .data-table {
-  width: max-content;
-  min-width: 100%;
 }
 
 /* ---- Simple list views: flex column, table fills remaining space ---- */
