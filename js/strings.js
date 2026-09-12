@@ -589,25 +589,47 @@ export const PAGES = {
     <h3>Features</h3>
     <ul>
       <li><strong>Pre-entries</strong> — import from SportIdent / EntryCentral CSV, print pre-filled entry forms</li>
-      <li><strong>Registration</strong> — on-the-day entry with automatic bib and SI card (dibber) assignment</li>
-      <li><strong>Finishers</strong> — stopwatch time entry or SI dibber result import</li>
-      <li><strong>Results</strong> — automatic category placing and prize list, live per-category progress tracking to judge when it's safe to do the prize presentation, CSV export, web publish with optional sticky notes shown as a paragraph on the published page</li>
-      <li><strong>Safety</strong> — live outstanding / DNF / finished counts; no-show pre-entry list</li>
+      <li><strong>Registration</strong> — on-the-day entry with automatic bib and SI card (dibber) assignment
+          and export to the SI Timing app (SI licence required)</li>
+      <li><strong>Finishers</strong> — stopwatch time entry, or via the <strong>RaceMaster Mobile companion app</strong>
+          (see below) or import results from the SI Timing app (SI licence required)</li>
+      <li><strong>Results</strong> — automatic category placing and prize list, a Splits tab with adjusted finish
+          times, live per-category progress tracking to judge when it's safe to do the prize presentation, CSV
+          export, web publish with optional sticky notes shown as a paragraph on the published page</li>
+      <li><strong>Safety Check</strong> — live outstanding / early-starter / retiree tabs with real time-of-day
+          (not just elapsed race time), a no-show pre-entry list, and a "Last CP" hint sourced from mobile
+          checkpoint data</li>
+      <li><strong>RaceMaster Mobile companion app</strong> — a separate Android app records Time, Bibs, or
+          Checkpoint splits on phones out on the course, with no network needed: any phone can act as a Bluetooth
+          "Mule", relaying every other nearby phone's data on to the server (or directly to this web app,
+          whichever it can reach) with no pairing step. The <em>Mobile Files</em> page is where that data lands —
+          browse and manage every device's file, turn selected files into the Progress tab in one click (with
+          live safety feedback on outstanding runners), and see everything actually stored on the server
+          regardless of age. Bib/name/course/category and live progress data flow back out to phones too, over
+          that same Bluetooth connection or straight from the server, so a Bibs or Checkpoint phone can validate
+          bib numbers before registration has even closed</li>
+      <li><strong>Reference data</strong> — a persistent People database of runner history across events, plus
+          Clubs, Categories, and SI Dibbers management, all reused dataset to dataset</li>
       <li><strong>Helpers</strong> — record volunteer names, roles, and contribution history</li>
-      <li><strong>People database</strong> — persistent runner history across events</li>
       <li><strong>Paperwork</strong> — printable entry forms, finish sheets, number matrix, and A5 race bibs</li>
-      <li><strong>Multi-device</strong> — conflict detection when two sessions edit the same dataset simultaneously</li>
-      <li><strong>Mobile-friendly</strong> — a collapsing menu, frozen table columns, and responsive layouts make the
-          app usable on a phone in the field, not just at a laptop</li>
+      <li><strong>Multi-user &amp; multi-device</strong> — separate logins per organiser, with conflict detection
+          when two sessions edit the same dataset simultaneously; an admin can manage other users' accounts and
+          copy a dataset into someone else's account</li>
+      <li><strong>Mobile-friendly</strong> — a collapsing menu, frozen table columns, and responsive layouts make
+          the web app itself usable on a phone in the field, not just at a laptop</li>
     </ul>
     <h3>Data storage</h3>
-    <p>All data is held in JSON files on the local server and cached in the browser.
-       Use <em>Datasets</em> to back up, restore, or switch between events.</p>
+    <p>All data is held in JSON files on the server and cached in the browser, so the app keeps working through a
+       lost connection and syncs back up once it's reachable again. Use <em>Datasets</em> to back up, restore, copy,
+       or switch between events.</p>
     <h3>Feedback &amp; issues</h3>
     <p>Report problems or suggestions to the race organiser for the event.</p>
     <h3>Source code</h3>
     <p>RaceMaster is open source. The repository is at
-       <a href="https://github.com/pd-giz-dave/racemaster" target="_blank" rel="noopener">github.com/pd-giz-dave/racemaster</a>.</p>
+       <a href="https://github.com/pd-giz-dave/racemaster" target="_blank" rel="noopener">github.com/pd-giz-dave/racemaster</a>,
+       and the RaceMaster Mobile companion app (also open source) at
+       <a href="https://github.com/pd-giz-dave/racemaster-mobile" target="_blank" rel="noopener">github.com/pd-giz-dave/racemaster-mobile</a> —
+       a debug build is available from the <em>Download APK</em> link in this app's own sidebar.</p>
   `,
 
   'whats-new': `
