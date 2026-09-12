@@ -4,7 +4,7 @@ import { state, loadAll } from './state.js';
 import { restoreDirectory, getSession, isStandalone } from './storage.js';
 import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch } from './connect.js';
 import { startPresenceWatch } from './presence.js';
-import { startBibAllocationsSync } from './bib-allocations.js';
+import { startProgressSync } from './progress-sync.js';
 import { wireDatasets, renderDatasets, hasUnconfirmedLogin } from './views/datasets.js';
 import { showBusy } from './utils.js';
 import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
@@ -46,7 +46,7 @@ export async function init() {
       await loadAll();
       updateBannerEventName(state.event.name);
       startPresenceWatch(session?.dataset || null);
-      startBibAllocationsSync();
+      startProgressSync();
       if (session && !reachedServer) {
         // restoreDirectory() degrades to the local cache rather than hard-failing when the
         // server can't be reached, so the load itself still succeeds — but showing the normal

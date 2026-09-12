@@ -10,10 +10,10 @@ import { handleResultsRoutes } from './routes/results.js';
 import { handleStaticRoutes } from './routes/static.js';
 
 // Route groups are tried in this exact order — datasets/mobile/users/results/static are each
-// internally ordered the same way the original single-file handler was (e.g. the
-// bib-allocations POST route in routes/mobile.js is checked before the general mobile POST
-// route it would otherwise be swallowed by), so preserving THIS top-level order matters just
-// as much as preserving each group's own internal order.
+// internally ordered the same way the original single-file handler was (e.g. the progress POST
+// route in routes/mobile.js is checked before the general mobile POST route it would otherwise
+// be swallowed by), so preserving THIS top-level order matters just as much as preserving each
+// group's own internal order.
 export async function route(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const { pathname } = url;

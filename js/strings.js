@@ -446,10 +446,9 @@ export const HELP = {
         accounts entirely and work purely locally via Export/Import.</p>
   `,
   'view-mobile-files': `
-    <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app, split across four tabs:
-        <strong>Devices</strong> (one row per physical phone), <strong>Bib Allocations</strong> (see below),
-        <strong>Progress</strong> (see below), and <strong>All Files</strong> (see below). You see your own
-        uploads; admins see everyone's.</p>
+    <p>Lists the timing data uploaded from the <strong>RaceMaster Mobile</strong> Android app, split across three tabs:
+        <strong>Devices</strong> (one row per physical phone), <strong>Progress</strong> (see below), and
+        <strong>All Files</strong> (see below). You see your own uploads; admins see everyone's.</p>
     <p>Each device's file interleaves two independent record types: <strong>Bibs</strong> (bib-number entries, from Bibs or Checkpoint mode)
         and <strong>Time</strong> (stopwatch splits, from Time mode). The counts shown are only what's currently <em>visible</em> —
         the entries since that device's own last Reset — the same view the phone's own screen would show; a blank count means none of that type exist at all.</p>
@@ -485,7 +484,7 @@ export const HELP = {
         failure is always logged to the console regardless of this setting.</p>
     <p><strong>Skip races older than (days)</strong> stops the app asking a connected phone for a race it's relaying on another device's
         behalf once it's this old (judged by the date baked into the end of its own race label) — no BLE pull request is sent for it at all.
-        The same cutoff also hides a race that old from this page entirely once it's the server's own copy — the Devices, Bib Allocations
+        The same cutoff also hides a race that old from this page entirely once it's the server's own copy — the Devices
         and Progress tabs simply act as if it doesn't exist. Neither ever applies to a race that's still genuinely active: a device's own
         currently-recorded race is never skipped over Bluetooth, and a race fetched from the server stays visible as long as any of its
         devices has a recent entry, even with an old label — a multi-day event's label is set once on day one and never changes, so age
@@ -540,30 +539,31 @@ export const HELP = {
         recomputing anything — this also clears their effects everywhere else that reads them, e.g. Safety Check's
         finished/outstanding counts and "Last CP" hint — and re-locks Auto-update progress above, the same as a
         failed Update Progress attempt would.</p>
-    <p>The <strong>Bib Allocations</strong> tab shows, per race, a bib number / name / course / category list generated
-        automatically from this dataset's own Entries and the Event's name and date — there's no button to press, it's kept
-        up to date within a couple of seconds of any relevant edit. This is what lets a phone in Bibs or Checkpoint mode know
-        which bib belongs to which course before registration has even closed. <strong>View</strong> shows the full list for
-        a race, sorted by bib number. The underlying file (<code>bib-allocations.json</code>, alongside that race's device
-        files) is public and
-        needs no sign-in to fetch, so it deliberately carries only bib number, name, course and category — never anything
-        else from an entry (no DOB, club, or contact details).</p>
-    <p>The <strong>Progress</strong> tab shows the raw, pre-adjustment table built by the most recent
-        <strong>Update Progress</strong> run: BibNumber, Name, Category, Course, Start (an explicit individual start time,
-        if this bib had a recorded early/late start), FinishTime (the raw, unadjusted value — the adjusted race time is on
-        Results &amp; Prize List, not here), and one column per checkpoint actually selected. Sorted by bib number, not
-        position — this tab has no notion of finishing position, only Results &amp; Prize List does. A bib seen only at a
-        checkpoint, with no finish yet, still gets its own row with a blank FinishTime — that's the safety-relevant case.</p>
+    <p>The <strong>Progress</strong> tab shows one row for every entry — BibNumber, Name, Category, Course, Start (an
+        explicit individual start time, if this bib had a recorded early/late start), FinishTime (the raw, unadjusted
+        value — the adjusted race time is on Results &amp; Prize List, not here), and one column per checkpoint actually
+        selected — pre-populated straight from this dataset's own Entries the moment a bib exists, with no button to
+        press and no need for a mobile file to have been synced yet: this is what lets a phone in Bibs or Checkpoint
+        mode know which bib belongs to which course before registration has even closed. Start/FinishTime/checkpoint
+        columns then fill in from the most recent <strong>Update Progress</strong> run, same as before. Sorted by bib
+        number, not position — this tab has no notion of finishing position, only Results &amp; Prize List does. A bib
+        seen only at a checkpoint, with no finish yet, still gets its own row with a blank FinishTime — that's the
+        safety-relevant case.</p>
+    <p>This whole table is also published, race-wide, as <code>progress.json</code> alongside that race's device files
+        — kept up to date within a couple of seconds of any relevant edit (an Entries change, or an Update/Clear
+        Progress run). The file is public and needs no sign-in to fetch, so it deliberately carries only bib number,
+        name, course, category, and timing data — never anything else from an entry (no DOB, club, or contact
+        details).</p>
     <p>The <strong>All Files</strong> tab lists every file actually stored on the server for you (or, if admin, everyone) —
-        every device file <em>and</em> every race's <code>bib-allocations.json</code> — regardless of "Skip races older
+        every device file <em>and</em> each race's <code>progress.json</code> — regardless of "Skip races older
         than". This is the one place <strong>Delete</strong> lives now; it's gone from the Devices tab. A file whose race
         label is older than "Skip races older than" and that specific file has no recent activity of its own (a device
-        with no recent line, or a bib-allocations file that hasn't been regenerated recently) is highlighted rather than
+        with no recent line, or a progress file that hasn't been regenerated recently) is highlighted rather than
         hidden — this is judged per file, not per race, so it can disagree with a race still being visible elsewhere on
-        this page: an old-labelled race with one still-active phone stays visible on Devices/Bib Allocations, but another,
-        genuinely abandoned phone in that same race is still flagged here for review.</p>
-    <p>Rows are sorted newest first by each file's own last activity — a device's newest recorded entry, or when a
-        bib-allocations file was last generated — not by race, so the genuinely oldest files across every race sink to
+        this page: an old-labelled race with one still-active phone stays visible on Devices, but another, genuinely
+        abandoned phone in that same race is still flagged here for review.</p>
+    <p>Rows are sorted newest first by each file's own last activity — a device's newest recorded entry, or when the
+        progress file was last generated — not by race, so the genuinely oldest files across every race sink to
         the bottom together regardless of which race they belong to. A stale row also offers <strong>Delete from
         here</strong>, alongside its ordinary Delete: this removes that row <em>and</em> every other stale row below it
         in this same newest-first order, skipping over any fresh row it happens to pass rather than stopping at it — a
@@ -651,6 +651,11 @@ export const PAGES = {
           here from the Devices tab, which no longer offers it. Rows sort newest first by their own last activity;
           a stale row also offers <strong>Delete from here</strong>, clearing it and every other stale row below it
           in one confirmed sweep</li>
+      <li>The <strong>Bib Allocations</strong> tab is gone — the <strong>Progress</strong> tab now shows a row for
+          every entry as soon as it's added (bib, name, course, category), kept live from Entries with no button to
+          press, and Start/FinishTime/checkpoint columns still fill in from Update Progress exactly as before. The
+          published file behind it is now <code>progress.json</code> (replacing <code>bib-allocations.json</code>),
+          alongside that race's device files and shown on the <strong>All Files</strong> tab in its place</li>
     </ul>
     <h3>v0.0.16-alpha</h3>
     <ul>
@@ -1023,29 +1028,21 @@ export const TABLES = {
   ],
   'mobile-files-all': [
     { id: 'raceLabel',  label: 'Race',        title: 'Race name (date suffix dropped — see Race Date; hover for the full race label)', sticky: true, wrap: true },
-    { id: 'location',   label: 'Where',       title: 'Course location for a device file — blank for a bib-allocations file', sticky: true, wrap: true, cap: 80 },
-    { id: 'bibs',       label: 'Bibs',        title: 'Bib entries visible on a device file, or bibs allocated for a bib-allocations file' },
-    { id: 'time',       label: 'Time',        title: 'Time splits currently visible — blank for a bib-allocations file' },
+    { id: 'location',   label: 'Where',       title: 'Course location for a device file — blank for the progress file', sticky: true, wrap: true, cap: 80 },
+    { id: 'bibs',       label: 'Bibs',        title: 'Bib entries visible on a device file, or entries in the progress file' },
+    { id: 'time',       label: 'Time',        title: 'Time splits currently visible — blank for the progress file' },
     { id: 'owner',      label: 'Owner',       title: 'Account this file belongs to (admins only)' },
     { id: 'raceDate',   label: 'Race Date',   title: 'Race date parsed from the race label' },
-    { id: 'device',     label: 'Device / File', title: 'Physical phone that recorded this file, or "Bib Allocations" for that race\'s bib-allocations.json' },
-    { id: 'lastSeen',    label: 'Last Seen',   title: 'When the server last actually heard from this device — blank for a bib-allocations file' },
-    { id: 'lastUpdate',  label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, or when the bib-allocations file was last generated — rows are sorted by this, newest first' },
+    { id: 'device',     label: 'Device / File', title: 'Physical phone that recorded this file, or "Progress" for that race\'s progress.json' },
+    { id: 'lastSeen',    label: 'Last Seen',   title: 'When the server last actually heard from this device — blank for the progress file' },
+    { id: 'lastUpdate',  label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, or when the progress file was last generated — rows are sorted by this, newest first' },
     { id: 'actions',    label: 'Actions',     title: 'View, or view raw, or delete this file; a stale row also offers Delete from here, removing it and every other stale row below it' },
-  ],
-  'bib-allocations': [
-    { id: 'raceLabel',   label: 'Race',       title: 'Race name this allocation was generated for (date suffix dropped — see Race Date; hover for the full race label)', sticky: true, wrap: true },
-    { id: 'owner',       label: 'Owner',      title: 'Account this race is recorded under (admins only)' },
-    { id: 'raceDate',    label: 'Race Date',  title: 'Race date parsed from the race label' },
-    { id: 'bibCount',    label: 'Bibs',       title: 'Number of bib numbers allocated' },
-    { id: 'generatedAt', label: 'Generated',  title: 'When this file was last generated by the web app' },
-    { id: 'actions',     label: 'Actions',    title: 'View the bib/name/course/category list' },
   ],
   'mobile-progress': [
     { id: 'bibNumber',  label: 'Bib',    title: 'Race number' },
     { id: 'name',       label: 'Name',   title: "Competitor's name" },
-    { id: 'category',   label: 'Cat',    title: 'Age category' },
     { id: 'course',     label: 'Course', title: 'Senior or junior course' },
+    { id: 'category',   label: 'Cat',    title: 'Age category' },
     { id: 'start',      label: 'Start',  title: 'Explicit individual start time recorded for this bib, if any (early/late start)' },
     { id: 'finishTime', label: 'Finish', title: 'Raw finish time as recorded, from the Finishers list — not adjusted for start/clock offsets (see Results & Prize List for the adjusted race time)' },
     { id: 'cp',         label: 'CP',     title: 'Approximate elapsed time at this checkpoint — raw, timestamp-based, not authoritative or offset-adjusted' },

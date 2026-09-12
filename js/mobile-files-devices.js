@@ -141,21 +141,21 @@ export function flattenDevices(races) {
 }
 
 // A row's own effective "last activity" instant, as epoch ms — a device row's lastUpdate is the
-// phone's own wire format, a bib-allocations row's is a plain ISO generatedAt (see flattenAllFiles
+// phone's own wire format, a progress row's is a plain ISO generatedAt (see flattenAllFiles
 // below), so this needs to know which parser applies. Unparseable/missing sorts last (oldest),
 // the conservative choice for a list whose whole purpose is surfacing what's safe to delete.
 function rowSortMs(row) {
-  const t = row.kind === 'bib-allocations' ? new Date(row.lastUpdate || '').getTime() : parsePhoneTimestamp(row.lastUpdate);
+  const t = row.kind === 'progress' ? new Date(row.lastUpdate || '').getTime() : parsePhoneTimestamp(row.lastUpdate);
   return Number.isFinite(t) ? t : -Infinity;
 }
 
-// Every device row from flattenDevices(), plus one extra row per race for its bib-allocations.json
-// (if it has one) — for the Mobile Files page's "All Files" tab (js/views/mobile-files-all.js),
-// the one place both kinds of server-side file are browsable/deletable together. `device.name` on
-// a bib-allocations row is deliberately the literal string 'bib-allocations' — that's what makes
-// deleteRow() (js/views/mobile-files.js) resolve to the right file via the ordinary device-delete
-// API (mobileDeviceFilePath and bibAllocationsFilePath build the identical path for that name —
-// see server/mobile.js), no new server route needed.
+// Every device row from flattenDevices(), plus one extra row per race for its progress.json (if
+// it has one — see js/progress-sync.js) — for the Mobile Files page's "All Files" tab
+// (js/views/mobile-files-all.js), the one place both kinds of server-side file are
+// browsable/deletable together. `device.name` on a progress row is deliberately the literal
+// string 'progress' — that's what makes deleteRow() (js/views/mobile-files.js) resolve to the
+// right file via the ordinary device-delete API (mobileDeviceFilePath and progressFilePath build
+// the identical path for that name — see server/mobile.js), no new server route needed.
 //
 // Sorted newest-first by each row's own last-activity date (not race date — two files under the
 // same race can easily have very different ages, and this tab's whole purpose is surfacing the
@@ -166,16 +166,16 @@ function rowSortMs(row) {
 export function flattenAllFiles(races) {
   const rows = flattenDevices(races).map(r => ({ ...r, kind: 'device' }));
   for (const race of races) {
-    if (!race.bibAllocations) continue;
+    if (!race.progress) continue;
     rows.push({
-      kind: 'bib-allocations',
+      kind: 'progress',
       owner: race.owner,
       raceLabel: race.raceLabel,
       raceDate: race.raceDate,
-      device: { name: 'bib-allocations' },
-      ba: race.bibAllocations,
-      bibsVisible: race.bibAllocations.entries.length,
-      lastUpdate: race.bibAllocations.generatedAt,
+      device: { name: 'progress' },
+      progress: race.progress,
+      bibsVisible: race.progress.entries.length,
+      lastUpdate: race.progress.generatedAt,
     });
   }
   rows.sort((a, b) =>

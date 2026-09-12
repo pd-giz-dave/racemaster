@@ -142,10 +142,10 @@ export function formatRaceDate(raceDate) {
 }
 
 // ISO string (device.lastSeen — either a server file mtime or a pending file's local pulledAt,
-// see mobile-files-devices.js's flattenDevices() — or bib-allocations.json's own generatedAt) →
+// see mobile-files-devices.js's flattenDevices() — or progress.json's own generatedAt) →
 // "dd/mm/yy HH:MM" local time, matching formatRaceDate()'s own dd/mm/yy convention elsewhere on
 // this page. `seconds: true` appends ":SS" — off by default (Last Seen has no use for that
-// precision), on for the Bib Allocations tab's own Generated column.
+// precision), on for a progress row's own Last Update column on the All Files tab.
 export function formatDateTime(iso, { seconds = false } = {}) {
   if (!iso) return '<span style="color:var(--muted)">—</span>';
   const d = new Date(iso);
@@ -326,7 +326,7 @@ function isRaceLabelOld(raceLabel, staleAfterDays) {
 // "yyyy/mm/dd HH:MM:SS" (a device line's own timestamp) → epoch ms, or null if unparseable.
 // Exported for js/mobile-files-devices.js's own flattenAllFiles(), which needs a real epoch
 // value (not just a threshold check) to sort All Files tab rows by date across both device and
-// bib-allocations rows, whose own timestamps come in two different wire formats.
+// progress rows, whose own timestamps come in two different wire formats.
 export function parsePhoneTimestamp(ts) {
   const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(ts || '');
   if (!m) return null;
@@ -341,9 +341,9 @@ function deviceHasRecentActivity(lines, staleAfterDays) {
   return (Date.now() - t) / (24 * 60 * 60 * 1000) < staleAfterDays;
 }
 
-// bib-allocations.json's own generatedAt is a plain ISO string (server-stamped — see
-// server/routes/mobile.js's bib-allocations POST handler), a different wire format from a
-// device line's "yyyy/mm/dd HH:mm:ss", so it needs its own (simpler) recency check.
+// progress.json's own generatedAt is a plain ISO string (server-stamped — see
+// server/routes/mobile.js's progress POST handler), a different wire format from a device
+// line's "yyyy/mm/dd HH:mm:ss", so it needs its own (simpler) recency check.
 function isoWithinDays(iso, staleAfterDays) {
   if (!iso) return false;
   const t = new Date(iso).getTime();
@@ -382,10 +382,10 @@ export function isDeviceStale(raceLabel, device) {
   return !deviceHasRecentActivity(device.lines, staleAfterDays);
 }
 
-// Same idea as isDeviceStale() above, for a race's bib-allocations.json — judged by its own
-// generatedAt rather than a device's recorded lines.
-export function isBibAllocationsStale(raceLabel, bibAllocations) {
+// Same idea as isDeviceStale() above, for a race's progress.json — judged by its own generatedAt
+// rather than a device's recorded lines.
+export function isProgressStale(raceLabel, progress) {
   const staleAfterDays = getRaceStaleAfterDays();
   if (!isRaceLabelOld(raceLabel, staleAfterDays)) return false;
-  return !isoWithinDays(bibAllocations?.generatedAt, staleAfterDays);
+  return !isoWithinDays(progress?.generatedAt, staleAfterDays);
 }

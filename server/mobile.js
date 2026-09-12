@@ -49,25 +49,28 @@ export function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
   fs.writeFileSync(mobileDeviceFilePath(username, raceLabel, deviceName), JSON.stringify(lines, null, 2), 'utf8');
 }
 
-// bib-allocations.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course,
-// category}]} file the web app pushes (see POST .../bib-allocations), not a per-device sync
-// file, so it
-// lives in the same owner-scoped race dir but is deliberately excluded from device enumeration
-// in getMobileRacesForUser() below.
-export function bibAllocationsFilePath(username, raceLabel) {
-  return path.join(mobileRaceDir(username, raceLabel), 'bib-allocations.json');
+// progress.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course, category,
+// startTime, finishTime, cpTimes}]} file the web app pushes (see POST .../progress) — the Mobile
+// Files page's own Progress tab contents, covering every entry regardless of mobile activity
+// (see js/mobile-files-progress.js's buildProgressRows()), so this is also what a phone in Bibs
+// or Checkpoint mode reads to know which bib is on which course (formerly a separate
+// bib-allocations.json/tab, retired once this file's own entry coverage made it redundant). Not
+// a per-device sync file, so it lives in the same owner-scoped race dir but is deliberately
+// excluded from device enumeration in getMobileRacesForUser() below.
+export function progressFilePath(username, raceLabel) {
+  return path.join(mobileRaceDir(username, raceLabel), 'progress.json');
 }
 
-export function readBibAllocations(username, raceLabel) {
-  const fp = bibAllocationsFilePath(username, raceLabel);
+export function readProgress(username, raceLabel) {
+  const fp = progressFilePath(username, raceLabel);
   if (!fs.existsSync(fp)) return null;
   try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch { return null; }
 }
 
-export function writeBibAllocations(username, raceLabel, payload) {
+export function writeProgress(username, raceLabel, payload) {
   const dir = mobileRaceDir(username, raceLabel);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(bibAllocationsFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(progressFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
 }
 
 // raceLabel ends "…-YY-MM-DD" (2-digit year first, e.g. "-26-08-04" = 4 August 2026 — the
@@ -125,9 +128,10 @@ function sortByRaceDateDesc(results) {
   });
 }
 
-// Returns array of { owner, raceLabel, raceDate, devices: [{name, records, lines}], recordCount },
-// newest race date first (by yy, then mm, then dd — races whose label has no trailing date
-// sort last). adminAccess=true returns every user's races; otherwise only `username`'s own.
+// Returns array of { owner, raceLabel, raceDate, devices: [{name, records, lines}], recordCount,
+// progress }, newest race date first (by yy, then mm, then dd — races whose label has no
+// trailing date sort last). adminAccess=true returns every user's races; otherwise only
+// `username`'s own.
 // `lines` is each device's full raw record array (see readMobileDeviceFile) — sent up front,
 // same as the counts, so the Mobile Files page can render a device's segment view (View button)
 // without a second round trip; these files are small per-device logs, never bulk data.
@@ -137,7 +141,10 @@ export function getMobileRacesForUser(username, adminAccess = false) {
     const devices = [];
     let recordCount = 0;
     for (const file of files) {
-      if (!file.endsWith('.json') || file === 'bib-allocations.json') continue;
+      // 'bib-allocations.json' is a retired file kind (see this module's own progressFilePath
+      // doc) — no longer generated, but still excluded here defensively in case one is left over
+      // on disk from before this change, so it never gets misinterpreted as a device file.
+      if (!file.endsWith('.json') || file === 'bib-allocations.json' || file === 'progress.json') continue;
       const deviceName = file.slice(0, -'.json'.length);
       const records = readMobileDeviceFile(owner, raceLabel, deviceName);
       recordCount += records.length;
@@ -154,7 +161,7 @@ export function getMobileRacesForUser(username, adminAccess = false) {
 
     results.push({
       owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel),
-      bibAllocations: readBibAllocations(owner, raceLabel),
+      progress: readProgress(owner, raceLabel),
     });
   }
 
@@ -174,7 +181,7 @@ export function getMobileRacesStatusForUser(username, adminAccess = false) {
   for (const { owner, raceLabel, raceDirPath, files } of walkMobileRaceDirs(username, adminAccess)) {
     const devices = [];
     for (const file of files) {
-      if (!file.endsWith('.json') || file === 'bib-allocations.json') continue;
+      if (!file.endsWith('.json') || file === 'bib-allocations.json' || file === 'progress.json') continue;
       const deviceName = file.slice(0, -'.json'.length);
       try {
         const st = fs.statSync(path.join(raceDirPath, file));

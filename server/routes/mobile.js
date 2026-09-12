@@ -6,28 +6,31 @@ import { sanitiseName } from '../datasets.js';
 import { getAuthUser, isAdmin } from '../auth.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
-  writeBibAllocations, getMobileRacesForUser, getMobileRacesStatusForUser,
+  writeProgress, getMobileRacesForUser, getMobileRacesStatusForUser,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleMobileRoutes(req, res, pathname) {
-  // POST /api/mobile/:owner/:raceLabel/bib-allocations — the web app pushes a race-wide
-  // {raceName, raceDate, entries: [{bibNumber, name, course, category}]} export so any phone
-  // syncing this race (WiFi or Mule/BLE) can learn which bib belongs to which course, without
-  // needing registration to have closed first.
-  // Checked before the broader POST /api/mobile/:raceLabel below, which would otherwise
-  // swallow this path too once decoded (both start with `/api/mobile/`).
-  // owner is the dataset's own owner (js/bib-allocations.js sends session.dataset's owner
-  // half, not necessarily the logged-in user) — same owner-only-or-admin write rule as
+  // POST /api/mobile/:owner/:raceLabel/progress — the web app pushes the Mobile Files page's own
+  // Progress tab contents, race-wide: {raceName, raceDate, entries: [{bibNumber, name, category,
+  // course, startTime, finishTime, cpTimes}]} — one entry per bib in Entries regardless of
+  // mobile activity (see js/mobile-files-progress.js's buildProgressRows()), so this is also what
+  // a phone in Bibs or Checkpoint mode reads to learn which bib is on which course, without
+  // needing registration to have closed first (formerly a separate bib-allocations.json/route,
+  // retired once this file's own entry coverage made it redundant).
+  // Checked before the broader POST /api/mobile/:raceLabel below, which would otherwise swallow
+  // this path too once decoded (both start with `/api/mobile/`).
+  // owner is the dataset's own owner (js/progress-sync.js sends session.dataset's owner half,
+  // not necessarily the logged-in user) — same owner-only-or-admin write rule as
   // PUT /api/data/:owner/:fullName, so this lands in the exact owner-scoped
   // mobile/<owner>/<raceLabel>/ folder this race's own per-device files already use, not
   // wherever the pushing admin happens to be logged in as.
-  if (/^\/api\/mobile\/[^/]+\/[^/]+\/bib-allocations$/.test(pathname) && req.method === 'POST') {
+  if (/^\/api\/mobile\/[^/]+\/[^/]+\/progress$/.test(pathname) && req.method === 'POST') {
     const username = getAuthUser(req);
     if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
-    const [owner, raceLabel] = pathname.slice('/api/mobile/'.length, -'/bib-allocations'.length)
+    const [owner, raceLabel] = pathname.slice('/api/mobile/'.length, -'/progress'.length)
       .split('/').map(decodeURIComponent).map(sanitiseName);
     if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
     if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' }); return true; }
@@ -35,6 +38,18 @@ export async function handleMobileRoutes(req, res, pathname) {
     try { body = JSON.parse(await readBody(req)); }
     catch { jsonReply(res, 400, { error: 'Invalid JSON' }); return true; }
     const entries = Array.isArray(body?.entries) ? body.entries : [];
+    // cpTimes is a plain {cpNumber: 'HH:MM:SS' | 'Retire'} object (see js/mobile-files-progress.js's
+    // buildProgressRows()) — sanitised key-by-key rather than trusted wholesale.
+    const sanitiseCpTimes = cp => {
+      const out = {};
+      if (cp && typeof cp === 'object') {
+        for (const [k, v] of Object.entries(cp)) {
+          const n = Number(k);
+          if (Number.isFinite(n) && n > 0 && typeof v === 'string') out[n] = v;
+        }
+      }
+      return out;
+    };
     const payload = {
       raceName: typeof body?.raceName === 'string' ? body.raceName : '',
       raceDate: typeof body?.raceDate === 'string' ? body.raceDate : '',
@@ -43,13 +58,16 @@ export async function handleMobileRoutes(req, res, pathname) {
         .map(e => ({
           bibNumber: Number(e?.bibNumber) || 0,
           name: typeof e?.name === 'string' ? e.name : '',
-          course: typeof e?.course === 'string' ? e.course : '',
           category: typeof e?.category === 'string' ? e.category : '',
+          course: typeof e?.course === 'string' ? e.course : '',
+          startTime: typeof e?.startTime === 'string' ? e.startTime : '',
+          finishTime: typeof e?.finishTime === 'string' ? e.finishTime : '',
+          cpTimes: sanitiseCpTimes(e?.cpTimes),
         }))
         .filter(e => e.bibNumber > 0),
     };
-    writeBibAllocations(owner, raceLabel, payload);
-    console.log(`[bib-allocations] ${username} -> ${owner}/${raceLabel}: updated (${payload.entries.length} entries)`);
+    writeProgress(owner, raceLabel, payload);
+    console.log(`[progress] ${username} -> ${owner}/${raceLabel}: updated (${payload.entries.length} entries)`);
     jsonReply(res, 200, { ok: true });
     return true;
   }

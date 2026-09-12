@@ -5,7 +5,7 @@
 // (delete/push/discard) that need to trigger a fresh renderMobileFiles() themselves. The pure,
 // DOM-free logic behind this whole feature lives up in js/mobile-files-shared.js,
 // js/mobile-files-devices.js and js/mobile-files-progress.js (see their own doc comments) —
-// this file and its DOM-layer siblings (mobile-files-devices.js, mobile-files-bib-allocations.js,
+// this file and its DOM-layer siblings (mobile-files-devices.js, mobile-files-all.js,
 // mobile-files-progress.js, mobile-files-ble.js, all here in js/views/) are the thin rendering/
 // wiring layer on top of that.
 //
@@ -33,8 +33,7 @@ import {
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
 } from '../mobile-files-shared.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
-import { renderBibAllocationsList, wireBibAllocationsTab, showBibAllocationsModal } from './mobile-files-bib-allocations.js';
-import { renderAllFilesList, currentAllFilesRows } from './mobile-files-all.js';
+import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
 import {
   renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
   isProgressAutoEnabled,
@@ -50,22 +49,21 @@ export { autoUpdateProgress };
 // refreshDevicesTableFromCache() fast path.
 let lastKnownRaces = [];
 
-// A race can still be listed by the server with zero devices — e.g. bib allocations were
-// pushed for it (server/mobile.js's writeBibAllocations()) but every device file has since
-// been deleted, which leaves the race's own directory non-empty (bib-allocations.json) so it's
-// never cleaned up. That's a legitimate state (see mobile-files-bib-allocations.js's own doc
-// comment), but it shouldn't inflate the header count sitting above the Devices tab — so this
-// only counts races that actually have a device row to show there.
+// A race can still be listed by the server with zero devices — e.g. progress was pushed for it
+// (server/mobile.js's writeProgress()) but every device file has since been deleted, which leaves
+// the race's own directory non-empty (progress.json) so it's never cleaned up. That's a
+// legitimate state, but it shouldn't inflate the header count sitting above the Devices tab — so
+// this only counts races that actually have a device row to show there.
 function formatRaceCount(races) {
   const n = races.filter(r => r.devices.length > 0).length;
   return `${n} race${n === 1 ? '' : 's'}`;
 }
 
-// r.device.name is 'bib-allocations' (literal) for a bib-allocations row (see flattenAllFiles()
-// in js/mobile-files-devices.js) — that's what makes apiDeleteMobileFile below resolve to the
-// right file with no server change needed; this is only for what's shown to the user.
+// r.device.name is 'progress' (literal) for a progress row (see flattenAllFiles() in
+// js/mobile-files-devices.js) — that's what makes apiDeleteMobileFile below resolve to the right
+// file with no server change needed; this is only for what's shown to the user.
 function fileLabel(r) {
-  return r.kind === 'bib-allocations' ? 'Bib Allocations' : r.device.name;
+  return r.kind === 'progress' ? 'Progress' : r.device.name;
 }
 
 // The actual server delete, with no confirm dialog and no user-facing status message of its own
@@ -91,8 +89,8 @@ async function deleteFileOnServer(r) {
   // (that's only ever tracked for a BLE-pulled pending file — see savePendingMobileFile), so
   // there's no way to target just this one device's cursor; clearing every cursor is the same
   // fallback discardPendingRow() uses for the equivalent no-deviceId case. None of this applies
-  // to a bib-allocations delete — it has nothing to do with what a phone has already pulled.
-  if (r.kind !== 'bib-allocations') {
+  // to a progress delete — it has nothing to do with what a phone has already pulled.
+  if (r.kind !== 'progress') {
     if (r.device.deviceId) resetLastPulledLineNumber(r.device.deviceId, r.raceLabel);
     else resetAllLastPulledLineNumbers();
   }
@@ -198,7 +196,6 @@ export function wireMobileFiles() {
   initProgressActions({ renderAll: renderMobileFiles });
   wireBleControls();
   wireProgressTab();
-  wireBibAllocationsTab();
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
@@ -211,7 +208,7 @@ export function wireMobileFiles() {
     else if (btn.dataset.action === 'discard')  discardPendingRow(r);
   });
   // All Files tab — the one place View/Raw/Delete are all still offered, for either a device
-  // file or a race's bib-allocations file (see currentAllFilesRows' own `kind` field, set by
+  // file or a race's progress file (see currentAllFilesRows' own `kind` field, set by
   // flattenAllFiles() in js/mobile-files-devices.js).
   document.getElementById('mobile-files-all-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
@@ -219,7 +216,7 @@ export function wireMobileFiles() {
     const r = currentAllFilesRows[+btn.closest('[data-idx]')?.dataset.idx];
     if (!r) return;
     if (btn.dataset.action === 'view') {
-      if (r.kind === 'bib-allocations') showBibAllocationsModal(r.owner, r.raceLabel, r.ba);
+      if (r.kind === 'progress') showProgressFileModal(r.owner, r.raceLabel, r.progress);
       else showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
     } else if (btn.dataset.action === 'raw') {
       showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
@@ -290,7 +287,6 @@ export async function renderMobileFiles({ silent = false } = {}) {
   if (!session) {
     if (!silent) showStatus('Sign in on the Datasets page to view mobile files.');
     renderRaceList([], false);
-    renderBibAllocationsList([], false);
     renderAllFilesList([], false);
     renderMobileProgressTable();
     if (count) count.textContent = '0';
@@ -305,7 +301,6 @@ export async function renderMobileFiles({ silent = false } = {}) {
     const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
-    renderBibAllocationsList(merged, isAdminUser);
     // Deliberately NOT `merged` — the All Files tab is the one place that skips both
     // filterStaleRaces() and mergePendingIntoRaces() on purpose, see its own module doc.
     renderAllFilesList(lastKnownRaces, isAdminUser);
@@ -319,7 +314,6 @@ export async function renderMobileFiles({ silent = false } = {}) {
     const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
-    renderBibAllocationsList(merged, isAdminUser);
     renderAllFilesList(lastKnownRaces, isAdminUser);
     renderMobileProgressTable();
     if (!silent) {

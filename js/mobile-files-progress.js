@@ -5,7 +5,7 @@
 // all — js/views/mobile-files-progress.js is the thin layer on top that wires buttons, shows
 // confirm dialogs/status toasts, and renders the actual table.
 
-import { getEntry } from './entries.js';
+import { getEntry, getSortedEntries } from './entries.js';
 import { entryInfo } from './safety.js';
 import { getMobileCheckpointTimes, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime } from './utils.js';
@@ -427,13 +427,16 @@ export function buildProgressColumns(baseColumns, cpNumbers) {
   return [...baseColumns.slice(0, idx), ...cpCols, ...baseColumns.slice(idx + 1)];
 }
 
-// Rows = every bib with a Start/Finish/DNF record in state.mobileProgress (mobile-recorded only
-// — the manually-entered Finishers list is never read here, see js/mobile-progress.js) UNION
-// every bib with at least one checkpoint sighting, even if never finished — that union is
-// deliberate: a bib seen only at a CP, with no finish, is exactly the safety-relevant case
-// (still out on the course, last seen at CP*n*). FinishTime here is the raw, unadjusted
-// stopwatch/paired-split value — the adjusted race time lives on the Results & Prize List page,
-// not here.
+// Rows = every entry (bib, name, course, category — the former Bib Allocations tab's own role,
+// now folded in here so that standalone tab/file is no longer needed: a bib with no mobile
+// activity at all still gets a row, blank Start/Finish/CP, kept live simply by virtue of this
+// being read fresh on every render/push — no separate generation or sync step of its own) UNION
+// every bib with a Start/Finish/DNF record in state.mobileProgress (mobile-recorded only — the
+// manually-entered Finishers list is never read here, see js/mobile-progress.js) UNION every bib
+// with at least one checkpoint sighting, even if never finished — that extra union is deliberate:
+// a bib seen only at a CP, with no finish, is exactly the safety-relevant case (still out on the
+// course, last seen at CP*n*). FinishTime here is the raw, unadjusted stopwatch/paired-split
+// value — the adjusted race time lives on the Results & Prize List page, not here.
 export function buildProgressRows() {
   const rowsByBib = new Map();
   const ensure = bib => {
@@ -443,6 +446,10 @@ export function buildProgressRows() {
     }
     return rowsByBib.get(bib);
   };
+  for (const e of getSortedEntries()) {
+    const bib = +e.bibNumber;
+    if (bib > 0) ensure(bib);
+  }
   for (const f of state.mobileProgress) {
     const bib = +f.number;
     if (bib <= 0) continue;

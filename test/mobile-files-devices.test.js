@@ -169,32 +169,32 @@ describe('mobile-files-devices.js:flattenDevices', () => {
 });
 
 describe('mobile-files-devices.js:flattenAllFiles', () => {
-  it('produces both device rows and a bib-allocations row for a race that has both, tagged with kind', () => {
+  it('produces both device rows and a progress row for a race that has both, tagged with kind', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [] }],
-      bibAllocations: { generatedAt: '2026-01-01T00:00:00.000Z', entries: [{ bibNumber: 1 }, { bibNumber: 2 }] },
+      progress: { generatedAt: '2026-01-01T00:00:00.000Z', entries: [{ bibNumber: 1 }, { bibNumber: 2 }] },
     }];
     const rows = flattenAllFiles(races);
     assert.equal(rows.length, 2);
-    assert.deepEqual([...rows.map(r => r.kind)].sort(), ['bib-allocations', 'device']);
-    const baRow = rows.find(r => r.kind === 'bib-allocations');
-    assert.equal(baRow.device.name, 'bib-allocations');
-    assert.equal(baRow.bibsVisible, 2);
-    assert.equal(baRow.lastUpdate, '2026-01-01T00:00:00.000Z');
+    assert.deepEqual([...rows.map(r => r.kind)].sort(), ['device', 'progress']);
+    const progressRow = rows.find(r => r.kind === 'progress');
+    assert.equal(progressRow.device.name, 'progress');
+    assert.equal(progressRow.bibsVisible, 2);
+    assert.equal(progressRow.lastUpdate, '2026-01-01T00:00:00.000Z');
   });
 
-  it('sorts rows newest-first by each row\'s own last-activity date, mixing device and bib-allocations rows together', () => {
+  it('sorts rows newest-first by each row\'s own last-activity date, mixing device and progress rows together', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [
         { name: 'Old', lines: [{ timestamp: '2020/01/01 10:00:00' }] },
         { name: 'New', lines: [{ timestamp: '2026/06/01 10:00:00' }] },
       ],
-      bibAllocations: { generatedAt: '2023-01-01T00:00:00.000Z', entries: [] },
+      progress: { generatedAt: '2023-01-01T00:00:00.000Z', entries: [] },
     }];
     const rows = flattenAllFiles(races);
-    assert.deepEqual(rows.map(r => r.kind === 'bib-allocations' ? 'bib-allocations' : r.device.name), ['New', 'bib-allocations', 'Old']);
+    assert.deepEqual(rows.map(r => r.kind === 'progress' ? 'progress' : r.device.name), ['New', 'progress', 'Old']);
   });
 
   it('sorts a row with no parseable date last, not first', () => {
@@ -209,7 +209,7 @@ describe('mobile-files-devices.js:flattenAllFiles', () => {
     assert.deepEqual(rows.map(r => r.device.name), ['Dated', 'NoDate']);
   });
 
-  it('produces device rows only for a race with no bibAllocations', () => {
+  it('produces device rows only for a race with no progress', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [] }],
@@ -219,11 +219,11 @@ describe('mobile-files-devices.js:flattenAllFiles', () => {
     assert.equal(rows[0].kind, 'device');
   });
 
-  it('assigns a sequential idx spanning device and bib-allocations rows together', () => {
+  it('assigns a sequential idx spanning device and progress rows together', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [] }, { name: 'B', lines: [] }],
-      bibAllocations: { generatedAt: '2026-01-01T00:00:00.000Z', entries: [] },
+      progress: { generatedAt: '2026-01-01T00:00:00.000Z', entries: [] },
     }];
     const rows = flattenAllFiles(races);
     assert.deepEqual(rows.map(r => r.idx), [0, 1, 2]);

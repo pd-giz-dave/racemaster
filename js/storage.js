@@ -208,12 +208,12 @@ export async function apiPushMobileSync(token, raceLabel, deviceName, lines) {
   return res.json();
 }
 
-// Pushes a race-wide {raceName, raceDate, entries} bib/name/course export to
-// server.js's POST /api/mobile/:owner/:raceLabel/bib-allocations — see js/bib-allocations.js.
-// owner is the current dataset's own owner (not necessarily the logged-in user — an admin can
-// push this for someone else's dataset), same as every other owner-scoped mobile/dataset route.
-export async function apiPushBibAllocations(token, owner, raceLabel, payload) {
-  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/bib-allocations`, {
+// Pushes the Mobile Files page's own Progress tab contents to
+// server.js's POST /api/mobile/:owner/:raceLabel/progress — see js/progress-sync.js. owner is
+// the current dataset's own owner (not necessarily the logged-in user — an admin can push this
+// for someone else's dataset), same as every other owner-scoped mobile/dataset route.
+export async function apiPushProgress(token, owner, raceLabel, payload) {
+  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/progress`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify(payload),

@@ -14,7 +14,7 @@ import {
   parseRaceLabelDate, raceNameOf, sortRaces, mergePendingIntoRaces,
   byLineNumber, computeIncorporationStatus,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
-  isDeviceStale, isBibAllocationsStale,
+  isDeviceStale, isProgressStale,
 } from '../js/mobile-files-shared.js';
 
 beforeEach(() => {
@@ -380,7 +380,7 @@ describe('mobile-files-shared.js:isDeviceStale', () => {
   });
 });
 
-describe('mobile-files-shared.js:isBibAllocationsStale', () => {
+describe('mobile-files-shared.js:isProgressStale', () => {
   function todayRaceLabel(name) {
     const d = new Date();
     const pad = n => String(n).padStart(2, '0');
@@ -391,19 +391,19 @@ describe('mobile-files-shared.js:isBibAllocationsStale', () => {
   beforeEach(() => setRaceStaleAfterDays(2));
 
   it('is true for an old-labelled race with an old generatedAt', () => {
-    assert.equal(isBibAllocationsStale(OLD_LABEL, { generatedAt: '2020-01-01T10:00:00.000Z' }), true);
+    assert.equal(isProgressStale(OLD_LABEL, { generatedAt: '2020-01-01T10:00:00.000Z' }), true);
   });
 
   it('is false for an old-labelled race with a recent generatedAt', () => {
-    assert.equal(isBibAllocationsStale(OLD_LABEL, { generatedAt: new Date().toISOString() }), false);
+    assert.equal(isProgressStale(OLD_LABEL, { generatedAt: new Date().toISOString() }), false);
   });
 
   it('is false for a young-labelled race regardless of generatedAt', () => {
-    assert.equal(isBibAllocationsStale(todayRaceLabel('race'), { generatedAt: '2020-01-01T10:00:00.000Z' }), false);
+    assert.equal(isProgressStale(todayRaceLabel('race'), { generatedAt: '2020-01-01T10:00:00.000Z' }), false);
   });
 
   it('is true for an old-labelled race with a missing/invalid generatedAt — nothing proves it\'s fresh', () => {
-    assert.equal(isBibAllocationsStale(OLD_LABEL, {}), true);
-    assert.equal(isBibAllocationsStale(OLD_LABEL, { generatedAt: 'not a date' }), true);
+    assert.equal(isProgressStale(OLD_LABEL, {}), true);
+    assert.equal(isProgressStale(OLD_LABEL, { generatedAt: 'not a date' }), true);
   });
 });

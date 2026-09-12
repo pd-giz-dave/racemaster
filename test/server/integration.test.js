@@ -251,49 +251,53 @@ describe('server integration: mobile sync', () => {
   });
 });
 
-describe('server integration: bib-allocations', () => {
-  it('an owner pushing their own bib-allocations lands under their own mobile/ folder', async () => {
-    const token = await createAndLogin('ba-owner');
+describe('server integration: progress', () => {
+  it('an owner pushing their own progress lands under their own mobile/ folder', async () => {
+    const token = await createAndLogin('prog-owner');
     const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    const raceLabel = 'ba-race-26-08-23';
+    const raceLabel = 'prog-race-26-08-23';
 
-    const push = await fetch(`${base}/api/mobile/ba-owner/${raceLabel}/bib-allocations`, {
+    const push = await fetch(`${base}/api/mobile/prog-owner/${raceLabel}/progress`, {
       method: 'POST', headers: auth,
-      body: JSON.stringify({ raceName: 'X', raceDate: '23/08/2026', entries: [{ bibNumber: 1, name: 'A', course: '10K' }] }),
+      body: JSON.stringify({
+        raceName: 'X', raceDate: '23/08/2026',
+        entries: [{ bibNumber: 1, name: 'A', category: 'MSEN', course: '10K', startTime: '', finishTime: '00:20:00', cpTimes: { 1: '00:10:00' } }],
+      }),
     });
     assert.equal(push.status, 200);
 
     const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
     const race = list.find(r => r.raceLabel === raceLabel);
-    assert.ok(race.bibAllocations);
+    assert.ok(race.progress);
+    assert.equal(race.progress.entries[0].cpTimes[1], '00:10:00');
   });
 
-  it('rejects pushing bib-allocations under a dataset owned by a different, non-admin user', async () => {
-    const victimToken = await createAndLogin('ba-victim');
-    await fetch(`${base}/api/mobile/ba-victim/some-race/bib-allocations`, {
+  it('rejects pushing progress under a dataset owned by a different, non-admin user', async () => {
+    const victimToken = await createAndLogin('prog-victim');
+    await fetch(`${base}/api/mobile/prog-victim/some-race/progress`, {
       method: 'POST', headers: { Authorization: `Bearer ${victimToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: [{ bibNumber: 1, name: 'A', course: '10K' }] }),
+      body: JSON.stringify({ entries: [{ bibNumber: 1, name: 'A', finishTime: '00:20:00' }] }),
     });
 
-    const attackerToken = await createAndLogin('ba-attacker');
-    const r = await fetch(`${base}/api/mobile/ba-victim/some-race/bib-allocations`, {
+    const attackerToken = await createAndLogin('prog-attacker');
+    const r = await fetch(`${base}/api/mobile/prog-victim/some-race/progress`, {
       method: 'POST', headers: { Authorization: `Bearer ${attackerToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: [{ bibNumber: 2, name: 'B', course: '10K' }] }),
+      body: JSON.stringify({ entries: [{ bibNumber: 2, name: 'B', finishTime: '00:25:00' }] }),
     });
     assert.equal(r.status, 403);
   });
 
-  it('lets an admin push bib-allocations under another user\'s dataset', async () => {
+  it('lets an admin push progress under another user\'s dataset', async () => {
     // 'first-user' from the earlier auth test is this run's admin.
     const adminToken = await (await fetch(`${base}/api/auth/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: 'first-user', password: 'secret123' }),
     }).then(r => r.json())).token;
-    await createAndLogin('ba-someone-else');
+    await createAndLogin('prog-someone-else');
 
-    const r = await fetch(`${base}/api/mobile/ba-someone-else/admin-pushed-race/bib-allocations`, {
+    const r = await fetch(`${base}/api/mobile/prog-someone-else/admin-pushed-race/progress`, {
       method: 'POST', headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: [{ bibNumber: 3, name: 'C', course: '10K' }] }),
+      body: JSON.stringify({ entries: [{ bibNumber: 3, name: 'C', finishTime: '00:30:00' }] }),
     });
     assert.equal(r.status, 200);
   });

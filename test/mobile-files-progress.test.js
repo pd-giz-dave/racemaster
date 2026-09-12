@@ -245,7 +245,21 @@ describe('mobile-files-progress.js:buildProgressColumns', () => {
 });
 
 describe('mobile-files-progress.js:buildProgressRows', () => {
-  it('builds one row per bib with a Start/Finish/DNF record', () => {
+  // beforeEach above seeds state.entries with bibs 1 (Alice) and 2 (Bob) — every test here
+  // therefore always gets at least those two rows now, pre-populated from Entries, even before
+  // any mobile data exists (the former Bib Allocations tab's own role, folded in here).
+  it('pre-populates one row per entry — bib, name, course, category — with no mobile activity at all', () => {
+    const rows = buildProgressRows();
+    assert.deepEqual(rows.map(r => r.bibNumber), [1, 2]);
+    assert.equal(rows[0].name, 'Alice');
+    assert.equal(rows[0].course, 'Seniors');
+    assert.equal(rows[0].category, 'MSEN');
+    assert.equal(rows[0].startTime, '');
+    assert.equal(rows[0].finishTime, '');
+    assert.deepEqual(rows[0].cpTimes, {});
+  });
+
+  it('overlays Start/Finish/DNF records from state.mobileProgress onto an entry\'s own row', () => {
     state.mobileProgress = [
       { action: 'Start', number: 1, time: '09:00:00' },
       { action: 'Finish', number: 1, time: '09:20:00' },
@@ -261,10 +275,15 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
   it('also includes a bib seen only at a checkpoint, never finished — the safety-relevant case', () => {
     state.mobileCheckpoints = [{ bibNumber: 2, cpTimes: { 1: '00:10:00' } }];
     const rows = buildProgressRows();
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].bibNumber, 2);
-    assert.equal(rows[0].finishTime, '');
-    assert.deepEqual(rows[0].cpTimes, { 1: '00:10:00' });
+    const row2 = rows.find(r => r.bibNumber === 2);
+    assert.equal(row2.finishTime, '');
+    assert.deepEqual(row2.cpTimes, { 1: '00:10:00' });
+  });
+
+  it('includes a bib with mobile activity but no matching entry (not yet in Entries)', () => {
+    state.mobileProgress = [{ action: 'Finish', number: 99, time: '00:30:00' }];
+    const rows = buildProgressRows();
+    assert.ok(rows.some(r => r.bibNumber === 99));
   });
 
   it('sorts by bib number', () => {
@@ -277,8 +296,8 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
     state.mobileProgress = [{ action: 'DNF', number: 2, time: '' }];
     state.mobileCheckpoints = [{ bibNumber: 2, cpTimes: { 1: CP_RETIRE } }];
     const rows = buildProgressRows();
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].finishTime, 'DNF');
-    assert.deepEqual(rows[0].cpTimes, { 1: CP_RETIRE });
+    const row2 = rows.find(r => r.bibNumber === 2);
+    assert.equal(row2.finishTime, 'DNF');
+    assert.deepEqual(row2.cpTimes, { 1: CP_RETIRE });
   });
 });
