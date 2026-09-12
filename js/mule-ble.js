@@ -14,6 +14,11 @@ const DEVICE_INFO_CHAR_UUID = '6d6f6269-6c65-2e72-6163-000000000001';
 const CONTROL_CHAR_UUID     = '6d6f6269-6c65-2e72-6163-000000000002';
 const DATA_CHAR_UUID        = '6d6f6269-6c65-2e72-6163-000000000003';
 const ACK_CHAR_UUID         = '6d6f6269-6c65-2e72-6163-000000000004';
+// Write-only from the browser, like ACK — but unlike ACK's small fixed batches, a race's full
+// progress.json can be far larger than one write, so this needs real chunking (see
+// deliverProgress()/PROGRESS_CHUNK_SIZE_BYTES below). Mirrors ~/racemaster-mobile's own
+// MuleGattProfile.kt PROGRESS_CHARACTERISTIC_UUID exactly.
+const PROGRESS_CHAR_UUID    = '6d6f6269-6c65-2e72-6163-000000000005';
 
 // Advertised (never a real GATT service — see MuleGattProfile.MULE_MODE_MARKER_SERVICE_UUID's
 // own doc on the phone side) only while a racemaster-mobile phone is currently in Mule Mode.
@@ -170,7 +175,11 @@ function isRaceLabelStale(raceLabel, deviceId, reportedLastLineNumber) {
 // every push regardless, so the race/device this pull is about must be identified the same way
 // here too, or a race already known from the server (already sanitised) and the same race just
 // pulled fresh over Bluetooth (still raw) look like two different races in Mobile Files.
-function sanitiseName(s) {
+// Exported so js/mobile-files-shared.js's own deriveRaceLabel() can reuse this exact
+// implementation rather than a third hand-copy (server.js and js/mobile-files-shared.js each
+// need their own, since neither can import from the other without a cycle, but this file and
+// mobile-files-shared.js can share one).
+export function sanitiseName(s) {
   return (s || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64).toLowerCase();
 }
 
@@ -544,6 +553,28 @@ async function sendSinkAck(service, recordUuids) {
       bleError(`[mule-ble] sink ack write failed for "${name}", batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
     }
   }
+}
+
+// Kept deliberately small per write, same reasoning as ACK_BATCH_SIZE's own doc just above — no
+// requestMtu()-equivalent exists in Web Bluetooth for page JS to call or query, so this can't size
+// itself to the actual negotiated link the way a native app could. Unlike ACK's small fixed
+// batches though, a race's full progress.json can be far larger than one write, so this needs
+// real multi-write chunking, not just "one write per logical batch."
+const PROGRESS_CHUNK_SIZE_BYTES = 400;
+
+// Writes [progress] (a {raceName, raceDate, generatedAt, entries} object, exactly progress.json's
+// own shape — see server/mobile.js) to the phone's PROGRESS characteristic as a sequence of small
+// writes terminated by a single 0x00 byte — the reverse-direction twin of collectDataStream's own
+// framing (see its own doc: "concatenated until a single 0x00 byte marks the end"). The phone
+// reassembles these the same way this file reassembles a DATA notify stream, just receiving
+// ordinary characteristic writes instead of notifications.
+async function deliverProgress(service, progress) {
+  const progressChar = await service.getCharacteristic(PROGRESS_CHAR_UUID);
+  const bytes = encodeJson(progress);
+  for (let i = 0; i < bytes.length; i += PROGRESS_CHUNK_SIZE_BYTES) {
+    await progressChar.writeValueWithResponse(bytes.slice(i, i + PROGRESS_CHUNK_SIZE_BYTES));
+  }
+  await progressChar.writeValueWithResponse(new Uint8Array([0]));
 }
 
 // Deterministically identifies one "give me your data since X" ask, mirroring
@@ -1164,7 +1195,12 @@ export async function reconnectToKnownDevice(device, onProgress) {
 // persist a pull locally need it so they can later call resetLastPulledLineNumber if that copy
 // ever gets discarded before being pushed. Does not disconnect afterward — call
 // disconnectPhone() explicitly once done.
-export async function pullFromConnectedPhone() {
+// currentRaceLabel/currentProgress: the web app's own currently-loaded race (already-sanitised
+// raceLabel string) and its cached progress payload for that race, if any — passed in by the
+// caller (js/views/mobile-files-ble.js) rather than read from state.js directly here, so this
+// file stays free of any dependency on state.js (see this function's own progress-delivery leg
+// below for how they're used: skipped entirely if either is null/omitted).
+export async function pullFromConnectedPhone({ currentRaceLabel = null, currentProgress = null } = {}) {
   if (!isConnected()) throw new Error('Not connected to a phone.');
   // Captured now, before anything else in here awaits — same reasoning as pullChunkedArray's own
   // identical capture (see its own doc): forgetConnection() nulls the module-level connectedDevice
@@ -1398,6 +1434,45 @@ export async function pullFromConnectedPhone() {
     }
   } else {
     bleLog(`[mule-ble] "${connectedName}" has no race of its own (pure Mule) — skipping straight to relay entries`);
+  }
+
+  // Delivers this browser's own cached progress for the currently-loaded race into the phone —
+  // the BLE half of the "phone can ask for progress" feature (in practice, since Web Bluetooth
+  // never lets a peripheral initiate anything, the browser volunteers it on every tick instead;
+  // see this file's own top-of-function doc for currentRaceLabel/currentProgress). A race-label
+  // mismatch is the "reject" case here: silently skipped, no wire-level error sent back — the
+  // browser is the sole authority on whether delivery should happen at all, since it already
+  // knows both sides of the comparison (the phone's own DeviceInfo.raceLabel and its own loaded
+  // race), so there's nothing a rejection message would tell the phone that skipping doesn't
+  // already achieve. Skipped too when the phone already reports holding this exact generatedAt
+  // (deviceInfo.progressGeneratedAt) — the bandwidth-saving mechanism, mirroring
+  // relayManifestVersion's own "only act on a genuine change" precedent above, just for inbound
+  // delivery instead of an outbound fetch decision.
+  //
+  // A delivery failure is logged but deliberately NOT pushed onto the shared `errors` array the
+  // final "throw only if every leg failed" check below reads — this leg never contributes actual
+  // device data to `results` either way, so folding its own failures into that check would make a
+  // pure-Mule phone (no own race, no relay entries) with a failed-but-otherwise-healthy progress
+  // delivery throw as if the whole pull had failed, when nothing it's actually responsible for
+  // (device records) did. connectionLost still propagates as normal — a genuinely dead link is
+  // exactly as relevant to the relay legs after this one as any other leg's own recovery failure.
+  if (currentRaceLabel && currentProgress && !connectionLost) {
+    const phoneRaceLabel = sanitiseName(deviceInfo.raceLabel);
+    if (phoneRaceLabel && phoneRaceLabel === currentRaceLabel) {
+      if (deviceInfo.progressGeneratedAt === currentProgress.generatedAt) {
+        bleLog(`[mule-ble] "${connectedName}" already has the latest progress (${currentProgress.generatedAt}) — skipping delivery`);
+      } else {
+        try {
+          await withGattRecovery(connectedName, () => deliverProgress(service, currentProgress));
+          bleLog(`[mule-ble] delivered progress (${currentProgress.generatedAt}) to "${connectedName}"`);
+        } catch (e) {
+          bleError(`[mule-ble] failed to deliver progress to "${connectedName}"`, e);
+          if (e.connectionLost) connectionLost = true;
+        }
+      }
+    } else {
+      bleLog(`[mule-ble] "${connectedName}"'s own race ("${deviceInfo.raceLabel}") doesn't match the loaded race ("${currentRaceLabel}") — not delivering progress`);
+    }
   }
 
   // Only bothered with at all when relayCount says there's something to fetch, so a leaf

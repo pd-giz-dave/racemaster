@@ -25,6 +25,7 @@ const DEVICE_INFO_CHAR_UUID = '6d6f6269-6c65-2e72-6163-000000000001';
 const CONTROL_CHAR_UUID     = '6d6f6269-6c65-2e72-6163-000000000002';
 const DATA_CHAR_UUID        = '6d6f6269-6c65-2e72-6163-000000000003';
 const ACK_CHAR_UUID         = '6d6f6269-6c65-2e72-6163-000000000004';
+const PROGRESS_CHAR_UUID    = '6d6f6269-6c65-2e72-6163-000000000005';
 
 beforeEach(() => {
   installLocalStorageMock();
@@ -192,6 +193,10 @@ function makeFakeDataChar() {
 //     simulates a real GATT call against a phone that's just gone out of range, which has no
 //     spec-guaranteed timeout of its own and was observed hanging indefinitely before callers
 //     raced it against one.
+//   progressWriteFails (default: false) — makes every write to the PROGRESS characteristic
+//     (deliverProgress()'s own chunked writes) reject — simulates a delivery failing partway
+//     through, distinct from every fault above (all of which are about the pull side, not the
+//     new progress-delivery leg).
 //   deviceInfoReadAt (default: none) — makes exactly the Nth DeviceInfo characteristic read
 //     (1-indexed, counting connectToPhone()'s own initial read too) reject instantly with that
 //     same real, field-confirmed collision error — every other read, including the very next
@@ -205,7 +210,7 @@ function makeFakePhone({ deviceInfo, recordsByRequest, faults = {} }) {
   const {
     connectsFrom = Infinity, connectsCount = 0, write = false, writeCount = 0,
     dropAfterConnect = null, deviceInfoReadsCount = 0, neverRespondToWrites = false,
-    hangDeviceInfoReadsFrom = Infinity, deviceInfoReadAt = null,
+    hangDeviceInfoReadsFrom = Infinity, deviceInfoReadAt = null, progressWriteFails = false,
   } = faults;
   const dataChar = makeFakeDataChar();
   let writeCallCount = 0;
@@ -230,10 +235,34 @@ function makeFakePhone({ deviceInfo, recordsByRequest, faults = {} }) {
     },
   };
   const ackChar  = { writeValueWithResponse: async () => {} };
+  // Accumulates deliverProgress()'s own chunked writes the same way the phone's own
+  // PeripheralSyncService would — buffering raw bytes until a single 0x00-byte write marks the
+  // end, then decoding the concatenated JSON. Each completed delivery is pushed onto
+  // progressDeliveries (test-only, exposed via the returned device's _progressDeliveries getter)
+  // rather than kept as a single latest value, so a test can assert on how many deliveries
+  // actually happened, not just the last one.
+  let progressChunks = [];
+  const progressDeliveries = [];
+  let progressWriteCount = 0;
+  const progressChar = {
+    writeValueWithResponse: async (bytes) => {
+      progressWriteCount++;
+      if (progressWriteFails) throw new Error('GATT operation failed for unknown reason.');
+      if (bytes.length === 1 && bytes[0] === 0) {
+        const total = new Uint8Array(progressChunks.reduce((n, c) => n + c.length, 0));
+        let offset = 0;
+        for (const c of progressChunks) { total.set(c, offset); offset += c.length; }
+        progressDeliveries.push(JSON.parse(new TextDecoder().decode(total)));
+        progressChunks = [];
+      } else {
+        progressChunks.push(bytes);
+      }
+    },
+  };
   const service = {
     getCharacteristic: async (uuid) => ({
       [DEVICE_INFO_CHAR_UUID]: infoChar, [CONTROL_CHAR_UUID]: controlChar,
-      [DATA_CHAR_UUID]: dataChar, [ACK_CHAR_UUID]: ackChar,
+      [DATA_CHAR_UUID]: dataChar, [ACK_CHAR_UUID]: ackChar, [PROGRESS_CHAR_UUID]: progressChar,
     }[uuid]),
     getPrimaryService: async () => service, // pullFromConnectedPhone calls gatt.getPrimaryService directly
   };
@@ -273,6 +302,12 @@ function makeFakePhone({ deviceInfo, recordsByRequest, faults = {} }) {
     // many times gatt.connect() was actually called, e.g. to confirm a retry loop reconnected
     // rather than reusing the same connection.
     get _connectCallCount() { return connectCallCount; },
+    // Test-only accessors for the fake PROGRESS characteristic above — every fully-reassembled
+    // delivery this fake phone has received so far, and how many individual chunk writes it took
+    // to produce them (so a test can confirm a large payload actually got split across more than
+    // one write, not just that the final decoded result happens to be right).
+    get _progressDeliveries() { return progressDeliveries; },
+    get _progressWriteCount() { return progressWriteCount; },
     // Test-only helper (not part of the real BluetoothDevice API) — simulates the phone
     // dropping out of range/turning off, firing the same 'gattserverdisconnected' listener a
     // real disconnect would.
@@ -890,6 +925,129 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
 
     assert.equal(manifestFetchCount, 2); // re-fetched despite relayCount staying at 1
     assert.equal(results2[0].deviceId, 'origin2');
+    disconnectPhone();
+  });
+});
+
+describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
+  // Fake timers are enabled per-test, inside each it() body, not in a shared beforeEach — same
+  // convention as every other describe block in this file (see its own top-of-describe note).
+  const currentProgress = {
+    raceName: 'Test Race', raceDate: '23/08/2026', generatedAt: '2026-08-23T10:00:00.000Z',
+    // 20 entries comfortably exceeds PROGRESS_CHUNK_SIZE_BYTES (400) once JSON-encoded, so a
+    // successful delivery test below can confirm real multi-write chunking happened, not just
+    // that the final decoded result happens to be right.
+    entries: Array.from({ length: 20 }, (_, i) => ({
+      bibNumber: i + 1, name: `Runner ${i + 1}`, category: 'MSEN', course: 'Seniors',
+      startTime: '', finishTime: '', cpTimes: {},
+    })),
+  };
+
+  it('delivers progress (chunked, reassembling exactly) when the phone\'s race matches and its generatedAt differs', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0,
+      progressGeneratedAt: '2020-01-01T00:00:00.000Z',
+    };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    await settleOnePull(t); // own-race leg's CONTROL write + DATA stream
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 1);
+    assert.deepEqual(device._progressDeliveries[0], currentProgress);
+    assert.ok(device._progressWriteCount > 2, 'expected the payload to be split across more than one write');
+    disconnectPhone();
+  });
+
+  it('does not deliver when the phone\'s own race does not match the loaded race — the "reject" case', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'a-different-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 0);
+    assert.equal(device._progressWriteCount, 0);
+    disconnectPhone();
+  });
+
+  it('does not deliver when the phone already reports holding this exact generatedAt', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0,
+      progressGeneratedAt: currentProgress.generatedAt,
+    };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 0);
+    disconnectPhone();
+  });
+
+  it('does not deliver when no currentProgress/currentRaceLabel is passed at all', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone(); // no options at all — matches every existing caller pre-this-feature
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 0);
+    disconnectPhone();
+  });
+
+  it('a persistently failing delivery is logged but never fails the whole pull — own-race data is still returned', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0,
+      progressGeneratedAt: '2020-01-01T00:00:00.000Z',
+    };
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: () => [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
+      faults: { progressWriteFails: true },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    await settleOnePull(t); // own-race leg's own CONTROL write + DATA stream
+    // The progress write's failure now triggers withGattRecovery's own one-shot
+    // reconnect-and-retry (see its own doc) before this leg ultimately gives up and logs —
+    // progressWriteFails makes every write fail identically, so the retry's own write fails too.
+    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before withGattRecovery's own reconnect attempt
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS after that reconnect succeeds
+    const results = await pullPromise; // must not throw/reject
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].lines.length, 1);
+    assert.equal(device._progressDeliveries.length, 0); // delivery genuinely never succeeded
     disconnectPhone();
   });
 });

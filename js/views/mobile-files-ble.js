@@ -26,7 +26,8 @@ import {
   getKnownDevices, reconnectToKnownDevice, abandonConnection, forgetKnownDevice,
   getConnectedDeviceInfo, getRaceStaleAfterDays, setRaceStaleAfterDays, isRecoveringGattOperation,
 } from '../mule-ble.js';
-import { recordBleLastSeen, mergePendingIntoRaces } from '../mobile-files-shared.js';
+import { recordBleLastSeen, mergePendingIntoRaces, deriveRaceLabel, findCurrentRaceProgress } from '../mobile-files-shared.js';
+import { state } from '../state.js';
 import { renderRaceList } from './mobile-files-devices.js';
 
 // Injected by mobile-files.js's own wireMobileFiles() — see this file's own top-of-file doc for
@@ -307,6 +308,23 @@ function refreshDevicesTableFromCache() {
   renderRaceList(mergePendingIntoRaces(getLastKnownRaces(), pending), getIsAdmin());
 }
 
+// What to pass pullFromConnectedPhone() for its own progress-delivery leg (see mule-ble.js's own
+// doc) — the web app's currently-loaded race, as a raceLabel, plus whatever progress payload is
+// already cached for it from the last full server fetch (no extra round trip just for this).
+// Returns nulls (delivery skipped entirely) when signed out or no event name/date is set yet.
+function currentRaceProgressContext() {
+  const session = getSession();
+  if (!session) return { currentRaceLabel: null, currentProgress: null };
+  // Same owner-derivation js/progress-sync.js's own pushProgress() uses — session.dataset's own
+  // owner, not getUsername() — an admin viewing someone else's dataset must match against THAT
+  // owner's progress.json, exactly the folder progress-sync.js pushed it to.
+  const [owner] = session.dataset.split('/');
+  const currentRaceLabel = deriveRaceLabel(state.event);
+  if (!currentRaceLabel) return { currentRaceLabel: null, currentProgress: null };
+  const currentProgress = findCurrentRaceProgress(getLastKnownRaces() || [], owner, currentRaceLabel);
+  return { currentRaceLabel, currentProgress };
+}
+
 // Pulls whatever history the currently-connected phone is holding, pushing each device
 // straight to the server exactly like a WiFi sync would. If the server can't be reached (the
 // expected case out in the field, with no internet), each pull is kept locally as "pending"
@@ -346,7 +364,7 @@ export async function pullAndSyncConnectedPhone({ silent = false } = {}) {
   try {
     let pulled;
     try {
-      pulled = await pullFromConnectedPhone();
+      pulled = await pullFromConnectedPhone(currentRaceProgressContext());
     } catch (e) {
       // silent only ever means "nothing new" (see this function's own doc) — a genuine failure
       // must still surface even on a background auto-pull tick, or a connection that's dying but

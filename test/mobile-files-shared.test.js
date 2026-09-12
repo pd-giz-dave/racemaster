@@ -11,10 +11,10 @@ import {
   loadLastSynced, saveLastSynced, getLastSyncedLineNumber, setLastSyncedLineNumber, maxLineNumber,
   loadBleLastSeen, recordBleLastSeen, getBleLastSeen,
   laterIso, formatRaceDate, formatDateTime, formatStoredTimestamp, latestLineTimestamp,
-  parseRaceLabelDate, raceNameOf, sortRaces, mergePendingIntoRaces,
+  parseRaceLabelDate, raceNameOf, deriveRaceLabel, sortRaces, mergePendingIntoRaces,
   byLineNumber, computeIncorporationStatus,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
-  isDeviceStale, isProgressStale,
+  isDeviceStale, isProgressStale, findCurrentRaceProgress,
 } from '../js/mobile-files-shared.js';
 
 beforeEach(() => {
@@ -173,6 +173,23 @@ describe('mobile-files-shared.js:parseRaceLabelDate / raceNameOf', () => {
   it('strips that same suffix back off to get the bare race name', () => {
     assert.equal(raceNameOf('dcn-test-Seniors-26-08-30'), 'dcn-test-Seniors');
     assert.equal(raceNameOf('no-date-suffix'), 'no-date-suffix');
+  });
+});
+
+describe('mobile-files-shared.js:deriveRaceLabel', () => {
+  it('derives "<name>-yy-mm-dd", not the event date\'s own dd/mm/yyyy order', () => {
+    // 5 Dec 2026 — a label of "race-26-12-05" reads as 2026-12-05, not 2005-12-26 or nonsense.
+    assert.equal(deriveRaceLabel({ name: 'Race', date: '05/12/2026' }), 'race-26-12-05');
+  });
+
+  it('sanitises the event name the same way a phone-recorded raceLabel already is', () => {
+    assert.equal(deriveRaceLabel({ name: 'Test Fell Race', date: '15/06/2026' }), 'testfellrace-26-06-15');
+  });
+
+  it('returns "" when the event has no name or no date yet', () => {
+    assert.equal(deriveRaceLabel({ name: '', date: '15/06/2026' }), '');
+    assert.equal(deriveRaceLabel({ name: 'Race', date: '' }), '');
+    assert.equal(deriveRaceLabel({ name: '', date: '' }), '');
   });
 });
 
@@ -405,5 +422,31 @@ describe('mobile-files-shared.js:isProgressStale', () => {
   it('is true for an old-labelled race with a missing/invalid generatedAt — nothing proves it\'s fresh', () => {
     assert.equal(isProgressStale(OLD_LABEL, {}), true);
     assert.equal(isProgressStale(OLD_LABEL, { generatedAt: 'not a date' }), true);
+  });
+});
+
+describe('mobile-files-shared.js:findCurrentRaceProgress', () => {
+  const races = [
+    { owner: 'alice', raceLabel: 'race-a-26-08-23', progress: { generatedAt: 'a' } },
+    { owner: 'bob',   raceLabel: 'race-a-26-08-23', progress: { generatedAt: 'b' } },
+    { owner: 'alice', raceLabel: 'race-b-26-08-23', progress: null },
+  ];
+
+  it('returns the matching race\'s own progress object', () => {
+    assert.deepEqual(findCurrentRaceProgress(races, 'alice', 'race-a-26-08-23'), { generatedAt: 'a' });
+    assert.deepEqual(findCurrentRaceProgress(races, 'bob', 'race-a-26-08-23'), { generatedAt: 'b' });
+  });
+
+  it('returns null when the race matches but has no progress recorded yet', () => {
+    assert.equal(findCurrentRaceProgress(races, 'alice', 'race-b-26-08-23'), null);
+  });
+
+  it('returns null when no race matches (wrong owner or wrong raceLabel)', () => {
+    assert.equal(findCurrentRaceProgress(races, 'carol', 'race-a-26-08-23'), null);
+    assert.equal(findCurrentRaceProgress(races, 'alice', 'no-such-race'), null);
+  });
+
+  it('returns null for an empty races array', () => {
+    assert.equal(findCurrentRaceProgress([], 'alice', 'race-a-26-08-23'), null);
   });
 });

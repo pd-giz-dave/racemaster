@@ -554,6 +554,16 @@ export const HELP = {
         Progress run). The file is public and needs no sign-in to fetch, so it deliberately carries only bib number,
         name, course, category, and timing data — never anything else from an entry (no DOB, club, or contact
         details).</p>
+    <p>A phone doesn't need to wait for that file to be fetched some other way — it can ask for this same Progress
+        data itself, two ways. Whenever the Mobile Files page is <strong>connected to a phone</strong> (Mule Mode),
+        the web app now delivers its own already-loaded Progress data to that phone over the same Bluetooth
+        connection it's already using, no extra round trip — but only when that phone's own race matches the one
+        loaded here; a phone tracking a different race is never sent anything, and one that already has the current
+        copy is skipped too, so this costs nothing once everyone's caught up. A phone with its own network access can
+        also fetch it directly from the server (authenticated, the same way its other syncing already is), checking
+        regularly without needing a Bluetooth connection to this page at all — again for free once it's already
+        up to date, by first saying which copy it already has and getting back a tiny "nothing's changed" reply
+        instead of the full list.</p>
     <p>The <strong>All Files</strong> tab lists every file actually stored on the server for you (or, if admin, everyone) —
         every device file <em>and</em> each race's <code>progress.json</code> — regardless of "Skip races older
         than". This is the one place <strong>Delete</strong> lives now; it's gone from the Devices tab. A file whose race
@@ -601,7 +611,21 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.17-alpha - current version</h3>
+    <h3>v0.0.18-alpha - current version</h3>
+    <ul>
+      <li>A phone can now fetch a race's <strong>Progress</strong> data straight from the server over
+          WiFi — <code>GET /api/mobile/&lt;race label&gt;/progress</code>, authenticated the same way as its
+          existing sync endpoints — instead of only ever seeing it via the web app's own Bluetooth
+          connection. A phone that already has the latest copy can say so and get back a tiny
+          "nothing's changed" reply instead of the full list, so checking regularly costs it almost
+          nothing once it's caught up</li>
+      <li>When the Mobile Files page is connected to a phone (Mule Mode), the web app now also delivers
+          its own cached Progress data to that phone over the same Bluetooth connection — no extra
+          round trip — whenever the connected phone's own race matches what's loaded here and it
+          doesn't already have the current copy; a phone tracking a different race is never sent
+          anything</li>
+    </ul>
+    <h3>v0.0.17-alpha</h3>
     <ul>
       <li><strong>Automate results update from mobiles</strong> — the Progress tab's data can now keep itself up to
           date on its own, from any source, without needing to be sat on Mobile Files:</li>

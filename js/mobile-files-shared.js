@@ -8,7 +8,7 @@
 
 import { state } from './state.js';
 import { getSession } from './storage.js';
-import { getRaceStaleAfterDays, raceLabelAgeDays } from './mule-ble.js';
+import { getRaceStaleAfterDays, raceLabelAgeDays, sanitiseName } from './mule-ble.js';
 
 // Ticked checkboxes, keyed by identity rather than row index — row indices are reassigned on
 // every render (races/devices can appear in a different order once sorted), so persisting
@@ -197,6 +197,19 @@ export function parseRaceLabelDate(raceLabel) {
 // actual name, not by a string that already differs in the very date component being grouped on.
 export function raceNameOf(raceLabel) {
   return (raceLabel || '').replace(/-\d{2}-\d{2}-\d{2}$/, '');
+}
+
+// Same "<name>-yy-mm-dd" convention a phone's own raceLabel already uses (2-digit year FIRST —
+// see parseRaceLabelDate above and js/mule-ble.js's raceLabelAgeDays, both of which parse a
+// label's trailing "-dd-dd-dd" strictly as yy-mm-dd) — state.event.date is stored dd/mm/yyyy, so
+// the day and year swap position here. Getting this order wrong doesn't error — it just silently
+// misdates the race for every consumer of that shared parsing, which is exactly what was
+// happening before this was fixed (see git history) — never re-derive this independently
+// elsewhere; this is now the one place it lives (js/progress-sync.js imports it back).
+export function deriveRaceLabel(event) {
+  const [dd, mm, yyyy] = (event.date || '').split('/');
+  if (!dd || !mm || !yyyy || !event.name) return '';
+  return `${sanitiseName(event.name) || 'race'}-${yyyy.slice(-2)}-${mm}-${dd}`;
 }
 
 // Newest date first, then race name, matching how an organiser actually thinks about a list
@@ -388,4 +401,13 @@ export function isProgressStale(raceLabel, progress) {
   const staleAfterDays = getRaceStaleAfterDays();
   if (!isRaceLabelOld(raceLabel, staleAfterDays)) return false;
   return !isoWithinDays(progress?.generatedAt, staleAfterDays);
+}
+
+// The cached progress payload (already fetched via GET /api/mobile — see race.progress in
+// server/mobile.js's getMobileRacesForUser) for whatever race [owner]/[raceLabel] currently is —
+// used by js/views/mobile-files-ble.js to decide what (if anything) to deliver to a connected
+// phone over BLE, without a second server round trip just for that. null when not found (races
+// not yet fetched, or no match).
+export function findCurrentRaceProgress(races, owner, raceLabel) {
+  return races.find(r => r.owner === owner && r.raceLabel === raceLabel)?.progress ?? null;
 }

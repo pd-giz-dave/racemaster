@@ -73,6 +73,16 @@ export function writeProgress(username, raceLabel, payload) {
   fs.writeFileSync(progressFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
 }
 
+// Whether a caller who says "I already have generatedAt=knownGeneratedAt" already holds the
+// current progress payload — see GET /api/mobile/:raceLabel/progress in routes/mobile.js, the
+// bandwidth-saving mechanism a phone (over BLE or HTTP) uses to avoid re-fetching an unchanged
+// race-wide progress export. Pulled out as its own pure function, mirroring this file's own
+// getMobileRacesStatusForUser precedent for "cheap version compare, no full re-send", so it's
+// directly unit-testable without faking an HTTP request.
+export function progressIsUnchanged(progress, knownGeneratedAt) {
+  return !!progress && !!knownGeneratedAt && progress.generatedAt === knownGeneratedAt;
+}
+
 // raceLabel ends "…-YY-MM-DD" (2-digit year first, e.g. "-26-08-04" = 4 August 2026 — the
 // phone's own date suffix) — pull that out for sorting. Returns { yy, mm, dd } (strings) or
 // null if the label doesn't end that way.

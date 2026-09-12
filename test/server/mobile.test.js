@@ -9,7 +9,7 @@ import path from 'path';
 import { ensureDirs, MOBILE_DIR } from '../../server/config.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
-  progressFilePath, readProgress, writeProgress, parseRaceLabelDate,
+  progressFilePath, readProgress, writeProgress, progressIsUnchanged, parseRaceLabelDate,
   getMobileRacesForUser, getMobileRacesStatusForUser,
 } from '../../server/mobile.js';
 
@@ -66,6 +66,25 @@ describe('server/mobile.js:readProgress / writeProgress', () => {
 
   it('returns null when there is no progress file yet', () => {
     assert.equal(readProgress('alice', 'no-such-race'), null);
+  });
+});
+
+describe('server/mobile.js:progressIsUnchanged', () => {
+  it('is true when knownGeneratedAt matches the progress payload\'s own generatedAt exactly', () => {
+    assert.equal(progressIsUnchanged({ generatedAt: '2026-08-23T10:00:00.000Z' }, '2026-08-23T10:00:00.000Z'), true);
+  });
+
+  it('is false when generatedAt differs', () => {
+    assert.equal(progressIsUnchanged({ generatedAt: '2026-08-23T10:00:00.000Z' }, '2020-01-01T00:00:00.000Z'), false);
+  });
+
+  it('is false when progress is null (nothing recorded yet)', () => {
+    assert.equal(progressIsUnchanged(null, '2026-08-23T10:00:00.000Z'), false);
+  });
+
+  it('is false when knownGeneratedAt is missing (a first-ever fetch)', () => {
+    assert.equal(progressIsUnchanged({ generatedAt: '2026-08-23T10:00:00.000Z' }, null), false);
+    assert.equal(progressIsUnchanged({ generatedAt: '2026-08-23T10:00:00.000Z' }, undefined), false);
   });
 });
 

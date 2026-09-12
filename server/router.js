@@ -18,6 +18,7 @@ export async function route(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const { pathname } = url;
   const force = url.searchParams.get('force') === 'true';
+  const knownGeneratedAt = url.searchParams.get('knownGeneratedAt');
 
   try {
     // GET /api/ping  — liveness check, no auth. `sink: true` is this server's own explicit
@@ -32,7 +33,7 @@ export async function route(req, res) {
 
     if (await handleAuthRoutes(req, res, pathname))               return;
     if (await handleDatasetRoutes(req, res, pathname, force))     return;
-    if (await handleMobileRoutes(req, res, pathname))             return;
+    if (await handleMobileRoutes(req, res, pathname, knownGeneratedAt)) return;
     if (await handleUserRoutes(req, res, pathname))                return;
     if (await handleResultsRoutes(req, res, pathname))             return;
     await handleStaticRoutes(req, res, pathname);

@@ -6,13 +6,16 @@ import { sanitiseName } from '../datasets.js';
 import { getAuthUser, isAdmin } from '../auth.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
-  writeProgress, getMobileRacesForUser, getMobileRacesStatusForUser,
+  writeProgress, readProgress, progressIsUnchanged, getMobileRacesForUser, getMobileRacesStatusForUser,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
-export async function handleMobileRoutes(req, res, pathname) {
+// knownGeneratedAt is only read by GET .../progress below (a query-string value, extracted once
+// in server/router.js the same way that file already extracts `force` for handleDatasetRoutes) —
+// every other route in this file ignores it.
+export async function handleMobileRoutes(req, res, pathname, knownGeneratedAt) {
   // POST /api/mobile/:owner/:raceLabel/progress — the web app pushes the Mobile Files page's own
   // Progress tab contents, race-wide: {raceName, raceDate, entries: [{bibNumber, name, category,
   // course, startTime, finishTime, cpTimes}]} — one entry per bib in Entries regardless of
@@ -207,6 +210,44 @@ export async function handleMobileRoutes(req, res, pathname) {
       result[deviceName] = maxLineNumber(readMobileDeviceFile(username, raceLabel, deviceName));
     }
     jsonReply(res, 200, result);
+    return true;
+  }
+
+  // GET /api/mobile/:raceLabel/progress?knownGeneratedAt=<ISO>  —  lets a phone fetch race-wide
+  // progress directly from the server, bypassing Bluetooth entirely (the HTTP twin of the BLE
+  // delivery in js/mule-ble.js's pullFromConnectedPhone/deliverProgress). Scoped to the
+  // requesting user's own folder, same as GET .../status above — an admin's phone would need to
+  // log in as the race's actual owner account for this to find the right folder, the same
+  // pre-existing limitation that route already has. Requires login like every other mobile sync
+  // endpoint here — deliberately NOT the same as progress.json's own incidental, unauthenticated
+  // exposure via the generic static-file route (server/routes/static.js serves anything under
+  // repo root, MOBILE_DIR included, with no auth check at all — untouched, out of scope here;
+  // this is the properly-gated path going forward).
+  //
+  // knownGeneratedAt is optional; when it matches what's on disk exactly, the response omits
+  // `entries` and returns {unchanged: true, generatedAt} instead of the full payload — the
+  // bandwidth-saving mechanism this route exists for. There's no ETag/304 convention anywhere in
+  // this server (a real conditional-GET would mean bypassing jsonReply for no real benefit here)
+  // — this reuses the same "cheap JSON sentinel" idiom getMobileRacesStatusForUser already
+  // established for the equivalent per-device problem.
+  if (/^\/api\/mobile\/[^/]+\/progress$/.test(pathname) && req.method === 'GET') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+
+    const raceLabel = sanitiseName(decodeURIComponent(pathname.slice('/api/mobile/'.length, -'/progress'.length)));
+    if (!raceLabel) { jsonReply(res, 400, { error: 'Invalid race label' }); return true; }
+
+    const progress = readProgress(username, raceLabel);
+    if (!progress) { jsonReply(res, 404, { error: 'No progress recorded for this race yet' }); return true; }
+
+    if (progressIsUnchanged(progress, knownGeneratedAt)) {
+      jsonReply(res, 200, { unchanged: true, generatedAt: progress.generatedAt });
+    } else {
+      jsonReply(res, 200, {
+        unchanged: false, generatedAt: progress.generatedAt,
+        raceName: progress.raceName, raceDate: progress.raceDate, entries: progress.entries,
+      });
+    }
     return true;
   }
 
