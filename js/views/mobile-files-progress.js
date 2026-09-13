@@ -23,6 +23,7 @@ import {
   buildProgressColumns, buildProgressRows,
 } from '../mobile-files-progress.js';
 import { currentRows } from './mobile-files-devices.js';
+import { pushProgressNow } from '../progress-sync.js';
 
 // Injected by mobile-files.js's own wireMobileFiles() — see this file's own top-of-file doc for
 // why this is dependency-injected rather than imported directly.
@@ -106,6 +107,10 @@ export async function clearProgress() {
     'Clear Progress', true
   )) return;
   await clearProgressData();
+  // Pushed immediately rather than left to the usual 2s debounce (see pushProgressNow's own
+  // doc) — an explicit "clear" should reach the persisted progress.json right away, not whenever
+  // the debounce next happens to fire.
+  await pushProgressNow();
   // Deleting the computed data undermines the same trust a failed Update Progress attempt
   // would — see clearAutoProgressState()'s own doc above. renderMobileProgressTable() below
   // already calls syncAutoProgressCheckbox() itself, so the checkbox reflects this immediately.

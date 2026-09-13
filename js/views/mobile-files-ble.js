@@ -39,6 +39,11 @@ export function initBle({ renderAll: r, getLastKnownRaces: g }) {
   getLastKnownRaces = g;
 }
 
+// See the "Skip races older than" 'change' handler in wireBleControls() below — debounces the
+// auto-refresh that setting change triggers.
+const STALE_DAYS_REFRESH_DEBOUNCE_MS = 500;
+let staleDaysRefreshTimer = null;
+
 // Gated the same way mule-ble.js's own bleLog is — routine tracing only, off by default.
 function debugLog(...args) { if (isBleLoggingEnabled()) console.log(`[${ts()}]`, ...args); }
 
@@ -644,6 +649,15 @@ export function wireBleControls() {
       const days = parseInt(staleDaysInput.value, 10);
       if (Number.isFinite(days) && days >= 1) setRaceStaleAfterDays(days);
       staleDaysInput.value = String(getRaceStaleAfterDays()); // reflect back whatever actually got saved (rejects e.g. 0, blank, negative)
+      // The Devices/All Files tabs' own staleness filtering and highlighting (filterStaleRaces/
+      // isDeviceStale/isProgressStale — mobile-files-shared.js) are pure functions of this
+      // setting, computed at render time, not something this input change touches directly — so
+      // without a refresh, a changed cutoff has no visible effect until whatever's already on
+      // screen next happens to re-render (a manual Refresh, the background poll, or navigating
+      // away and back). Debounced so repeatedly nudging the spinner arrows (each a separate
+      // 'change') coalesces into one refresh shortly after the value settles, not one per click.
+      clearTimeout(staleDaysRefreshTimer);
+      staleDaysRefreshTimer = setTimeout(() => { renderAll(); }, STALE_DAYS_REFRESH_DEBOUNCE_MS);
     });
   }
 }

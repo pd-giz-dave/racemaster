@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { state } from '../js/state.js';
 import { installLocalStorageMock, installFetchMock, installWindowMock, jsonResponse, flushMicrotasks } from './helpers/mock-browser.js';
-import { startProgressSync } from '../js/progress-sync.js';
+import { startProgressSync, pushProgressNow } from '../js/progress-sync.js';
 
 beforeEach(() => {
   installLocalStorageMock();
@@ -123,6 +123,57 @@ describe('progress-sync.js:startProgressSync', () => {
     startProgressSync();
     t.mock.timers.tick(2000);
     await flushMicrotasks();
+
+    assert.equal(fetchMock.calls.length, 0);
+  });
+});
+
+// pushProgressNow — used by Clear Progress so the persisted progress.json reflects an explicit
+// clear right away, rather than however long the usual debounce takes to fire (or never, if the
+// tab closes/navigates away before it does).
+describe('progress-sync.js:pushProgressNow', () => {
+  it('pushes immediately, with no debounce wait at all', async () => {
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+
+    await pushProgressNow();
+
+    assert.equal(fetchMock.calls.length, 1);
+  });
+
+  it('cancels an already-scheduled debounced push rather than letting both fire', async (t) => {
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    startProgressSync(); // schedules its own initial debounced push
+    await pushProgressNow();
+    assert.equal(fetchMock.calls.length, 1);
+
+    // The debounce startProgressSync() itself scheduled must not also fire later and double-push.
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+    assert.equal(fetchMock.calls.length, 1);
+  });
+
+  it('reflects the very latest state, not whatever it was when some earlier debounce was scheduled', async () => {
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+
+    state.mobileProgress = [];
+    state.mobileCheckpoints = [];
+    await pushProgressNow();
+    const firstBody = JSON.parse(fetchMock.calls[0].opts.body);
+    assert.equal(firstBody.entries[0].finishTime, '');
+
+    state.mobileProgress = [{ action: 'Finish', number: '1', time: '00:45:00' }];
+    await pushProgressNow();
+    const secondBody = JSON.parse(fetchMock.calls[1].opts.body);
+    assert.equal(secondBody.entries[0].finishTime, '00:45:00');
+  });
+
+  it('does nothing when signed out, same as the debounced path', async () => {
+    localStorage.removeItem('racemaster-token');
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+
+    await pushProgressNow();
 
     assert.equal(fetchMock.calls.length, 0);
   });

@@ -45,6 +45,19 @@ function schedulePush() {
   _timer = setTimeout(pushProgress, 2000);
 }
 
+// Pushes right now instead of waiting out the usual 2s debounce, cancelling any already-pending
+// one — for an explicit, one-off action (Clear Progress) where leaving the persisted
+// progress.json stale until the debounce happens to fire (or relying on it surviving a tab
+// close/navigation in the meantime) isn't good enough: the operator just told the app "this data
+// is gone," and the server-side copy other phones/admins read should reflect that immediately,
+// not eventually. Same best-effort contract as the debounced path otherwise — a server outage
+// here is silently swallowed by pushProgress() itself and simply retried on the next dirty-change
+// (or the next explicit call), never surfaced as an error to the caller.
+export async function pushProgressNow() {
+  clearTimeout(_timer);
+  await pushProgress();
+}
+
 // connectAndLoad() (app.js) can run more than once per page load — switching datasets re-runs
 // it — so the previous listener must be torn down first, or repeated switches pile up duplicate
 // listeners each firing their own push per edit.
