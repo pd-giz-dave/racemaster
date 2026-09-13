@@ -6,7 +6,7 @@
 // confirm dialogs/status toasts, and renders the actual table.
 
 import { getSortedEntries } from './entries.js';
-import { entryInfo } from './safety.js';
+import { entryInfo, getConflictedBibs } from './safety.js';
 import { getMobileCheckpointTimes, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime } from './utils.js';
 import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
@@ -452,12 +452,26 @@ export function buildProgressColumns(baseColumns, cpNumbers) {
 // own, without needing to be filtered out here too — see js/mobile-progress.js's
 // getSortedMobileProgress() (course-filtered via the same getEntry() lookup) and js/results.js's
 // getSplitsRows() (an explicit `if (!entry) continue`).
+//
+// `conflict` (js/safety.js's own getConflictedBibs()) marks a bib SI Results, the stopwatch/
+// manual Finishers list, and Mobile Files disagree about — either a different Finish time, or one
+// source saying Finish while another says DNF/retired — the same clash Results & Prize List and
+// Safety Check both already resolve and warn about (resolveFinishSources() in results.js: SI
+// wins, then stopwatch, then mobile). This tab shows whichever value actually won (same as those
+// two pages), flagged, so the race director doesn't mistake it for settled, undisputed data.
 export function buildProgressRows() {
   const rowsByBib = new Map();
+  // Computed once per call, not per row — getConflictedBibs() itself re-resolves both courses'
+  // worth of sources, so it's worth sharing across every ensure() call here rather than redoing
+  // that per bib.
+  const conflictedBibs = getConflictedBibs();
   const ensure = bib => {
     if (!rowsByBib.has(bib)) {
       const info = entryInfo(bib);
-      rowsByBib.set(bib, { bibNumber: bib, name: info.name, category: info.category, course: info.course, startTime: '', finishTime: '', cpTimes: {}, invalid: info.invalid });
+      rowsByBib.set(bib, {
+        bibNumber: bib, name: info.name, category: info.category, course: info.course,
+        startTime: '', finishTime: '', cpTimes: {}, invalid: info.invalid, conflict: conflictedBibs.has(bib),
+      });
     }
     return rowsByBib.get(bib);
   };

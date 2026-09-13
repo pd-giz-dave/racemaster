@@ -35,7 +35,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.18-alpha)</button></h1>
+    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.19-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -664,6 +664,7 @@
         <span class="entry-status view-status-msg" hidden></span>
       </div>
       <p style="font-size:0.8rem;color:var(--muted);margin:-6px 0 10px" title="Every time below (Last CP, Early Starters) is shown as an actual time-of-day, derived from this race start plus however long ago it was recorded — compare it against the time now to judge how long ago that really was.">Race start: <strong id="safety-race-start">—</strong> &nbsp;·&nbsp; Time now: <strong id="safety-time-now">—</strong></p>
+      <div id="safety-conflict-warnings" hidden style="margin:0 0 12px;padding:10px;border-radius:6px;background:var(--header-warn);color:#333;font-size:0.875rem"></div>
 
       <div class="tab-bar" id="safety-tab-bar">
         <button class="active" data-safety-tab="outstanding-seniors">Outstanding (Seniors)</button>
@@ -776,6 +777,7 @@
     <div class="view" id="view-results" hidden>
       <div id="results-sticky-top">
         <div class="view-header"><h2>Results &amp; Prize List</h2><span class="entry-status view-status-msg" hidden></span></div>
+        <div id="results-conflict-warnings" hidden style="margin:0 0 12px;padding:10px;border-radius:6px;background:var(--header-warn);color:#333;font-size:0.875rem"></div>
         <div class="btn-row">
           <button class="btn btn-secondary" id="btn-print-prize-list" disabled>Print Prize List</button>
           <button class="btn btn-secondary" id="btn-export-results-csv">Export CSV</button>

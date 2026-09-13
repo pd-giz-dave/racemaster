@@ -321,6 +321,15 @@ export const HELP = {
         a typo on the device, or someone genuinely not yet entered. It's shown here anyway (a real sighting is
         worth knowing about for safety purposes) rather than silently dropped, and it's ignored on the Results &amp;
         Prize List page until the bib is corrected or added.</p>
+    <p>A yellow banner above the tabs lists any bib recorded by more than one source — SI Results, the
+        stopwatch/manual Finishers list, and Mobile Files' Update Progress — including one source saying Finish
+        while another says retired/DNF for the same bib, not just two sources disagreeing on the time. One source
+        is used (SI, then Finishers, then Mobile Files) and the others are ignored, so this bib appears in exactly
+        one of the Finishers/Retirees tabs below, never both; see the Results &amp; Prize List page's own help for
+        why that order, and its own copy of the same banner. An early/late start recorded by both the stopwatch/
+        manual Finishers list and Mobile Files for the same bib is flagged the same way — there's no SI side to a
+        Start record, so it's just those two, stopwatch taking priority — even when they happen to agree on the
+        time, since a bib genuinely shouldn't be independently timed twice with nobody the wiser.</p>
   `,
   'view-si-results': `
     <p>Import finish times from an SI Timing (processable) results export. The import matches competitors by bib number. 
@@ -343,6 +352,19 @@ export const HELP = {
     <p>On the <strong>Seniors</strong> tab, <strong>%Ldrs</strong> shows each finisher's time as a
         percentage of the top 10 finishers' average (that average = 100%); <strong>R</strong>
         next to a time marks a course record, shown only when one's actually been broken.</p>
+    <p>A bib can be recorded by more than one source — SI Results, the stopwatch/manual Finishers
+        list, and Mobile Files' Update Progress — and those sources can disagree, either about the
+        time (two say Finish, with different times) or about whether the bib finished at all (one
+        says Finish, another says retired/DNF). Either way, one source is used and the others are
+        ignored, in this order: <strong>SI Results</strong> first, then the <strong>Finishers</strong>
+        list, then <strong>Mobile Files</strong> — SI is treated as the most authoritative since it's
+        a dedicated timing system's own export. A yellow banner above the tabs lists every such clash
+        actually found, so it's never silently resolved with nobody the wiser; the same list also
+        appears on the Safety Check page, and its Finished/Retirees tabs reflect the same resolved
+        outcome (a bib is never shown as both). The same banner also lists a bib whose early/late
+        Start was recorded by both the Finishers list and Mobile Files (no SI side to a Start record,
+        so just those two) — not something this page itself shows, but worth surfacing here too since
+        it's the same shared banner.</p>
     <p>Use <strong>Export CSV</strong> to save the current tab's data as a spreadsheet for ad-hoc
         manipulation — available on the <strong>Seniors</strong>, <strong>Juniors</strong>,
         <strong>Pairs</strong> and <strong>Splits</strong> tabs. Use <strong>Print Prize List</strong>
@@ -510,7 +532,10 @@ export const HELP = {
         (nothing in its current segment), or if more than one file resolves to the same location (Finish or a checkpoint)
         at once. A bib number that isn't in Entries is <strong>not</strong> rejected — it's added to the Progress tab
         below (and the Safety Check page) highlighted, since a phone genuinely recorded it, but it's left out of Results
-        &amp; Prize List until the bib is corrected or added there.</p>
+        &amp; Prize List until the bib is corrected or added there. A row is highlighted for a different reason when its
+        bib is recorded differently by more than one source (SI Results, the stopwatch/manual Finishers list, and Mobile
+        Files) — see Results &amp; Prize List's own help for the priority order and the conflict banner shown there and
+        on Safety Check.</p>
     <p>You can also tick any number of <strong>checkpoint</strong> location files (any location containing a number, e.g.
         "CP1", "Checkpoint 2") alongside the Finish file(s) — each contributes a <strong>raw</strong> elapsed time per bib,
         computed as that bib's own crossing timestamp minus the Finish location's stopwatch Start time. Checkpoint mode has
@@ -648,7 +673,36 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.18-alpha - current version</h3>
+    <h3>v0.0.19-alpha - current version</h3>
+    <ul>
+      <li>Results &amp; Prize List and Safety Check now spot and warn about a <strong>bib number
+          conflict</strong> — the same bib recorded differently by more than one source (SI Results,
+          the stopwatch/manual Finishers list, and Mobile Files' Update Progress), whether that's two
+          sources disagreeing on a finish time, one saying Finish while another says retired/DNF, or
+          two sources both recording an early/late Start. One source is used and the rest ignored, in
+          priority order — SI, then Finishers, then Mobile Files — and a yellow banner on both pages
+          lists every clash actually found, so it's never resolved silently with nobody the wiser. The
+          same conflicted bib is also flagged on Mobile Files' own Progress tab</li>
+      <li>A mobile bib with no matching Entry is no longer rejected outright — the whole Update
+          Progress run used to be blocked by a single bad bib, discarding every other valid record
+          along with it. It's now added to the Progress tab and Safety Check, flagged, and left out of
+          Results &amp; Prize List until the bib is corrected or added</li>
+      <li>Fixed <strong>progress.json</strong> never actually reaching a phone that had already chosen
+          a course — it was being pushed to a course-less race folder no phone ever uses once Start is
+          pressed. Now pushed once per course, each to that course's own race folder</li>
+      <li>The Devices tab's own background poll no longer silently does nothing unless Auto-update
+          progress happens to be ticked — it now always keeps the Devices/Progress/All Files tables
+          current while online, independent of that setting</li>
+      <li>The header status dot now distinguishes a genuinely expired login from being offline, and the
+          Datasets page offers a quick re-login that keeps the connected dataset, instead of requiring a
+          full log out</li>
+      <li>Added a <strong>Started At</strong> column to the Devices tab — the time of day a device most
+          recently went active, so you can confirm every station is actually set up and running</li>
+      <li><strong>Clear Progress</strong> now pushes the cleared state to the server immediately rather
+          than waiting for the usual debounce; changing "Skip races older than" now auto-refreshes the
+          page</li>
+    </ul>
+    <h3>v0.0.18-alpha</h3>
     <ul>
       <li>A phone can now fetch a race's <strong>Progress</strong> data straight from the server over
           WiFi — <code>GET /api/mobile/&lt;race label&gt;/progress</code>, authenticated the same way as its

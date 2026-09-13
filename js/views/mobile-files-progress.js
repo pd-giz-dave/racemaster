@@ -252,9 +252,19 @@ export function renderMobileProgressTable() {
   };
   for (const n of cpNumbers) renderers[`cp_${n}`] = r => escHtml(r.cpTimes?.[n] || '');
   renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), renderers), rows, {
-    // See buildProgressRows()'s own doc on `invalid` — a bib with mobile activity but no
-    // matching Entry, same row-error styling Finishers/Entries/Safety Check all use for it.
-    rowAttrs: r => ({ class: r.invalid ? 'row-error' : '', title: r.invalid ? 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry' : '' }),
+    // See buildProgressRows()'s own doc on `invalid`/`conflict` — a bib with mobile activity but
+    // no matching Entry, or one SI Results/Finishers/Mobile Files disagree about, same row-error
+    // styling Finishers/Entries/Safety Check all use for either case. Mutually exclusive in
+    // practice (a conflict is only ever resolved between sources for a bib that already has a
+    // matching Entry), so there's no ambiguity about which tooltip applies.
+    rowAttrs: r => ({
+      class: (r.invalid || r.conflict) ? 'row-error' : '',
+      title: r.invalid
+        ? 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry'
+        : r.conflict
+          ? 'SI Results, Finishers and/or Mobile Files disagree about this bib — see the conflict warning on Results & Prize List / Safety Check'
+          : '',
+    }),
   });
   syncAutoProgressCheckbox();
 }

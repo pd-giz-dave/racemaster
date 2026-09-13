@@ -7,11 +7,11 @@ import { derivePairGender } from '../categories.js';
 import { setHTML, showStatus, showConfirmDialog, wireTabBar, renderTable, tableColumns } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { COURSE } from '../constants.js';
-import { showBusy, elapsedToTimeOfDay } from '../utils.js';
+import { showBusy, elapsedToTimeOfDay, escHtml } from '../utils.js';
 import { renderHome } from './home.js';
 import {
   getOutstandingRows, getDnfRows, getFinishedRows,
-  getEarlyStarterRows, buildNoShows, getSafetyCounts, getExplicitStart,
+  getEarlyStarterRows, buildNoShows, getSafetyCounts, getExplicitStart, getBibConflictWarnings,
 } from '../safety.js';
 import { getLatestCheckpoint } from '../mobile-checkpoints.js';
 import { removeMobileProgressRecord } from '../mobile-progress.js';
@@ -105,8 +105,24 @@ function updateSafetyClockLine() {
   setHTML('safety-time-now', timeNow());
 }
 
+// Same bib-number-clash list Results & Prize List shows (results.js's own resolveFinishSources()
+// — SI wins, then stopwatch, then mobile) — surfaced here too since a race director watching
+// Safety Check may never open Results directly, and a conflict here means one of these bibs'
+// finish/DNF status might not be coming from the source they'd expect.
+function renderConflictWarnings() {
+  const el = document.getElementById('safety-conflict-warnings');
+  if (!el) return;
+  const warnings = getBibConflictWarnings();
+  el.hidden = warnings.length === 0;
+  if (warnings.length) {
+    el.innerHTML = `<strong>Bib number conflict${warnings.length === 1 ? '' : 's'}:</strong><br>`
+      + warnings.map(escHtml).join('<br>');
+  }
+}
+
 export function renderSafety() {
   updateSafetyClockLine();
+  renderConflictWarnings();
   renderTable('safety-outstanding-seniors-tbody', SAFETY_OUT_COLS, getOutstandingRows(COURSE.SENIORS), {
     rowAttrs: e => ({ 'data-bib': e.bibNumber }),
   });

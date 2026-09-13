@@ -11,6 +11,7 @@ import { builtinFRARows } from '../js/categories.js';
 import {
   getFinishedBibs, getFinishedOnlyBibs, entryInfo, getOutstandingRows, getDnfRows,
   getFinishedRows, getEarlyStarterRows, getExplicitStart, buildNoShows, getSafetyCounts,
+  getBibConflictWarnings, getConflictedBibs,
 } from '../js/safety.js';
 
 beforeEach(() => {
@@ -175,6 +176,84 @@ describe('safety.js:getFinishedRows', () => {
   });
 });
 
+describe('safety.js:getBibConflictWarnings', () => {
+  // Mirrors results.js's own resolveFinishSources() (SI wins, then stopwatch, then mobile) — this
+  // is Safety Check's own window onto exactly the same conflicts Results & Prize List resolves,
+  // so a race director watching this page alone still finds out about them.
+  it('returns no warnings when there is nothing to conflict', () => {
+    state.entries   = [{ bibNumber: '1', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers = [{ action: 'Finish', number: '1', time: '01:00:00' }];
+    assert.deepEqual(getBibConflictWarnings(), []);
+  });
+
+  it('reports a stopwatch/mobile clash for the same bib', () => {
+    state.entries        = [{ bibNumber: '1', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers       = [{ action: 'Finish', number: '1', time: '01:00:00' }];
+    state.mobileProgress  = [{ action: 'Finish', number: '1', time: '01:00:05' }];
+    const warnings = getBibConflictWarnings();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /stopwatch says finished, mobile says finished/);
+  });
+
+  it('reports an SI/stopwatch clash, SI taking priority', () => {
+    state.entries    = [{ bibNumber: '1', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.siResults  = [{ RaceNumber: '1', RaceTime: '00:59:00', CourseClass: 'Seniors' }];
+    state.finishers  = [{ action: 'Finish', number: '1', time: '01:00:00' }];
+    const warnings = getBibConflictWarnings();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /SI says finished, stopwatch says finished/);
+  });
+
+  // The exact bug this was written for: a bib logged as finished by one source and retired by
+  // another isn't a "same status, different value" clash — it's a disagreement about whether the
+  // bib finished at all, and must be caught the same way.
+  it('reports a stopwatch-DNF/mobile-Finish clash for the same bib', () => {
+    state.entries        = [{ bibNumber: '101', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers       = [{ action: 'DNF', number: '101', time: '-' }];
+    state.mobileProgress  = [{ action: 'Finish', number: '101', time: '01:00:05' }];
+    const warnings = getBibConflictWarnings();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /stopwatch says retired, mobile says finished/);
+  });
+
+  // A Start record is a different kind of conflict — no Finish/DNF status at all, and no SI side
+  // to it — but a bib independently timed as an early/late starter by two sources, even agreeing
+  // on the time, is exactly the same "recorded twice, which do I trust" problem.
+  it('reports a stopwatch/mobile Start clash for the same bib', () => {
+    state.entries        = [{ bibNumber: '1', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers       = [{ action: 'Start', number: '1', time: '00:05:00' }];
+    state.mobileProgress  = [{ action: 'Start', number: '1', time: '00:05:00' }];
+    const warnings = getBibConflictWarnings();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /Bib 1 — an early\/late start is recorded by both stopwatch and mobile/);
+  });
+});
+
+describe('safety.js:getConflictedBibs', () => {
+  // Just the bare bib numbers behind getBibConflictWarnings() above — js/mobile-files-progress.js's
+  // buildProgressRows() uses this to flag its own row for a conflicted bib, so the Progress tab
+  // agrees with Results & Prize List/Safety Check without duplicating the warning-text parsing.
+  it('returns an empty set when there is nothing to conflict', () => {
+    state.entries   = [{ bibNumber: '1', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers = [{ action: 'Finish', number: '1', time: '01:00:00' }];
+    assert.deepEqual([...getConflictedBibs()], []);
+  });
+
+  it('includes a bib with a stopwatch-DNF/mobile-Finish clash', () => {
+    state.entries        = [{ bibNumber: '101', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers       = [{ action: 'DNF', number: '101', time: '-' }];
+    state.mobileProgress  = [{ action: 'Finish', number: '101', time: '01:00:05' }];
+    assert.deepEqual([...getConflictedBibs()], [101]);
+  });
+
+  it('includes a bib with a stopwatch/mobile Start clash', () => {
+    state.entries        = [{ bibNumber: '1', course: 'Seniors', category: 'MSEN', name: 'Dave' }];
+    state.finishers       = [{ action: 'Start', number: '1', time: '00:05:00' }];
+    state.mobileProgress  = [{ action: 'Start', number: '1', time: '00:05:00' }];
+    assert.deepEqual([...getConflictedBibs()], [1]);
+  });
+});
+
 describe('safety.js:getEarlyStarterRows', () => {
   it('lists Start records from stopwatch and mobile, sorted by bib', () => {
     state.entries = [
@@ -187,6 +266,15 @@ describe('safety.js:getEarlyStarterRows', () => {
     assert.deepEqual(rows.map(r => r.number), ['1', '2']); // f.number passed through verbatim, not coerced
     assert.equal(rows[0].startTime, '00:01:00');
     assert.equal(rows[0].invalid, false);
+  });
+
+  it('a stopwatch Start wins over a mobile Start for the same bib — one row, not two', () => {
+    state.entries         = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
+    state.finishers       = [{ action: 'Start', number: '1', time: '00:05:00' }];
+    state.mobileProgress  = [{ action: 'Start', number: '1', time: '00:01:00' }];
+    const rows = getEarlyStarterRows();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].startTime, '00:05:00');
   });
 
   it('flags a mobile early start for a bib with no matching entry', () => {

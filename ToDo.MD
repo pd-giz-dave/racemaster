@@ -38,3 +38,6 @@
       across "Update progress" actions, the rest of the system must react as if there was a time there
       (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
 
+## Re-test BT stuff wrt auto progress update
+
+- [ ] make sure BT pulls of progress behave same as a server pull (update server, propagate to phones)

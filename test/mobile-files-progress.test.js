@@ -19,6 +19,8 @@ beforeEach(() => {
   ];
   state.mobileProgress = [];
   state.mobileCheckpoints = [];
+  state.finishers = [];
+  state.siResults = [];
 });
 
 // A minimal Finish-location device row: one Time-mode phone with a Start + one Split, one
@@ -306,6 +308,22 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
   it('does not flag a row as invalid when its bib matches a real entry', () => {
     const rows = buildProgressRows();
     assert.equal(rows.find(r => r.bibNumber === 1).invalid, false);
+  });
+
+  // Mirrors safety.js's own getConflictedBibs() — the same SI/stopwatch/mobile priority clash
+  // Results & Prize List and Safety Check both resolve and warn about (resolveFinishSources() in
+  // results.js) is surfaced here too, so it's never mistaken for settled, undisputed data.
+  it('flags a row as conflicted when more than one source disagrees on its bib (Finish vs DNF)', () => {
+    state.finishers      = [{ action: 'DNF', number: '1', time: '-' }];
+    state.mobileProgress = [{ action: 'Finish', number: '1', time: '00:30:00' }];
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).conflict, true);
+  });
+
+  it('does not flag a row as conflicted when only one source has recorded its bib', () => {
+    state.mobileProgress = [{ action: 'Finish', number: '1', time: '00:30:00' }];
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).conflict, false);
   });
 
   it('sorts by bib number', () => {

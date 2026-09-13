@@ -12,6 +12,106 @@ import { getMobileCheckpointNumbers, getMobileCheckpointTimes, getMobileCheckpoi
 import { getSortedMobileProgress } from './mobile-progress.js';
 
 
+const SOURCE_PRIORITY = ['SI', 'stopwatch', 'mobile'];
+const STATUS_VERB = { Finish: 'finished', DNF: 'retired' };
+
+// Records this source's own opinion of `bib` (Finish, with a time, or DNF/retired) into `map`,
+// keyed by bib — at most one entry per bib per source. A single source recording BOTH for the
+// same bib (a data inconsistency, e.g. a stopwatch edit history with a stray leftover row) isn't
+// a genuine cross-source conflict, so it's resolved silently rather than warned about: Finish
+// wins, matching the pre-existing "Finish always shown over DNF" convention this file already
+// used before source-priority existed at all.
+function recordVerdict(map, bib, status, time) {
+  const existing = map.get(bib);
+  if (!existing || (existing.status === 'DNF' && status === 'Finish')) map.set(bib, { status, time: time || '' });
+}
+
+// Resolves which of up to three sources — SI results, the stopwatch/manual Finishers list, and
+// Mobile Files' Update Progress — gets to supply a bib's own Finish-or-DNF verdict for `course`,
+// whenever more than one source has an opinion about the same bib. Priority is SI, then
+// stopwatch, then mobile: an SI import is the most authoritative (a dedicated timing system's own
+// export), a stopwatch/manual Finishers entry is a deliberate action by whoever's running that
+// page, and a mobile Update Progress run is the most likely to have picked up something stray (a
+// mistyped bib, a phone that shouldn't have been selected). A conflict isn't only two sources
+// disagreeing on a Finish *time* — one source recording a Finish while another records a DNF/
+// retirement for the very same bib is exactly the same "which do I trust" problem, resolved the
+// same way, and is very much a real field scenario (a phone's Update Progress run picking up a
+// bib that was actually retired at the finish line, recorded there on paper/stopwatch instead).
+//
+// Returns { siFinishers, swFinishers, mobileFinishers, winners, warnings, conflictedBibs }. The
+// first three are each source's own *winning* Finish rows only (no bib appears in more than one,
+// and none appear here at all if their winning verdict was actually DNF) — what formatResults()
+// below builds results from. `winners` is every bib's own winning verdict as { bib, source,
+// status, time }; also available keyed by bib via js/safety.js's own resolveAllFinishVerdicts(),
+// the same ground truth Safety Check's Finished/Retirees tabs are built from, so the two pages
+// can never disagree about which bibs are in which state. `warnings` is a human-readable list of
+// every clash actually found, for display on both pages. `conflictedBibs` is just the bare bib
+// numbers behind those warnings, for a caller that wants to flag a row rather than read prose —
+// js/mobile-files-progress.js's buildProgressRows(), via js/safety.js's own getConflictedBibs().
+export function resolveFinishSources(course) {
+  const bySource = { SI: new Map(), stopwatch: new Map(), mobile: new Map() };
+
+  for (const r of state.siResults) {
+    const bib = getSIBib(r);
+    if (bib <= 0) continue;
+    // Falls back to the matched Entry's own course only when the SI row itself doesn't specify
+    // one at all — a real SI export always carries CourseClass, but tolerating a blank one here
+    // (rather than the row silently becoming invisible to every course) costs nothing when we
+    // already know the bib's course from Entries anyway. An SI row that DOES specify a course,
+    // even a wrong/mismatched one, is trusted as given — that's a genuine data question, not
+    // something this fallback should paper over.
+    const siCourse = getSICourse(r) || getEntry(bib)?.course || '';
+    if (!ciEq(siCourse, course)) continue;
+    const time = getSIRaceTime(r);
+    if (time) { recordVerdict(bySource.SI, bib, 'Finish', time); continue; }
+    if (getSIStatus(r)) recordVerdict(bySource.SI, bib, 'DNF', '');
+  }
+  for (const f of getSortedFinishers(course)) {
+    const bib = +f.number;
+    if (bib <= 0) continue;
+    if (f.action === 'Finish') recordVerdict(bySource.stopwatch, bib, 'Finish', f.time);
+    else if (f.action === 'DNF') recordVerdict(bySource.stopwatch, bib, 'DNF', f.time);
+  }
+  for (const f of getSortedMobileProgress(course)) {
+    const bib = +f.number;
+    if (bib <= 0) continue;
+    if (f.action === 'Finish') recordVerdict(bySource.mobile, bib, 'Finish', f.time);
+    else if (f.action === 'DNF') recordVerdict(bySource.mobile, bib, 'DNF', f.time);
+  }
+
+  // Group every source's opinion of each bib together, in priority order — the first entry for a
+  // bib is always the highest-priority source that has one, i.e. the winner.
+  const byBib = new Map();
+  for (const source of SOURCE_PRIORITY) {
+    for (const [bib, verdict] of bySource[source]) {
+      const list = byBib.get(bib) || [];
+      list.push({ bib, source, ...verdict });
+      byBib.set(bib, list);
+    }
+  }
+
+  const warnings = [];
+  const winners = [];
+  const conflictedBibs = new Set();
+  for (const [bib, entries] of byBib) {
+    const winner = entries[0];
+    winners.push(winner);
+    for (const loser of entries.slice(1)) {
+      conflictedBibs.add(bib);
+      warnings.push(
+        `${course}: Bib ${bib} — ${winner.source} says ${STATUS_VERB[winner.status]}, `
+        + `${loser.source} says ${STATUS_VERB[loser.status]} (${winner.source} used)`
+      );
+    }
+  }
+
+  const siFinishers      = winners.filter(w => w.source === 'SI' && w.status === 'Finish').map(w => ({ action: 'Finish', number: w.bib, time: w.time }));
+  const swFinishers      = winners.filter(w => w.source === 'stopwatch' && w.status === 'Finish').map(w => ({ action: 'Finish', number: w.bib, time: w.time }));
+  const mobileFinishers  = winners.filter(w => w.source === 'mobile' && w.status === 'Finish').map(w => ({ action: 'Finish', number: w.bib, time: w.time }));
+
+  return { siFinishers, swFinishers, mobileFinishers, winners, warnings, conflictedBibs };
+}
+
 /** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, helpersReport }. */
 export function formatResults() {
   const results = [];
@@ -21,36 +121,8 @@ export function formatResults() {
   const clashWarnings = [];
 
   for (const course of courses) {
-    // Stopwatch finishers for this course (manual entries, source !== 'si')
-    const swFinishers = getSortedFinishers(course)
-      .filter(f => f.action === 'Finish');
-    const swBibs = new Set(swFinishers.map(f => +f.number));
-
-    // Mobile Files' Progress data for this course — skip bibs already in the stopwatch source.
-    // Raw, unadjusted times exactly like swFinishers (both get adjustedFinishTime() below), not
-    // pre-adjusted the way SI results are — see js/mobile-progress.js.
-    const mobileFinishers = getSortedMobileProgress(course)
-      .filter(f => f.action === 'Finish')
-      .filter(f => {
-        if (swBibs.has(+f.number)) {
-          clashWarnings.push(`Bib ${f.number} has stopwatch and mobile result — mobile ignored`);
-          return false;
-        }
-        return true;
-      });
-    const mobileBibs = new Set(mobileFinishers.map(f => +f.number));
-
-    // SI results for this course — skip bibs already accounted for above
-    const siFinishers = state.siResults
-      .filter(r => ciEq(getSICourse(r), course) && getSIBib(r) > 0 && getSIRaceTime(r))
-      .map(r => ({ action: 'Finish', number: getSIBib(r), time: getSIRaceTime(r) }))
-      .filter(f => {
-        if (swBibs.has(+f.number) || mobileBibs.has(+f.number)) {
-          clashWarnings.push(`Bib ${f.number} has stopwatch/mobile and SI result — SI ignored`);
-          return false;
-        }
-        return true;
-      });
+    const { siFinishers, swFinishers, mobileFinishers, winners, warnings } = resolveFinishSources(course);
+    clashWarnings.push(...warnings);
     const siBibSet = new Set(siFinishers.map(f => +f.number));
 
     // Assign each finisher a numeric sort key.
@@ -87,74 +159,69 @@ export function formatResults() {
       return { f, entry, adjTime };
     }).filter(({ entry }) => entry && !isEntryBanned(entry));
 
-    if (!finishers.length) continue;
-
-    // Top-10 average for %Ldrs — only timed finishers count
-    const timedFinishers = finishers.filter(({ adjTime }) => timeToSeconds(adjTime) > 0);
-    const top10    = timedFinishers.slice(0, 10);
-    const avgTop10 = top10.length
-      ? top10.reduce((s, { adjTime }) => s + timeToSeconds(adjTime), 0) / top10.length
-      : 0;
-
-    // Course records for record-breaking flag
-    const maleRecordSecs   = state.event.maleRecord   ? timeToSeconds(state.event.maleRecord)   : 0;
-    const femaleRecordSecs = state.event.femaleRecord ? timeToSeconds(state.event.femaleRecord) : 0;
-
-    // Build result rows
+    // Build result rows — a course with genuinely no Finish records at all (everyone still out,
+    // or a course whose every bib's winning verdict turned out to be DNF) skips all of this
+    // ranking-specific work below (nothing to rank), but must NOT skip the whole course: the
+    // DNF-union section right after still needs to run, or a course with DNF-only bibs would show
+    // no Retirees at all in Results & Prize List.
     const courseResults = [];
-    let position = 0;
+    if (finishers.length) {
+      // Top-10 average for %Ldrs — only timed finishers count
+      const timedFinishers = finishers.filter(({ adjTime }) => timeToSeconds(adjTime) > 0);
+      const top10    = timedFinishers.slice(0, 10);
+      const avgTop10 = top10.length
+        ? top10.reduce((s, { adjTime }) => s + timeToSeconds(adjTime), 0) / top10.length
+        : 0;
 
-    for (const { f, entry, adjTime } of finishers) {
-      position++;
-      const bib  = +f.number;
-      const secs = timeToSeconds(adjTime);
-      const leaderSecs   = timeToSeconds(finishers[0].adjTime);
-      const behindSecs   = secs > 0 && leaderSecs > 0 ? secs - leaderSecs : 0;
-      const behindTime   = behindSecs > 0 ? secondsToTime(behindSecs) : '';
-      const pctLdrs      = avgTop10 > 0 && secs > 0 ? Math.round(avgTop10 / secs * 100) : '';
+      // Course records for record-breaking flag
+      const maleRecordSecs   = state.event.maleRecord   ? timeToSeconds(state.event.maleRecord)   : 0;
+      const femaleRecordSecs = state.event.femaleRecord ? timeToSeconds(state.event.femaleRecord) : 0;
 
-      const gender = genderFromCategory(entry?.category || '');
-      const recordSecs = gender === GENDER.FEMALE ? femaleRecordSecs : maleRecordSecs;
-      const recordBreaker = recordSecs > 0 && secs > 0 && secs < recordSecs;
+      let position = 0;
 
-      const isPair     = !!(entry?.partner);
-      const pairGender = isPair ? derivePairGender(entry.gender, entry.partner.gender) : '';
+      for (const { f, entry, adjTime } of finishers) {
+        position++;
+        const bib  = +f.number;
+        const secs = timeToSeconds(adjTime);
+        const leaderSecs   = timeToSeconds(finishers[0].adjTime);
+        const behindSecs   = secs > 0 && leaderSecs > 0 ? secs - leaderSecs : 0;
+        const behindTime   = behindSecs > 0 ? secondsToTime(behindSecs) : '';
+        const pctLdrs      = avgTop10 > 0 && secs > 0 ? Math.round(avgTop10 / secs * 100) : '';
 
-      courseResults.push({
-        course,
-        bibNumber:    bib || '',
-        position,
-        inCatPos:     0,
-        name:         entry?.name     || '',
-        club:         entry?.club     || '',
-        category:     entry?.category || '',
-        time:         adjTime,
-        behindTime,
-        pctLdrs,
-        recordBreaker,
-        prize:        '',
-        isPair,
-        partner:      entry?.partner  ?? null,
-        pairGender,
-      });
+        const gender = genderFromCategory(entry?.category || '');
+        const recordSecs = gender === GENDER.FEMALE ? femaleRecordSecs : maleRecordSecs;
+        const recordBreaker = recordSecs > 0 && secs > 0 && secs < recordSecs;
+
+        const isPair     = !!(entry?.partner);
+        const pairGender = isPair ? derivePairGender(entry.gender, entry.partner.gender) : '';
+
+        courseResults.push({
+          course,
+          bibNumber:    bib || '',
+          position,
+          inCatPos:     0,
+          name:         entry?.name     || '',
+          club:         entry?.club     || '',
+          category:     entry?.category || '',
+          time:         adjTime,
+          behindTime,
+          pctLdrs,
+          recordBreaker,
+          prize:        '',
+          isPair,
+          partner:      entry?.partner  ?? null,
+          pairGender,
+        });
+      }
     }
 
-    // Add DNF entries at end — from finishers list (action=DNF) and SI results (non-blank Status)
+    // Add DNF entries at end — one per bib whose own *winning* verdict (resolveFinishSources()
+    // above) is DNF, not merely "some source somewhere said DNF" — a bib can't win as both Finish
+    // (already in courseResults, from siFinishers/swFinishers/mobileFinishers above) and DNF at
+    // once, so addedBibs below is only ever a belt-and-braces check, not what actually prevents
+    // this from double-counting.
     const addedBibs = new Set(courseResults.map(r => +r.bibNumber));
-
-    const dnfBibs = new Set(
-      [...getSortedFinishers(course), ...getSortedMobileProgress(course)]
-        .filter(f => f.action === 'DNF' && +f.number > 0)
-        .map(f => +f.number)
-    );
-    // SI results with a non-blank Status are non-finishers (DNF, DNS, mispunch, etc.)
-    for (const r of state.siResults) {
-      if (!ciEq(getSICourse(r), course)) continue;
-      const status = getSIStatus(r);
-      if (!status) continue;
-      const bib = getSIBib(r);
-      if (bib > 0) dnfBibs.add(bib);
-    }
+    const dnfBibs = new Set(winners.filter(w => w.status === 'DNF').map(w => w.bib));
 
     for (const e of getSortedEntries()) {
       if (!ciEq(e.course, course)) continue;

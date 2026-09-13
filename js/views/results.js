@@ -34,6 +34,7 @@ export async function renderResults() {
   _prizes       = prizes;
   _pairsResults = pairsResults;
 
+  renderConflictWarnings(warnings);
   renderResultsTable('results-senior-tbody', seniors);
   renderJuniorsTable('results-junior-tbody', juniors);
   renderProgressTable();
@@ -67,6 +68,24 @@ export async function renderResults() {
   renderHelpersReport(helpersReport);
   updateResultsButtons();
   return warnings;
+}
+
+// A bib clash between SI results, the stopwatch/manual Finishers list, and Mobile Files' Update
+// Progress (formatResults()'s own resolveFinishSources() — see results.js) is resolved
+// automatically (SI wins, then stopwatch, then mobile) rather than blocking anything, but it's
+// worth the race director actually seeing — a stray mobile pull or a duplicate SI import could
+// otherwise silently override the intended time. Persistent (not the usual 10s showStatus() toast)
+// since it stays true until the underlying data conflict is actually fixed. Safety Check shows
+// the exact same list via safety.js's own getBibConflictWarnings() — the one thing both pages
+// need to agree on, so it's computed once here in results.js, not re-derived in either view.
+function renderConflictWarnings(warnings) {
+  const el = document.getElementById('results-conflict-warnings');
+  if (!el) return;
+  el.hidden = warnings.length === 0;
+  if (warnings.length) {
+    el.innerHTML = `<strong>Bib number conflict${warnings.length === 1 ? '' : 's'}:</strong><br>`
+      + warnings.map(escHtml).join('<br>');
+  }
 }
 
 function renderProgressTable() {

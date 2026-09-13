@@ -92,7 +92,59 @@ describe('results.js:formatResults', () => {
     state.mobileProgress = [{ action: 'Finish', number: '1', time: '01:00:05' }];
     const { warnings, seniors } = formatResults();
     assert.equal(seniors.length, 1);
-    assert.ok(warnings.some(w => /stopwatch and mobile/.test(w)));
+    assert.ok(warnings.some(w => /stopwatch says finished, mobile says finished/.test(w)));
+  });
+
+  // Priority is SI, then stopwatch, then mobile (resolveFinishSources() in results.js) — an SI
+  // import is treated as the most authoritative source, so it wins over a stopwatch/manual entry
+  // even though a stopwatch entry alone would win over mobile (the test above).
+  it('SI wins over a stopwatch result for the same bib, with a warning', () => {
+    state.entries   = [entry(1)];
+    state.siResults = [{ RaceNumber: '1', RaceTime: '00:59:00', CourseClass: 'Seniors' }];
+    state.finishers = [{ action: 'Finish', number: '1', time: '01:00:00' }];
+    const { warnings, seniors } = formatResults();
+    assert.equal(seniors.length, 1);
+    assert.equal(seniors[0].time, '00:59:00');
+    assert.ok(warnings.some(w => /SI says finished, stopwatch says finished/.test(w)));
+  });
+
+  it('SI wins over a mobile result for the same bib, with a warning', () => {
+    state.entries        = [entry(1)];
+    state.siResults      = [{ RaceNumber: '1', RaceTime: '00:59:00', CourseClass: 'Seniors' }];
+    state.mobileProgress = [{ action: 'Finish', number: '1', time: '01:00:05' }];
+    const { warnings, seniors } = formatResults();
+    assert.equal(seniors.length, 1);
+    assert.equal(seniors[0].time, '00:59:00');
+    assert.ok(warnings.some(w => /SI says finished, mobile says finished/.test(w)));
+  });
+
+  it('when all three sources have the same bib, SI wins and both others are warned about separately', () => {
+    state.entries        = [entry(1)];
+    state.siResults      = [{ RaceNumber: '1', RaceTime: '00:59:00', CourseClass: 'Seniors' }];
+    state.finishers       = [{ action: 'Finish', number: '1', time: '01:00:00' }];
+    state.mobileProgress  = [{ action: 'Finish', number: '1', time: '01:00:05' }];
+    const { warnings, seniors } = formatResults();
+    assert.equal(seniors.length, 1);
+    assert.equal(seniors[0].time, '00:59:00');
+    assert.ok(warnings.some(w => /SI says finished, stopwatch says finished/.test(w)));
+    assert.ok(warnings.some(w => /SI says finished, mobile says finished/.test(w)));
+  });
+
+  // A conflict isn't only two sources disagreeing on a Finish *time* — one source recording a
+  // Finish while a higher-priority one records a DNF/retirement for the very same bib is exactly
+  // the same "which do I trust" problem (a real field scenario: a phone's Update Progress run
+  // picked up a bib that was actually retired at the finish line, recorded there on the
+  // stopwatch/manually instead). Stopwatch outranks mobile, so the bib must show as DNF, not
+  // Finished, and the warning must say so.
+  it('a stopwatch DNF beats a mobile Finish for the same bib — the bib is DNF, not finished', () => {
+    state.entries        = [entry(1)];
+    state.finishers       = [{ action: 'DNF', number: '1', time: '-' }];
+    state.mobileProgress  = [{ action: 'Finish', number: '1', time: '01:00:05' }];
+    const { warnings, seniors } = formatResults();
+    assert.equal(seniors.length, 1);
+    assert.equal(+seniors[0].bibNumber, 1);
+    assert.equal(seniors[0].time, 'DNF');
+    assert.ok(warnings.some(w => /stopwatch says retired, mobile says finished/.test(w)));
   });
 
   // Update Progress no longer rejects a bib with no matching Entry — it's flagged instead (see
