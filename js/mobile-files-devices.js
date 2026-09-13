@@ -62,6 +62,38 @@ export function whenOf(r) {
   return ((r.timestamp ?? r.timestampMillis) || '').split(' ')[1] || '';
 }
 
+// The device's own most recent "session start" marker — Time mode's action:'Start' (the fixed
+// t=0 stopwatch marker, splitTime non-null) or Bibs/CP mode's action:'Clock' marker (the
+// equivalent bib-less S0 marker for that family, splitTime null) — whichever family this device
+// actually uses. Deliberately scoped by family the same way buildSegmentView() splits lines
+// above, not a bare `action === 'Start'` check on the raw file: Bibs/CP mode also uses the
+// literal action string 'Start' for a quite different thing (an individual runner's own
+// explicit early/late start entry, bib-bearing, splitTime null) — without this split, a device
+// with even one such entry would risk that racing bib's own timestamp being read as this
+// device's own start time instead of its actual Clock marker.
+//
+// "Most recent" (highest lineNumber across the whole file), not the current segment's own S0:
+// a Reset always immediately records a fresh Start/Clock for the new segment (see
+// racemaster-mobile's own Help text), so this gives the same answer either way without needing
+// this file's own segment-boundary logic at all — simpler, and correct even for a file this
+// segment logic can't yet resolve for some other reason.
+//
+// Returns "HH:MM" (seconds dropped — this is a reassurance glance for the race director that a
+// station is set up and running, not a precise timestamp) from whichever qualifying record is
+// latest, or '' if the device has no such record at all (nothing pulled yet, or an old file
+// predating this marker convention).
+export function latestStartedAt(lines) {
+  const timeRows = lines.filter(r => r.splitTime != null);
+  const bibsRows = lines.filter(r => r.splitTime == null);
+  const candidates = [
+    ...timeRows.filter(r => r.action === 'Start'),
+    ...bibsRows.filter(r => r.action === 'Clock'),
+  ];
+  if (!candidates.length) return '';
+  const latest = candidates.reduce((a, b) => (b.lineNumber ?? 0) > (a.lineNumber ?? 0) ? b : a);
+  return whenOf(latest).slice(0, 5); // "HH:mm:ss" -> "HH:mm"
+}
+
 // Every visible line should share one location (it's stamped from the race's own
 // RaceEntity.location, the same for every record a device sends for that race) — anything
 // else means the file is invalid. Exported: js/views/mobile-files-devices.js's showDeviceModal()
@@ -133,6 +165,7 @@ export function flattenDevices(races) {
         timeVisible: timeSegment.length,
         lastSeen: laterIso(device.lastSeen, getBleLastSeen(race.owner, race.raceLabel, device.name)),
         lastUpdate: latestLineTimestamp(device.lines),
+        startedAt: latestStartedAt(device.lines),
         incorporationStatus: computeIncorporationStatus(r),
       });
     }

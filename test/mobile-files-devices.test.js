@@ -8,7 +8,7 @@ import { installLocalStorageMock } from './helpers/mock-browser.js';
 import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
-  flattenDevices, flattenAllFiles,
+  flattenDevices, flattenAllFiles, latestStartedAt,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -78,6 +78,45 @@ describe('mobile-files-devices.js:whenOf', () => {
   it('falls back to timestampMillis for a pre-rename line, and empty string for neither', () => {
     assert.equal(whenOf({ timestampMillis: '2026/08/30 09:00:00' }), '09:00:00');
     assert.equal(whenOf({}), '');
+  });
+});
+
+describe('mobile-files-devices.js:latestStartedAt', () => {
+  it('reads a Time-mode device\'s own Start marker (splitTime non-null)', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
+      { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', timestamp: '2026/08/30 09:20:00.00' },
+    ];
+    assert.equal(latestStartedAt(lines), '09:00');
+  });
+
+  it('reads a Bibs/CP-mode device\'s own Clock marker (splitTime null), not a per-bib Start entry', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Clock', bibNumber: 'n/a', timestamp: '2026/08/30 08:55:00' },
+      // A runner's own explicit early/late start — same literal action string 'Start', but a
+      // per-bib Bibs-mode entry, never this device's own session-start marker.
+      { lineNumber: 2, action: 'Start', bibNumber: '42', timestamp: '2026/08/30 09:05:12' },
+    ];
+    assert.equal(latestStartedAt(lines), '08:55');
+  });
+
+  it('picks the highest-lineNumber marker when the device was reset and started again', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
+      { lineNumber: 2, action: 'Reset' },
+      { lineNumber: 3, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 14:30:00.00' },
+    ];
+    assert.equal(latestStartedAt(lines), '14:30');
+  });
+
+  it('drops seconds — only HH:MM', () => {
+    const lines = [{ lineNumber: 1, action: 'Clock', timestamp: '2026/08/30 07:03:45' }];
+    assert.equal(latestStartedAt(lines), '07:03');
+  });
+
+  it('returns "" when the device has no Start/Clock record at all', () => {
+    assert.equal(latestStartedAt([]), '');
+    assert.equal(latestStartedAt([{ lineNumber: 1, action: 'Finish', bibNumber: '1', timestamp: '2026/08/30 09:20:00' }]), '');
   });
 });
 

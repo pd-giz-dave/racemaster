@@ -36,7 +36,6 @@ import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mo
 import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
 import {
   renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
-  isProgressAutoEnabled,
 } from './mobile-files-progress.js';
 import { initBle, wireBleControls, updateConnectButtonLabel } from './mobile-files-ble.js';
 
@@ -331,16 +330,27 @@ export async function renderMobileFiles({ silent = false } = {}) {
 
 // ---- Background server poll (ToDo.MD line 42's server-side half) ----
 //
-// While ticked, #mf-auto-progress (mobile-files-progress.js) only ever reacted to *this
-// browser's own* actions (Refresh, Push, Discard, Delete, a Bluetooth pull) — nothing here
-// noticed a WiFi sync, or another admin's upload, until some unrelated action happened to call
-// renderMobileFiles() again. This polls the server every getServerPollIntervalSeconds() while
-// online, but cheaply: GET /api/mobile/status (server/routes/mobile.js) costs one fs.statSync
-// per device file, no content read — hasNewMobileData() compares that against lastKnownRaces,
-// and only then is the full renderMobileFiles({silent:true}) (itself already ending in
-// maybeAutoUpdateProgress()) actually worth calling.
+// Keeps every tab on this page current with whatever the server actually has — a phone's own
+// direct WiFi sync, another admin's upload, a Mule delivering someone else's data — none of
+// which "this browser did something" alone would ever notice; without this, the operator saw
+// stale device lists/progress/All Files rows until some unrelated action here happened to call
+// renderMobileFiles() again. Polls the server every getServerPollIntervalSeconds() while online,
+// but cheaply: GET /api/mobile/status (server/routes/mobile.js) costs one fs.statSync per device
+// file, no content read — hasNewMobileData() compares that against lastKnownRaces, and only then
+// is the full renderMobileFiles({silent:true}) actually worth calling.
+//
+// Deliberately NOT gated on #mf-auto-progress (mobile-files-progress.js) — that used to gate
+// this whole function outright, on the theory that refreshing the page was only ever worth doing
+// to feed auto-progress's own recompute. Confirmed as a real bug in the field: with Auto-update
+// progress left unticked (its own default, and the common case for an operator who's never
+// unlocked it), the "Poll server every" setting silently did nothing at all, no matter how low
+// it was set, even though its own label promises nothing about that checkbox — a phone's genuine
+// server update just never appeared here until a manual Refresh. renderMobileFiles()'s own
+// trailing maybeAutoUpdateProgress() call already re-checks isProgressAutoEnabled() itself before
+// doing anything progress-specific, so removing the gate here only restores the plain "keep this
+// page's own tables fresh" behavior the setting's own name describes — it doesn't make auto-
+// progress recomputation itself any less opt-in than it already was.
 async function pollServerForChanges() {
-  if (!isProgressAutoEnabled()) return; // nothing to do — not even the lightweight fetch is worth making
   const session = getSession();
   if (!session) return;
   let status;

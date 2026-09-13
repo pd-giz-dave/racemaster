@@ -11,7 +11,7 @@ import {
 } from '../storage.js';
 import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise, applyStickyColumns } from '../ui.js';
 import { showBusy, escHtml } from '../utils.js';
-import { updateDataFileButton, pingServerNow } from '../connect.js';
+import { updateDataFileButton, pingServerNow, isLoginExpired } from '../connect.js';
 import { renderAll, showView } from '../app.js';
 import { isServerHidden, setServerHidden } from '../server-hide.js';
 
@@ -94,6 +94,17 @@ function showPanel(name, adminUser) {
   getEl('df-panels-row').style.display = (name === 'datasets') ? 'flex' : 'none';
   getEl('df-panel-users').hidden       = (name !== 'datasets') || !adminUser;
   resetPasswordVisibility();
+  updateReloginBanner();
+}
+
+// Shown only while the header status dot reads "login expired" (js/connect.js's
+// isLoginExpired()) — reacts to the 'racemaster-login-expired' event wired in wireDatasets()
+// below, and is also called directly wherever this page already knows the answer just changed
+// (a fresh sign-in, a successful re-login, logging out, going standalone) so the banner never
+// lags behind by up to the next 30s ping tick.
+function updateReloginBanner() {
+  const banner = getEl('df-relogin-banner');
+  if (banner) banner.hidden = !isLoginExpired();
 }
 
 function setStatus(id, msg, isError = false) {
@@ -530,7 +541,7 @@ export function wireDatasets(onConnect) {
 
   function handleLogin(isCreate) {
     const username = getEl('df-username').value.trim();
-    const password = getEl('df-password').value;
+    let password = getEl('df-password').value;
     if (!username || !password) {
       setStatus('df-auth-status', 'Enter username and password.', true);
       return;
@@ -547,6 +558,15 @@ export function wireDatasets(onConnect) {
     }
     setStatus('df-auth-status', isCreate ? 'Creating account…' : 'Signing in…');
     const call = isCreate ? apiCreateAccount(username, password) : apiLogin(username, password);
+    // Best-effort only, right after the request is already issued (the fetch call already has
+    // its own copy of the string by value, so clearing this local doesn't affect it) — JS gives
+    // no way to actually zero out the old string's backing memory, only to drop every reference
+    // to it as early as possible so it's no longer sitting visible in the DOM and becomes
+    // eligible for GC immediately, rather than lingering in the password field for as long as
+    // this panel stays open.
+    getEl('df-password').value = '';
+    getEl('df-confirm-password').value = '';
+    password = null;
     call.then(result => {
       if (result.error) {
         setStatus('df-auth-status', result.error, true);
@@ -558,6 +578,7 @@ export function wireDatasets(onConnect) {
         setIsAdmin(!!result.isAdmin);
         isAdminUser = !!result.isAdmin;
         updateDataFileButton();
+        pingServerNow(); // refreshes the header dot (and any stale login-expired banner) right away
         loadDatasets();
       }
     }).catch(() => {
@@ -565,10 +586,58 @@ export function wireDatasets(onConnect) {
     });
   }
 
+  // Re-authenticates in place, keeping whatever dataset is currently connected — see
+  // js/connect.js's isLoginExpired()/pingServerNow() for what shows this banner at all: a saved
+  // session token the server itself no longer accepts, with nothing on this device having
+  // actually gone wrong. A full Log out/Sign in would work too, but throws away the connected
+  // dataset in the process; this doesn't need to.
+  function handleRelogin() {
+    const username = activeUsername || getUsername();
+    let password = getEl('df-relogin-password').value;
+    if (!password) {
+      setStatus('df-relogin-status', 'Enter your password.', true);
+      return;
+    }
+    setStatus('df-relogin-status', 'Signing in…');
+    const call = apiLogin(username, password);
+    // Best-effort scrub, same reasoning as handleLogin's own doc above.
+    getEl('df-relogin-password').value = '';
+    password = null;
+    call.then(result => {
+      if (result.error) {
+        setStatus('df-relogin-status', result.error, true);
+        return;
+      }
+      const dataset = getSession()?.dataset;
+      if (dataset) {
+        setSession(result.token, dataset); // new token, same connected dataset
+      } else {
+        // The previously connected dataset already got cleared some other way (e.g. an
+        // unrelated 401 on a real request elsewhere) before this ran — nothing left to
+        // preserve, so this is just an ordinary fresh sign-in instead.
+        setStandalone(false);
+      }
+      activeToken    = result.token;
+      activeUsername = result.username;
+      setUsername(result.username);
+      setIsAdmin(!!result.isAdmin);
+      isAdminUser = !!result.isAdmin;
+      setStatus('df-relogin-status', 'Signed in again.');
+      updateDataFileButton();
+      pingServerNow(); // re-checks immediately — hides this banner via the event once it agrees
+      loadDatasets();
+    }).catch(() => {
+      reportError('df-relogin-status', 'Server unreachable — try again once back online.');
+    });
+  }
+
   getEl('df-btn-login').onclick          = () => handleLogin(false);
   getEl('df-btn-create-account').onclick = () => handleLogin(true);
   getEl('df-password').onkeydown         = e => { if (e.key === 'Enter') handleLogin(false); };
   getEl('df-confirm-password').onkeydown = e => { if (e.key === 'Enter') handleLogin(true); };
+  getEl('df-btn-relogin').onclick          = handleRelogin;
+  getEl('df-relogin-password').onkeydown   = e => { if (e.key === 'Enter') handleRelogin(); };
+  window.addEventListener('racemaster-login-expired', updateReloginBanner);
   blockClipboard(getEl('df-confirm-password'));
 
   document.querySelectorAll('.btn-toggle-password').forEach(btn => {
@@ -583,6 +652,7 @@ export function wireDatasets(onConnect) {
     activeUsername = null;
     resetPasswordVisibility();
     updateDataFileButton();
+    pingServerNow(); // no session left to expire — clears any stale login-expired dot/banner
     _onConnect?.();
   };
 
@@ -676,6 +746,7 @@ export function wireDatasets(onConnect) {
     getEl('df-confirm-password').value = '';
     showPanel('auth', false);
     updateDataFileButton();
+    pingServerNow(); // no session left to expire — clears any stale login-expired dot/banner
   };
 }
 
@@ -686,6 +757,10 @@ export function renderDatasets() {
   isAdminUser    = getIsAdmin();
   if (activeToken) {
     loadDatasets();
+    // Forces an immediate check rather than leaving the login-expired banner (if this saved
+    // token is no longer accepted) showing whatever it last happened to be, up to 30s stale —
+    // see js/connect.js's pingServerNow()/isLoginExpired().
+    pingServerNow();
   } else {
     showPanel('auth', false);
     setTimeout(() => getEl('df-username')?.focus(), 0);

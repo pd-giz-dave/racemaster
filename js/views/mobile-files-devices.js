@@ -131,6 +131,7 @@ function buildColumns(isAdminUser) {
     time:      r => formatCount(r.timeVisible),
     lastSeen:   r => formatDateTime(r.lastSeen),
     lastUpdate: r => formatStoredTimestamp(r.lastUpdate),
+    startedAt: r => r.startedAt ? escHtml(r.startedAt) : '<span style="color:var(--muted)">—</span>',
     actions:   r => r.pending ? `
       <button class="btn-sm" data-action="view">View</button>
       <button class="btn-sm" data-action="raw">Raw</button>

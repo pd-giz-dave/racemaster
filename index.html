@@ -1170,6 +1170,26 @@
           </div>
           <div id="df-panel-loggedin" hidden>
             <p id="df-logged-in-user" style="margin:0 0 12px;font-size:0.875rem;color:var(--muted)"></p>
+            <!-- Shown only while the header status dot reads "login expired" (see
+                 js/connect.js's isLoginExpired() and js/views/datasets.js's own
+                 updateReloginBanner()) — lets the operator restore a working session with just
+                 their password, without a full Log out (which would also forget the currently
+                 connected dataset). -->
+            <div id="df-relogin-banner" hidden style="margin:0 0 12px;padding:10px;border-radius:6px;background:var(--header-warn)">
+              <p style="margin:0 0 8px;font-size:0.875rem;color:#333">Your login has expired. Re-enter your password to
+                  continue — your connected dataset stays as it is.</p>
+              <div class="password-field-wrap" style="margin-bottom:8px">
+                <input id="df-relogin-password" type="password" placeholder="password" aria-label="Password" autocomplete="current-password" style="width:100%">
+                <button type="button" class="btn-toggle-password" data-target="df-relogin-password" aria-label="Show password" tabindex="-1">
+                  <svg class="icon-eye" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+                  <svg class="icon-eye-off" viewBox="0 0 24 24" hidden><use href="#icon-eye-off"></use></svg>
+                </button>
+              </div>
+              <div class="btn-row">
+                <button id="df-btn-relogin" class="btn btn-primary">Re-sign In</button>
+              </div>
+              <p id="df-relogin-status" style="margin:8px 0 0;min-height:1.2em;font-size:0.875rem"></p>
+            </div>
             <button id="df-btn-logout" class="btn btn-secondary" style="width:100%">Log out</button>
             <!-- Admin users section (admin only) -->
             <div id="df-panel-users" hidden style="margin-top:16px;border-top:1px solid var(--border,#ddd);padding-top:12px">
