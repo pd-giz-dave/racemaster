@@ -463,9 +463,10 @@ export const HELP = {
         device — useful for spotting a phone that's gone quiet. <strong>Last Update</strong> is the newest entry's own
         recorded timestamp, across every line on the device, not just what's currently visible — these two can differ,
         e.g. a phone still connected but with nothing new to send.</p>
-    <p><strong>Started At</strong> is the time of day (HH:MM) this device most recently went active — its latest Start
-        (Time mode) or Clock (Bibs/Checkpoint mode) marker, whichever it uses — so at a glance you can confirm every
-        station is actually set up and running, not just that a file exists for it.</p>
+    <p><strong>Started At</strong>, shown the same dd/mm/yy hh:mm format as Last Seen/Last Update, is when this
+        device most recently went active — its latest Start (Time mode) or Clock (Bibs/Checkpoint mode) marker,
+        whichever it uses — so at a glance you can confirm every station is actually set up and running, not just
+        that a file exists for it.</p>
     <p><strong>View</strong> shows the Bibs and Time entries side by side, aligned by split number, with the location
         and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
         useful for troubleshooting. Deleting a device's file is done from the <strong>All Files</strong> tab now (see below),
@@ -1083,7 +1084,7 @@ export const TABLES = {
     { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },
     { id: 'lastSeen',   label: 'Last Seen',   title: 'When the server (or, for a Bluetooth-pulled pending file, this browser) last actually heard from this device' },
     { id: 'lastUpdate', label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, across all lines (not just those currently visible)' },
-    { id: 'startedAt', label: 'Started At', title: 'Time of day (HH:MM) this device most recently went active — its latest Start (Time mode) or Clock (Bibs/CP mode) marker' },
+    { id: 'startedAt', label: 'Started At', title: 'When this device most recently went active — its latest Start (Time mode) or Clock (Bibs/CP mode) marker' },
     { id: 'actions',   label: 'Actions',   title: 'View or view raw this file' },
   ],
   'mobile-files-all': [

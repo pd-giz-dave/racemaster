@@ -87,7 +87,7 @@ describe('mobile-files-devices.js:latestStartedAt', () => {
       { lineNumber: 1, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
       { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', timestamp: '2026/08/30 09:20:00.00' },
     ];
-    assert.equal(latestStartedAt(lines), '09:00');
+    assert.equal(latestStartedAt(lines), '2026/08/30 09:00:00.00');
   });
 
   it('reads a Bibs/CP-mode device\'s own Clock marker (splitTime null), not a per-bib Start entry', () => {
@@ -97,7 +97,7 @@ describe('mobile-files-devices.js:latestStartedAt', () => {
       // per-bib Bibs-mode entry, never this device's own session-start marker.
       { lineNumber: 2, action: 'Start', bibNumber: '42', timestamp: '2026/08/30 09:05:12' },
     ];
-    assert.equal(latestStartedAt(lines), '08:55');
+    assert.equal(latestStartedAt(lines), '2026/08/30 08:55:00');
   });
 
   it('picks the highest-lineNumber marker when the device was reset and started again', () => {
@@ -106,12 +106,12 @@ describe('mobile-files-devices.js:latestStartedAt', () => {
       { lineNumber: 2, action: 'Reset' },
       { lineNumber: 3, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 14:30:00.00' },
     ];
-    assert.equal(latestStartedAt(lines), '14:30');
+    assert.equal(latestStartedAt(lines), '2026/08/30 14:30:00.00');
   });
 
-  it('drops seconds — only HH:MM', () => {
+  it('returns the full raw timestamp, seconds included — formatted at render time, same as Last Update', () => {
     const lines = [{ lineNumber: 1, action: 'Clock', timestamp: '2026/08/30 07:03:45' }];
-    assert.equal(latestStartedAt(lines), '07:03');
+    assert.equal(latestStartedAt(lines), '2026/08/30 07:03:45');
   });
 
   it('returns "" when the device has no Start/Clock record at all', () => {

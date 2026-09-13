@@ -78,10 +78,11 @@ export function whenOf(r) {
 // this file's own segment-boundary logic at all — simpler, and correct even for a file this
 // segment logic can't yet resolve for some other reason.
 //
-// Returns "HH:MM" (seconds dropped — this is a reassurance glance for the race director that a
-// station is set up and running, not a precise timestamp) from whichever qualifying record is
-// latest, or '' if the device has no such record at all (nothing pulled yet, or an old file
-// predating this marker convention).
+// Returns the raw "yyyy/mm/dd HH:MM:SS" timestamp (same shape latestLineTimestamp() above
+// returns for Last Update, formatted the same way via formatStoredTimestamp() at render time —
+// js/views/mobile-files-devices.js) from whichever qualifying record is latest, or '' if the
+// device has no such record at all (nothing pulled yet, or an old file predating this marker
+// convention).
 export function latestStartedAt(lines) {
   const timeRows = lines.filter(r => r.splitTime != null);
   const bibsRows = lines.filter(r => r.splitTime == null);
@@ -91,7 +92,7 @@ export function latestStartedAt(lines) {
   ];
   if (!candidates.length) return '';
   const latest = candidates.reduce((a, b) => (b.lineNumber ?? 0) > (a.lineNumber ?? 0) ? b : a);
-  return whenOf(latest).slice(0, 5); // "HH:mm:ss" -> "HH:mm"
+  return latest.timestamp ?? latest.timestampMillis ?? '';
 }
 
 // Every visible line should share one location (it's stamped from the race's own
