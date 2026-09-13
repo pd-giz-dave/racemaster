@@ -29,6 +29,13 @@ function toTimeOfDay(elapsed, rawTimeOfDay) {
   return rawTimeOfDay || elapsedToTimeOfDay(elapsed, state.event.startTime) || elapsed;
 }
 
+// A DNF/Finished/Early-Starters row whose bib has no matching Entry (safety.js's own
+// entryInfo()/`invalid` field — Update Progress deliberately no longer rejects such a bib, see
+// mobile-files-progress.js's validateAndCompute()) gets the same row-error styling Finishers/
+// Entries already use for an equivalent case, plus this tooltip — it's still shown here (a real
+// mobile sighting, worth knowing about for safety purposes) rather than filtered out.
+const INVALID_BIB_TITLE = 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry';
+
 const SAFETY_OUT_COLS = tableColumns(TABLES['safety-outstanding'], {
   bib:     e => e.bibNumber,
   name:    e => getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : ''),
@@ -109,12 +116,16 @@ export function renderSafety() {
 
   const dnfRows = getDnfRows();
   renderTable('safety-dnf-tbody', SAFETY_DNF_COLS, dnfRows, {
-    rowAttrs: d => ({ 'data-bib': d.bib }),
+    rowAttrs: d => ({ 'data-bib': d.bib, class: d.invalid ? 'row-error' : '', title: d.invalid ? INVALID_BIB_TITLE : '' }),
   });
 
-  renderTable('safety-finished-tbody', SAFETY_FIN_COLS, getFinishedRows());
+  renderTable('safety-finished-tbody', SAFETY_FIN_COLS, getFinishedRows(), {
+    rowAttrs: f => ({ class: f.invalid ? 'row-error' : '', title: f.invalid ? INVALID_BIB_TITLE : '' }),
+  });
 
-  renderTable('safety-early-tbody', SAFETY_EARLY_COLS, getEarlyStarterRows());
+  renderTable('safety-early-tbody', SAFETY_EARLY_COLS, getEarlyStarterRows(), {
+    rowAttrs: f => ({ class: f.invalid ? 'row-error' : '', title: f.invalid ? INVALID_BIB_TITLE : '' }),
+  });
 
   renderTable('safety-noshows-tbody', SAFETY_NOSHOWS_COLS, buildNoShows(), {
     rowAttrs: r => ({ class: r.dupBib !== null ? 'row-timing-target' : '' }),

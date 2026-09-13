@@ -73,12 +73,23 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
-  it('rejects a bib number not present in entries', () => {
+  it('includes (rather than rejects) a bib number not present in entries — flagged elsewhere, not here', () => {
     const r = finishRow();
     r.device.lines[2].bibNumber = '999';
     return validateAndCompute([r]).then(result => {
-      assert.match(result.error, /not in entries/);
-      assert.match(result.error, /999/);
+      assert.equal(result.error, undefined);
+      assert.equal(result.expected.length, 1);
+      assert.equal(result.expected[0].number, 999);
+    });
+  });
+
+  it('includes (rather than rejects) a checkpoint crossing for a bib not present in entries', () => {
+    const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '999', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
+    ] } });
+    return validateAndCompute([finishRow(), cp]).then(result => {
+      assert.equal(result.error, undefined);
+      assert.equal(result.cpTimesByCp.get(1).get(999), '00:10:00');
     });
   });
 
@@ -284,6 +295,17 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
     state.mobileProgress = [{ action: 'Finish', number: 99, time: '00:30:00' }];
     const rows = buildProgressRows();
     assert.ok(rows.some(r => r.bibNumber === 99));
+  });
+
+  it('flags a row as invalid when its bib has no matching entry', () => {
+    state.mobileProgress = [{ action: 'Finish', number: 99, time: '00:30:00' }];
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 99).invalid, true);
+  });
+
+  it('does not flag a row as invalid when its bib matches a real entry', () => {
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).invalid, false);
   });
 
   it('sorts by bib number', () => {

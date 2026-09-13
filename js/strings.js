@@ -316,6 +316,11 @@ export const HELP = {
         for a mobile-recorded retire) each retirement was actually recorded, alongside <strong>When</strong> as
         described above. Both are blank when there's genuinely nothing to show — a manual retirement with no time
         given, or one that only came from SI results, which carries no location or time of its own.</p>
+    <p>A row highlighted in the <strong>Retirees / DNFs</strong>, <strong>Finished</strong> or <strong>Early
+        Starters</strong> tabs means a phone recorded that bib but it doesn't match anyone currently in Entries —
+        a typo on the device, or someone genuinely not yet entered. It's shown here anyway (a real sighting is
+        worth knowing about for safety purposes) rather than silently dropped, and it's ignored on the Results &amp;
+        Prize List page until the bib is corrected or added.</p>
   `,
   'view-si-results': `
     <p>Import finish times from an SI Timing (processable) results export. The import matches competitors by bib number. 
@@ -500,9 +505,11 @@ export const HELP = {
         split with no matching bib is simply ignored (the bibs will catch up on a later sync), and if a bib was already
         added untimed by an earlier run, a later run supplying the missing time fills it in rather than duplicating the
         record. The old finishers list and all checkpoint data are cleared before each run, so it's always a full rebuild
-        rather than a merge. Rejected if any bib number isn't in Entries, if the selected files aren't all from the same
-        race, if a selected file is empty (nothing in its current segment), or if more than one file resolves to the same
-        location (Finish or a checkpoint) at once.</p>
+        rather than a merge. Rejected if the selected files aren't all from the same race, if a selected file is empty
+        (nothing in its current segment), or if more than one file resolves to the same location (Finish or a checkpoint)
+        at once. A bib number that isn't in Entries is <strong>not</strong> rejected — it's added to the Progress tab
+        below (and the Safety Check page) highlighted, since a phone genuinely recorded it, but it's left out of Results
+        &amp; Prize List until the bib is corrected or added there.</p>
     <p>You can also tick any number of <strong>checkpoint</strong> location files (any location containing a number, e.g.
         "CP1", "Checkpoint 2") alongside the Finish file(s) — each contributes a <strong>raw</strong> elapsed time per bib,
         computed as that bib's own crossing timestamp minus the Finish location's stopwatch Start time. Checkpoint mode has
@@ -525,8 +532,9 @@ export const HELP = {
         remembered at a time, for whichever dataset earned it most recently — connecting to a different dataset starts
         locked again, and switching back to an earlier one doesn't restore it either, even if it was unlocked before;
         run Update Progress there again to re-earn it. Its own on/off state is remembered the same way. Re-locked
-        immediately by any failed attempt (manual or automatic — e.g. a bib not yet in Entries; an unattended run that's
-        started failing shouldn't just keep silently failing again on every future change with nobody watching) or by
+        immediately by any failed attempt (manual or automatic — e.g. a selected file suddenly empty, or two files now
+        resolving to the same location; an unattended run that's started failing shouldn't just keep silently failing
+        again on every future change with nobody watching) or by
         <strong>Clear Progress</strong> below (deleting the computed data undermines the same trust a failed attempt
         would). A manual failure shows the same error it always did; an automatic one is logged to the browser console
         rather than shown, since nothing here is a direct response to a user action. Same safeguard as the Results-page

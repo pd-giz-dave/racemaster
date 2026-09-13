@@ -69,6 +69,14 @@ export function getCategoryProgress() {
     getCategoryPriority(a.category) - getCategoryPriority(b.category));
 }
 
+// `invalid` is true when `bib` has no matching Entry at all — either not yet added (the race
+// director hasn't got to it yet) or a mistyped/unregistered number a phone genuinely recorded;
+// there's no way to tell those two apart from the data alone, and both need the exact same
+// treatment: shown, not silently dropped, but clearly flagged rather than looking like an
+// ordinary resolved row. Every caller below (getDnfRows/getFinishedRows/getEarlyStarterRows,
+// and mobile-files-progress.js's buildProgressRows()) passes this straight through onto its own
+// row so the view layer can apply the same row-error styling Finishers/Entries already use for
+// an equivalent "bib not in Entries" case.
 export function entryInfo(bib) {
   const e  = getEntry(bib);
   const pg = e?.partner ? derivePairGender(e.gender, e.partner.gender) : '';
@@ -76,6 +84,7 @@ export function entryInfo(bib) {
     name:     getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : ''),
     course:   e?.course   || '',
     category: pg ? `${e?.category || ''} ${pg}`.trim() : (e?.category || ''),
+    invalid:  !e,
   };
 }
 
@@ -134,7 +143,7 @@ export function getDnfRows() {
     .map(({ bib, idx }) => {
       const r = entryInfo(bib);
       const { where, when, whenTimeOfDay } = getRetireDetails(bib, idx);
-      return { bib, idx, name: r.name, course: r.course, category: r.category, where, when, whenTimeOfDay };
+      return { bib, idx, name: r.name, course: r.course, category: r.category, where, when, whenTimeOfDay, invalid: r.invalid };
     });
 }
 
@@ -161,7 +170,7 @@ export function getFinishedRows() {
     .map(f => {
       const r   = entryInfo(+f.number);
       const res = resultsByBib.get(+f.number);
-      return { number: f.number, name: r.name, course: r.course, category: r.category, pos: res?.position ?? '', time: res?.time ?? '' };
+      return { number: f.number, name: r.name, course: r.course, category: r.category, pos: res?.position ?? '', time: res?.time ?? '', invalid: r.invalid };
     });
 }
 
@@ -193,7 +202,7 @@ export function getEarlyStarterRows() {
       const r = entryInfo(+f.number);
       return {
         number: f.number, name: r.name, course: r.course, category: r.category,
-        startTime: f.time || '', startTimeOfDay: f.timeOfDay || '',
+        startTime: f.time || '', startTimeOfDay: f.timeOfDay || '', invalid: r.invalid,
       };
     });
 }

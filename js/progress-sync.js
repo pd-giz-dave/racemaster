@@ -20,7 +20,11 @@ function buildPayload() {
   return {
     raceName: state.event.name,
     raceDate: state.event.date,
-    entries: buildProgressRows(),
+    // `invalid` (buildProgressRows()'s own doc in mobile-files-progress.js — a bib with mobile
+    // activity but no matching Entry) is Progress-tab/Safety-Check display metadata, dropped here
+    // rather than sent on: a phone's own bib-allocation logic has no use for it, and it's not
+    // part of the wire format racemaster-mobile already expects.
+    entries: buildProgressRows().map(({ invalid, ...entry }) => entry),
   };
 }
 

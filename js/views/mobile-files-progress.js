@@ -164,9 +164,13 @@ export async function updateProgress() {
   await renderAll();
   renderMobileProgressTable();
   document.querySelector('#mobile-files-tab-bar [data-mf-tab="progress"]')?.click();
+  // A bib with no matching Entry is included, not rejected (see validateAndCompute()'s own doc) —
+  // called out here so it isn't only discoverable by happening to spot the flagged row.
+  const invalidCount = buildProgressRows().filter(r => r.invalid).length;
   showStatus(
     `Progress updated: ${added} record${added === 1 ? '' : 's'}`
-      + `${cpBuckets.size ? `, checkpoint times computed for ${state.mobileCheckpoints.length} bib(s)` : ''}.`
+      + `${cpBuckets.size ? `, checkpoint times computed for ${state.mobileCheckpoints.length} bib(s)` : ''}`
+      + `${invalidCount ? `. ${invalidCount} bib(s) not in Entries — flagged on Progress and Safety Check` : '.'}`
   );
 }
 
@@ -247,7 +251,11 @@ export function renderMobileProgressTable() {
     finishTime: r => escHtml(r.finishTime || ''),
   };
   for (const n of cpNumbers) renderers[`cp_${n}`] = r => escHtml(r.cpTimes?.[n] || '');
-  renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), renderers), rows);
+  renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), renderers), rows, {
+    // See buildProgressRows()'s own doc on `invalid` — a bib with mobile activity but no
+    // matching Entry, same row-error styling Finishers/Entries/Safety Check all use for it.
+    rowAttrs: r => ({ class: r.invalid ? 'row-error' : '', title: r.invalid ? 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry' : '' }),
+  });
   syncAutoProgressCheckbox();
 }
 

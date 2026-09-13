@@ -5,7 +5,7 @@
 // all — js/views/mobile-files-progress.js is the thin layer on top that wires buttons, shows
 // confirm dialogs/status toasts, and renders the actual table.
 
-import { getEntry, getSortedEntries } from './entries.js';
+import { getSortedEntries } from './entries.js';
 import { entryInfo } from './safety.js';
 import { getMobileCheckpointTimes, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime } from './utils.js';
@@ -134,6 +134,15 @@ function computeCpTimes(bibsRows, startMs) {
 // partway through a race would permanently offset every later bib's splitNumber against its
 // true corresponding Time split.
 //
+// A bib-required action (BIB_REQUIRED_FINISHER_ACTIONS) whose bib number doesn't match any
+// current Entry is still emitted here, not dropped — validateAndCompute() no longer rejects the
+// whole run over this (see that function's own doc for why), and there's nothing left upstream
+// that filters it out. buildProgressRows()/safety.js's entryInfo() are what actually flag it as
+// `invalid` for display, purely by checking getEntry(bib) again at read time — nothing here needs
+// to know or record that itself. Only a genuinely malformed bib number (not a positive integer at
+// all — data corruption, not a mistyped/unregistered one) is dropped outright: there's no sensible
+// row to show for it, unlike an ordinary wrong-but-well-formed bib.
+//
 // The result is sorted by lineNumber, not splitNumber — applyComputedResults() assigns it to
 // state.mobileProgress in this same order, and adjustedFinishTime()'s own mobile fallback (see
 // time-utils.js) relies on that order to find the *last* matching Clock/Start/etc record, so
@@ -158,9 +167,15 @@ function computeCpTimes(bibsRows, startMs) {
 // row itself has one, independent of whether the elapsed figure could be computed.
 function expectedFinisherEntries(bibs, times, startMs) {
   const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
-  return [...bibs].sort(byLineNumber).map(b => {
+  const out = [];
+  for (const b of [...bibs].sort(byLineNumber)) {
     const action = BIBS_ACTION_TO_FINISHER[b.action];
-    const number = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action) ? +b.bibNumber : 0;
+    const bibRequired = BIB_REQUIRED_FINISHER_ACTIONS.has(b.action);
+    const number = bibRequired ? +b.bibNumber : 0;
+    // Genuinely corrupt data (not a positive integer at all) rather than an unregistered/
+    // mistyped-but-well-formed bib — see this function's own top-of-file doc for why those two
+    // are treated differently: this one is dropped outright rather than flagged.
+    if (bibRequired && (!Number.isFinite(number) || number <= 0)) continue;
     const paired = timeBySplit.get(b.splitNumber);
     const timeOfDay = (action === 'DNF' || action === 'Start') ? deviceTimeOfDay(b.timestamp) : '';
     let time = '';
@@ -180,8 +195,9 @@ function expectedFinisherEntries(bibs, times, startMs) {
     // Only actually carried when non-empty (Start/DNF with a usable device timestamp) — keeps
     // every other entry's shape exactly as before rather than padding it with a field it has no
     // use for.
-    return timeOfDay ? { action, number, time, timeOfDay } : { action, number, time };
-  });
+    out.push(timeOfDay ? { action, number, time, timeOfDay } : { action, number, time });
+  }
+  return out;
 }
 
 // Duplicate split numbers within one bucket mean two independent recording streams got
@@ -286,15 +302,6 @@ export async function validateAndCompute(selected) {
     return { error: `Cannot compute results — more than one time-recording phone selected at Finish (duplicate split number(s) ${dupTimeSplits.join(', ')}).` };
   }
 
-  const invalidBibs = [...new Set(
-    bibs.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action))
-      .map(b => +b.bibNumber)
-      .filter(n => !Number.isFinite(n) || n <= 0 || !getEntry(n))
-  )];
-  if (invalidBibs.length) {
-    return { error: `Cannot compute results — bib number(s) not in entries: ${invalidBibs.join(', ')}.` };
-  }
-
   // The Finish bucket's own Time-mode Start row is the universal t=0 reference for every
   // timestamp-based elapsed calc below — checkpoint crossings, a checkpoint retire's own "when"
   // (computeCpTimes' retireElapsed), and now a Finish-location retire's "when" too
@@ -311,20 +318,18 @@ export async function validateAndCompute(selected) {
     if (startMs == null) {
       return { error: 'Cannot compute checkpoint times — no Start record found in the Finish location\'s time file; select it too.' };
     }
-    const invalidCpBibs = [];
     for (const [cpNumber, r] of cpBuckets) {
       const { bibsSegment } = buildSegmentView(r.device.lines);
       const cpRows = bibsSegment.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action));
-      const bad = [...new Set(cpRows.map(b => +b.bibNumber).filter(n => !Number.isFinite(n) || n <= 0 || !getEntry(n)))];
-      if (bad.length) { invalidCpBibs.push(`CP${cpNumber}: ${bad.join(', ')}`); continue; }
+      // computeCpTimes() itself already drops a malformed (non-positive-integer) bib — see its
+      // own doc — so a crossing recorded for a bib that just doesn't match any current Entry
+      // passes straight through here unfiltered, same as expectedFinisherEntries() above; see
+      // this file's top-of-function doc for why that's no longer rejected.
       const { cpTimes, cpTimeOfDay, retireElapsed } = computeCpTimes(cpRows, startMs);
       cpTimesByCp.set(cpNumber, cpTimes);
       cpTimeOfDayByCp.set(cpNumber, cpTimeOfDay);
       for (const [bib, t] of retireElapsed) retireElapsedByBib.set(bib, t);
       for (const [bib, t] of cpTimeOfDay) if (cpTimes.get(bib) === CP_RETIRE) retireTimeOfDayByBib.set(bib, t);
-    }
-    if (invalidCpBibs.length) {
-      return { error: `Cannot compute results — bib number(s) not in entries: ${invalidCpBibs.join('; ')}.` };
     }
   }
 
@@ -360,8 +365,9 @@ export async function validateAndCompute(selected) {
 // wipes state.mobileProgress and rebuilds it wholesale from `expected` (line-by-line diffing
 // against whatever Progress already held turned out to be a losing battle with every new edge
 // case the phone's own history could produce — see validateAndCompute()'s own doc for why a
-// full rebuild sidesteps that; every bib in `expected` was already validated against entries by
-// validateAndCompute(), so no further per-entry validation is needed here), then rebuilds
+// full rebuild sidesteps that; a bib in `expected` with no matching Entry is stored exactly the
+// same as any other — see expectedFinisherEntries()'s own doc for why that's deliberate, and
+// buildProgressRows()/safety.js's entryInfo() for where it actually gets flagged), then rebuilds
 // state.mobileCheckpoints wholesale too, stored raw (crossing timestamp minus start timestamp,
 // no offset correction) — early/late-start and clock-offset adjustment is the domain of
 // adjustedFinishTime() in results.js/formatResults(), not this page; this page's job is only to
@@ -437,12 +443,21 @@ export function buildProgressColumns(baseColumns, cpNumbers) {
 // a bib seen only at a CP, with no finish, is exactly the safety-relevant case (still out on the
 // course, last seen at CP*n*). FinishTime here is the raw, unadjusted stopwatch/paired-split
 // value — the adjusted race time lives on the Results & Prize List page, not here.
+//
+// `invalid` (from entryInfo()'s own doc in safety.js) marks a bib with mobile activity but no
+// matching Entry — validateAndCompute() deliberately no longer rejects such a bib, so it needs
+// somewhere to actually surface: this tab shows it, flagged, rather than silently dropping it (the
+// old behavior) or letting it look like an ordinary row, so the race director can catch a
+// mistyped/unregistered bib. It's excluded from Results & Prize List and its Splits tab on its
+// own, without needing to be filtered out here too — see js/mobile-progress.js's
+// getSortedMobileProgress() (course-filtered via the same getEntry() lookup) and js/results.js's
+// getSplitsRows() (an explicit `if (!entry) continue`).
 export function buildProgressRows() {
   const rowsByBib = new Map();
   const ensure = bib => {
     if (!rowsByBib.has(bib)) {
       const info = entryInfo(bib);
-      rowsByBib.set(bib, { bibNumber: bib, name: info.name, category: info.category, course: info.course, startTime: '', finishTime: '', cpTimes: {} });
+      rowsByBib.set(bib, { bibNumber: bib, name: info.name, category: info.category, course: info.course, startTime: '', finishTime: '', cpTimes: {}, invalid: info.invalid });
     }
     return rowsByBib.get(bib);
   };

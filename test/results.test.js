@@ -95,6 +95,24 @@ describe('results.js:formatResults', () => {
     assert.ok(warnings.some(w => /stopwatch and mobile/.test(w)));
   });
 
+  // Update Progress no longer rejects a bib with no matching Entry — it's flagged instead (see
+  // mobile-files-progress.js's validateAndCompute()/buildProgressRows()) — but must still never
+  // reach Results: getSortedMobileProgress(course) (js/mobile-progress.js) is course-filtered via
+  // the same getEntry() lookup, so a bib with no Entry has no course to match at all.
+  it('ignores a mobile Finish/DNF for a bib with no matching entry', () => {
+    state.entries = [entry(1)];
+    state.finishers      = [];
+    state.mobileProgress = [
+      { action: 'Finish', number: '1', time: '01:00:00' },
+      { action: 'Finish', number: '999', time: '00:30:00' },
+      { action: 'DNF',    number: '998', time: '' },
+    ];
+    const { seniors } = formatResults();
+    assert.equal(seniors.length, 1);
+    assert.equal(seniors[0].bibNumber, 1);
+    assert.ok(!seniors.some(r => r.bibNumber === 999 || r.bibNumber === 998));
+  });
+
   it('builds a top-N overall prize list, split by gender', () => {
     state.entries = [
       entry(1, { category: 'MSEN' }), entry(2, { category: 'WSEN', gender: 'Female' }),
@@ -161,5 +179,20 @@ describe('results.js:getSplitsRows', () => {
     assert.equal(rows[0].bibNumber, 1);
     assert.equal(rows[0].splits[0].cumulative, '00:30:00');
     assert.equal(rows[0].finishTime.cumulative, '01:00:00');
+  });
+
+  // Same "flagged, not rejected" change as formatResults() above — a checkpoint sighting for a
+  // bib with no matching Entry must still never reach the Splits tab: the explicit
+  // `if (!entry) continue` below already handles it, this just locks that in.
+  it('ignores a mobile checkpoint sighting for a bib with no matching entry', () => {
+    state.entries = [entry(1)];
+    const seniorsResults = [{ bibNumber: '1', position: 1, name: 'Runner 1', category: 'MSEN', time: '01:00:00' }];
+    state.mobileCheckpoints = [
+      { bibNumber: 1, cpTimes: { 1: '00:10:00' } },
+      { bibNumber: 999, cpTimes: { 1: '00:12:00' } },
+    ];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].bibNumber, 1);
   });
 });

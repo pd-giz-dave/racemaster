@@ -52,7 +52,7 @@ describe('safety.js:getFinishedOnlyBibs', () => {
 describe('safety.js:entryInfo', () => {
   it('reports name/course/category for a solo entry', () => {
     state.entries = [{ bibNumber: '1', name: 'Dave', course: 'Seniors', category: 'MSEN' }];
-    assert.deepEqual(entryInfo(1), { name: 'Dave', course: 'Seniors', category: 'MSEN' });
+    assert.deepEqual(entryInfo(1), { name: 'Dave', course: 'Seniors', category: 'MSEN', invalid: false });
   });
 
   it('appends " (banned)" for a banned entrant', () => {
@@ -70,7 +70,7 @@ describe('safety.js:entryInfo', () => {
   });
 
   it('handles an unknown bib gracefully', () => {
-    assert.deepEqual(entryInfo(999), { name: '', course: '', category: '' });
+    assert.deepEqual(entryInfo(999), { name: '', course: '', category: '', invalid: true });
   });
 });
 
@@ -106,7 +106,7 @@ describe('safety.js:getDnfRows', () => {
     state.entries   = [{ bibNumber: '1', name: 'A', course: 'Seniors', category: 'MSEN' }];
     state.finishers = [{ action: 'DNF', number: '1', time: '00:15:00' }];
     const rows = getDnfRows();
-    assert.deepEqual(rows[0], { bib: 1, idx: 0, name: 'A', course: 'Seniors', category: 'MSEN', where: 'Finish', when: '00:15:00', whenTimeOfDay: '' });
+    assert.deepEqual(rows[0], { bib: 1, idx: 0, name: 'A', course: 'Seniors', category: 'MSEN', where: 'Finish', when: '00:15:00', whenTimeOfDay: '', invalid: false });
   });
 
   it('a stopwatch retiree with no time given comes back with when blank', () => {
@@ -148,6 +148,12 @@ describe('safety.js:getDnfRows', () => {
     assert.equal(rows[0].where, '');
     assert.equal(rows[0].when, '');
   });
+
+  it('flags a mobile DNF for a bib with no matching entry', () => {
+    state.mobileProgress = [{ action: 'DNF', number: '999', time: '00:20:00' }];
+    const rows = getDnfRows();
+    assert.equal(rows[0].invalid, true);
+  });
 });
 
 describe('safety.js:getFinishedRows', () => {
@@ -159,6 +165,13 @@ describe('safety.js:getFinishedRows', () => {
     assert.equal(rows[0].name, 'Dave');
     assert.equal(rows[0].pos, 1);
     assert.equal(rows[0].time, '01:00:00');
+    assert.equal(rows[0].invalid, false);
+  });
+
+  it('flags a mobile finisher for a bib with no matching entry', () => {
+    state.mobileProgress = [{ action: 'Finish', number: '999', time: '01:00:00' }];
+    const rows = getFinishedRows();
+    assert.equal(rows[0].invalid, true);
   });
 });
 
@@ -173,6 +186,13 @@ describe('safety.js:getEarlyStarterRows', () => {
     const rows = getEarlyStarterRows();
     assert.deepEqual(rows.map(r => r.number), ['1', '2']); // f.number passed through verbatim, not coerced
     assert.equal(rows[0].startTime, '00:01:00');
+    assert.equal(rows[0].invalid, false);
+  });
+
+  it('flags a mobile early start for a bib with no matching entry', () => {
+    state.mobileProgress = [{ action: 'Start', number: '999', time: '00:01:00' }];
+    const rows = getEarlyStarterRows();
+    assert.equal(rows[0].invalid, true);
   });
 });
 
