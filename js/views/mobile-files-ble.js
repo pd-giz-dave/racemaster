@@ -27,6 +27,7 @@ import {
   getConnectedDeviceInfo, getRaceStaleAfterDays, setRaceStaleAfterDays, isRecoveringGattOperation,
 } from '../mule-ble.js';
 import { recordBleLastSeen, mergePendingIntoRaces, deriveRaceLabel, findCurrentRaceProgress } from '../mobile-files-shared.js';
+import { COURSE } from '../constants.js';
 import { state } from '../state.js';
 import { renderRaceList } from './mobile-files-devices.js';
 
@@ -314,20 +315,31 @@ function refreshDevicesTableFromCache() {
 }
 
 // What to pass pullFromConnectedPhone() for its own progress-delivery leg (see mule-ble.js's own
-// doc) — the web app's currently-loaded race, as a raceLabel, plus whatever progress payload is
-// already cached for it from the last full server fetch (no extra round trip just for this).
-// Returns nulls (delivery skipped entirely) when signed out or no event name/date is set yet.
+// doc) — one { raceLabel, progress } candidate per course (js/constants.js's COURSE), each using
+// whatever progress payload is already cached for it from the last full server fetch (no extra
+// round trip just for this). Progress itself has no course of its own — one event covers Seniors
+// AND Juniors at once — but a phone's own race folder does once a course is chosen at Start time
+// (racemaster-mobile's own RaceLabels.kt), so there's no single "the" raceLabel to hand over here:
+// mule-ble.js picks whichever candidate (if any) actually matches the connected phone's own
+// reported raceLabel. Returns an empty array (delivery skipped entirely) when signed out or no
+// event name/date is set yet.
 function currentRaceProgressContext() {
   const session = getSession();
-  if (!session) return { currentRaceLabel: null, currentProgress: null };
+  if (!session) return { currentRaceCandidates: [] };
   // Same owner-derivation js/progress-sync.js's own pushProgress() uses — session.dataset's own
   // owner, not getUsername() — an admin viewing someone else's dataset must match against THAT
   // owner's progress.json, exactly the folder progress-sync.js pushed it to.
   const [owner] = session.dataset.split('/');
-  const currentRaceLabel = deriveRaceLabel(state.event);
-  if (!currentRaceLabel) return { currentRaceLabel: null, currentProgress: null };
-  const currentProgress = findCurrentRaceProgress(getLastKnownRaces() || [], owner, currentRaceLabel);
-  return { currentRaceLabel, currentProgress };
+  const races = getLastKnownRaces() || [];
+  const currentRaceCandidates = [COURSE.SENIORS, COURSE.JUNIORS]
+    .map(course => {
+      const raceLabel = deriveRaceLabel(state.event, course);
+      if (!raceLabel) return null;
+      const progress = findCurrentRaceProgress(races, owner, raceLabel);
+      return progress ? { raceLabel, progress } : null;
+    })
+    .filter(Boolean);
+  return { currentRaceCandidates };
 }
 
 // Pulls whatever history the currently-connected phone is holding, pushing each device

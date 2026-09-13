@@ -199,17 +199,30 @@ export function raceNameOf(raceLabel) {
   return (raceLabel || '').replace(/-\d{2}-\d{2}-\d{2}$/, '');
 }
 
-// Same "<name>-yy-mm-dd" convention a phone's own raceLabel already uses (2-digit year FIRST —
-// see parseRaceLabelDate above and js/mule-ble.js's raceLabelAgeDays, both of which parse a
-// label's trailing "-dd-dd-dd" strictly as yy-mm-dd) — state.event.date is stored dd/mm/yyyy, so
-// the day and year swap position here. Getting this order wrong doesn't error — it just silently
-// misdates the race for every consumer of that shared parsing, which is exactly what was
-// happening before this was fixed (see git history) — never re-derive this independently
-// elsewhere; this is now the one place it lives (js/progress-sync.js imports it back).
-export function deriveRaceLabel(event) {
+// Same "<name>-yy-mm-dd" (or "<name>-<course>-yy-mm-dd") convention a phone's own raceLabel
+// already uses (2-digit year FIRST — see parseRaceLabelDate above and js/mule-ble.js's
+// raceLabelAgeDays, both of which parse a label's trailing "-dd-dd-dd" strictly as yy-mm-dd) —
+// state.event.date is stored dd/mm/yyyy, so the day and year swap position here. Getting this
+// order wrong doesn't error — it just silently misdates the race for every consumer of that
+// shared parsing, which is exactly what was happening before this was fixed (see git history) —
+// never re-derive this independently elsewhere; this is now the one place it lives
+// (js/progress-sync.js imports it back).
+//
+// `course`, when given, is sanitised and inserted the same way racemaster-mobile's own
+// buildRaceLabel(name, course, timestamp) does (RaceLabels.kt) once a course has been chosen at
+// Start time on the phone — a race folder there is "<name>-<date>" only until then, and
+// "<name>-<course>-<date>" from then on. One web-app event/dataset has no course of its own (it
+// covers Seniors AND Juniors at once — see js/constants.js's COURSE), so a caller that needs to
+// reach an actual per-course race folder (js/progress-sync.js's push, mobile-files-ble.js's own
+// progress-delivery leg) must derive one label per course explicitly, not guess at a single
+// course-less one and hope it happens to match — see this file's own plan doc/commit history for
+// the bug that came from doing exactly that.
+export function deriveRaceLabel(event, course) {
   const [dd, mm, yyyy] = (event.date || '').split('/');
   if (!dd || !mm || !yyyy || !event.name) return '';
-  return `${sanitiseName(event.name) || 'race'}-${yyyy.slice(-2)}-${mm}-${dd}`;
+  const name = sanitiseName(event.name) || 'race';
+  const date = `${yyyy.slice(-2)}-${mm}-${dd}`;
+  return course ? `${name}-${sanitiseName(course)}-${date}` : `${name}-${date}`;
 }
 
 // Newest date first, then race name, matching how an organiser actually thinks about a list

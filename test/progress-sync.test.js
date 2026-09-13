@@ -30,7 +30,7 @@ describe('progress-sync.js:startProgressSync', () => {
     await flushMicrotasks();
 
     assert.equal(fetchMock.calls.length, 1);
-    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/me\/testfellrace-26-06-15\/progress/);
+    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/me\/testfellrace-seniors-26-06-15\/progress/);
     const body = JSON.parse(fetchMock.calls[0].opts.body);
     assert.equal(body.raceName, 'Test Fell Race');
     assert.deepEqual(body.entries, [{
@@ -50,7 +50,37 @@ describe('progress-sync.js:startProgressSync', () => {
     await flushMicrotasks();
 
     assert.equal(fetchMock.calls.length, 1);
-    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/someone-else\/testfellrace-26-06-15\/progress/);
+    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/someone-else\/testfellrace-seniors-26-06-15\/progress/);
+  });
+
+  // The actual fix this session's "progress file is not getting to the server" report led to:
+  // progress itself has no course of its own (one event covers Seniors AND Juniors at once), but
+  // a phone's own race folder does from the moment a course is chosen at Start time — pushing one
+  // combined progress.json to a single course-less label never actually landed where a
+  // course-assigned phone looks for it. Pushed instead as one course-filtered payload per course,
+  // each to that course's own race label — and a course with no entries at all gets no push,
+  // rather than an empty one nobody needs.
+  it('pushes each course separately, to that course\'s own race label, when both have entries', async (t) => {
+    state.entries = [
+      { bibNumber: '1', name: 'Dave', course: 'Seniors', category: 'MSEN' },
+      { bibNumber: '2', name: 'Amy',  course: 'Juniors', category: 'U16' },
+    ];
+    state.mobileProgress = [];
+    state.mobileCheckpoints = [];
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    startProgressSync();
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+
+    assert.equal(fetchMock.calls.length, 2);
+    const seniorsCall = fetchMock.calls.find(c => c.url.includes('-seniors-'));
+    const juniorsCall = fetchMock.calls.find(c => c.url.includes('-juniors-'));
+    assert.match(seniorsCall.url, /\/api\/mobile\/me\/testfellrace-seniors-26-06-15\/progress/);
+    assert.match(juniorsCall.url, /\/api\/mobile\/me\/testfellrace-juniors-26-06-15\/progress/);
+    assert.deepEqual(JSON.parse(seniorsCall.opts.body).entries.map(e => e.bibNumber), [1]);
+    assert.deepEqual(JSON.parse(juniorsCall.opts.body).entries.map(e => e.bibNumber), [2]);
   });
 
   it('re-pushes on a racemaster-dirty-change event, debounced', async (t) => {

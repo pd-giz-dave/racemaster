@@ -1195,12 +1195,16 @@ export async function reconnectToKnownDevice(device, onProgress) {
 // persist a pull locally need it so they can later call resetLastPulledLineNumber if that copy
 // ever gets discarded before being pushed. Does not disconnect afterward — call
 // disconnectPhone() explicitly once done.
-// currentRaceLabel/currentProgress: the web app's own currently-loaded race (already-sanitised
-// raceLabel string) and its cached progress payload for that race, if any — passed in by the
-// caller (js/views/mobile-files-ble.js) rather than read from state.js directly here, so this
-// file stays free of any dependency on state.js (see this function's own progress-delivery leg
-// below for how they're used: skipped entirely if either is null/omitted).
-export async function pullFromConnectedPhone({ currentRaceLabel = null, currentProgress = null } = {}) {
+// currentRaceCandidates: one { raceLabel, progress } pair per course (js/constants.js's COURSE)
+// the web app currently has cached progress for — passed in by the caller
+// (js/views/mobile-files-ble.js) rather than read from state.js directly here, so this file stays
+// free of any dependency on state.js. A phone's own race has no course of its own until one is
+// chosen at Start time, and the web app's Event Settings has no course of its own at all (one
+// event covers Seniors AND Juniors at once) — so there's no single label to compare the phone's
+// own raceLabel against; this function's own progress-delivery leg below instead looks for
+// whichever candidate (if any) matches the connected phone's own reported raceLabel exactly, and
+// delivers only that one. Skipped entirely if the array is empty/omitted.
+export async function pullFromConnectedPhone({ currentRaceCandidates = [] } = {}) {
   if (!isConnected()) throw new Error('Not connected to a phone.');
   // Captured now, before anything else in here awaits — same reasoning as pullChunkedArray's own
   // identical capture (see its own doc): forgetConnection() nulls the module-level connectedDevice
@@ -1436,11 +1440,11 @@ export async function pullFromConnectedPhone({ currentRaceLabel = null, currentP
     bleLog(`[mule-ble] "${connectedName}" has no race of its own (pure Mule) — skipping straight to relay entries`);
   }
 
-  // Delivers this browser's own cached progress for the currently-loaded race into the phone —
-  // the BLE half of the "phone can ask for progress" feature (in practice, since Web Bluetooth
-  // never lets a peripheral initiate anything, the browser volunteers it on every tick instead;
-  // see this file's own top-of-function doc for currentRaceLabel/currentProgress). A race-label
-  // mismatch is the "reject" case here: silently skipped, no wire-level error sent back — the
+  // Delivers this browser's own cached progress for whichever course this phone's own race
+  // actually is — the BLE half of the "phone can ask for progress" feature (in practice, since
+  // Web Bluetooth never lets a peripheral initiate anything, the browser volunteers it on every
+  // tick instead; see this file's own top-of-function doc for currentRaceCandidates). No matching
+  // candidate is the "reject" case here: silently skipped, no wire-level error sent back — the
   // browser is the sole authority on whether delivery should happen at all, since it already
   // knows both sides of the comparison (the phone's own DeviceInfo.raceLabel and its own loaded
   // race), so there's nothing a rejection message would tell the phone that skipping doesn't
@@ -1456,22 +1460,23 @@ export async function pullFromConnectedPhone({ currentRaceLabel = null, currentP
   // delivery throw as if the whole pull had failed, when nothing it's actually responsible for
   // (device records) did. connectionLost still propagates as normal — a genuinely dead link is
   // exactly as relevant to the relay legs after this one as any other leg's own recovery failure.
-  if (currentRaceLabel && currentProgress && !connectionLost) {
+  if (currentRaceCandidates.length && !connectionLost) {
     const phoneRaceLabel = sanitiseName(deviceInfo.raceLabel);
-    if (phoneRaceLabel && phoneRaceLabel === currentRaceLabel) {
-      if (deviceInfo.progressGeneratedAt === currentProgress.generatedAt) {
-        bleLog(`[mule-ble] "${connectedName}" already has the latest progress (${currentProgress.generatedAt}) — skipping delivery`);
+    const match = phoneRaceLabel ? currentRaceCandidates.find(c => c.raceLabel === phoneRaceLabel) : null;
+    if (match) {
+      if (deviceInfo.progressGeneratedAt === match.progress.generatedAt) {
+        bleLog(`[mule-ble] "${connectedName}" already has the latest progress (${match.progress.generatedAt}) — skipping delivery`);
       } else {
         try {
-          await withGattRecovery(connectedName, () => deliverProgress(service, currentProgress));
-          bleLog(`[mule-ble] delivered progress (${currentProgress.generatedAt}) to "${connectedName}"`);
+          await withGattRecovery(connectedName, () => deliverProgress(service, match.progress));
+          bleLog(`[mule-ble] delivered progress (${match.progress.generatedAt}) to "${connectedName}"`);
         } catch (e) {
           bleError(`[mule-ble] failed to deliver progress to "${connectedName}"`, e);
           if (e.connectionLost) connectionLost = true;
         }
       }
     } else {
-      bleLog(`[mule-ble] "${connectedName}"'s own race ("${deviceInfo.raceLabel}") doesn't match the loaded race ("${currentRaceLabel}") — not delivering progress`);
+      bleLog(`[mule-ble] "${connectedName}"'s own race ("${deviceInfo.raceLabel}") doesn't match any currently loaded race — not delivering progress`);
     }
   }
 

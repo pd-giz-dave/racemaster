@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { getSession, apiPushProgress } from './storage.js';
 import { buildProgressRows } from './mobile-files-progress.js';
 import { deriveRaceLabel } from './mobile-files-shared.js';
+import { COURSE } from './constants.js';
 
 // Race-wide push of the Mobile Files page's own Progress tab contents (now including every
 // entry, not just mobile-recorded ones — see buildProgressRows()'s own doc) to
@@ -15,8 +16,16 @@ import { deriveRaceLabel } from './mobile-files-shared.js';
 // own progress-delivery leg (see its own doc) needs the exact same derivation to know whether a
 // connected phone's race matches this dataset's, so it now lives in the one shared leaf module
 // both this file and js/views/mobile-files-ble.js can import from with no risk of drifting apart.
-
-function buildPayload() {
+//
+// Progress itself has no course of its own — one web-app event/dataset covers Seniors AND
+// Juniors at once — but a phone's own race folder does, from the moment a course is chosen at
+// Start time (racemaster-mobile's own RaceLabels.kt). Pushing one combined progress.json to a
+// single course-less label therefore never actually lands where a phone with a course already
+// chosen looks for it — it's a genuinely different race folder as far as the server's concerned.
+// Pushed here instead as one course-filtered payload per course, each to that course's own
+// raceLabel (deriveRaceLabel(event, course)) — a real fix, not a guess at which single folder to
+// use, and it also means a phone only ever receives entries for its own course.
+function buildPayloadForCourse(course) {
   return {
     raceName: state.event.name,
     raceDate: state.event.date,
@@ -24,7 +33,9 @@ function buildPayload() {
     // activity but no matching Entry) is Progress-tab/Safety-Check display metadata, dropped here
     // rather than sent on: a phone's own bib-allocation logic has no use for it, and it's not
     // part of the wire format racemaster-mobile already expects.
-    entries: buildProgressRows().map(({ invalid, ...entry }) => entry),
+    entries: buildProgressRows()
+      .filter(r => r.course === course)
+      .map(({ invalid, ...entry }) => entry),
   };
 }
 
@@ -36,11 +47,13 @@ async function pushProgress() {
   // phones syncing this race (which look for progress.json under the race's actual owner) would
   // never find it.
   const [owner] = session.dataset.split('/');
-  const raceLabel = deriveRaceLabel(state.event);
-  const payload = buildPayload();
-  if (!raceLabel || !payload.entries.length) return; // no event name/date yet, or no entries at all
-  try { await apiPushProgress(session.token, owner, raceLabel, payload); }
-  catch { /* server unreachable — next dirty-change retries, same as storage.js's syncToServer() */ }
+  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
+    const raceLabel = deriveRaceLabel(state.event, course);
+    const payload = buildPayloadForCourse(course);
+    if (!raceLabel || !payload.entries.length) continue; // no event name/date yet, or nobody on this course
+    try { await apiPushProgress(session.token, owner, raceLabel, payload); }
+    catch { /* server unreachable — next dirty-change retries, same as storage.js's syncToServer() */ }
+  }
 }
 
 let _timer = null;

@@ -72,7 +72,15 @@ export function renderAllFilesList(races, isAdminUser) {
     ...r,
     stale: r.kind === 'progress' ? isProgressStale(r.raceLabel, r.progress) : isDeviceStale(r.raceLabel, r.device),
   }));
-  renderTable('mobile-files-all-tbody', tableColumns(TABLES['mobile-files-all'], {
+  // Reuses TABLES['mobile-files'] (the Devices tab's own column set) rather than a separate,
+  // near-duplicate entry — every column here means the same thing it does there, so there's
+  // nothing this tab needs worded differently. `select` renders but is otherwise inert for now
+  // (no selection state, no handler) — harmless to show, and there for a future bulk-delete
+  // feature to pick up rather than adding its own column later. `startedAt` is blank for a
+  // progress row (formatStoredTimestamp(undefined) already renders that as a plain dash) since a
+  // progress.json export has no "device went active" moment of its own.
+  renderTable('mobile-files-all-tbody', tableColumns(TABLES['mobile-files'], {
+    select:     r => `<input type="checkbox" class="mobile-file-all-select" data-idx="${r.idx}" aria-label="Select ${escHtml(r.kind === 'progress' ? 'Progress' : r.device.name)}">`,
     owner:      isAdminUser ? r => escHtml(r.owner) : undefined,
     // Date suffix dropped from the visible text, same as the Devices tab — redundant with the
     // Race Date column right next to it; full raceLabel stays in the tooltip.
@@ -83,7 +91,8 @@ export function renderAllFilesList(races, isAdminUser) {
     bibs:       r => formatCount(r.bibsVisible),
     time:       r => r.kind === 'progress' ? '' : formatCount(r.timeVisible),
     lastSeen:   r => r.kind === 'progress' ? '' : formatDateTime(r.lastSeen),
-    lastUpdate: r => r.kind === 'progress' ? formatDateTime(r.lastUpdate, { seconds: true }) : formatStoredTimestamp(r.lastUpdate),
+    lastUpdate: r => r.kind === 'progress' ? formatDateTime(r.lastUpdate) : formatStoredTimestamp(r.lastUpdate),
+    startedAt:  r => formatStoredTimestamp(r.startedAt),
     // "Delete from here" only offered on an already-stale row — see this file's own top doc for
     // what "below it" means, and mobile-files.js's deleteFromHere() for the actual bulk delete.
     actions:    r => (r.kind === 'progress' ? `

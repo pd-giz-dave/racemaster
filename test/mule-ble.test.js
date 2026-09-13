@@ -955,13 +955,42 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await settleConnectRetry(t);
     await connectPromise;
 
-    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [{ raceLabel: 'test-race', progress: currentProgress }] });
     await settleOnePull(t); // own-race leg's CONTROL write + DATA stream
     await pullPromise;
 
     assert.equal(device._progressDeliveries.length, 1);
     assert.deepEqual(device._progressDeliveries[0], currentProgress);
     assert.ok(device._progressWriteCount > 2, 'expected the payload to be split across more than one write');
+    disconnectPhone();
+  });
+
+  // Progress has no course of its own (one web-app event covers Seniors AND Juniors at once),
+  // but a phone's own race does from the moment a course is chosen at Start time — so there are
+  // up to two candidates here (one per course), and this connected phone's own raceLabel must
+  // pick out the one actually meant for it, not just whichever candidate happens to be first.
+  it('picks the matching candidate out of several — a phone on one course never gets another course\'s progress', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race-juniors', relayCount: 0,
+      progressGeneratedAt: '2020-01-01T00:00:00.000Z',
+    };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const juniorsProgress = { ...currentProgress, generatedAt: '2026-08-23T11:00:00.000Z' };
+    const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [
+      { raceLabel: 'test-race-seniors', progress: currentProgress },
+      { raceLabel: 'test-race-juniors', progress: juniorsProgress },
+    ] });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 1);
+    assert.deepEqual(device._progressDeliveries[0], juniorsProgress);
     disconnectPhone();
   });
 
@@ -974,7 +1003,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await settleConnectRetry(t);
     await connectPromise;
 
-    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [{ raceLabel: 'test-race', progress: currentProgress }] });
     await settleOnePull(t);
     await pullPromise;
 
@@ -995,7 +1024,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await settleConnectRetry(t);
     await connectPromise;
 
-    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [{ raceLabel: 'test-race', progress: currentProgress }] });
     await settleOnePull(t);
     await pullPromise;
 
@@ -1003,7 +1032,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     disconnectPhone();
   });
 
-  it('does not deliver when no currentProgress/currentRaceLabel is passed at all', async (t) => {
+  it('does not deliver when no currentRaceCandidates is passed at all', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
@@ -1036,7 +1065,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await settleConnectRetry(t);
     await connectPromise;
 
-    const pullPromise = pullFromConnectedPhone({ currentRaceLabel: 'test-race', currentProgress });
+    const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [{ raceLabel: 'test-race', progress: currentProgress }] });
     await settleOnePull(t); // own-race leg's own CONTROL write + DATA stream
     // The progress write's failure now triggers withGattRecovery's own one-shot
     // reconnect-and-retry (see its own doc) before this leg ultimately gives up and logs —

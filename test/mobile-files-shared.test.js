@@ -191,6 +191,15 @@ describe('mobile-files-shared.js:deriveRaceLabel', () => {
     assert.equal(deriveRaceLabel({ name: 'Race', date: '' }), '');
     assert.equal(deriveRaceLabel({ name: '', date: '' }), '');
   });
+
+  // The actual fix behind "progress not getting to the server" (see git history) — a phone's own
+  // race folder gets a course segment once one's chosen at Start time (racemaster-mobile's own
+  // RaceLabels.kt); a caller that needs to reach one now passes it explicitly rather than getting
+  // back a label that only ever matched a course-less folder.
+  it('inserts a sanitised course segment between name and date when one is given', () => {
+    assert.equal(deriveRaceLabel({ name: 'Race', date: '05/12/2026' }, 'Seniors'), 'race-seniors-26-12-05');
+    assert.equal(deriveRaceLabel({ name: 'Race', date: '05/12/2026' }, 'Juniors'), 'race-juniors-26-12-05');
+  });
 });
 
 describe('mobile-files-shared.js:sortRaces', () => {

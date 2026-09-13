@@ -563,11 +563,12 @@ export const HELP = {
         number, not position — this tab has no notion of finishing position, only Results &amp; Prize List does. A bib
         seen only at a checkpoint, with no finish yet, still gets its own row with a blank FinishTime — that's the
         safety-relevant case.</p>
-    <p>This whole table is also published, race-wide, as <code>progress.json</code> alongside that race's device files
-        — kept up to date within a couple of seconds of any relevant edit (an Entries change, or an Update/Clear
-        Progress run). The file is public and needs no sign-in to fetch, so it deliberately carries only bib number,
-        name, course, category, and timing data — never anything else from an entry (no DOB, club, or contact
-        details).</p>
+    <p>This table is also published as <code>progress.json</code>, split by course — one file alongside each
+        course's own device files, each carrying only that course's own rows, since a phone's own race is always
+        course-specific from the moment a course is chosen at Start time. Kept up to date within a couple of seconds
+        of any relevant edit (an Entries change, or an Update/Clear Progress run). The file is public and needs no
+        sign-in to fetch, so it deliberately carries only bib number, name, course, category, and timing data —
+        never anything else from an entry (no DOB, club, or contact details).</p>
     <p>A phone doesn't need to wait for that file to be fetched some other way — it can ask for this same Progress
         data itself, two ways. Whenever the Mobile Files page is <strong>connected to a phone</strong> (Mule Mode),
         the web app now delivers its own already-loaded Progress data to that phone over the same Bluetooth
@@ -1086,18 +1087,6 @@ export const TABLES = {
     { id: 'lastUpdate', label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, across all lines (not just those currently visible)' },
     { id: 'startedAt', label: 'Started At', title: 'When this device most recently went active — its latest Start (Time mode) or Clock (Bibs/CP mode) marker' },
     { id: 'actions',   label: 'Actions',   title: 'View or view raw this file' },
-  ],
-  'mobile-files-all': [
-    { id: 'raceLabel',  label: 'Race',        title: 'Race name (date suffix dropped — see Race Date; hover for the full race label)', sticky: true, wrap: true },
-    { id: 'location',   label: 'Where',       title: 'Course location for a device file — blank for the progress file', sticky: true, wrap: true, cap: 80 },
-    { id: 'bibs',       label: 'Bibs',        title: 'Bib entries visible on a device file, or entries in the progress file' },
-    { id: 'time',       label: 'Time',        title: 'Time splits currently visible — blank for the progress file' },
-    { id: 'owner',      label: 'Owner',       title: 'Account this file belongs to (admins only)' },
-    { id: 'raceDate',   label: 'Race Date',   title: 'Race date parsed from the race label' },
-    { id: 'device',     label: 'Device / File', title: 'Physical phone that recorded this file, or "Progress" for that race\'s progress.json' },
-    { id: 'lastSeen',    label: 'Last Seen',   title: 'When the server last actually heard from this device — blank for the progress file' },
-    { id: 'lastUpdate',  label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, or when the progress file was last generated — rows are sorted by this, newest first' },
-    { id: 'actions',    label: 'Actions',     title: 'View, or view raw, or delete this file; a stale row also offers Delete from here, removing it and every other stale row below it' },
   ],
   'mobile-progress': [
     { id: 'bibNumber',  label: 'Bib',    title: 'Race number' },
