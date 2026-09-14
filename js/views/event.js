@@ -7,9 +7,6 @@ import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
 import { showBusy, normaliseDate } from '../utils.js';
 import { renderHome } from './home.js';
-import { getSession, apiTouchProgress } from '../storage.js';
-import { deriveRaceLabel } from '../mobile-files-shared.js';
-import { COURSE } from '../constants.js';
 
 function populateJuniorLimitDropdown() {
   const el = document.getElementById('ev-junior-limit');
@@ -178,37 +175,8 @@ export async function saveEventForm() {
   setTimeout(() => window.dispatchEvent(new CustomEvent('rm:navigate', { detail: 'home' })), 2000);
 }
 
-// "Activate Race" — touches progress.json's own generatedAt to now for this event's own race
-// label(s) only (server/mobile.js's touchProgress via POST .../progress/touch — see TODO.md's
-// phase-2 "Activate Race" correction), the signal a mobile phone's own setup-time server scan
-// uses to find/rank recent races. Deliberately never touches any other race — it only ever
-// derives labels from state.event, the same way js/progress-sync.js's own push does, so there's
-// no way for this to reach a past or unrelated event's race folder. A course with no progress.json
-// yet at all (never registered/pushed) is silently skipped — nothing to activate, same as
-// progress-sync.js skipping a course with nobody on it.
-async function activateRace() {
-  const session = getSession();
-  if (!session) { showStatus('Not signed in — nothing to activate.', true); return; }
-  const [owner] = session.dataset.split('/');
-  let activated = 0;
-  let failed = 0;
-  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
-    const raceLabel = deriveRaceLabel(state.event, course);
-    if (!raceLabel) continue;
-    try {
-      const result = await apiTouchProgress(session.token, owner, raceLabel);
-      if (result?.ok) activated++;
-      else if (!result?.error?.includes('No progress')) failed++;
-    } catch { failed++; }
-  }
-  if (activated) showStatus(`Activated ${activated} race${activated === 1 ? '' : 's'} for mobile phones to find.`);
-  else if (failed) showStatus('Could not activate — server unreachable or you\'re not signed in.', true);
-  else showStatus('Nothing to activate yet — push progress (Update Progress) first.', true);
-}
-
 export function wireEvent() {
   on('btn-save-event',  'click', saveEventForm);
-  on('btn-activate-race', 'click', activateRace);
   on('ev-categories',   'change', populateJuniorLimitDropdown);
 
   const distEl = document.getElementById('ev-distance');

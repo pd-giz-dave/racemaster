@@ -14,7 +14,7 @@ import {
   parseRaceLabelDate, raceNameOf, deriveRaceLabel, sortRaces, mergePendingIntoRaces,
   byLineNumber, computeIncorporationStatus,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
-  isDeviceStale, isProgressStale, findCurrentRaceProgress,
+  isDeviceStale, isProgressStale, isProgressRecent, findCurrentRaceProgress,
 } from '../js/mobile-files-shared.js';
 
 beforeEach(() => {
@@ -431,6 +431,28 @@ describe('mobile-files-shared.js:isProgressStale', () => {
   it('is true for an old-labelled race with a missing/invalid generatedAt — nothing proves it\'s fresh', () => {
     assert.equal(isProgressStale(OLD_LABEL, {}), true);
     assert.equal(isProgressStale(OLD_LABEL, { generatedAt: 'not a date' }), true);
+  });
+});
+
+describe('mobile-files-shared.js:isProgressRecent', () => {
+  // Existence AND recency together — a genuinely different question from isProgressStale() above,
+  // which only ever flags an already-listed row and treats a young-labelled race as automatically
+  // "not stale" even with no progress at all. Mobile Files' own Activate Race status
+  // (js/views/mobile-files.js) needs "no progress.json" and "a stale one" to both read as
+  // "not active", regardless of how new the race label itself is.
+  beforeEach(() => setRaceStaleAfterDays(2));
+
+  it('is true for a recent generatedAt', () => {
+    assert.equal(isProgressRecent({ generatedAt: new Date().toISOString() }), true);
+  });
+
+  it('is false for an old generatedAt', () => {
+    assert.equal(isProgressRecent({ generatedAt: '2020-01-01T10:00:00.000Z' }), false);
+  });
+
+  it('is false when there is no progress at all — unlike isProgressStale, not automatically "fine"', () => {
+    assert.equal(isProgressRecent(undefined), false);
+    assert.equal(isProgressRecent({}), false);
   });
 });
 

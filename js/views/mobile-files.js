@@ -24,14 +24,19 @@
 
 import {
   getSession, getIsAdmin, getUsername, apiListMobileFiles, apiGetMobileStatus, apiDeleteMobileFile,
-  apiPushMobileSync, getPendingMobileFiles, removePendingMobileFile,
+  apiPushMobileSync, getPendingMobileFiles, removePendingMobileFile, apiTouchProgress,
 } from '../storage.js';
 import { showConfirmDialog, showStatus, wireTabBar, getEl } from '../ui.js';
 import { isBluetoothAvailable, resetLastPulledLineNumber, resetAllLastPulledLineNumbers } from '../mule-ble.js';
 import {
   rowKey, selectedKeys, saveSelectedKeys, computeIncorporationStatus, mergePendingIntoRaces, restoreSelectedKeysOnce,
-  getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
+  getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces, deriveRaceLabel, formatDateTime,
+  isProgressRecent,
 } from '../mobile-files-shared.js';
+import { state } from '../state.js';
+import { COURSE } from '../constants.js';
+import { getEntriesOnCourse } from '../entries.js';
+import { buildProgressRows } from '../mobile-files-progress.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
 import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
 import {
@@ -47,6 +52,12 @@ export { autoUpdateProgress };
 // reads this via the getLastKnownRaces getter passed to initBle() below, for its own
 // refreshDevicesTableFromCache() fast path.
 let lastKnownRaces = [];
+
+// Whether the most recent renderMobileFiles() call actually reached the server (true) or fell
+// back to lastKnownRaces after a failed fetch (false) — updateActivateStatus() above reads this
+// to tell "confirmed not active" apart from "can't currently confirm either way, but this browser
+// has data ready to send the moment it's back online".
+let lastFetchOk = true;
 
 // A race can still be listed by the server with zero devices — e.g. progress was pushed for it
 // (server/mobile.js's writeProgress()) but every device file has since been deleted, which leaves
@@ -190,12 +201,91 @@ async function discardPendingRow(r) {
   showStatus(`"${r.device.name}" discarded.`);
 }
 
+// Persistent (not the usual 10s showStatus() toast) per-course "is this race actually live right
+// now" indicator, next to the Activate Race button — recomputed on every renderMobileFiles() call
+// (Refresh, a poll tick, after any action here), not just right after a click, so it always
+// reflects reality rather than trusting whatever a past activateRace() click happened to report.
+// A course reads "active" only when a progress.json genuinely exists for it — on the server
+// (race.progress, from the last successful fetch) — with a generatedAt inside the "Skip races
+// older than" staleness window right now (isProgressRecent(), mobile-files-shared.js); "no
+// progress.json at all" and "a stale one" both read the same as "not active". When the last fetch
+// couldn't reach the server at all, a course with local data ready to send (buildProgressRows()
+// filtered to it, non-empty) reads "pending" instead of flatly "not active" — this browser simply
+// hasn't been able to confirm the server has it yet, not that there's genuinely nothing there.
+// Skips a course entirely when nobody's even entered for it (getEntriesOnCourse) — nothing to
+// report for a course this event doesn't use.
+function updateActivateStatus() {
+  const el = getEl('mf-activate-status');
+  if (!el) return;
+  const session = getSession();
+  const owner = session?.dataset?.split('/')[0];
+  const parts = [];
+  let anyActive = false;
+  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
+    if (!getEntriesOnCourse(course)) continue;
+    const raceLabel = deriveRaceLabel(state.event, course);
+    if (!raceLabel) continue;
+    const race = owner && lastKnownRaces.find(r => r.owner === owner && r.raceLabel === raceLabel);
+    if (race?.progress && isProgressRecent(race.progress)) {
+      anyActive = true;
+      parts.push(`${course} active (${formatDateTime(race.progress.generatedAt)})`);
+    } else if (!lastFetchOk && buildProgressRows().some(r => r.course === course)) {
+      parts.push(`${course} pending — will activate once back online`);
+    } else {
+      parts.push(`${course} not active`);
+    }
+  }
+  el.textContent = parts.join('   ·   ');
+  el.hidden = parts.length === 0;
+  el.className = anyActive ? 'entry-status status-ok' : 'entry-status';
+}
+
+// "Activate Race" — touches progress.json's own generatedAt to now for this event's own race
+// label(s) only (server/mobile.js's touchProgress via POST .../progress/touch), the signal a
+// mobile phone's own setup-time server scan uses to find/rank recent races. Deliberately never
+// touches any other race — it only ever derives labels from state.event, the same way
+// js/progress-sync.js's own push does, so there's no way for this to reach a past or unrelated
+// event's race folder. NOT dependent on Update Progress having been run: progress.json is pushed
+// automatically by progress-sync.js's own debounced push whenever a course has any entries at
+// all, regardless of whether Update Progress has ever computed a Finish/Start time for any of
+// them — this only ever touches an *existing* file's timestamp, it never creates one. A course
+// with no progress.json yet at all (nobody entered, or this browser's never been online since) is
+// silently skipped, not treated as a failure. Lives here rather than on Event Settings (where it
+// used to be) since Mobile Files is where an operator is actually looking when a phone can't find
+// the race — and where updateActivateStatus() above can show the real, current result, not just
+// whatever this one click's own responses happened to say.
+async function activateRace() {
+  const session = getSession();
+  if (!session) { showStatus('Not signed in — nothing to activate.', true); return; }
+  const [owner] = session.dataset.split('/');
+  let touched = 0;
+  let failed = 0;
+  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
+    const raceLabel = deriveRaceLabel(state.event, course);
+    if (!raceLabel) continue;
+    try {
+      const result = await apiTouchProgress(session.token, owner, raceLabel);
+      if (result?.ok) touched++;
+      else if (!result?.error?.includes('No progress')) failed++;
+    } catch { failed++; }
+  }
+  // Silent refresh — pulls the just-touched generatedAt back down so updateActivateStatus() (run
+  // as part of renderMobileFiles() itself) reflects it immediately, without this toast getting
+  // stomped by renderMobileFiles()'s own "Loading…"/"No mobile files…" messages (see its own
+  // `silent` option's doc).
+  await renderMobileFiles({ silent: true });
+  if (touched) showStatus('Activation requested — see status below.');
+  else if (failed) showStatus('Could not activate — server unreachable or you\'re not signed in.', true);
+  else showStatus('Nothing to activate yet — no progress data has reached the server for this race yet.', true);
+}
+
 export function wireMobileFiles() {
   initBle({ renderAll: renderMobileFiles, getLastKnownRaces: () => lastKnownRaces });
   initProgressActions({ renderAll: renderMobileFiles });
   wireBleControls();
   wireProgressTab();
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
+  document.getElementById('btn-activate-race')?.addEventListener('click', activateRace);
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -289,6 +379,8 @@ export async function renderMobileFiles({ silent = false } = {}) {
     renderAllFilesList([], false);
     renderMobileProgressTable();
     if (count) count.textContent = '0';
+    lastFetchOk = true; // not signed in isn't "offline" — don't leave a stale "pending" reading
+    updateActivateStatus();
     return false;
   }
   const isAdminUser = getIsAdmin();
@@ -304,6 +396,8 @@ export async function renderMobileFiles({ silent = false } = {}) {
     // filterStaleRaces() and mergePendingIntoRaces() on purpose, see its own module doc.
     renderAllFilesList(lastKnownRaces, isAdminUser);
     renderMobileProgressTable();
+    lastFetchOk = true;
+    updateActivateStatus();
     if (!silent) showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
     await maybeAutoUpdateProgress();
     return true;
@@ -315,6 +409,8 @@ export async function renderMobileFiles({ silent = false } = {}) {
     renderRaceList(merged, isAdminUser);
     renderAllFilesList(lastKnownRaces, isAdminUser);
     renderMobileProgressTable();
+    lastFetchOk = false;
+    updateActivateStatus();
     if (!silent) {
       showStatus(merged.length
         ? 'Server unreachable — showing the last known list plus anything pulled locally.'

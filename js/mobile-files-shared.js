@@ -416,6 +416,17 @@ export function isProgressStale(raceLabel, progress) {
   return !isoWithinDays(progress?.generatedAt, staleAfterDays);
 }
 
+// A genuinely different question from isProgressStale() above: that one only ever *flags* a row
+// that already exists in a list, and treats a race whose own label isn't old yet as automatically
+// "not stale" even with no progress.json at all — the right behavior for a "should this already-
+// listed row be highlighted" check, wrong for "does this course actually have a live progress.json
+// right now". This is existence AND recency together — used by Mobile Files' own Activate Race
+// status (js/views/mobile-files.js), which needs "no progress.json at all" to read the same as "a
+// stale one", not silently pass as fine just because the race label itself is recent.
+export function isProgressRecent(progress) {
+  return isoWithinDays(progress?.generatedAt, getRaceStaleAfterDays());
+}
+
 // The cached progress payload (already fetched via GET /api/mobile — see race.progress in
 // server/mobile.js's getMobileRacesForUser) for whatever race [owner]/[raceLabel] currently is —
 // used by js/views/mobile-files-ble.js to decide what (if anything) to deliver to a connected

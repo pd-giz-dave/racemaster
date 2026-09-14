@@ -169,6 +169,7 @@ export const TOOLTIPS = {
   'btn-clear-categories':        'Delete all custom categories',
 
   // Mobile Files
+  'btn-activate-race':           "Signal mobile phones that this event's race(s) are current, so their own setup-time server scan can find and rank it — only ever touches this event's own race(s), never a past or unrelated one",
   'btn-refresh-mobile-files':    'Reload mobile files from the server and from anything pulled locally over Bluetooth',
   'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Offers a direct reconnect for a phone connected to before; otherwise confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
   'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s) (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — requires valid bib numbers, the same race, no empty files, and no more than one file per location',
@@ -493,6 +494,20 @@ export const HELP = {
         and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
         useful for troubleshooting. Deleting a device's file is done from the <strong>All Files</strong> tab now (see below),
         not here.</p>
+    <p>Use <strong>Activate Race</strong> to signal mobile phones that this event's race(s) are current, so their own
+        setup-time server scan can find and rank it — touches only this event's own race(s), derived the same way
+        the automatic progress push is, so it can never reach a past or unrelated event's race by mistake. This is
+        <strong>not</strong> dependent on ever having run Update Progress: progress data is pushed to the server
+        automatically as soon as a course has any entries at all, regardless of whether a Finish/Start time has ever
+        been computed for any of them — Activate Race only ever touches an already-existing file's timestamp, it
+        never creates one, so a course with genuinely nobody entered for it yet is silently skipped rather than
+        treated as a failure. The status line below the buttons shows, for each course in use, whether it's
+        currently <strong>active</strong> (a progress file exists on the server with a timestamp inside the "Skip
+        races older than" window, shown in dd/mm/yy HH:MM), <strong>pending</strong> (this browser has data ready to
+        send but couldn't reach the server to confirm it — see the header's own online/offline indicator), or
+        <strong>not active</strong>. It's persistent, not a 10-second toast, and updates on every refresh — not only
+        right after clicking the button — since what matters is the server's own current state, not just what one
+        click happened to report.</p>
     <p>Use <strong>Refresh</strong> to reload the list from the server and from anything already pulled locally over Bluetooth.</p>
     <p><strong>Connect to Phone…</strong> pulls a device's history directly over Bluetooth from a nearby phone running RaceMaster Mobile —
         no network needed, for use out on the course. The browser's own device picker can't show a meaningful name, so the first time you

@@ -264,17 +264,6 @@
         </div>
       </div>
 
-      <div class="card">
-        <h3>Mobile Sync</h3>
-        <p class="text-muted text-sm mb-8">
-          Signals mobile phones that this event's race(s) are current, so their own setup can
-          find it. Only ever touches this event's own race(s) — never a past or unrelated one.
-        </p>
-        <div class="btn-row">
-          <button class="btn" id="btn-activate-race">Activate Race</button>
-        </div>
-      </div>
-
       <div class="btn-row">
         <button class="btn" id="btn-save-event">Save Event Settings</button>
       </div>
@@ -1308,12 +1297,16 @@
         <label class="mf-option"><input type="checkbox" id="btn-ble-logging"> Bluetooth logging</label>
       </div>
       <div class="btn-row">
+        <button class="btn" id="btn-activate-race">Activate Race</button>
         <button class="btn btn-secondary" id="btn-refresh-mobile-files">Refresh</button>
         <button class="btn btn-secondary" id="btn-update-progress">Update Progress</button>
         <button class="btn btn-secondary" id="btn-clear-progress">Clear Progress</button>
         <label id="mf-auto-progress-label" style="display:inline-flex;align-items:center;gap:4px">
           <input type="checkbox" id="mf-auto-progress" disabled> Auto-update progress
         </label>
+      </div>
+      <p id="mf-activate-status" class="entry-status" hidden style="margin:-6px 0 10px;display:inline-block"></p>
+      <div class="btn-row">
         <button class="btn" id="btn-connect-phone">Connect to Phone…</button>
         <span id="mobile-files-poll-interval" class="entry-status" hidden></span>
         <span id="mobile-files-poll-status" class="entry-status" hidden></span>
