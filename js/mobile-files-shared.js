@@ -6,7 +6,6 @@
 // dependency on any of those other modules, so this stays a true leaf every one of them can
 // safely import from without any risk of a circular import.
 
-import { state } from './state.js';
 import { getSession } from './storage.js';
 import { getRaceStaleAfterDays, raceLabelAgeDays, sanitiseName } from './mule-ble.js';
 
