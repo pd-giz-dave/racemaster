@@ -756,6 +756,55 @@ export function forgetKnownDevice(id) {
   } catch { /* storage unavailable — best effort only */ }
 }
 
+// ---- Phase 3: adopted devices ----
+//
+// "Adopting" a relayed device (see RelayManifestEntry — a genuinely different phone the
+// connected mule is relaying records for, not the mule itself) is the operator telling it "this
+// is your race" regardless of what raceLabel it's currently self-reporting (racemaster-mobile's
+// TODO.md: a device that set up offline only ever guesses a temporary name). Keyed by
+// originDeviceId (racemaster-mobile's own stable per-install id), never raceLabel — the whole
+// point is that a device's self-reported raceLabel is exactly the thing that can't be trusted
+// here (see this file's own targeted-delivery doc below). Persisted in localStorage the same
+// plain, unscoped way KNOWN_DEVICES_KEY already is (not scoped per logged-in username — this
+// codebase has no existing precedent for that on any of its other BLE-local storage, and an
+// operator only ever runs one browser profile against one race at a time in practice).
+const ADOPTED_DEVICES_KEY = 'racemaster-ble-adopted-devices';
+
+function loadAdoptedDevices() {
+  try { return JSON.parse(localStorage.getItem(ADOPTED_DEVICES_KEY) || '{}'); } catch { return {}; }
+}
+
+// { [originDeviceId]: { raceLabel, deviceName } }
+export function getAdoptedDevices() {
+  return loadAdoptedDevices();
+}
+
+export function setAdoptedDevice(deviceId, deviceName, raceLabel) {
+  try {
+    const map = loadAdoptedDevices();
+    map[deviceId] = { raceLabel, deviceName };
+    localStorage.setItem(ADOPTED_DEVICES_KEY, JSON.stringify(map));
+  } catch { /* storage unavailable — best effort only */ }
+}
+
+export function removeAdoptedDevice(deviceId) {
+  try {
+    const map = loadAdoptedDevices();
+    if (!(deviceId in map)) return;
+    delete map[deviceId];
+    localStorage.setItem(ADOPTED_DEVICES_KEY, JSON.stringify(map));
+  } catch { /* storage unavailable — best effort only */ }
+}
+
+// The connected mule's own most-recently-fetched relay manifest (see cachedRelayEntries' own
+// doc below) — exposed read-only so the Mobile Files page can render an "adopt" toggle per
+// relayed device without pullFromConnectedPhone needing to change its own return shape (which
+// every existing caller already treats as a bare results array). Empty until at least one pull
+// has actually fetched (or reused a still-valid cached copy of) a manifest this session.
+export function getCachedRelayEntries() {
+  return cachedRelayEntries || [];
+}
+
 // navigator.bluetooth.getDevices() is a Chromium extension to the Web Bluetooth spec (not
 // supported in every Web-Bluetooth-capable browser) returning every device this origin still
 // holds a persistent permission grant for — cross-referenced against rememberDevice() above so
@@ -1204,7 +1253,12 @@ export async function reconnectToKnownDevice(device, onProgress) {
 // own raceLabel against; this function's own progress-delivery leg below instead looks for
 // whichever candidate (if any) matches the connected phone's own reported raceLabel exactly, and
 // delivers only that one. Skipped entirely if the array is empty/omitted.
-export async function pullFromConnectedPhone({ currentRaceCandidates = [] } = {}) {
+// adoptedTargets: [{ deviceId, raceLabel, progress }] — one entry per device the operator has
+// adopted (see getAdoptedDevices/setAdoptedDevice above), with whatever progress is currently
+// cached for the raceLabel it was adopted into (built by the caller, mobile-files-ble.js's own
+// currentRaceProgressContext(), the same way currentRaceCandidates already is — see that
+// function's own doc for why this file stays free of any direct state.js dependency).
+export async function pullFromConnectedPhone({ currentRaceCandidates = [], adoptedTargets = [] } = {}) {
   if (!isConnected()) throw new Error('Not connected to a phone.');
   // Captured now, before anything else in here awaits — same reasoning as pullChunkedArray's own
   // identical capture (see its own doc): forgetConnection() nulls the module-level connectedDevice
@@ -1494,6 +1548,36 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [] } = {}
     }
   }
 
+  // Phase 3, case 1 — the connected phone IS itself one of the operator's adopted devices:
+  // deliver directly, tagged with targetDeviceId/targetRaceLabel, bypassing the raceLabel-match
+  // gate entirely (the whole point of adoption is that this phone's own self-reported raceLabel
+  // can't be trusted — see racemaster-mobile's own PeripheralSyncService.handleProgressPayload,
+  // which treats a matching targetDeviceId as either "adopt this identity" (this device) or
+  // "forward this on" (any other device — see the relay-forward leg below)). Diffed against
+  // deviceInfo.progressGeneratedAt exactly like the own-race leg above, since this connection's
+  // own freshly-read DeviceInfo already tells us what this specific phone already has.
+  if (adoptedTargets.length && !connectionLost) {
+    const directTarget = adoptedTargets.find(t => t.deviceId === deviceInfo.deviceId);
+    if (directTarget && deviceInfo.progressGeneratedAt !== directTarget.progress.generatedAt) {
+      const since = deviceInfo.progressGeneratedAt;
+      const entries = since
+        ? directTarget.progress.entries.filter(e => e.updatedAt && e.updatedAt > since)
+        : directTarget.progress.entries;
+      const delta = {
+        raceName: directTarget.progress.raceName, raceDate: directTarget.progress.raceDate,
+        generatedAt: directTarget.progress.generatedAt, entries,
+        targetDeviceId: directTarget.deviceId, targetRaceLabel: directTarget.raceLabel,
+      };
+      try {
+        await withGattRecovery(connectedName, () => deliverProgress(service, delta));
+        bleLog(`[mule-ble] delivered ${entries.length} targeted progress entr${entries.length === 1 ? 'y' : 'ies'} to adopted device "${connectedName}" (direct, raceLabel="${directTarget.raceLabel}")`);
+      } catch (e) {
+        bleError(`[mule-ble] failed to deliver targeted progress to adopted device "${connectedName}"`, e);
+        if (e.connectionLost) connectionLost = true;
+      }
+    }
+  }
+
   // Only bothered with at all when relayCount says there's something to fetch, so a leaf
   // Time/Bibs/CP phone (always relayCount 0) never pays this extra round trip. Beyond that,
   // cachedRelayEntries (see its own doc above) is reused as-is whenever relayManifestCacheKey()
@@ -1527,6 +1611,37 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [] } = {}
   } else {
     cachedRelayEntries = null;
     cachedRelayManifestKey = null;
+  }
+
+  // Phase 3, case 2 — relay-forward: relayEntries just proved "connectedName" can reach each of
+  // these origins (it's already relaying their records), so for any adopted target found among
+  // them, hand the cached progress off here too, tagged the same way as the direct case above —
+  // the receiving phone either adopts it (if it turns out to BE the target) or caches-and-forwards
+  // it again itself, recursively, through however many further mule hops separate it from the
+  // true target (see racemaster-mobile's own MuleSyncEngine.deliverTargetedProgressIfPending).
+  // Deliberately NOT diffed against the deep origin's own reported progressGeneratedAt the way
+  // the direct case is — RelayManifestEntry carries no such checkpoint (only lastLineNumber,
+  // which is about record sync, not progress), and adding one would mean tracking a second
+  // checkpoint through the whole relay-manifest pipeline on the phone side purely for this;
+  // accepted as a real, deliberate simplification (a redundant re-send at worst, never
+  // incorrect) rather than built out for a first version of multi-hop delivery.
+  if (adoptedTargets.length && !connectionLost) {
+    for (const relay of relayEntries) {
+      const target = adoptedTargets.find(t => t.deviceId === relay.originDeviceId);
+      if (!target) continue;
+      const delta = {
+        raceName: target.progress.raceName, raceDate: target.progress.raceDate,
+        generatedAt: target.progress.generatedAt, entries: target.progress.entries,
+        targetDeviceId: target.deviceId, targetRaceLabel: target.raceLabel,
+      };
+      try {
+        await withGattRecovery(connectedName, () => deliverProgress(service, delta));
+        bleLog(`[mule-ble] forwarded progress for adopted device "${target.deviceId}" (raceLabel="${target.raceLabel}") via relay through "${connectedName}"`);
+      } catch (e) {
+        bleError(`[mule-ble] failed to forward progress for adopted device "${target.deviceId}" via "${connectedName}"`, e);
+        if (e.connectionLost) connectionLost = true;
+      }
+    }
   }
 
   for (const relay of relayEntries) {

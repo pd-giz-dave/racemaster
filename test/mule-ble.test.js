@@ -18,6 +18,7 @@ import {
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
   getRaceStaleAfterDays, setRaceStaleAfterDays,
   getKnownDevices, connectToPhone, reconnectToKnownDevice, pullFromConnectedPhone, abandonConnection,
+  getAdoptedDevices, setAdoptedDevice, removeAdoptedDevice, getCachedRelayEntries,
 } from '../js/mule-ble.js';
 
 const SERVICE_UUID          = '6d6f6269-6c65-2e72-6163-656d61737465';
@@ -1113,6 +1114,141 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     assert.equal(results[0].lines.length, 1);
     assert.equal(device._progressDeliveries.length, 0); // delivery genuinely never succeeded
     disconnectPhone();
+  });
+
+  // Phase 3: targeted delivery for an adopted device — bypasses the raceLabel-match gate
+  // entirely (adoptedTargets' own raceLabel need not match deviceInfo.raceLabel at all), tags
+  // the payload with targetDeviceId/targetRaceLabel, and diffs against the connected phone's own
+  // progressGeneratedAt exactly like the own-race leg above.
+
+  it('delivers targeted progress directly to an adopted device, tagged, regardless of its self-reported raceLabel', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'some-temporary-manually-typed-name', relayCount: 0,
+      progressGeneratedAt: '2020-01-01T00:00:00.000Z',
+    };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({
+      adoptedTargets: [{ deviceId: 'dev1', raceLabel: 'the-real-race-seniors-26-08-23', progress: currentProgress }],
+    });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 1);
+    assert.equal(device._progressDeliveries[0].targetDeviceId, 'dev1');
+    assert.equal(device._progressDeliveries[0].targetRaceLabel, 'the-real-race-seniors-26-08-23');
+    assert.equal(device._progressDeliveries[0].generatedAt, currentProgress.generatedAt);
+    disconnectPhone();
+  });
+
+  it('does not deliver a second time to an adopted device that already reports holding this exact generatedAt', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'temp', relayCount: 0,
+      progressGeneratedAt: currentProgress.generatedAt,
+    };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({
+      adoptedTargets: [{ deviceId: 'dev1', raceLabel: 'the-real-race', progress: currentProgress }],
+    });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 0);
+    disconnectPhone();
+  });
+
+  it('forwards targeted progress to a relayed (not directly-connected) adopted device found in the relay manifest', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'mule-dev', deviceName: 'Mule', raceLabel: '', relayCount: 1 };
+    const relayManifest = [{ originDeviceId: 'leaf-dev', originRaceLabel: 'leaf-temp-race', originDeviceName: 'Leaf Phone' }];
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => (req.requestRelayManifest ? relayManifest : []),
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({
+      adoptedTargets: [{ deviceId: 'leaf-dev', raceLabel: 'the-real-race-seniors-26-08-23', progress: currentProgress }],
+    });
+    await settleOnePull(t); // relay-manifest fetch's own settle delay
+    await settleOnePull(t); // the one relayed race's own record-pull settle delay
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 1);
+    assert.equal(device._progressDeliveries[0].targetDeviceId, 'leaf-dev');
+    assert.equal(device._progressDeliveries[0].targetRaceLabel, 'the-real-race-seniors-26-08-23');
+    disconnectPhone();
+  });
+
+  it('never delivers targeted progress for a device that has not been adopted', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'temp', relayCount: 0 };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone({ adoptedTargets: [] });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 0);
+    disconnectPhone();
+  });
+});
+
+describe('mule-ble.js:getAdoptedDevices / setAdoptedDevice / removeAdoptedDevice', () => {
+  it('defaults to empty', () => {
+    assert.deepEqual(getAdoptedDevices(), {});
+  });
+
+  it('round-trips a set device through localStorage, keyed by deviceId', () => {
+    setAdoptedDevice('dev1', 'Phone One', 'race-seniors-26-08-23');
+
+    assert.deepEqual(getAdoptedDevices(), { dev1: { raceLabel: 'race-seniors-26-08-23', deviceName: 'Phone One' } });
+  });
+
+  it('setting a device already adopted replaces its previous assignment', () => {
+    setAdoptedDevice('dev1', 'Phone One', 'race-seniors-26-08-23');
+    setAdoptedDevice('dev1', 'Phone One', 'race-juniors-26-08-23');
+
+    assert.equal(getAdoptedDevices().dev1.raceLabel, 'race-juniors-26-08-23');
+  });
+
+  it('removeAdoptedDevice clears only the named device', () => {
+    setAdoptedDevice('dev1', 'Phone One', 'race-a');
+    setAdoptedDevice('dev2', 'Phone Two', 'race-b');
+
+    removeAdoptedDevice('dev1');
+
+    assert.deepEqual(getAdoptedDevices(), { dev2: { raceLabel: 'race-b', deviceName: 'Phone Two' } });
+  });
+
+  it('removing a never-adopted device is a no-op', () => {
+    removeAdoptedDevice('never-adopted');
+
+    assert.deepEqual(getAdoptedDevices(), {});
+  });
+});
+
+describe('mule-ble.js:getCachedRelayEntries', () => {
+  it('starts empty before any pull has fetched a manifest', () => {
+    assert.deepEqual(getCachedRelayEntries(), []);
   });
 });
 

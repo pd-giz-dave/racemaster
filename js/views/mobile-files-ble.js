@@ -25,6 +25,7 @@ import {
   getRecommendedPollIntervalMs, isBleLoggingEnabled, setBleLoggingEnabled,
   getKnownDevices, reconnectToKnownDevice, abandonConnection, forgetKnownDevice,
   getConnectedDeviceInfo, getRaceStaleAfterDays, setRaceStaleAfterDays, isRecoveringGattOperation,
+  getCachedRelayEntries, getAdoptedDevices, setAdoptedDevice, removeAdoptedDevice,
 } from '../mule-ble.js';
 import { recordBleLastSeen, mergePendingIntoRaces, deriveRaceLabel, findCurrentRaceProgress } from '../mobile-files-shared.js';
 import { COURSE } from '../constants.js';
@@ -269,6 +270,12 @@ function onBleDisconnected(wasDeliberate) {
   connectionIssue = false; // moot once the link has formally ended — don't let it linger into a later, genuinely fresh connection
   consecutivePullFailures = 0;
   updateConnectButtonLabel();
+  // The relay manifest belongs to whichever mule was just connected — a stale list from it must
+  // not linger once that connection's gone (getCachedRelayEntries() itself is reset on the next
+  // connect via mule-ble.js's own cachedRelayEntries/cachedRelayManifestKey reset — see
+  // connectAndVerify — this just clears the now-stale DOM immediately rather than waiting for it).
+  const relayContainer = getEl('mf-relay-devices');
+  if (relayContainer) { relayContainer.hidden = true; relayContainer.innerHTML = ''; }
   if (wasDeliberate) {
     debugLog(`[mobile-files] disconnected (expected) for "${lastConnectedDeviceName || 'unknown device'}"`);
   } else if (connectAttemptInProgress) {
@@ -325,7 +332,7 @@ function refreshDevicesTableFromCache() {
 // event name/date is set yet.
 function currentRaceProgressContext() {
   const session = getSession();
-  if (!session) return { currentRaceCandidates: [] };
+  if (!session) return { currentRaceCandidates: [], adoptedTargets: [] };
   // Same owner-derivation js/progress-sync.js's own pushProgress() uses — session.dataset's own
   // owner, not getUsername() — an admin viewing someone else's dataset must match against THAT
   // owner's progress.json, exactly the folder progress-sync.js pushed it to.
@@ -339,7 +346,70 @@ function currentRaceProgressContext() {
       return progress ? { raceLabel, progress } : null;
     })
     .filter(Boolean);
-  return { currentRaceCandidates };
+  // Phase 3: one { deviceId, raceLabel, progress } entry per device the operator has adopted
+  // (see mule-ble.js's own getAdoptedDevices doc) that this owner currently has cached progress
+  // for — an adopted device whose assigned raceLabel has no progress.json at all yet (nothing
+  // registered/pushed there so far) is simply skipped, same "nothing to deliver" posture
+  // currentRaceCandidates already has for a course with no progress cached.
+  const adopted = getAdoptedDevices();
+  const adoptedTargets = Object.entries(adopted)
+    .map(([deviceId, { raceLabel }]) => {
+      const progress = findCurrentRaceProgress(races, owner, raceLabel);
+      return progress ? { deviceId, raceLabel, progress } : null;
+    })
+    .filter(Boolean);
+  return { currentRaceCandidates, adoptedTargets };
+}
+
+// Renders the "adopt a relayed device" list into #mf-relay-devices, from whatever the
+// last-completed pull's own relay manifest fetch cached (see mule-ble.js's own
+// getCachedRelayEntries) — a plain, functional list (not the full data-table treatment the
+// Devices tab gets) rather than a fully themed table, since this is a small, occasional-use
+// control, not the page's primary content. Called after every pull (successful or not — an
+// empty manifest just renders as "no relayed devices seen yet", not an error) and once at
+// initBle() time so a page reload still shows whatever was last connected before any new pull.
+function renderRelayDevices() {
+  const container = getEl('mf-relay-devices');
+  if (!container) return;
+  const entries = getCachedRelayEntries();
+  if (!entries.length) { container.hidden = true; container.innerHTML = ''; return; }
+  const adopted = getAdoptedDevices();
+  const rows = entries.map(entry => {
+    const current = adopted[entry.originDeviceId];
+    const label = entry.originDeviceName || entry.originDeviceId;
+    const checked = current ? 'checked' : '';
+    return `<label class="mf-option" style="display:flex;align-items:center;gap:6px;margin-right:14px">` +
+      `<input type="checkbox" data-adopt-device="${entry.originDeviceId}" data-adopt-name="${label}" ${checked}>` +
+      `Adopt "${label}"${current ? ` — as ${current.raceLabel}` : ''}` +
+      `</label>`;
+  }).join('');
+  container.innerHTML =
+    `<p style="font-size:0.8rem;color:var(--muted);margin:6px 0">Relayed devices seen via this mule — ` +
+    `tick one to adopt it into the currently loaded event/course, regardless of what race it's ` +
+    `currently reporting itself as:</p><div class="btn-row">${rows}</div>`;
+  container.hidden = false;
+  container.querySelectorAll('[data-adopt-device]').forEach(input => {
+    input.addEventListener('change', () => {
+      const deviceId = input.dataset.adoptDevice;
+      const deviceName = input.dataset.adoptName;
+      if (input.checked) {
+        // Adopts into whichever course's raceLabel the currently loaded event derives — Seniors
+        // by default, since a courseless device is more often a Seniors-convention entry than
+        // not; the operator can re-tick to pick Juniors instead by unchecking then using the
+        // per-course chip below (kept intentionally simple — see this function's own doc on why
+        // this is a plain functional control, not the full picker a first-class feature would
+        // warrant).
+        const raceLabel = deriveRaceLabel(state.event, COURSE.SENIORS) || deriveRaceLabel(state.event, COURSE.JUNIORS);
+        if (!raceLabel) { showStatus('Load an event with a name/date first.', true); input.checked = false; return; }
+        setAdoptedDevice(deviceId, deviceName, raceLabel);
+        showStatus(`Adopted "${deviceName}" as "${raceLabel}".`);
+      } else {
+        removeAdoptedDevice(deviceId);
+        showStatus(`Un-adopted "${deviceName}".`);
+      }
+      renderRelayDevices();
+    });
+  });
 }
 
 // Pulls whatever history the currently-connected phone is holding, pushing each device
@@ -441,6 +511,7 @@ export async function pullAndSyncConnectedPhone({ silent = false } = {}) {
     // mtime / a pending file's own pulledAt, neither of which changes when there's nothing new
     // to write) isn't enough on its own to reflect "we just successfully talked to this phone".
     for (const { raceLabel, deviceName } of pulled) recordBleLastSeen(username, raceLabel, deviceName);
+    renderRelayDevices();
     const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
     // Echoes what the phone's own DeviceInfo reported alongside this pull (relayCount — how many
     // other devices it's currently relaying data for on this Mule's behalf) — refreshed by
