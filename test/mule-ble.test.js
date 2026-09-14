@@ -936,10 +936,13 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     raceName: 'Test Race', raceDate: '23/08/2026', generatedAt: '2026-08-23T10:00:00.000Z',
     // 20 entries comfortably exceeds PROGRESS_CHUNK_SIZE_BYTES (400) once JSON-encoded, so a
     // successful delivery test below can confirm real multi-write chunking happened, not just
-    // that the final decoded result happens to be right.
+    // that the final decoded result happens to be right. updatedAt matches generatedAt (all
+    // freshly updated) so every entry survives the delta filter against the older
+    // progressGeneratedAt these tests' deviceInfo fixtures report — see mule-ble.js's own
+    // "delta, not the whole race" doc on the delivery leg.
     entries: Array.from({ length: 20 }, (_, i) => ({
       bibNumber: i + 1, name: `Runner ${i + 1}`, category: 'MSEN', course: 'Seniors',
-      startTime: '', finishTime: '', cpTimes: {},
+      startTime: '', finishTime: '', cpTimes: {}, updatedAt: '2026-08-23T10:00:00.000Z',
     })),
   };
 
@@ -965,6 +968,35 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     disconnectPhone();
   });
 
+  it('delivers only the entries whose updatedAt is newer than the phone\'s own progressGeneratedAt checkpoint', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const checkpoint = '2026-08-23T09:00:00.000Z';
+    const deviceInfo = {
+      deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0,
+      progressGeneratedAt: checkpoint,
+    };
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+
+    // Only bib 1 changed since the phone's own checkpoint — the other 19 entries' updatedAt
+    // predates it, so a delta delivery must leave them out entirely.
+    const partiallyChanged = {
+      ...currentProgress,
+      entries: currentProgress.entries.map((e, i) => i === 0 ? { ...e, updatedAt: '2026-08-23T10:30:00.000Z' } : { ...e, updatedAt: '2026-08-23T08:00:00.000Z' }),
+    };
+    const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [{ raceLabel: 'test-race', progress: partiallyChanged }] });
+    await settleOnePull(t);
+    await pullPromise;
+
+    assert.equal(device._progressDeliveries.length, 1);
+    assert.deepEqual(device._progressDeliveries[0].entries.map(e => e.bibNumber), [1]);
+    assert.equal(device._progressDeliveries[0].generatedAt, partiallyChanged.generatedAt);
+    disconnectPhone();
+  });
+
   // Progress has no course of its own (one web-app event covers Seniors AND Juniors at once),
   // but a phone's own race does from the moment a course is chosen at Start time — so there are
   // up to two candidates here (one per course), and this connected phone's own raceLabel must
@@ -981,7 +1013,10 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await settleConnectRetry(t);
     await connectPromise;
 
-    const juniorsProgress = { ...currentProgress, generatedAt: '2026-08-23T11:00:00.000Z' };
+    const juniorsProgress = {
+      ...currentProgress, generatedAt: '2026-08-23T11:00:00.000Z',
+      entries: currentProgress.entries.map(e => ({ ...e, updatedAt: '2026-08-23T11:00:00.000Z' })),
+    };
     const pullPromise = pullFromConnectedPhone({ currentRaceCandidates: [
       { raceLabel: 'test-race-seniors', progress: currentProgress },
       { raceLabel: 'test-race-juniors', progress: juniorsProgress },

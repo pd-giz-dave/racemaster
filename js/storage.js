@@ -221,6 +221,17 @@ export async function apiPushProgress(token, owner, raceLabel, payload) {
   return res.json();
 }
 
+// "Activate Race" (js/views/event.js) — server.js's POST .../progress/touch, refreshing
+// progress.json's own generatedAt with no entries sent at all. Same owner-scoping as
+// apiPushProgress above.
+export async function apiTouchProgress(token, owner, raceLabel) {
+  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/progress/touch`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  return res.json();
+}
+
 // ---- Bluetooth-pulled files pending an eventual server push (field use, no network) ----
 //
 // Keyed by owner (the signed-in user at pull time) + raceLabel + deviceName, same identity a

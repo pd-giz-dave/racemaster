@@ -6,6 +6,59 @@ import { buildProgressRows } from './mobile-files-progress.js';
 import { deriveRaceLabel } from './mobile-files-shared.js';
 import { COURSE } from './constants.js';
 
+// The last payload actually pushed for each owner+raceLabel, keyed by "owner:raceLabel" (not
+// raceLabel alone — an admin can push the same-looking label for two different owners' datasets
+// in one session, and those must never be treated as the same cache entry) — this session's own
+// record of "what the server should already have", so pushProgress() below can diff a freshly
+// built payload against it and send only what changed instead of everything, every time (see
+// TODO.md's delta-payload correction — BT and internet traffic must both stay minimal, since
+// field connectivity is unreliable and mobile data is metered). Deliberately in-memory, not
+// localStorage: a page reload has nothing cached, so its first push naturally sends everything,
+// self-healing any drift between what this browser believes the server has and what's actually
+// there (e.g. if the server's copy was reset by something else entirely) — persisting this
+// across reloads would trade that self-healing away for no real benefit, since the first push of
+// a fresh session is cheap regardless.
+const lastPushedByRaceLabel = new Map();
+
+function pushCacheKey(owner, raceLabel) { return `${owner}:${raceLabel}`; }
+
+// Test-only: clears the in-memory push cache so each test starts from "nothing pushed yet",
+// same as a fresh page load — needed because, unlike this module's other state (_timer/
+// _unlisten), the cache's actual *content* changes what a subsequent push sends, so leaving it
+// to leak between test cases would make later tests silently depend on earlier ones' state.
+export function resetProgressPushCacheForTests() {
+  lastPushedByRaceLabel.clear();
+}
+
+// True if two entries (same bibNumber, by construction — see diffEntries below) differ in any
+// field the server actually stores — cpTimes is a plain object, so a shallow compare isn't
+// enough for it specifically.
+function entriesDiffer(a, b) {
+  if (!a || !b) return true;
+  if (a.name !== b.name || a.category !== b.category || a.course !== b.course ||
+      a.startTime !== b.startTime || a.finishTime !== b.finishTime) return true;
+  const aCp = a.cpTimes || {};
+  const bCp = b.cpTimes || {};
+  const aKeys = Object.keys(aCp);
+  const bKeys = Object.keys(bCp);
+  if (aKeys.length !== bKeys.length) return true;
+  return aKeys.some(k => aCp[k] !== bCp[k]);
+}
+
+// Diffs a freshly built entries array against the last snapshot actually pushed for this
+// raceLabel — returns {changed, removed}: `changed` is every entry that's new or differs from
+// what was last sent (by bibNumber), `removed` is every bibNumber that was in the last snapshot
+// but isn't in the fresh array at all (e.g. an Entries deletion) — the one thing a pure upsert on
+// the server side can't express (see server/mobile.js's mergeProgress own doc).
+function diffEntries(owner, raceLabel, freshEntries) {
+  const previous = lastPushedByRaceLabel.get(pushCacheKey(owner, raceLabel));
+  if (!previous) return { changed: freshEntries, removed: [] };
+  const changed = freshEntries.filter(e => entriesDiffer(e, previous.get(e.bibNumber)));
+  const freshBibs = new Set(freshEntries.map(e => e.bibNumber));
+  const removed = [...previous.keys()].filter(bib => !freshBibs.has(bib));
+  return { changed, removed };
+}
+
 // Race-wide push of the Mobile Files page's own Progress tab contents (now including every
 // entry, not just mobile-recorded ones — see buildProgressRows()'s own doc) to
 // POST /api/mobile/:owner/:raceLabel/progress. This is what a phone in Bibs or Checkpoint mode
@@ -49,10 +102,23 @@ async function pushProgress() {
   const [owner] = session.dataset.split('/');
   for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
     const raceLabel = deriveRaceLabel(state.event, course);
-    const payload = buildPayloadForCourse(course);
-    if (!raceLabel || !payload.entries.length) continue; // no event name/date yet, or nobody on this course
-    try { await apiPushProgress(session.token, owner, raceLabel, payload); }
-    catch { /* server unreachable — next dirty-change retries, same as storage.js's syncToServer() */ }
+    if (!raceLabel) continue; // no event name/date yet
+    const fresh = buildPayloadForCourse(course);
+    const { changed, removed } = diffEntries(owner, raceLabel, fresh.entries);
+    // Nothing to send: either nobody's ever been on this course (fresh and the cache are both
+    // empty), or nothing's changed since the last push. A course that HAD entries and now has
+    // none must still fall through and push, so `removed` actually reaches the server — see
+    // diffEntries' own doc.
+    if (!changed.length && !removed.length) continue;
+    const payload = { raceName: fresh.raceName, raceDate: fresh.raceDate, entries: changed, removed };
+    try {
+      await apiPushProgress(session.token, owner, raceLabel, payload);
+      // Only the freshly-pushed snapshot advances on success — a failed push (server
+      // unreachable) must leave lastPushedByRaceLabel exactly as it was, so the same diff
+      // (not an empty one) is retried on the next dirty-change instead of silently giving up
+      // on entries the server never actually received.
+      lastPushedByRaceLabel.set(pushCacheKey(owner, raceLabel), new Map(fresh.entries.map(e => [e.bibNumber, e])));
+    } catch { /* server unreachable — next dirty-change retries, same as storage.js's syncToServer() */ }
   }
 }
 

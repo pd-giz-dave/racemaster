@@ -6,23 +6,29 @@ import { sanitiseName } from '../datasets.js';
 import { getAuthUser, isAdmin } from '../auth.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
-  writeProgress, readProgress, progressIsUnchanged, getMobileRacesForUser, getMobileRacesStatusForUser,
+  mergeProgress, touchProgress, readProgress, progressIsUnchanged,
+  getMobileRacesForUser, getMobileRacesStatusForUser, getAvailableRacesForUser,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
-// knownGeneratedAt is only read by GET .../progress below (a query-string value, extracted once
-// in server/router.js the same way that file already extracts `force` for handleDatasetRoutes) —
-// every other route in this file ignores it.
-export async function handleMobileRoutes(req, res, pathname, knownGeneratedAt) {
-  // POST /api/mobile/:owner/:raceLabel/progress — the web app pushes the Mobile Files page's own
-  // Progress tab contents, race-wide: {raceName, raceDate, entries: [{bibNumber, name, category,
-  // course, startTime, finishTime, cpTimes}]} — one entry per bib in Entries regardless of
-  // mobile activity (see js/mobile-files-progress.js's buildProgressRows()), so this is also what
-  // a phone in Bibs or Checkpoint mode reads to learn which bib is on which course, without
-  // needing registration to have closed first (formerly a separate bib-allocations.json/route,
-  // retired once this file's own entry coverage made it redundant).
+// `since` is only read by GET .../progress below (a query-string value, extracted once in
+// server/router.js the same way that file already extracts `force` for handleDatasetRoutes) —
+// every other route in this file ignores it. `maxAgeDays` is only read by GET /api/mobile/races.
+export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) {
+  // POST /api/mobile/:owner/:raceLabel/progress — the web app pushes changes to the Mobile Files
+  // page's own Progress tab contents, race-wide: {raceName, raceDate, entries: [{bibNumber, name,
+  // category, course, startTime, finishTime, cpTimes}], removed: [bibNumber, ...]} — only the
+  // entries that actually changed since the web app's own last successful push for this race
+  // label (see js/progress-sync.js), not its full recomputed set every time; `removed` names any
+  // bib no longer present at all (e.g. an Entries deletion), the one thing a pure upsert can't
+  // express. mergeProgress() (server/mobile.js) does the actual upsert-by-bibNumber merge into
+  // whatever's already stored, mirroring POST /api/mobile/:raceLabel's own merge-by-recordUuid
+  // shape — this route used to just replace the whole file every time, back when the web app sent
+  // everything on every push; see mergeProgress's own doc for why that's no longer good enough
+  // (metered mobile data + unreliable field connectivity, per TODO.md's own delta-payload
+  // correction).
   // Checked before the broader POST /api/mobile/:raceLabel below, which would otherwise swallow
   // this path too once decoded (both start with `/api/mobile/`).
   // owner is the dataset's own owner (js/progress-sync.js sends session.dataset's owner half,
@@ -53,25 +59,46 @@ export async function handleMobileRoutes(req, res, pathname, knownGeneratedAt) {
       }
       return out;
     };
-    const payload = {
+    const sanitisedEntries = entries
+      .map(e => ({
+        bibNumber: Number(e?.bibNumber) || 0,
+        name: typeof e?.name === 'string' ? e.name : '',
+        category: typeof e?.category === 'string' ? e.category : '',
+        course: typeof e?.course === 'string' ? e.course : '',
+        startTime: typeof e?.startTime === 'string' ? e.startTime : '',
+        finishTime: typeof e?.finishTime === 'string' ? e.finishTime : '',
+        cpTimes: sanitiseCpTimes(e?.cpTimes),
+      }))
+      .filter(e => e.bibNumber > 0);
+    const removed = Array.isArray(body?.removed) ? body.removed.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
+    const merged = mergeProgress(owner, raceLabel, {
       raceName: typeof body?.raceName === 'string' ? body.raceName : '',
       raceDate: typeof body?.raceDate === 'string' ? body.raceDate : '',
-      generatedAt: new Date().toISOString(),
-      entries: entries
-        .map(e => ({
-          bibNumber: Number(e?.bibNumber) || 0,
-          name: typeof e?.name === 'string' ? e.name : '',
-          category: typeof e?.category === 'string' ? e.category : '',
-          course: typeof e?.course === 'string' ? e.course : '',
-          startTime: typeof e?.startTime === 'string' ? e.startTime : '',
-          finishTime: typeof e?.finishTime === 'string' ? e.finishTime : '',
-          cpTimes: sanitiseCpTimes(e?.cpTimes),
-        }))
-        .filter(e => e.bibNumber > 0),
-    };
-    writeProgress(owner, raceLabel, payload);
-    console.log(`[progress] ${username} -> ${owner}/${raceLabel}: updated (${payload.entries.length} entries)`);
+      entries: sanitisedEntries,
+      removed,
+    });
+    console.log(`[progress] ${username} -> ${owner}/${raceLabel}: merged ${sanitisedEntries.length} changed, ${removed.length} removed (${merged.entries.length} total)`);
     jsonReply(res, 200, { ok: true });
+    return true;
+  }
+
+  // POST /api/mobile/:owner/:raceLabel/progress/touch — "Activate Race" (js/views/event.js):
+  // refreshes progress.json's own generatedAt to now with no entries re-sent at all, purely a
+  // "this race is current" signal for the mobile app's own server-race-scan (see
+  // touchProgress's own doc in server/mobile.js). Same owner-or-admin rule as the progress POST
+  // route above. Checked before the broader POST /api/mobile/:raceLabel below for the same reason
+  // that route is.
+  if (/^\/api\/mobile\/[^/]+\/[^/]+\/progress\/touch$/.test(pathname) && req.method === 'POST') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const [owner, raceLabel] = pathname.slice('/api/mobile/'.length, -'/progress/touch'.length)
+      .split('/').map(decodeURIComponent).map(sanitiseName);
+    if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
+    if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' }); return true; }
+    const touched = touchProgress(owner, raceLabel);
+    if (!touched) { jsonReply(res, 404, { error: 'No progress recorded for this race yet' }); return true; }
+    console.log(`[progress] ${username} -> ${owner}/${raceLabel}: activated (generatedAt=${touched.generatedAt})`);
+    jsonReply(res, 200, { ok: true, generatedAt: touched.generatedAt });
     return true;
   }
 
@@ -224,9 +251,13 @@ export async function handleMobileRoutes(req, res, pathname, knownGeneratedAt) {
   // repo root, MOBILE_DIR included, with no auth check at all — untouched, out of scope here;
   // this is the properly-gated path going forward).
   //
-  // knownGeneratedAt is optional; when it matches what's on disk exactly, the response omits
-  // `entries` and returns {unchanged: true, generatedAt} instead of the full payload — the
-  // bandwidth-saving mechanism this route exists for. There's no ETag/304 convention anywhere in
+  // `since` (an entry's own `updatedAt` cursor, e.g. whatever generatedAt this caller last saw)
+  // is optional. When it matches what's on disk exactly, the response omits `entries` and returns
+  // {unchanged: true, generatedAt} instead — the fast-path bandwidth-saving mechanism this route
+  // has always had. Otherwise, `entries` is filtered down to only those whose own `updatedAt` is
+  // newer than `since` (see mergeProgress's own doc for where that per-entry stamp comes from) —
+  // a delta, not the whole race's entries every time; omitting `since` entirely still returns
+  // everything, for a caller with nothing cached yet. There's no ETag/304 convention anywhere in
   // this server (a real conditional-GET would mean bypassing jsonReply for no real benefit here)
   // — this reuses the same "cheap JSON sentinel" idiom getMobileRacesStatusForUser already
   // established for the equivalent per-device problem.
@@ -240,14 +271,34 @@ export async function handleMobileRoutes(req, res, pathname, knownGeneratedAt) {
     const progress = readProgress(username, raceLabel);
     if (!progress) { jsonReply(res, 404, { error: 'No progress recorded for this race yet' }); return true; }
 
-    if (progressIsUnchanged(progress, knownGeneratedAt)) {
+    if (progressIsUnchanged(progress, since)) {
       jsonReply(res, 200, { unchanged: true, generatedAt: progress.generatedAt });
     } else {
+      const entries = since ? progress.entries.filter(e => e.updatedAt && e.updatedAt > since) : progress.entries;
       jsonReply(res, 200, {
         unchanged: false, generatedAt: progress.generatedAt,
-        raceName: progress.raceName, raceDate: progress.raceDate, entries: progress.entries,
+        raceName: progress.raceName, raceDate: progress.raceDate, entries,
       });
     }
+    return true;
+  }
+
+  // GET /api/mobile/races?maxAgeDays=N — the mobile app's setup-time server-race-scan (see
+  // getAvailableRacesForUser's own doc in server/mobile.js for why this is a separate, lean route
+  // rather than client-side filtering of GET /api/mobile below). Checked before that route since
+  // both are exact-pathname matches with no prefix relationship, order doesn't actually matter
+  // between them, but kept together for readability. maxAgeDays is required — a malformed/missing
+  // value is a 400, not a silent "no filtering" fallback, since an unfiltered scan is exactly the
+  // heavy behavior this route exists to avoid.
+  if (pathname === '/api/mobile/races' && req.method === 'GET') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const parsedMaxAgeDays = Number(maxAgeDays);
+    if (!Number.isFinite(parsedMaxAgeDays) || parsedMaxAgeDays <= 0) {
+      jsonReply(res, 400, { error: 'maxAgeDays must be a positive number' });
+      return true;
+    }
+    jsonReply(res, 200, getAvailableRacesForUser(username, parsedMaxAgeDays, isAdmin(username)));
     return true;
   }
 

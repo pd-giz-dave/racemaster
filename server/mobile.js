@@ -73,6 +73,47 @@ export function writeProgress(username, raceLabel, payload) {
   fs.writeFileSync(progressFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
 }
 
+// Delta-merges a push into whatever progress.json already exists, rather than replacing it
+// wholesale — the web app now only sends entries that actually changed since its own last
+// successful push (see js/progress-sync.js), not its full recomputed set every time, so a plain
+// replace would silently drop every entry this push didn't happen to include. Mirrors
+// POST /api/mobile/:raceLabel's own upsert-by-key merge loop, keyed by bibNumber instead of
+// recordUuid. `updatedAt` is stamped here (server-authoritative, like generatedAt already was —
+// see routes/mobile.js's own "ignoring client's value" precedent), not trusted from the caller,
+// so a delta fetch's own `since` filtering (see GET .../progress below) can rely on it. `removed`
+// (bib numbers no longer present on the web app's own side, e.g. an Entries deletion) are dropped
+// from the stored set — the one case a pure upsert can't express on its own.
+export function mergeProgress(username, raceLabel, { raceName, raceDate, entries, removed }) {
+  const existing = readProgress(username, raceLabel) || { raceName: '', raceDate: '', entries: [] };
+  const now = new Date().toISOString();
+  const byBib = new Map(existing.entries.map(e => [e.bibNumber, e]));
+  for (const entry of entries) byBib.set(entry.bibNumber, { ...entry, updatedAt: now });
+  for (const bibNumber of removed || []) byBib.delete(bibNumber);
+  const merged = {
+    raceName: raceName || existing.raceName,
+    raceDate: raceDate || existing.raceDate,
+    generatedAt: now,
+    entries: [...byBib.values()],
+  };
+  writeProgress(username, raceLabel, merged);
+  return merged;
+}
+
+// "Activate Race" (js/views/event.js) — refreshes progress.json's own generatedAt to now,
+// without requiring the caller to resend entries at all, so the operator can signal "this race
+// is current, mobile phones should notice it" as a lightweight, minimal-payload action rather
+// than a full re-push (see TODO.md's phase-2 "Activate Race" correction on why this needed its
+// own route instead of just reusing the POST .../progress path). Returns null (caller 404s) if
+// there's no progress.json yet for this label — nothing to activate until registration/the first
+// real push has happened.
+export function touchProgress(username, raceLabel) {
+  const existing = readProgress(username, raceLabel);
+  if (!existing) return null;
+  const touched = { ...existing, generatedAt: new Date().toISOString() };
+  writeProgress(username, raceLabel, touched);
+  return touched;
+}
+
 // Whether a caller who says "I already have generatedAt=knownGeneratedAt" already holds the
 // current progress payload — see GET /api/mobile/:raceLabel/progress in routes/mobile.js, the
 // bandwidth-saving mechanism a phone (over BLE or HTTP) uses to avoid re-fetching an unchanged
@@ -201,5 +242,32 @@ export function getMobileRacesStatusForUser(username, adminAccess = false) {
     devices.sort((a, b) => a.name.localeCompare(b.name));
     results.push({ owner, raceLabel, devices });
   }
+  return results;
+}
+
+// GET /api/mobile/races?maxAgeDays=N's own backing function — the mobile app's setup-time
+// server-race-scan (racemaster-mobile's own SetupRaceScreen), which needs to find recent races
+// to offer as a pick-list without downloading getMobileRacesForUser()'s full per-device record
+// arrays just to do it (see TODO.md's phase-2 correction: this needed a genuinely new, lean,
+// server-side-filtered endpoint, not client-side filtering of the heavy listing). Only races with
+// an actual progress.json are eligible at all — one with none has never been registered/pushed
+// from the web app, so there's nothing yet for a phone to usefully "become". `maxAgeDays` is
+// required (not optional like getMobileRacesForUser's adminAccess) — the mobile client always
+// has its own SettingsRepository.raceStaleAfterDays to pass, and filtering server-side is the
+// entire point of this route existing.
+export function getAvailableRacesForUser(username, maxAgeDays, adminAccess = false) {
+  const cutoffMillis = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const results = [];
+  for (const { owner, raceLabel } of walkMobileRaceDirs(username, adminAccess)) {
+    const progress = readProgress(owner, raceLabel);
+    if (!progress || !progress.generatedAt) continue;
+    const generatedAtMillis = Date.parse(progress.generatedAt);
+    if (!Number.isFinite(generatedAtMillis) || generatedAtMillis < cutoffMillis) continue;
+    results.push({
+      raceLabel, raceName: progress.raceName || '', raceDate: progress.raceDate || '',
+      generatedAt: progress.generatedAt,
+    });
+  }
+  results.sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
   return results;
 }

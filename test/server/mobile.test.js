@@ -9,8 +9,9 @@ import path from 'path';
 import { ensureDirs, MOBILE_DIR } from '../../server/config.js';
 import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
-  progressFilePath, readProgress, writeProgress, progressIsUnchanged, parseRaceLabelDate,
-  getMobileRacesForUser, getMobileRacesStatusForUser,
+  progressFilePath, readProgress, writeProgress, mergeProgress, touchProgress,
+  progressIsUnchanged, parseRaceLabelDate,
+  getMobileRacesForUser, getMobileRacesStatusForUser, getAvailableRacesForUser,
 } from '../../server/mobile.js';
 
 beforeEach(() => {
@@ -66,6 +67,90 @@ describe('server/mobile.js:readProgress / writeProgress', () => {
 
   it('returns null when there is no progress file yet', () => {
     assert.equal(readProgress('alice', 'no-such-race'), null);
+  });
+});
+
+describe('server/mobile.js:mergeProgress', () => {
+  it('upserts entries by bibNumber into an empty progress.json, stamping updatedAt', () => {
+    const merged = mergeProgress('alice', 'race1', {
+      raceName: 'Test Race', raceDate: '23/08/2026',
+      entries: [{ bibNumber: 1, name: 'Dave', category: 'MSEN', course: 'Seniors', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    assert.equal(merged.entries.length, 1);
+    assert.equal(merged.entries[0].bibNumber, 1);
+    assert.equal(typeof merged.entries[0].updatedAt, 'string');
+    assert.deepEqual(readProgress('alice', 'race1'), merged);
+  });
+
+  it('leaves an existing entry untouched when only a different bib is pushed', () => {
+    mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '',
+      entries: [{ bibNumber: 1, name: 'Dave', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    const first = readProgress('alice', 'race1').entries[0];
+    const merged = mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '',
+      entries: [{ bibNumber: 2, name: 'Sam', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    assert.equal(merged.entries.length, 2);
+    assert.deepEqual(merged.entries.find(e => e.bibNumber === 1), first);
+  });
+
+  it('replaces an existing entry\'s fields (and updatedAt) when the same bib is pushed again', async () => {
+    mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '',
+      entries: [{ bibNumber: 1, name: 'Dave', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    const before = readProgress('alice', 'race1').entries[0];
+    await new Promise(r => setTimeout(r, 5));
+    const merged = mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '',
+      entries: [{ bibNumber: 1, name: 'David', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    assert.equal(merged.entries.length, 1);
+    assert.equal(merged.entries[0].name, 'David');
+    assert.notEqual(merged.entries[0].updatedAt, before.updatedAt);
+  });
+
+  it('drops a bib named in `removed`, even if also present in `entries` on the same push', () => {
+    mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '',
+      entries: [
+        { bibNumber: 1, name: 'Dave', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} },
+        { bibNumber: 2, name: 'Sam', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} },
+      ],
+      removed: [],
+    });
+    const merged = mergeProgress('alice', 'race1', { raceName: 'X', raceDate: '', entries: [], removed: [2] });
+    assert.deepEqual(merged.entries.map(e => e.bibNumber), [1]);
+  });
+
+  it('bumps generatedAt even when entries/removed are both empty (a pure touch-like push)', async () => {
+    const first = mergeProgress('alice', 'race1', { raceName: 'X', raceDate: '', entries: [], removed: [] });
+    await new Promise(r => setTimeout(r, 5));
+    const second = mergeProgress('alice', 'race1', { raceName: 'X', raceDate: '', entries: [], removed: [] });
+    assert.notEqual(second.generatedAt, first.generatedAt);
+  });
+});
+
+describe('server/mobile.js:touchProgress', () => {
+  it('returns null when there is no progress.json yet for this race', () => {
+    assert.equal(touchProgress('alice', 'no-such-race'), null);
+  });
+
+  it('refreshes generatedAt without touching entries', async () => {
+    const payload = { raceName: 'X', raceDate: '', entries: [{ bibNumber: 1, name: 'Dave', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }] };
+    writeProgress('alice', 'race1', payload);
+    await new Promise(r => setTimeout(r, 5));
+    const touched = touchProgress('alice', 'race1');
+    assert.notEqual(touched.generatedAt, undefined);
+    assert.deepEqual(touched.entries, payload.entries);
+    assert.deepEqual(readProgress('alice', 'race1'), touched);
   });
 });
 
@@ -146,6 +231,45 @@ describe('server/mobile.js:getMobileRacesForUser', () => {
     writeMobileDeviceFile('alice', 'undated-race', 'PhoneZ', []);
     const races = getMobileRacesForUser('alice');
     assert.equal(races[races.length - 1].raceLabel, 'undated-race');
+  });
+});
+
+describe('server/mobile.js:getAvailableRacesForUser', () => {
+  it('only lists races that have a progress.json at all', () => {
+    writeMobileDeviceFile('alice', 'race-no-progress', 'PhoneA', []);
+    writeProgress('alice', 'race-with-progress', { raceName: 'X', raceDate: '', generatedAt: new Date().toISOString(), entries: [] });
+    const races = getAvailableRacesForUser('alice', 30);
+    assert.deepEqual(races.map(r => r.raceLabel), ['race-with-progress']);
+  });
+
+  it('excludes a race whose generatedAt is older than maxAgeDays', () => {
+    const old = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const recent = new Date().toISOString();
+    writeProgress('alice', 'race-old', { raceName: 'Old', raceDate: '', generatedAt: old, entries: [] });
+    writeProgress('alice', 'race-recent', { raceName: 'Recent', raceDate: '', generatedAt: recent, entries: [] });
+    const races = getAvailableRacesForUser('alice', 2);
+    assert.deepEqual(races.map(r => r.raceLabel), ['race-recent']);
+  });
+
+  it('sorts newest generatedAt first', () => {
+    writeProgress('alice', 'race-a', { raceName: 'A', raceDate: '', generatedAt: '2026-08-20T10:00:00.000Z', entries: [] });
+    writeProgress('alice', 'race-b', { raceName: 'B', raceDate: '', generatedAt: '2026-08-23T10:00:00.000Z', entries: [] });
+    const races = getAvailableRacesForUser('alice', 30);
+    assert.deepEqual(races.map(r => r.raceLabel), ['race-b', 'race-a']);
+  });
+
+  it('returns the lean shape only — no devices/lines/recordCount', () => {
+    writeMobileDeviceFile('alice', 'race-a', 'PhoneA', [{ recordUuid: 'u1' }]);
+    writeProgress('alice', 'race-a', { raceName: 'A', raceDate: '', generatedAt: new Date().toISOString(), entries: [] });
+    const race = getAvailableRacesForUser('alice', 30)[0];
+    assert.deepEqual(Object.keys(race).sort(), ['generatedAt', 'raceDate', 'raceLabel', 'raceName']);
+  });
+
+  it('scopes to the requesting user\'s own races unless adminAccess is true', () => {
+    writeProgress('alice', 'race-alice', { raceName: 'A', raceDate: '', generatedAt: new Date().toISOString(), entries: [] });
+    writeProgress('bob', 'race-bob', { raceName: 'B', raceDate: '', generatedAt: new Date().toISOString(), entries: [] });
+    assert.deepEqual(getAvailableRacesForUser('alice', 30).map(r => r.raceLabel), ['race-alice']);
+    assert.ok(getAvailableRacesForUser('alice', 30, true).some(r => r.raceLabel === 'race-bob'));
   });
 });
 

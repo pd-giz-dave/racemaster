@@ -1467,9 +1467,23 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [] } = {}
       if (deviceInfo.progressGeneratedAt === match.progress.generatedAt) {
         bleLog(`[mule-ble] "${connectedName}" already has the latest progress (${match.progress.generatedAt}) — skipping delivery`);
       } else {
+        // Delta, not the whole race — same "only what changed since the receiver's own
+        // checkpoint" idiom GET .../progress's own `since` filtering uses server-side (see
+        // routes/mobile.js), just applied here against the phone's own self-reported
+        // deviceInfo.progressGeneratedAt instead of a query param. A phone that's never
+        // received progress at all (progressGeneratedAt null/empty) still gets everything —
+        // there's no prior checkpoint to diff against, same as a first-ever HTTP fetch.
+        const since = deviceInfo.progressGeneratedAt;
+        const entries = since
+          ? match.progress.entries.filter(e => e.updatedAt && e.updatedAt > since)
+          : match.progress.entries;
+        const delta = {
+          raceName: match.progress.raceName, raceDate: match.progress.raceDate,
+          generatedAt: match.progress.generatedAt, entries,
+        };
         try {
-          await withGattRecovery(connectedName, () => deliverProgress(service, match.progress));
-          bleLog(`[mule-ble] delivered progress (${match.progress.generatedAt}) to "${connectedName}"`);
+          await withGattRecovery(connectedName, () => deliverProgress(service, delta));
+          bleLog(`[mule-ble] delivered ${entries.length} changed progress entr${entries.length === 1 ? 'y' : 'ies'} (${match.progress.generatedAt}) to "${connectedName}"`);
         } catch (e) {
           bleError(`[mule-ble] failed to deliver progress to "${connectedName}"`, e);
           if (e.connectionLost) connectionLost = true;

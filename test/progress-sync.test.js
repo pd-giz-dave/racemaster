@@ -5,11 +5,15 @@ import assert from 'node:assert/strict';
 
 import { state } from '../js/state.js';
 import { installLocalStorageMock, installFetchMock, installWindowMock, jsonResponse, flushMicrotasks } from './helpers/mock-browser.js';
-import { startProgressSync, pushProgressNow } from '../js/progress-sync.js';
+import { startProgressSync, pushProgressNow, resetProgressPushCacheForTests } from '../js/progress-sync.js';
 
 beforeEach(() => {
   installLocalStorageMock();
   installWindowMock();
+  // The delta-push cache (see progress-sync.js's own doc) is in-memory, not localStorage, so
+  // installLocalStorageMock() alone doesn't reset it between tests — every test here otherwise
+  // assumes a full "nothing pushed yet" push, same as a fresh page load.
+  resetProgressPushCacheForTests();
   localStorage.setItem('racemaster-token', 'tok');
   localStorage.setItem('racemaster-dataset', 'me/race');
   state.event            = { name: 'Test Fell Race', date: '15/06/2026' };
@@ -83,7 +87,7 @@ describe('progress-sync.js:startProgressSync', () => {
     assert.deepEqual(JSON.parse(juniorsCall.opts.body).entries.map(e => e.bibNumber), [2]);
   });
 
-  it('re-pushes on a racemaster-dirty-change event, debounced', async (t) => {
+  it('re-pushes on a racemaster-dirty-change event that actually changes something, debounced', async (t) => {
     const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
     t.mock.timers.enable({ apis: ['setTimeout'] });
 
@@ -92,10 +96,21 @@ describe('progress-sync.js:startProgressSync', () => {
     await flushMicrotasks();
     assert.equal(fetchMock.calls.length, 1);
 
+    // A dirty-change with no actual data change behind it must NOT trigger a second network
+    // call at all — that's the whole point of pushing deltas rather than the full state every
+    // time (see progress-sync.js's own diffEntries doc). Only once something genuinely differs
+    // (a new checkpoint time here) does the next debounce actually push again.
+    window.dispatchEvent(new CustomEvent('racemaster-dirty-change'));
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+    assert.equal(fetchMock.calls.length, 1);
+
+    state.mobileCheckpoints = [{ bibNumber: '1', cpTimes: { 1: '00:10:00', 2: '00:20:00' } }];
     window.dispatchEvent(new CustomEvent('racemaster-dirty-change'));
     t.mock.timers.tick(2000);
     await flushMicrotasks();
     assert.equal(fetchMock.calls.length, 2);
+    assert.deepEqual(JSON.parse(fetchMock.calls[1].opts.body).entries[0].cpTimes, { 1: '00:10:00', 2: '00:20:00' });
   });
 
   it('does nothing once no event name/date is set (no derivable race label)', async (t) => {
@@ -155,6 +170,29 @@ describe('progress-sync.js:startProgressSync', () => {
     await flushMicrotasks();
 
     assert.equal(fetchMock.calls.length, 0);
+  });
+
+  it('reports a deleted entry as `removed`, and still pushes even though `entries` is now empty', async (t) => {
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    startProgressSync();
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+    assert.equal(fetchMock.calls.length, 1);
+    assert.deepEqual(JSON.parse(fetchMock.calls[0].opts.body).removed, []);
+
+    state.entries = []; // bib 1 deleted from Entries entirely
+    state.mobileProgress = [];
+    state.mobileCheckpoints = [];
+    window.dispatchEvent(new CustomEvent('racemaster-dirty-change'));
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+
+    assert.equal(fetchMock.calls.length, 2);
+    const body = JSON.parse(fetchMock.calls[1].opts.body);
+    assert.deepEqual(body.entries, []);
+    assert.deepEqual(body.removed, [1]);
   });
 });
 
