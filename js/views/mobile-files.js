@@ -113,9 +113,15 @@ async function deleteRow(r) {
   const label = fileLabel(r);
   // Naming the owner too when admin: this is the one page an admin can see two different users'
   // similarly-named races side by side, so the plain race/file name alone isn't always enough to
-  // be sure which one's about to be deleted.
+  // be sure which one's about to be deleted. A relocated device (see mobile-files-devices.js's
+  // own flattenDevices()) shows up as more than one row — this deletes the server's one
+  // underlying file regardless of which of that device's location-rows was clicked, so that's
+  // called out explicitly rather than leaving an admin/operator to assume it only affects "this"
+  // location.
+  const locationNote = r.locationSplit
+    ? ` This removes every location this device recorded, not just "${r.rawLocation}".` : '';
   if (!await showConfirmDialog(
-    `Delete "${label}" from "${r.raceLabel}"${getIsAdmin() ? ` (owner: ${r.owner})` : ''}? This cannot be undone.`,
+    `Delete "${label}" from "${r.raceLabel}"${getIsAdmin() ? ` (owner: ${r.owner})` : ''}?${locationNote} This cannot be undone.`,
     'Delete', true
   )) return;
   const error = await deleteFileOnServer(r);

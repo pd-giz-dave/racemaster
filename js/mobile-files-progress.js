@@ -17,15 +17,26 @@ import { buildSegmentView, rawLocationOf, resolveLocationKey } from './mobile-fi
 // mode) is treated as a Finish, since it only makes sense here at all when the CP happened to
 // be the finish line. "Stop"/"Reset" are session-boundary markers with no finisher meaning —
 // left out of this map entirely so they're dropped rather than transferred.
+//
+// `ModeStart` (the Bibs-family device marker on the wire — see mobile-files-devices.js's own
+// hasRealBib/latestStartedAt doc; ToDo.MD: "use the ModeStart records and not start or clock
+// records") maps to the OUTPUT action `'Clock'`, not `'ModeStart'` — that rename is purely a wire
+// -format/input concern. state.mobileProgress's own action vocabulary is the same one
+// state.finishers (the manually-entered stopwatch list) has used for years — time-utils.js's
+// adjustedFinishTime(), safety.js and finishers.js itself all still look for a literal `'Clock'`
+// record there, well beyond Mobile Files' own concerns, so the OUTPUT value must stay `'Clock'`
+// regardless of what the device's own wire action is now called.
 const BIBS_ACTION_TO_FINISHER = {
   Start: 'Start', Finish: 'Finish', DNF: 'DNF', Pass: 'Finish',
-  Clock: 'Clock', Ignore: 'Ignore', Seniors: 'Seniors', Juniors: 'Juniors', Male: 'Male', Female: 'Female',
+  ModeStart: 'Clock', Ignore: 'Ignore', Seniors: 'Seniors', Juniors: 'Juniors', Male: 'Male', Female: 'Female',
 };
 const TRANSFERABLE_BIBS_ACTIONS = new Set(Object.keys(BIBS_ACTION_TO_FINISHER));
 const BIB_REQUIRED_FINISHER_ACTIONS = new Set(['Start', 'Finish', 'DNF', 'Pass']);
-// Time mode's own "Stop"/"Reset"/"Undo" markers carry no split of their own — only Start (the
-// fixed t=0 marker) and ordinary Split rows pair with a bib.
-const TRANSFERABLE_TIME_ACTIONS = new Set(['Start', 'Split']);
+// Time mode's own "Stop"/"Reset"/"Undo" markers carry no split of their own — only its own
+// ModeStart marker (the fixed t=0 mark, formerly action:'Start' — see BIBS_ACTION_TO_FINISHER's
+// own doc above for why the wire rename doesn't touch the OUTPUT vocabulary) and ordinary Split
+// rows pair with a bib.
+const TRANSFERABLE_TIME_ACTIONS = new Set(['ModeStart', 'Split']);
 
 // "HH:MM:SS.CC" (elapsed, as stored in splitTime) → "HH:MM:SS" — finishers.js's own
 // parseFinishTime() splits on any non-digit run and rejects more than 3 numeric parts, so a
@@ -53,11 +64,11 @@ function deviceTimeOfDay(ts) {
   return m ? m[1] : '';
 }
 
-// "The time mode start line" — the one Start row in a Time-mode device's file, whose own
+// "The time mode start line" — the one ModeStart row in a Time-mode device's file, whose own
 // timestamp is wall-clock zero for every elapsed time computed against it (both FinishTime's
 // existing splitNumber pairing and the new CP timestamp arithmetic use this same instant).
 function findStartTimestamp(finishTimeRows) {
-  const start = finishTimeRows.find(r => r.action === 'Start');
+  const start = finishTimeRows.find(r => r.action === 'ModeStart');
   return start ? parseTimestamp(start.timestamp) : null;
 }
 
@@ -265,9 +276,13 @@ export async function validateAndCompute(selected) {
     if (!visibleRows.length) {
       return { error: `Cannot compute results — "${r.device.name}" is empty (no entries in its current segment).` };
     }
+    // A location genuinely changing mid-file (the marshal moved — ToDo.MD's own "allow for the
+    // location changing in a device file") is expected, not an error: rawLocationOf() already
+    // resolves that to whichever location is current (the latest line's own — see its own doc in
+    // mobile-files-devices.js), so this only ever fires when no visible row carries one at all.
     const raw = rawLocationOf(visibleRows);
     if (raw == null) {
-      return { error: `Cannot compute results — "${r.device.name}" has inconsistent locations within its own file.` };
+      return { error: `Cannot compute results — "${r.device.name}" has no location recorded.` };
     }
     const key = resolveLocationKey(raw);
     if (!key) {

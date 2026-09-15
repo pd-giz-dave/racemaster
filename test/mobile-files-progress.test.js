@@ -23,8 +23,8 @@ beforeEach(() => {
   state.siResults = [];
 });
 
-// A minimal Finish-location device row: one Time-mode phone with a Start + one Split, one
-// Bibs-mode phone with one Finish — enough for validateAndCompute() to pair a real finish time.
+// A minimal Finish-location device row: one Time-mode phone with a ModeStart marker + one Split,
+// one Bibs-mode phone with one Finish — enough for validateAndCompute() to pair a real finish time.
 function finishRow(overrides = {}) {
   return {
     owner: 'alice', raceLabel: 'race-a',
@@ -32,9 +32,13 @@ function finishRow(overrides = {}) {
       name: 'Finish Phone',
       lines: [
         // splitTime set (even though it's the fixed t=0 marker) so buildSegmentView classifies
-        // this as the Time-mode family, not the Bibs-mode one — a Bibs-mode "Start" action also
-        // exists (see BIBS_ACTION_TO_FINISHER), and only splitTime null/non-null tells them apart.
-        { lineNumber: 1, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00', location: 'Finish' },
+        // this as the Time-mode family, not the Bibs-mode one — a Bibs-mode per-bib "Start"
+        // action also exists (a runner's own early/late start, unrelated to this device marker —
+        // see BIBS_ACTION_TO_FINISHER's own doc), and only splitTime null/non-null tells the two
+        // families apart; action:'ModeStart' itself (ToDo.MD: "use the ModeStart records and not
+        // start or clock records") is what identifies this specific row as the family's own
+        // session-start marker, not an ordinary entry.
+        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00', location: 'Finish' },
         { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
         { lineNumber: 3, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
       ],
@@ -59,11 +63,47 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
-  it('rejects a file with inconsistent locations across its own lines', () => {
+  it('resolves a file whose location changed mid-file to its latest (current) one, rather than rejecting it', () => {
+    const moved = finishRow();
+    moved.device.lines[0].location = 'CP1'; // stale — an earlier line, before the marshal moved to Finish
+    return validateAndCompute([moved]).then(result => {
+      assert.equal(result.error, undefined);
+      assert.equal(result.finishRows.length, 1); // bucketed by the LATEST location (Finish), not the first
+    });
+  });
+
+  it('rejects a file with no location recorded on any visible line', () => {
     const bad = finishRow();
-    bad.device.lines[0].location = 'CP1'; // disagrees with the other two lines' "Finish"
+    for (const l of bad.device.lines) delete l.location;
     return validateAndCompute([bad]).then(result => {
-      assert.match(result.error, /inconsistent locations/);
+      assert.match(result.error, /no location recorded/);
+    });
+  });
+
+  // ToDo.MD's "modestart setup record" — a device adopted (Setup Race run, mode chosen) before
+  // anything real has been recorded must not crash or misbehave when selected for Update
+  // Progress. There's no longer a separate mode-agnostic "Setup" record to worry about (ToDo.MD:
+  // "drop the 'Setup' record from the device file, its no longer created, there will always be a
+  // modestart record") — the file's own ModeStart marker (already in BIBS_ACTION_TO_FINISHER,
+  // same as the 'Clock' action it replaced) transfers harmlessly as a single inert Clock-mapped
+  // entry (number 0, no bib), not an error — matches long-standing behavior for the old 'Clock'
+  // marker, unchanged in substance by the wire-format rename.
+  it('succeeds harmlessly (one inert entry, not an error) for a Finish-location device with only its own ModeStart marker', () => {
+    const modeStartOnly = finishRow({ device: { name: 'Just Adopted', lines: [
+      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', splitTime: null, location: 'Finish' },
+    ] } });
+    return validateAndCompute([modeStartOnly]).then(result => {
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.expected, [{ action: 'Clock', number: 0, time: '' }]);
+    });
+  });
+
+  it('rejects a Finish-location device whose only visible line is a genuinely non-transferable action', () => {
+    const stopOnly = finishRow({ device: { name: 'Odd Phone', lines: [
+      { lineNumber: 1, action: 'Stop', bibNumber: '1', location: 'Finish' },
+    ] } });
+    return validateAndCompute([stopOnly]).then(result => {
+      assert.match(result.error, /no transferable entries/);
     });
   });
 
@@ -141,9 +181,9 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     assert.equal(startEntry.timeOfDay, '09:05:00');
   });
 
-  it('rejects a checkpoint file when the Finish file\'s time-mode Start row is missing', async () => {
+  it('rejects a checkpoint file when the Finish file\'s time-mode ModeStart row is missing', async () => {
     const noStart = finishRow();
-    noStart.device.lines = noStart.device.lines.filter(l => l.action !== 'Start');
+    noStart.device.lines = noStart.device.lines.filter(l => l.action !== 'ModeStart');
     const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
     ] } });

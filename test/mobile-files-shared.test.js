@@ -36,6 +36,16 @@ describe('mobile-files-shared.js:rowKey', () => {
   it('combines owner, raceLabel and device name', () => {
     assert.equal(rowKey(row()), 'alice test-race-26-08-30 Phone One');
   });
+
+  // A relocated device (ToDo.MD's "allow for the location changing in a device file") produces
+  // more than one row for the same owner/raceLabel/device name — see flattenDevices() in
+  // mobile-files-devices.js — so those rows need distinct keys, but an ordinary row must keep
+  // exactly its original key (real users already have selection state persisted under it).
+  it('appends rawLocation only when locationSplit is true, leaving an ordinary row\'s key unchanged', () => {
+    assert.equal(rowKey(row({ rawLocation: 'CP1' })), 'alice test-race-26-08-30 Phone One'); // no locationSplit -> ignored
+    assert.equal(rowKey(row({ rawLocation: 'CP1', locationSplit: true })), 'alice test-race-26-08-30 Phone One CP1');
+    assert.equal(rowKey(row({ rawLocation: 'CP2', locationSplit: true })), 'alice test-race-26-08-30 Phone One CP2');
+  });
 });
 
 describe('mobile-files-shared.js:currentDatasetContext', () => {

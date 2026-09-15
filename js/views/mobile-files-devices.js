@@ -127,8 +127,8 @@ function buildColumns(isAdminUser) {
       ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
       : ''),
     location:  r => `<span title="${escHtml(r.location)}">${escHtml(r.location)}</span>`,
-    bibs:      r => formatCount(r.bibsVisible),
-    time:      r => formatCount(r.timeVisible),
+    bibs:      r => formatCount(r.bibsVisible, r.bibsExpected),
+    time:      r => formatCount(r.timeVisible, r.timeExpected),
     lastSeen:   r => formatDateTime(r.lastSeen),
     lastUpdate: r => formatStoredTimestamp(r.lastUpdate),
     startedAt: r => formatStoredTimestamp(r.startedAt),

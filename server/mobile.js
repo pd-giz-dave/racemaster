@@ -7,10 +7,10 @@
 // shared file per race), holding that device's own lines as a single flat, chronological
 // array — a Bibs line and a Time line are told apart by whether `splitTime` is null (Bibs has
 // no stopwatch of its own) or `bibNumber` is null (Time has no bib concept at all — the mobile
-// app never sends null there for a Bibs line, even one with no bib of its own, e.g. a Clock/
-// Stop/Reset marker: those send the string "n/a" instead, matching how the app's own history
-// list displays them, specifically so a bib-less Bibs line can never be wire-indistinguishable
-// from a Time line by both fields being null at once), not by which array they're
+// app never sends null there for a Bibs line, even one with no bib of its own, e.g. its own
+// action:'ModeStart'/Stop/Reset marker: those send the string "n/a" instead, matching how the
+// app's own history list displays them, specifically so a bib-less Bibs line can never be
+// wire-indistinguishable from a Time line by both fields being null at once), not by which array they're
 // (hence there's no need to repeat deviceName per line, or split the array by category,
 // either). Append-merged on every sync (new recordUuids added, existing ones left alone; see
 // server/routes/mobile.js's merge loop), since the app sends only the lineNumber delta, not

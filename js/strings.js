@@ -479,17 +479,23 @@ export const HELP = {
         <strong>All Files</strong> (see below). You see your own uploads; admins see everyone's.</p>
     <p>Each device's file interleaves two independent record types: <strong>Bibs</strong> (bib-number entries, from Bibs or Checkpoint mode)
         and <strong>Time</strong> (stopwatch splits, from Time mode). The counts shown are only what's currently <em>visible</em> —
-        the entries since that device's own last Reset — the same view the phone's own screen would show; a blank count means none of that type exist at all.</p>
-    <p>The <strong>Location</strong> column should read the same for every visible line on a device — if it shows
-        <strong>Inconsistent</strong>, the file has been mixed between two different course locations and needs checking.</p>
+        the entries since that device's own last Reset — the same view the phone's own screen would show; a device's own setup/session-start
+        marker never counts as a bib or a split itself. What a blank vs. a literal <strong>0</strong> means is deliberately different: a phone
+        that's been set up or had a mode chosen, but has recorded nothing of that type yet, shows <strong>0</strong> — it's genuinely expected,
+        just not here yet. Blank means that type was never in play on this device at all (e.g. a Time-mode phone's own Bibs column). A phone
+        that's only just been adopted, with neither mode chosen yet, shows blank on both until one is.</p>
+    <p>If a marshal relocates mid-race, the device's file will carry more than one <strong>Location</strong> — that's expected, not an
+        error. The device gets a separate row per location it's actually recorded at, each with its own Bibs/Time counts scoped to just
+        that location; <strong>View</strong>/<strong>Raw</strong> on the old row keeps showing only what was recorded at the old location,
+        and the new row only what's been recorded since the move.</p>
     <p><strong>Last Seen</strong> is when the server (or, for a pending file, this browser) last actually heard from that
         device — useful for spotting a phone that's gone quiet. <strong>Last Update</strong> is the newest entry's own
         recorded timestamp, across every line on the device, not just what's currently visible — these two can differ,
         e.g. a phone still connected but with nothing new to send.</p>
     <p><strong>Started At</strong>, shown the same dd/mm/yy hh:mm format as Last Seen/Last Update, is when this
-        device most recently went active — its latest Start (Time mode) or Clock (Bibs/Checkpoint mode) marker,
-        whichever it uses — so at a glance you can confirm every station is actually set up and running, not just
-        that a file exists for it.</p>
+        device most recently went active — its latest ModeStart marker (written the moment Bibs/Checkpoint or Time
+        mode is actually chosen) — so at a glance you can confirm every station is actually set up and running, not
+        just that a file exists for it.</p>
     <p><strong>View</strong> shows the Bibs and Time entries side by side, aligned by split number, with the location
         and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
         useful for troubleshooting. Deleting a device's file is done from the <strong>All Files</strong> tab now (see below),
@@ -1149,9 +1155,9 @@ export const TABLES = {
   'mobile-files': [
     { id: 'select',    label: '',          title: 'Select for bulk actions', sticky: true },
     { id: 'raceLabel', label: 'Race',      title: 'Race name (date suffix dropped — see Race Date; hover for the full race label as recorded on the phone)', sticky: true, wrap: true },
-    { id: 'location',  label: 'Where',     title: 'Course location stamped on this device\'s currently-visible lines — every line should agree', sticky: true, wrap: true, cap: 80 },
-    { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset)' },
-    { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset)' },
+    { id: 'location',  label: 'Where',     title: 'This location\'s own course location — a relocated device gets one row per location it\'s recorded at, each scoped to just that location\'s own entries', sticky: true, wrap: true, cap: 80 },
+    { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset) — "0" means expected but none yet, blank means this device has no bibs mode of its own' },
+    { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset) — "0" means expected but none yet, blank means this device has no Time mode of its own' },
     { id: 'owner',     label: 'Owner',     title: 'Account this file was uploaded under (admins only)' },
     { id: 'raceDate',  label: 'Race Date', title: 'Race date parsed from the race label' },
     { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },

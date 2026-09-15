@@ -19,9 +19,19 @@ beforeEach(() => {
 });
 
 describe('mobile-files-devices.js:formatCount', () => {
-  it('shows nothing for zero, otherwise the count as a string', () => {
+  it('with no `expected` argument, shows nothing for zero, otherwise the count as a string', () => {
     assert.equal(formatCount(0), '');
     assert.equal(formatCount(3), '3');
+  });
+
+  it('expected:true always shows a literal count, including "0" — a real expectation with nothing recorded yet', () => {
+    assert.equal(formatCount(0, true), '0');
+    assert.equal(formatCount(3, true), '3');
+  });
+
+  it('expected:false shows blank for a genuine zero, but a real non-zero count always wins — never hide actually-recorded data', () => {
+    assert.equal(formatCount(0, false), '');
+    assert.equal(formatCount(3, false), '3');
   });
 });
 
@@ -82,19 +92,21 @@ describe('mobile-files-devices.js:whenOf', () => {
 });
 
 describe('mobile-files-devices.js:latestStartedAt', () => {
-  it('reads a Time-mode device\'s own Start marker (splitTime non-null)', () => {
+  it('reads a Time-mode device\'s own ModeStart marker', () => {
     const lines = [
-      { lineNumber: 1, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
+      { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
       { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', timestamp: '2026/08/30 09:20:00.00' },
     ];
     assert.equal(latestStartedAt(lines), '2026/08/30 09:00:00.00');
   });
 
-  it('reads a Bibs/CP-mode device\'s own Clock marker (splitTime null), not a per-bib Start entry', () => {
+  it('reads a Bibs/CP-mode device\'s own ModeStart marker, not a per-bib Start entry', () => {
     const lines = [
-      { lineNumber: 1, action: 'Clock', bibNumber: 'n/a', timestamp: '2026/08/30 08:55:00' },
-      // A runner's own explicit early/late start — same literal action string 'Start', but a
-      // per-bib Bibs-mode entry, never this device's own session-start marker.
+      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', timestamp: '2026/08/30 08:55:00' },
+      // A runner's own explicit early/late start — action:'Start', a completely different (and
+      // now unambiguous) action string from this device's own action:'ModeStart' marker, ever
+      // since ModeStart replaced the former per-family Start/Clock markers (ToDo.MD: "use the
+      // ModeStart records and not start or clock records").
       { lineNumber: 2, action: 'Start', bibNumber: '42', timestamp: '2026/08/30 09:05:12' },
     ];
     assert.equal(latestStartedAt(lines), '2026/08/30 08:55:00');
@@ -102,19 +114,19 @@ describe('mobile-files-devices.js:latestStartedAt', () => {
 
   it('picks the highest-lineNumber marker when the device was reset and started again', () => {
     const lines = [
-      { lineNumber: 1, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
+      { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00' },
       { lineNumber: 2, action: 'Reset' },
-      { lineNumber: 3, action: 'Start', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 14:30:00.00' },
+      { lineNumber: 3, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 14:30:00.00' },
     ];
     assert.equal(latestStartedAt(lines), '2026/08/30 14:30:00.00');
   });
 
   it('returns the full raw timestamp, seconds included — formatted at render time, same as Last Update', () => {
-    const lines = [{ lineNumber: 1, action: 'Clock', timestamp: '2026/08/30 07:03:45' }];
+    const lines = [{ lineNumber: 1, action: 'ModeStart', timestamp: '2026/08/30 07:03:45' }];
     assert.equal(latestStartedAt(lines), '2026/08/30 07:03:45');
   });
 
-  it('returns "" when the device has no Start/Clock record at all', () => {
+  it('returns "" when the device has no ModeStart record at all', () => {
     assert.equal(latestStartedAt([]), '');
     assert.equal(latestStartedAt([{ lineNumber: 1, action: 'Finish', bibNumber: '1', timestamp: '2026/08/30 09:20:00' }]), '');
   });
@@ -127,11 +139,15 @@ describe('mobile-files-devices.js:locationSummary / rawLocationOf', () => {
     assert.equal(locationSummary(rows), 'Finish');
   });
 
-  it('flags an inconsistent file (more than one distinct location) as invalid', () => {
-    const rows = [{ location: 'Finish' }, { location: 'CP1' }];
-    assert.equal(rawLocationOf(rows), null);
-    assert.match(locationSummary(rows), /Inconsistent/);
-    assert.match(locationSummary(rows), /invalid/);
+  // In practice flattenDevices() (see its own describe block below) already splits a device's
+  // rows by location BEFORE these are ever called on them, so this genuinely-mixed input only
+  // happens via a direct call like this one — the latest-wins fallback these two apply is just
+  // graceful degradation for that case, not the real mechanism ToDo.MD's own "allow for the
+  // location changing in a device file" is handled by any more.
+  it('falls back to the latest (highest lineNumber) row\'s location when given genuinely mixed-location rows directly', () => {
+    const rows = [{ location: 'Finish', lineNumber: 1 }, { location: 'CP1', lineNumber: 2 }];
+    assert.equal(rawLocationOf(rows), 'CP1');
+    assert.equal(locationSummary(rows), 'CP1');
   });
 
   it('locationSummary escapes an untrusted location string', () => {
@@ -204,6 +220,256 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     selectedKeys.add(rowKey({ owner: 'alice', raceLabel: 'race-a', device: { name: 'A' } }));
     const rows = flattenDevices(races);
     assert.equal(rows[0].incorporationStatus, 'outstanding');
+  });
+
+  // ToDo.MD's "Mobile-app changes to reflect through to Mobile Files processing" section: a
+  // device that's only ever written its own ModeStart marker has recorded nothing real yet — the
+  // count shown must still distinguish "0 so far, but genuinely expected" (this family's own mode
+  // was chosen) from "not expected at all" (this device has nothing to do with that family — see
+  // formatCount's own `expected` argument, and js/views/mobile-files-devices.js /
+  // mobile-files-all.js, which render bibs/time using bibsVisible/bibsExpected and
+  // timeVisible/timeExpected together).
+  it('shows a bib count of 0 for a device with only its own bibs ModeStart marker (bibNumber "n/a")', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' }] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsVisible, 0);
+    assert.equal(rows[0].bibsExpected, true);
+    assert.equal(rows[0].timeExpected, false); // this device has nothing to do with splits at all
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '0');
+    assert.equal(formatCount(rows[0].timeVisible, rows[0].timeExpected), '');
+  });
+
+  // ToDo.MD: "drop the 'Setup' record from the device file, its no longer created, there will
+  // always be a modestart record" — a brand new, not-yet-synced device is now represented by
+  // having literally zero lines at all, not a placeholder record of its own; this must still show
+  // blank/blank (not "0/0" — no mode has been chosen at all yet, so neither family is expected).
+  it('shows both counts as blank for a brand new device with zero lines at all — no mode chosen yet', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsVisible, 0);
+    assert.equal(rows[0].timeVisible, 0);
+    assert.equal(rows[0].bibsExpected, false);
+    assert.equal(rows[0].timeExpected, false);
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '');
+    assert.equal(formatCount(rows[0].timeVisible, rows[0].timeExpected), '');
+  });
+
+  it('shows a split count of 0 for a Time-mode device with only its own ModeStart marker (splitTime non-null)', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'ModeStart', splitTime: '00:00:00', location: 'Finish' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].timeVisible, 0);
+    assert.equal(rows[0].timeExpected, true);
+    assert.equal(rows[0].bibsExpected, false); // this device has nothing to do with bibs at all
+    assert.equal(formatCount(rows[0].timeVisible, rows[0].timeExpected), '0');
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '');
+  });
+
+  it('still counts a real split after the ModeStart marker (marker itself excluded, the real split is not)', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', location: 'Finish' },
+        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', location: 'Finish' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].timeVisible, 1);
+    assert.equal(rows[0].timeExpected, true);
+  });
+
+  it('still counts a real bib after the ModeStart marker (marker itself excluded, the real bib is not)', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+        { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsVisible, 1);
+    assert.equal(rows[0].bibsExpected, true);
+  });
+
+  // ToDo.MD: "allow for the location changing in a device file (it means the marshall has
+  // moved), when that happens a new devices line should be created to show the new 'Where'
+  // column, and the 'View' for that should only show the new location and the 'View' for the
+  // old should only show the old location" — see js/mobile-files-devices.js's own
+  // splitByLocation()/flattenDevices() doc for the full design.
+  describe('location changes (the marshal moved)', () => {
+    it('splits a device that has recorded at more than one location into one row per location', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'Phone', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 3, action: 'Finish', bibNumber: '6', location: 'CP2' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      assert.equal(rows.length, 2);
+      assert.deepEqual(rows.map(r => r.device.name), ['Phone', 'Phone']);
+      assert.deepEqual(rows.map(r => r.rawLocation).sort(), ['CP1', 'CP2']);
+      assert.ok(rows.every(r => r.locationSplit === true));
+    });
+
+    it('scopes each location-row\'s own counts to just its own location\'s entries', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'Phone', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 3, action: 'ModeStart', bibNumber: 'n/a', location: 'CP2' },
+          { lineNumber: 4, action: 'Finish', bibNumber: '6', location: 'CP2' },
+          { lineNumber: 5, action: 'Finish', bibNumber: '7', location: 'CP2' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      const cp1 = rows.find(r => r.rawLocation === 'CP1');
+      const cp2 = rows.find(r => r.rawLocation === 'CP2');
+      assert.equal(cp1.bibsVisible, 1);
+      assert.equal(cp2.bibsVisible, 2);
+    });
+
+    it('gives each location-row its own rowKey and independently-tracked incorporation status', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'Phone', lines: [
+          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
+        ] }],
+      }];
+      selectedKeys.add(rowKey({ owner: 'alice', raceLabel: 'race-a', device: { name: 'Phone' }, rawLocation: 'CP1', locationSplit: true }));
+      const rows = flattenDevices(races);
+      const cp1 = rows.find(r => r.rawLocation === 'CP1');
+      const cp2 = rows.find(r => r.rawLocation === 'CP2');
+      assert.notEqual(rowKey(cp1), rowKey(cp2));
+      assert.equal(cp1.incorporationStatus, 'outstanding'); // selected, and has an unsynced line
+      assert.equal(cp2.incorporationStatus, 'none');         // never selected
+    });
+
+    it('each location-row\'s View/Raw only sees that location\'s own lines (device.lines is scoped)', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'Phone', lines: [
+          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      const cp1 = rows.find(r => r.rawLocation === 'CP1');
+      const cp2 = rows.find(r => r.rawLocation === 'CP2');
+      assert.deepEqual(cp1.device.lines.map(l => l.bibNumber), ['5']);
+      assert.deepEqual(cp2.device.lines.map(l => l.bibNumber), ['6']);
+    });
+
+    it('does not split a device that has only ever recorded at one location', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'Phone', lines: [
+          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'Finish' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'Finish' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].locationSplit, false);
+      assert.equal(rows[0].rawLocation, 'Finish');
+    });
+
+    it('does not split a still-pending (not-yet-pushed) device even if its local lines already span two locations', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'Phone', pending: true, lines: [
+          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].device.lines.length, 2); // Push still uploads everything as one payload
+    });
+  });
+
+  // ToDo.MD: "when a race has been reset in a device file, the latest modestart record is still
+  // valid wrt the location and mode" — a Reset with no fresh ModeStart written immediately after
+  // it (the phone's own convention is to write one right away, but this must degrade gracefully
+  // rather than assume that always holds) would otherwise empty out both the post-Reset segment
+  // and the visible-location rows, wrongly reporting "no mode/location" for a device that plainly
+  // still has one.
+  describe('a Reset with no fresh ModeStart immediately after it', () => {
+    it('still shows the last ModeStart\'s own location, not blank', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'A', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 3, action: 'Reset' }, // no fresh ModeStart follows
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      assert.equal(rows[0].location, 'CP1');
+    });
+
+    it('still shows the last ModeStart\'s own bibs/time expectation ("0", not blank)', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'A', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 3, action: 'Reset' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      assert.equal(rows[0].bibsVisible, 0);   // the Reset genuinely cleared the visible count
+      assert.equal(rows[0].bibsExpected, true); // but the mode itself is still valid
+      assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '0');
+    });
+
+    it('still resolves rawLocation for validateAndCompute-style bucketing after a markerless Reset', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'A', lines: [
+          { lineNumber: 1, action: 'ModeStart', splitTime: 'n/a', location: 'Finish' },
+          { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:10:00', location: 'Finish' },
+          // A Time-family Reset needs its own non-null splitTime to land in the Time bucket at
+          // all (buildSegmentView classifies purely on splitTime null-ness) — otherwise it'd
+          // fall into the Bibs bucket instead and never cut this family's segment off.
+          { lineNumber: 3, action: 'Reset', splitTime: 'n/a' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      assert.equal(rows[0].rawLocation, 'Finish');
+      assert.equal(rows[0].timeExpected, true);
+      assert.equal(rows[0].timeVisible, 0);
+    });
+
+    it('a fresh ModeStart written right after the Reset (the normal case) is used instead, once it exists', () => {
+      const races = [{
+        owner: 'alice', raceLabel: 'race-a', raceDate: null,
+        devices: [{ name: 'A', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+          { lineNumber: 2, action: 'Reset', location: 'CP1' },
+          { lineNumber: 3, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+          { lineNumber: 4, action: 'Finish', bibNumber: '9', location: 'CP1' },
+        ] }],
+      }];
+      const rows = flattenDevices(races);
+      // The fresh (post-Reset) ModeStart is what's actually visible now — bib 9, recorded after
+      // it, is correctly counted; nothing from before the Reset leaks through.
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].bibsVisible, 1);
+    });
   });
 });
 

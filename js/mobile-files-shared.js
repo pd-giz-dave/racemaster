@@ -14,7 +14,19 @@ import { getRaceStaleAfterDays, raceLabelAgeDays, sanitiseName } from './mule-bl
 // selection across a re-render (or navigating away from Mobile Files and back) needs a stable
 // key instead.
 export const selectedKeys = new Set();
-export function rowKey(r) { return `${r.owner} ${r.raceLabel} ${r.device.name}`; }
+// `locationSplit`/`rawLocation` (set by flattenDevices() — see mobile-files-devices.js — only
+// once a device's file actually spans more than one location) differentiate the two-or-more list
+// rows a relocated device now produces (ToDo.MD's "allow for the location changing in a device
+// file"): without this, two rows sharing the same owner/raceLabel/device name would collide onto
+// one selection/incorporation-status key, so ticking one would silently tick both. Gated on
+// `locationSplit` specifically, not merely whether `rawLocation` is present — flattenDevices()
+// sets `rawLocation` on every row, split or not, so keying off its mere presence would change
+// every row's key, not just a relocated device's; an ordinary (never-relocated) row's key, and
+// every existing caller that builds an `r` with no `locationSplit` of its own, stays completely
+// unchanged.
+export function rowKey(r) {
+  return `${r.owner} ${r.raceLabel} ${r.device.name}` + (r.locationSplit ? ` ${r.rawLocation}` : '');
+}
 
 // The connected dataset's own identity — owner/fullName, exactly what the server itself uses
 // to address it (see storage.js's own use of session.dataset) — for guarding persisted
