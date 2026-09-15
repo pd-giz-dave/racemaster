@@ -71,6 +71,14 @@ describe('server/mobile.js:readProgress / writeProgress', () => {
 });
 
 describe('server/mobile.js:mergeProgress', () => {
+  it('returns null when there is no progress file yet and pushing nothing', () => {
+    const merged = mergeProgress('alice', 'race1', {
+      raceName: 'Test Race', raceDate: '23/08/2026',
+      entries: [],
+      removed: [],
+    });
+    assert.equal(merged, null);
+  });
   it('upserts entries by bibNumber into an empty progress.json, stamping updatedAt', () => {
     const merged = mergeProgress('alice', 'race1', {
       raceName: 'Test Race', raceDate: '23/08/2026',
@@ -131,7 +139,11 @@ describe('server/mobile.js:mergeProgress', () => {
   });
 
   it('bumps generatedAt even when entries/removed are both empty (a pure touch-like push)', async () => {
-    const first = mergeProgress('alice', 'race1', { raceName: 'X', raceDate: '', entries: [], removed: [] });
+    const first = mergeProgress('alice', 'race1', {
+      raceName: 'X',
+      raceDate: '',
+      entries: [{ bibNumber: 1, name: 'Dave', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [] });
     await new Promise(r => setTimeout(r, 5));
     const second = mergeProgress('alice', 'race1', { raceName: 'X', raceDate: '', entries: [], removed: [] });
     assert.notEqual(second.generatedAt, first.generatedAt);
@@ -139,8 +151,11 @@ describe('server/mobile.js:mergeProgress', () => {
 });
 
 describe('server/mobile.js:touchProgress', () => {
-  it('returns null when there is no progress.json yet for this race', () => {
-    assert.equal(touchProgress('alice', 'no-such-race'), null);
+  it('generates empty progress when there is no progress.json yet for this race', () => {
+    const touched = touchProgress('alice', 'race1');
+    assert.notEqual(touched.generatedAt, undefined);
+    assert.deepEqual(touched.entries, []);
+    assert.deepEqual(readProgress('alice', 'race1'), touched);
   });
 
   it('refreshes generatedAt without touching entries', async () => {

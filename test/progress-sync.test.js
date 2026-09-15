@@ -65,6 +65,10 @@ describe('progress-sync.js:startProgressSync', () => {
   // each to that course's own race label — and a course with no entries at all gets no push,
   // rather than an empty one nobody needs.
   it('pushes each course separately, to that course\'s own race label, when both have entries', async (t) => {
+    // Juniors only counts as "in use" (coursesInUse(), categories.js) once Event Settings
+    // actually configures a junior age limit — without this, both bibs below would correctly
+    // sweep into the one Seniors course instead (see the "all in one course" test further down).
+    state.event.juniorLimit = 'U18';
     state.entries = [
       { bibNumber: '1', name: 'Dave', course: 'Seniors', category: 'MSEN' },
       { bibNumber: '2', name: 'Amy',  course: 'Juniors', category: 'U16' },
@@ -127,7 +131,12 @@ describe('progress-sync.js:startProgressSync', () => {
 
   // buildProgressRows() pre-populates a row per entry (see mobile-files-progress.js) — matching
   // the former Bib Allocations tab's own "push whenever entries exist" threshold — so this only
-  // stays a no-op when there are truly no entries and no mobile-recorded activity either.
+  // stays a no-op when there are truly no entries and no mobile-recorded activity either. Not
+  // forced through even as a course's first push of the session: server/mobile.js's own
+  // mergeProgress() deliberately refuses to create a progress.json from an empty delta with
+  // nothing already on disk (so a stray "Clear previous event" or an idle empty dataset never
+  // spawns one) — Activate Race (touchProgress()) is the one deliberate action that creates a
+  // file from nothing, not this background auto-push.
   it('does nothing when there are no entries and no progress rows at all', async (t) => {
     state.entries = [];
     state.mobileProgress = [];
@@ -140,6 +149,29 @@ describe('progress-sync.js:startProgressSync', () => {
     await flushMicrotasks();
 
     assert.equal(fetchMock.calls.length, 0);
+  });
+
+  // The other half of the same story: with no junior age limit configured at all, there's only
+  // ever one course (coursesInUse()), so even a bib whose own stored `course` field happens to
+  // say 'Juniors' (stale from before the limit was removed, say) still lands in the one Seniors
+  // push — never silently dropped, and never causing a separate (pointless) Juniors push either.
+  it('sweeps every entry into the one Seniors push when no junior age limit is configured, regardless of their own course field', async (t) => {
+    state.entries = [
+      { bibNumber: '1', name: 'Dave', course: 'Seniors', category: 'MSEN' },
+      { bibNumber: '2', name: 'Amy',  course: 'Juniors', category: 'U16' },
+    ];
+    state.mobileProgress = [];
+    state.mobileCheckpoints = [];
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    startProgressSync();
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+
+    assert.equal(fetchMock.calls.length, 1);
+    assert.match(fetchMock.calls[0].url, /\/api\/mobile\/me\/testfellrace-seniors-26-06-15\/progress/);
+    assert.deepEqual(JSON.parse(fetchMock.calls[0].opts.body).entries.map(e => e.bibNumber), [1, 2]);
   });
 
   it('pushes as soon as an entry exists, even with no mobile-recorded activity at all', async (t) => {

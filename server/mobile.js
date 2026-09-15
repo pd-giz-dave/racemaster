@@ -83,8 +83,16 @@ export function writeProgress(username, raceLabel, payload) {
 // so a delta fetch's own `since` filtering (see GET .../progress below) can rely on it. `removed`
 // (bib numbers no longer present on the web app's own side, e.g. an Entries deletion) are dropped
 // from the stored set — the one case a pure upsert can't express on its own.
+// if the progress file does not exist and we're writing nothing, do not create it, this is the
+// context when "Clear previous event" was pressed. We only want the progress file to be created
+// when the "Activate race" button was pressed.
 export function mergeProgress(username, raceLabel, { raceName, raceDate, entries, removed }) {
-  const existing = readProgress(username, raceLabel) || { raceName: '', raceDate: '', entries: [] };
+  var existing = readProgress(username, raceLabel)
+  if (!existing) {
+    // if it does not exist and we're writing nothing, do not create it
+    if (!entries.length && !removed?.length) return null;
+    existing = { raceName: '', raceDate: '', entries: [] };
+  }
   const now = new Date().toISOString();
   const byBib = new Map(existing.entries.map(e => [e.bibNumber, e]));
   for (const entry of entries) byBib.set(entry.bibNumber, { ...entry, updatedAt: now });
@@ -99,16 +107,11 @@ export function mergeProgress(username, raceLabel, { raceName, raceDate, entries
   return merged;
 }
 
-// "Activate Race" (js/views/event.js) — refreshes progress.json's own generatedAt to now,
-// without requiring the caller to resend entries at all, so the operator can signal "this race
-// is current, mobile phones should notice it" as a lightweight, minimal-payload action rather
-// than a full re-push (see TODO.md's phase-2 "Activate Race" correction on why this needed its
-// own route instead of just reusing the POST .../progress path). Returns null (caller 404s) if
-// there's no progress.json yet for this label — nothing to activate until registration/the first
-// real push has happened.
+// "Activate Race" (js/views/event.js) — refreshes/creates progress.json's own generatedAt to now,
+// without requiring the caller to send entries at all, so the operator can signal "this race
+// is current, mobile phones should notice it" as a lightweight, minimal-payload action.
 export function touchProgress(username, raceLabel) {
-  const existing = readProgress(username, raceLabel);
-  if (!existing) return null;
+  const existing = readProgress(username, raceLabel) || { raceName: '', raceDate: '', entries: [] };
   const touched = { ...existing, generatedAt: new Date().toISOString() };
   writeProgress(username, raceLabel, touched);
   return touched;

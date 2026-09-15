@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { getSession, apiPushProgress } from './storage.js';
 import { buildProgressRows } from './mobile-files-progress.js';
 import { deriveRaceLabel } from './mobile-files-shared.js';
-import { COURSE } from './constants.js';
+import { coursesInUse } from './categories.js';
 
 // The last payload actually pushed for each owner+raceLabel, keyed by "owner:raceLabel" (not
 // raceLabel alone — an admin can push the same-looking label for two different owners' datasets
@@ -78,7 +78,17 @@ function diffEntries(owner, raceLabel, freshEntries) {
 // Pushed here instead as one course-filtered payload per course, each to that course's own
 // raceLabel (deriveRaceLabel(event, course)) — a real fix, not a guess at which single folder to
 // use, and it also means a phone only ever receives entries for its own course.
-function buildPayloadForCourse(course) {
+//
+// `inUse` (coursesInUse() in categories.js — Event Settings alone, never state.entries) is passed
+// in rather than recomputed per course: when it's just [Seniors] (no junior age limit configured
+// at all), EVERY row is swept into that one payload regardless of its own `course` field —
+// "all entrants will be running the same course" — rather than filtering by `r.course === course`
+// as usual. That filter alone isn't enough here: an entry's own `course` is only ever recomputed
+// when its category changes (see entries.js), so a bib assigned 'Juniors' while a junior limit
+// used to be configured stays tagged that way even after the race director removes it — without
+// this sweep such a bib would silently vanish from every progress.json rather than landing in the
+// one course that's actually left.
+function buildPayloadForCourse(course, inUse) {
   return {
     raceName: state.event.name,
     raceDate: state.event.date,
@@ -87,7 +97,7 @@ function buildPayloadForCourse(course) {
     // bib-allocation logic has no use for either, and neither is part of the wire format
     // racemaster-mobile already expects.
     entries: buildProgressRows()
-      .filter(r => r.course === course)
+      .filter(r => inUse.length === 1 || r.course === course)
       .map(({ invalid, conflict, ...entry }) => entry),
   };
 }
@@ -100,15 +110,20 @@ async function pushProgress() {
   // phones syncing this race (which look for progress.json under the race's actual owner) would
   // never find it.
   const [owner] = session.dataset.split('/');
-  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
+  const inUse = coursesInUse();
+  for (const course of inUse) {
     const raceLabel = deriveRaceLabel(state.event, course);
     if (!raceLabel) continue; // no event name/date yet
-    const fresh = buildPayloadForCourse(course);
+    const fresh = buildPayloadForCourse(course, inUse);
     const { changed, removed } = diffEntries(owner, raceLabel, fresh.entries);
     // Nothing to send: either nobody's ever been on this course (fresh and the cache are both
-    // empty), or nothing's changed since the last push. A course that HAD entries and now has
-    // none must still fall through and push, so `removed` actually reaches the server — see
-    // diffEntries' own doc.
+    // empty), or nothing's changed since the last push. Deliberately NOT forced through even on a
+    // course's first push of the session: server/mobile.js's mergeProgress() itself now refuses
+    // to create a progress.json from an empty delta with nothing already on disk (so a stray
+    // "Clear previous event" or an idle empty dataset never spawns one) — the one thing that DOES
+    // create a file from nothing is Activate Race (touchProgress()), a deliberate action, not this
+    // background auto-push. A course that HAD entries and now has none must still fall through
+    // and push, so `removed` actually reaches the server — see diffEntries' own doc.
     if (!changed.length && !removed.length) continue;
     const payload = { raceName: fresh.raceName, raceDate: fresh.raceDate, entries: changed, removed };
     try {

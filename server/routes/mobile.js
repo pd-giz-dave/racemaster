@@ -77,7 +77,11 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       entries: sanitisedEntries,
       removed,
     });
-    console.log(`[progress] ${username} -> ${owner}/${raceLabel}: merged ${sanitisedEntries.length} changed, ${removed.length} removed (${merged.entries.length} total)`);
+    if (!merged) {
+      console.log(`[progress] ${username} -> ${owner}/${raceLabel}: no progress and no changes, progress file not created`);
+    } else {
+      console.log(`[progress] ${username} -> ${owner}/${raceLabel}: merged ${sanitisedEntries.length} changed, ${removed.length} removed (${merged.entries.length} total)`);
+    }
     jsonReply(res, 200, { ok: true });
     return true;
   }
@@ -96,7 +100,6 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
     if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' }); return true; }
     const touched = touchProgress(owner, raceLabel);
-    if (!touched) { jsonReply(res, 404, { error: 'No progress recorded for this race yet' }); return true; }
     console.log(`[progress] ${username} -> ${owner}/${raceLabel}: activated (generatedAt=${touched.generatedAt})`);
     jsonReply(res, 200, { ok: true, generatedAt: touched.generatedAt });
     return true;

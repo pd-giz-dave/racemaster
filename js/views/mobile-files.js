@@ -34,9 +34,7 @@ import {
   isProgressRecent,
 } from '../mobile-files-shared.js';
 import { state } from '../state.js';
-import { COURSE } from '../constants.js';
-import { getEntriesOnCourse } from '../entries.js';
-import { buildProgressRows } from '../mobile-files-progress.js';
+import { coursesInUse } from '../categories.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
 import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
 import {
@@ -209,11 +207,13 @@ async function discardPendingRow(r) {
 // (race.progress, from the last successful fetch) — with a generatedAt inside the "Skip races
 // older than" staleness window right now (isProgressRecent(), mobile-files-shared.js); "no
 // progress.json at all" and "a stale one" both read the same as "not active". When the last fetch
-// couldn't reach the server at all, a course with local data ready to send (buildProgressRows()
-// filtered to it, non-empty) reads "pending" instead of flatly "not active" — this browser simply
-// hasn't been able to confirm the server has it yet, not that there's genuinely nothing there.
-// Skips a course entirely when nobody's even entered for it (getEntriesOnCourse) — nothing to
-// report for a course this event doesn't use.
+// couldn't reach the server at all, every in-use course reads "pending" rather than flatly "not
+// active" — this browser simply can't confirm the server's own state right now (offline), not
+// that there's genuinely nothing there.
+//
+// Which courses to report on comes from coursesInUse() (categories.js) — Event Settings alone,
+// never state.entries: a phone may need to be set up, and a race director may want to confirm
+// activation, before registration has even opened.
 function updateActivateStatus() {
   const el = getEl('mf-activate-status');
   if (!el) return;
@@ -221,16 +221,15 @@ function updateActivateStatus() {
   const owner = session?.dataset?.split('/')[0];
   const parts = [];
   let anyActive = false;
-  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
-    if (!getEntriesOnCourse(course)) continue;
+  for (const course of coursesInUse()) {
     const raceLabel = deriveRaceLabel(state.event, course);
     if (!raceLabel) continue;
     const race = owner && lastKnownRaces.find(r => r.owner === owner && r.raceLabel === raceLabel);
     if (race?.progress && isProgressRecent(race.progress)) {
       anyActive = true;
       parts.push(`${course} active (${formatDateTime(race.progress.generatedAt)})`);
-    } else if (!lastFetchOk && buildProgressRows().some(r => r.course === course)) {
-      parts.push(`${course} pending — will activate once back online`);
+    } else if (!lastFetchOk) {
+      parts.push(`${course} pending — offline, can't confirm`);
     } else {
       parts.push(`${course} not active`);
     }
@@ -240,33 +239,30 @@ function updateActivateStatus() {
   el.className = anyActive ? 'entry-status status-ok' : 'entry-status';
 }
 
-// "Activate Race" — touches progress.json's own generatedAt to now for this event's own race
-// label(s) only (server/mobile.js's touchProgress via POST .../progress/touch), the signal a
-// mobile phone's own setup-time server scan uses to find/rank recent races. Deliberately never
-// touches any other race — it only ever derives labels from state.event, the same way
-// js/progress-sync.js's own push does, so there's no way for this to reach a past or unrelated
-// event's race folder. NOT dependent on Update Progress having been run: progress.json is pushed
-// automatically by progress-sync.js's own debounced push whenever a course has any entries at
-// all, regardless of whether Update Progress has ever computed a Finish/Start time for any of
-// them — this only ever touches an *existing* file's timestamp, it never creates one. A course
-// with no progress.json yet at all (nobody entered, or this browser's never been online since) is
-// silently skipped, not treated as a failure. Lives here rather than on Event Settings (where it
-// used to be) since Mobile Files is where an operator is actually looking when a phone can't find
-// the race — and where updateActivateStatus() above can show the real, current result, not just
-// whatever this one click's own responses happened to say.
+// "Activate Race" — refreshes (or, if none exists yet, creates) progress.json's own generatedAt
+// for this event's own race label(s) only (server/mobile.js's touchProgress via
+// POST .../progress/touch), the signal a mobile phone's own setup-time server scan uses to find/
+// rank recent races. Deliberately never touches any other race — it only ever derives labels from
+// state.event, the same way js/progress-sync.js's own push does, so there's no way for this to
+// reach a past or unrelated event's race folder. NOT dependent on Update Progress having been
+// run, NOR on anyone having registered yet: unlike the background auto-push (progress-sync.js),
+// which deliberately never creates a file from nothing (so an idle/cleared dataset doesn't spawn
+// stray ones — see its own doc), touchProgress() itself now creates an empty progress.json when
+// none exists — this is the one deliberate, explicit action that's allowed to, precisely so a
+// phone can be set up, and this button used, before registration opens.
 async function activateRace() {
   const session = getSession();
   if (!session) { showStatus('Not signed in — nothing to activate.', true); return; }
   const [owner] = session.dataset.split('/');
   let touched = 0;
   let failed = 0;
-  for (const course of [COURSE.SENIORS, COURSE.JUNIORS]) {
+  for (const course of coursesInUse()) {
     const raceLabel = deriveRaceLabel(state.event, course);
     if (!raceLabel) continue;
     try {
       const result = await apiTouchProgress(session.token, owner, raceLabel);
       if (result?.ok) touched++;
-      else if (!result?.error?.includes('No progress')) failed++;
+      else failed++;
     } catch { failed++; }
   }
   // Silent refresh — pulls the just-touched generatedAt back down so updateActivateStatus() (run
@@ -276,7 +272,7 @@ async function activateRace() {
   await renderMobileFiles({ silent: true });
   if (touched) showStatus('Activation requested — see status below.');
   else if (failed) showStatus('Could not activate — server unreachable or you\'re not signed in.', true);
-  else showStatus('Nothing to activate yet — no progress data has reached the server for this race yet.', true);
+  else showStatus('Nothing to activate — set the event name and date first.', true);
 }
 
 export function wireMobileFiles() {

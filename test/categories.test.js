@@ -7,7 +7,7 @@ import { state } from '../js/state.js';
 import {
   getMaleCategories, getFemaleCategories, calculateCategory, maxAgeFromCategory,
   toMaleCategory, seniorAllowed, categoryFromDistance, genderFromCategory,
-  getCategoryPriority, derivePairGender, calculatePairCategory, calculateCourse,
+  getCategoryPriority, derivePairGender, calculatePairCategory, calculateCourse, coursesInUse,
   applyFRAPreset, applyWFRAPreset, builtinFRARows, builtinWFRARows,
   FRA_CATEGORIES, WFRA_CATEGORIES,
 } from '../js/categories.js';
@@ -106,6 +106,24 @@ describe('categories.js:seniorAllowed', () => {
     state.event.juniorLimit = 'U18B';
     assert.equal(seniorAllowed('U20B'), true);
     assert.equal(seniorAllowed('MSEN'), true);
+  });
+});
+
+describe('categories.js:coursesInUse', () => {
+  // Event Settings alone, never state.entries — js/progress-sync.js's own progress.json push and
+  // Mobile Files' Activate Race both need this to work before anyone's registered at all.
+  it('is Seniors-only when there is no junior limit configured', () => {
+    assert.deepEqual(coursesInUse(), ['Seniors']);
+  });
+
+  it('is Seniors-only when the junior limit is explicitly "None"', () => {
+    state.event.juniorLimit = 'None';
+    assert.deepEqual(coursesInUse(), ['Seniors']);
+  });
+
+  it('includes Juniors once a junior age limit is actually configured', () => {
+    state.event.juniorLimit = 'U18B';
+    assert.deepEqual(coursesInUse(), ['Seniors', 'Juniors']);
   });
 });
 

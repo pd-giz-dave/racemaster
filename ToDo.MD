@@ -41,3 +41,10 @@
 ## Re-test BT stuff wrt auto progress update
 
 - [ ] make sure BT pulls of progress behave same as a server pull (update server, propagate to phones)
+
+## Using same clock for both juniors and seniors
+
+In this context the phones see bibs for both senior and junior courses.
+We need a way to do this and still create junior results separately.
+Use an event setting of 'shared stopwatch' for juniors timing.
+When set the race id becomes racename-mixed-date and the progress record contains all bibs.

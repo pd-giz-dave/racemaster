@@ -143,6 +143,20 @@ export function seniorAllowed(category) {
   return catMax > maxAgeFromCategory(juniorLimit);
 }
 
+// Which courses this event actually uses — from Event Settings alone, never from whether anyone
+// has registered for either yet (js/progress-sync.js's own progress.json push, and Mobile Files'
+// own Activate Race, both need this: a phone may need to be set up, and a race director may want
+// to activate the race, before registration has even opened, let alone before any entry exists).
+// Seniors always runs. Juniors only exists as a course of its own once a junior age limit is
+// actually configured (the exact same check seniorAllowed() above already makes to decide which
+// course a given bib belongs on) — with no limit set, there's only one course, and
+// calculateCourse() above already sends every entry there regardless of its own age category, so
+// there's never a genuinely separate Juniors race to report on.
+export function coursesInUse() {
+  const juniorLimit = (state.event.juniorLimit || '').toUpperCase();
+  return (!juniorLimit || juniorLimit === 'NONE') ? [COURSE.SENIORS] : [COURSE.SENIORS, COURSE.JUNIORS];
+}
+
 /**
  * Given a distance, return the highest junior category (male, truncated)
  * that is NOT allowed at that distance.
