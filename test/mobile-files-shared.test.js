@@ -15,6 +15,7 @@ import {
   byLineNumber, computeIncorporationStatus,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
   isDeviceStale, isProgressStale, isProgressRecent, findCurrentRaceProgress,
+  saveCachedProgressRaces, loadCachedProgressRaces,
 } from '../js/mobile-files-shared.js';
 
 beforeEach(() => {
@@ -73,6 +74,38 @@ describe('mobile-files-shared.js:loadSelectedKeys / saveSelectedKeys', () => {
     assert.equal(loadSelectedKeys(), null);
     localStorage.setItem('racemaster-mobile-selected-keys', 'not even json');
     assert.equal(loadSelectedKeys(), null);
+  });
+});
+
+describe('mobile-files-shared.js:saveCachedProgressRaces / loadCachedProgressRaces', () => {
+  it('round-trips only the progress-bearing races, stripped down to owner/raceLabel/raceDate/progress/devices:[]', () => {
+    const races = [
+      { owner: 'alice', raceLabel: 'race-a', raceDate: { dd: '30', mm: '08', yy: '26' },
+        progress: { generatedAt: '2026-08-30T10:00:00.000Z', entries: [] },
+        devices: [{ name: 'Phone One', lines: [{ lineNumber: 1 }] }] },
+      { owner: 'alice', raceLabel: 'race-b', raceDate: null, devices: [{ name: 'Phone Two', lines: [] }] }, // no progress — dropped
+    ];
+    saveCachedProgressRaces(races);
+    assert.deepEqual(loadCachedProgressRaces(), [
+      { owner: 'alice', raceLabel: 'race-a', raceDate: { dd: '30', mm: '08', yy: '26' },
+        progress: { generatedAt: '2026-08-30T10:00:00.000Z', entries: [] }, devices: [] },
+    ]);
+  });
+
+  it('returns [] when nothing has ever been cached, the cache is corrupt, or it belongs to a different dataset', () => {
+    assert.deepEqual(loadCachedProgressRaces(), []);
+    localStorage.setItem('racemaster-mobile-cached-progress-races', 'not even json');
+    assert.deepEqual(loadCachedProgressRaces(), []);
+    localStorage.setItem('racemaster-mobile-cached-progress-races', JSON.stringify({
+      context: 'someone-else/race', races: [{ owner: 'bob', raceLabel: 'race-x', progress: {}, devices: [] }],
+    }));
+    assert.deepEqual(loadCachedProgressRaces(), []);
+  });
+
+  it('the cached devices:[] keeps a cached race a drop-in-compatible input to mergePendingIntoRaces()', () => {
+    saveCachedProgressRaces([{ owner: 'alice', raceLabel: 'race-a', raceDate: null, progress: { generatedAt: 'x', entries: [] } }]);
+    const cached = loadCachedProgressRaces();
+    assert.doesNotThrow(() => mergePendingIntoRaces(cached, []));
   });
 });
 

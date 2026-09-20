@@ -441,3 +441,49 @@ export function isProgressRecent(progress) {
 export function findCurrentRaceProgress(races, owner, raceLabel) {
   return races.find(r => r.owner === owner && r.raceLabel === raceLabel)?.progress ?? null;
 }
+
+// ---- Locally-persisted progress cache (survives a reload while offline) ----
+//
+// js/views/mobile-files.js's own `lastKnownRaces` already gives every tab a same-session
+// fallback once a server fetch has failed — but it's a plain in-memory variable, so it starts
+// empty again on a genuine page reload (closing/reopening the app, or a real crash) with no
+// route back to what was last known. That's fine for the Devices tab (its own offline story is
+// Bluetooth, not a stale copy of what the server had — see mergePendingIntoRaces above) and for
+// Update Progress (validateAndCompute() is pure local computation over already-loaded/pulled
+// data, no server round trip at all) — but the All Files tab's own progress.json row, and
+// mule-ble.js's own progress-delivery-to-a-connected-phone leg (currentRaceProgressContext(),
+// which reads exactly this same races array), have no other source for "what progress.json did
+// we last know about" once genuinely offline since before the page loaded. This is that source:
+// a small, dataset-scoped localStorage cache of just the progress-bearing races (never device
+// lines — those would go stale immediately and Bluetooth is the real source of truth for them),
+// written on every successful fetch, read back only when nothing fresher is available in memory.
+const CACHED_PROGRESS_RACES_KEY = 'racemaster-mobile-cached-progress-races';
+
+// Deliberately strips `devices` down to a fixed, always-empty array (never real device lines —
+// those would go stale immediately, and Bluetooth is the real source of truth for them) rather
+// than dropping the field outright: mergePendingIntoRaces() above (and everything downstream of
+// it — flattenDevices()/flattenAllFiles() in js/mobile-files-devices.js) unconditionally spreads
+// and filters race.devices, so every cached race still needs a real (empty) array to stay a
+// drop-in-compatible race object for any caller expecting one, not just the progress-specific
+// ones this cache was actually built for. Races with no progress.json at all are dropped
+// entirely — nothing useful to cache about them.
+export function saveCachedProgressRaces(races) {
+  try {
+    const slim = races
+      .filter(r => r.progress)
+      .map(r => ({ owner: r.owner, raceLabel: r.raceLabel, raceDate: r.raceDate, progress: r.progress, devices: [] }));
+    localStorage.setItem(CACHED_PROGRESS_RACES_KEY, JSON.stringify({
+      context: currentDatasetContext(), races: slim,
+    }));
+  } catch { /* storage unavailable/full — best effort only, same as other persisted state here */ }
+}
+
+// Returns [] if nothing was ever cached, the cache is corrupt, or it belongs to a different
+// dataset (same guard loadSelectedKeys() uses — see currentDatasetContext()'s own doc).
+export function loadCachedProgressRaces() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CACHED_PROGRESS_RACES_KEY) || 'null');
+    if (!parsed || parsed.context !== currentDatasetContext() || !Array.isArray(parsed.races)) return [];
+    return parsed.races;
+  } catch { return []; }
+}

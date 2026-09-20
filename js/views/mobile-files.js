@@ -31,7 +31,7 @@ import { isBluetoothAvailable, resetLastPulledLineNumber, resetAllLastPulledLine
 import {
   rowKey, selectedKeys, saveSelectedKeys, computeIncorporationStatus, mergePendingIntoRaces, restoreSelectedKeysOnce,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces, deriveRaceLabel, formatDateTime,
-  isProgressRecent,
+  isProgressRecent, saveCachedProgressRaces, loadCachedProgressRaces,
 } from '../mobile-files-shared.js';
 import { state } from '../state.js';
 import { coursesInUse } from '../categories.js';
@@ -50,6 +50,20 @@ export { autoUpdateProgress };
 // reads this via the getLastKnownRaces getter passed to initBle() below, for its own
 // refreshDevicesTableFromCache() fast path.
 let lastKnownRaces = [];
+
+// lastKnownRaces itself, unless this is a genuinely fresh page load with nothing fetched yet
+// this session at all (a reload while offline, or the app opened offline from the start) — then
+// falls back to the persisted, dataset-scoped progress cache (mobile-files-shared.js's own
+// saveCachedProgressRaces/loadCachedProgressRaces) instead of an empty array. That cache only
+// ever holds {owner, raceLabel, raceDate, progress} — never device lines — so every caller of
+// this getter keeps working exactly as before for anything device-related (nothing to merge in),
+// while the All Files tab's progress.json row, updateActivateStatus()'s own status line, and
+// mule-ble.js's currentRaceProgressContext() (what to deliver to a connected phone over BLE) all
+// gain a real answer instead of silently reading "nothing" the moment the page has been reloaded
+// without ever reaching the server this session.
+function progressRaces() {
+  return lastKnownRaces.length ? lastKnownRaces : loadCachedProgressRaces();
+}
 
 // Whether the most recent renderMobileFiles() call actually reached the server (true) or fell
 // back to lastKnownRaces after a failed fetch (false) — updateActivateStatus() above reads this
@@ -227,7 +241,7 @@ function updateActivateStatus() {
   for (const course of coursesInUse()) {
     const raceLabel = deriveRaceLabel(state.event, course);
     if (!raceLabel) continue;
-    const race = owner && lastKnownRaces.find(r => r.owner === owner && r.raceLabel === raceLabel);
+    const race = owner && progressRaces().find(r => r.owner === owner && r.raceLabel === raceLabel);
     if (race?.progress && isProgressRecent(race.progress)) {
       anyActive = true;
       parts.push(`${course} active (${formatDateTime(race.progress.generatedAt)})`);
@@ -299,7 +313,7 @@ async function viewDeviceRow(r) {
 }
 
 export function wireMobileFiles() {
-  initBle({ renderAll: renderMobileFiles, getLastKnownRaces: () => lastKnownRaces });
+  initBle({ renderAll: renderMobileFiles, getLastKnownRaces: progressRaces });
   initProgressActions({ renderAll: renderMobileFiles });
   wireBleControls();
   wireProgressTab();
@@ -408,6 +422,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
   try {
     const races = await apiListMobileFiles(session.token);
     lastKnownRaces = Array.isArray(races) ? races : [];
+    saveCachedProgressRaces(lastKnownRaces);
     const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
@@ -422,11 +437,16 @@ export async function renderMobileFiles({ silent = false } = {}) {
     return true;
   } catch {
     // Server unreachable — keep showing whatever was last successfully loaded rather than
-    // wiping the list down to only locally-pulled pending files.
-    const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));
+    // wiping the list down to only locally-pulled pending files. progressRaces() (not the raw
+    // lastKnownRaces variable) so a genuinely fresh page load with nothing fetched yet this
+    // session — not just "went offline mid-session" — still has the persisted progress cache to
+    // fall back to (see its own doc in mobile-files-shared.js); harmless for the Devices tab
+    // either way, since a cached race never carries real device lines of its own.
+    const races = progressRaces();
+    const merged = filterStaleRaces(mergePendingIntoRaces(races, pending));
     if (count) count.textContent = formatRaceCount(merged);
     renderRaceList(merged, isAdminUser);
-    renderAllFilesList(lastKnownRaces, isAdminUser);
+    renderAllFilesList(races, isAdminUser);
     renderMobileProgressTable();
     lastFetchOk = false;
     updateActivateStatus();
