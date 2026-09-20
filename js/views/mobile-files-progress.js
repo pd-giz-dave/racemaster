@@ -15,7 +15,7 @@
 import { on, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
-import { getMobileCheckpointNumbers } from '../mobile-checkpoints.js';
+import { getMobileCheckpointNumbers, CP_RETIRE } from '../mobile-checkpoints.js';
 import { state } from '../state.js';
 import { selectedKeys, computeIncorporationStatus, loadSelectedKeys, currentDatasetContext } from '../mobile-files-shared.js';
 import {
@@ -143,10 +143,17 @@ export async function updateProgress() {
   const { finishRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp } = result;
 
   const existingCount = state.mobileProgress.length;
-  const cpSummary = cpBuckets.size ? ` and checkpoint times from ${cpBuckets.size} CP file(s)` : '';
+  // Built from parts, not a fixed "N Finish file(s)[ and checkpoint times from M CP file(s)]"
+  // template — a Finish file is no longer required (a phone may not have relocated there yet),
+  // so finishRows.length can genuinely be 0; omitting that clause entirely reads naturally
+  // ("Add 3 progress record(s) from checkpoint times from 2 CP file(s)?") rather than saying
+  // "from 0 Finish file(s)".
+  const finishPart = finishRows.length ? `${finishRows.length} Finish file(s)` : null;
+  const cpPart = cpBuckets.size ? `checkpoint times from ${cpBuckets.size} CP file(s)` : null;
+  const sourceSummary = [finishPart, cpPart].filter(Boolean).join(' and ');
   const confirmMsg = existingCount
-    ? `This replaces ${existingCount} existing progress record(s) with ${expected.length} from ${finishRows.length} Finish file(s)${cpSummary}. Continue?`
-    : `Add ${expected.length} progress record(s) from ${finishRows.length} Finish file(s)${cpSummary}?`;
+    ? `This replaces ${existingCount} existing progress record(s) with ${expected.length} from ${sourceSummary}. Continue?`
+    : `Add ${expected.length} progress record(s) from ${sourceSummary}?`;
   if (!await showConfirmDialog(confirmMsg, 'Update Progress')) return;
 
   const { added } = await applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp);
@@ -244,13 +251,26 @@ export function renderMobileProgressTable() {
   const rows = buildProgressRows();
   const renderers = {
     bibNumber:  r => String(r.bibNumber),
-    name:       r => escHtml(r.name),
+    // A bib with real mobile activity but no matching Entry (buildProgressRows()'s own `invalid`)
+    // would otherwise show a blank Name cell, easy to mistake for a rendering glitch rather than
+    // the actual problem (nobody registered this bib) — spelled out instead.
+    name:       r => escHtml(r.invalid ? '--entry missing--' : r.name),
     category:   r => escHtml(r.category),
     course:     r => escHtml(r.course),
     start:      r => escHtml(r.startTime || ''),
     finishTime: r => escHtml(r.finishTime || ''),
   };
-  for (const n of cpNumbers) renderers[`cp_${n}`] = r => escHtml(r.cpTimes?.[n] || '');
+  // Time-of-day, not elapsed — the raw device reading, straight out of the file (this tab's own
+  // job, per buildProgressRows()'s doc; adjusted elapsed times are the Results & Prize List
+  // Splits tab's job, not this one). CP_RETIRE is the one exception: cpTimes (not cpTimesOfDay)
+  // still carries that literal sentinel text ('Retire'), and must keep showing as-is rather than
+  // being replaced by the retiring row's own crossing time-of-day.
+  for (const n of cpNumbers) {
+    renderers[`cp_${n}`] = r => {
+      const t = r.cpTimes?.[n];
+      return escHtml(t === CP_RETIRE ? CP_RETIRE : (r.cpTimesOfDay?.[n] || ''));
+    };
+  }
   renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), renderers), rows, {
     // See buildProgressRows()'s own doc on `invalid`/`conflict` — a bib with mobile activity but
     // no matching Entry, or one SI Results/Finishers/Mobile Files disagree about, same row-error

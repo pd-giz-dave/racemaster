@@ -126,7 +126,7 @@ function buildColumns(isAdminUser) {
     device:    r => escHtml(r.device.name) + (r.pending
       ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
       : ''),
-    location:  r => `<span title="${escHtml(r.location)}">${escHtml(r.location)}</span>`,
+    location:  r => `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || '—')}</span>`,
     bibs:      r => formatCount(r.bibsVisible, r.bibsExpected),
     time:      r => formatCount(r.timeVisible, r.timeExpected),
     lastSeen:   r => formatDateTime(r.lastSeen),

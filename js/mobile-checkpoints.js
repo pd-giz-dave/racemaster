@@ -17,6 +17,7 @@ export const CP_RETIRE = 'Retire';
 
 export function getMobileCheckpointBib(r)   { return +r.bibNumber || 0; }
 export function getMobileCheckpointTimes(r) { return r.cpTimes || {}; }
+export function getMobileCheckpointTimesOfDay(r) { return r.cpTimesOfDay || {}; }
 
 /** Every CP number present across all rows, ascending — for building dynamic table columns. */
 export function getMobileCheckpointNumbers() {

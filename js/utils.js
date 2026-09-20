@@ -131,6 +131,19 @@ export function elapsedToTimeOfDay(elapsed, raceStartTime) {
   return secondsToTime((timeToSeconds(raceStartTime) + timeToSeconds(elapsed)) % 86400);
 }
 
+// The inverse of elapsedToTimeOfDay() above — a device's own raw time-of-day reading (e.g. a
+// mobile checkpoint crossing's own timestamp) minus the race's scheduled start, for computing a
+// fallback elapsed duration when there's no device-recorded Start moment to measure against
+// directly (see results.js's getSplitsRows() checkpoint fallback, mobile-files-progress.js's own
+// computeCpTimes only ever produces a real device-anchored elapsed value when a Finish file's own
+// ModeStart timestamp exists). Wraps past midnight the same way — a crossing recorded after
+// midnight for a race that started the previous evening still comes out positive.
+export function timeOfDayToElapsed(timeOfDay, raceStartTime) {
+  if (!isValidRaceTime(timeOfDay) || !isValidRaceTime(raceStartTime)) return '';
+  const secs = ((timeToSeconds(timeOfDay) - timeToSeconds(raceStartTime)) % 86400 + 86400) % 86400;
+  return secondsToTime(secs);
+}
+
 /** Parse a date string (DD/MM/YYYY) to a Date object */
 export function parseDate(d) {
   const s = normaliseDate(d);

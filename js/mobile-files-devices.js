@@ -57,9 +57,9 @@ export function formatCount(visible, expected) {
 // enough on its own to exclude a row here. There's no longer a separate mode-agnostic "Setup"
 // record to also account for — ToDo.MD: "drop the 'Setup' record from the device file, its no
 // longer created, there will always be a modestart record" — a brand new, not-yet-synced device
-// simply has zero lines at all until its first real ModeStart arrives (see
-// splitByLocation()/flattenDevices() below for how that shows up: blank on both counts, same
-// outcome the old Setup record used to produce, just without a line of its own to represent it).
+// simply has zero lines at all until its first real ModeStart arrives (see flattenDevices() below
+// for how that shows up: blank on both counts, same outcome the old Setup record used to
+// produce, just without a line of its own to represent it).
 function hasRealBib(r) {
   if (r.action === 'ModeStart') return false;
   if (r.bibNumber == null) return false;
@@ -175,14 +175,14 @@ export function latestStartedAt(lines) {
   return latest ? (latest.timestamp ?? latest.timestampMillis ?? '') : '';
 }
 
-// A set of visible rows' own location — by now (see flattenDevices() below, which splits a
-// device's rows into one list row per distinct location BEFORE this is ever called on them) every
-// caller's own `visibleRows` already shares one location by construction, so this just reports
-// it. Kept latest-wins (highest lineNumber) rather than a strict "must be uniform or null" check
-// purely as a defensive fallback for a caller that hands this genuinely mixed-location rows
-// directly (a test, or some future caller) — graceful degradation, not the mechanism relocation
-// itself is handled by any more. Returns null only when there's no visible row at all (or none of
-// them carry a location).
+// A set of visible rows' own CURRENT location — the latest-wins (highest lineNumber) value,
+// used wherever a single representative location is needed (the Devices list's own sort order,
+// mobile-files-progress.js's own single-location bucketing). A device relocating mid-race is a
+// real HistoryAction.LOCATION entry within the SAME race/file now (racemaster-mobile's own
+// RaceRepository.relocateActiveModes) — not a new race filed under a new name — so a device's own
+// `visibleRows` can genuinely span more than one location again; this is deliberately still just
+// "whichever one is current" (see distinctLocationsOf() below for the full list). Returns null
+// only when there's no visible row at all (or none of them carry a location).
 function currentLocationOf(visibleRows) {
   if (!visibleRows.length) return null;
   const latest = visibleRows.reduce((a, b) => (b.lineNumber ?? 0) > (a.lineNumber ?? 0) ? b : a);
@@ -196,10 +196,26 @@ export function locationSummary(visibleRows) {
 
 // Same as locationSummary() above, but the raw string (or null when there isn't one) rather than
 // a display-ready HTML snippet. Also used by mobile-files-progress.js's own validateAndCompute()
-// to bucket selected files by resolved location — by the time a row reaches that function it's
-// already single-location (see flattenDevices()'s own doc), so this is just a straight read there.
+// as the single-location fallback for a row that's already been narrowed to one location's own
+// rows (see that function's own doc).
 export function rawLocationOf(visibleRows) {
   return currentLocationOf(visibleRows);
+}
+
+// Every distinct location a device has recorded at within its CURRENT (RESET-bounded) segment —
+// course-ordered via locationSortKey, same convention the Devices list itself sorts by. Unlike
+// currentLocationOf() above, this doesn't collapse down to one value: a relocated device's
+// earlier station is exactly what the "Where" column (js/views/mobile-files-devices.js) needs to
+// keep showing, not just wherever it ended up. Scoped to the same RESET-bounded `visibleRows` set
+// every other per-row figure (bibsVisible, timeVisible, ...) already uses, not the raw whole
+// file — a genuine Reset still means "discard", including whichever location(s) it happened at,
+// consistent with everything else this file already treats that way.
+export function distinctLocationsOf(visibleRows) {
+  const locations = [...new Set(visibleRows.map(r => r.location).filter(Boolean))];
+  return locations.sort((a, b) => {
+    const ka = locationSortKey(a), kb = locationSortKey(b);
+    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
+  });
 }
 
 // Every location is free text set by the phone operator (RaceMaster Mobile's own
@@ -228,108 +244,61 @@ function locationSortKey(rawLocation) {
   return [2, 0, rawLocation || ''];
 }
 
-// Every distinct location actually recorded anywhere in a device's file (not just its current
-// segment — a relocated device's now-closed-out OLD location is exactly what ToDo.MD's own "the
-// 'View' for the old should only show the old location" needs kept visible, not dropped the
-// moment the marshal moves on). Falsy/missing locations are ignored — a line with no location of
-// its own carries no signal either way.
-function distinctLocations(lines) {
-  return [...new Set(lines.map(l => l.location).filter(Boolean))];
-}
-
-// Splits one device's raw lines into one group per location it's ever recorded at — ToDo.MD's
-// "allow for the location changing in a device file (it means the marshall has moved) ... a new
-// devices line should be created". Each group's own Reset/Undo history is then resolved
-// independently (buildSegmentView is called separately per group by flattenDevices() below, not
-// here) — a Reset recorded after relocating to a new location has nothing to do with closing out
-// the old location's own already-finished history, so filtering by location BEFORE segment
-// resolution (rather than after) is what makes each location's own "current segment" concept
-// still mean the right thing once it has a location of its own to be scoped to.
-//
-// A pending (not-yet-pushed) device is deliberately never split: mobile-files.js's own Push
-// action uploads `device.lines` as one payload for the whole device, so splitting it here would
-// let a "Push" click on just one of the resulting rows silently leave the other location's
-// not-yet-synced lines stuck un-pushed. It reverts to being splittable, like any synced device,
-// the moment it's actually pushed and re-fetched from the server.
-//
-// A device with only one distinct location (by far the common case) is never split either —
-// yields exactly the original single "whole file" group, so nothing downstream needs to treat
-// that case any differently from before.
-function splitByLocation(device) {
-  if (device.pending) return [{ location: null, lines: device.lines }];
-  const locations = distinctLocations(device.lines);
-  if (locations.length <= 1) return [{ location: locations[0] ?? null, lines: device.lines }];
-  return locations.map(location => ({ location, lines: device.lines.filter(l => l.location === location) }));
-}
-
-// Flattens races → one row per device, or — once a device's file spans more than one location —
-// one row per (device, location) pair (see splitByLocation() above), precomputing everything the
+// Flattens races → one row per device (one physical server file), precomputing everything the
 // columns need so js/views/mobile-files-devices.js's column render functions stay trivial reads,
 // same as every other list view's *_COLS.
 //
-// Each such row's own `device` is a shallow clone with `lines` narrowed to just that location's
-// own — deliberately, not a separate field alongside the original: every existing reader of
-// `r.device.lines` (rowKey/computeIncorporationStatus/setLastSyncedLineNumber in
-// mobile-files-shared.js, showDeviceModal/showRawModal and the Push action in
-// js/views/mobile-files.js, validateAndCompute() in mobile-files-progress.js) then automatically
-// sees only this row's own location's data with no changes of its own needed — in particular
-// this is what makes the View/Raw modals show "only the new location"/"only the old location" per
-// ToDo.MD, and what makes validateAndCompute() bucket each location-row by its own single,
-// unambiguous location rather than needing to re-resolve one from mixed data.
-//
-// `rawLocation` is always set (every row has some location, or null), but `locationSplit` is
-// what rowKey() (mobile-files-shared.js) actually gates on to decide whether to append it —
-// keying off rawLocation's mere presence would differentiate every row's key, not just a
-// relocated device's; an ordinary unsplit row's key stays completely unchanged from before this
-// feature existed.
+// One device file is always exactly one row — a marshal relocating mid-race now writes a
+// HistoryAction.LOCATION marker into the SAME race/device file (racemaster-mobile's own
+// RaceRepository.relocateActiveModes) rather than starting a new race, so a device's own rows can
+// genuinely span more than one location again. This function still returns one row per device —
+// `location` stays the single current/latest value (for sorting), and the new `locations` field
+// carries the full course-ordered list for the "Where" column. js/views/mobile-files.js's `view`
+// handlers use `locations` to decide whether to prompt before narrowing `device.lines` down to
+// one location's own rows (each row's own `.location`, resolved per-record on the phone before
+// push — see SyncRecordMapping.kt's withResolvedLocations — already says which station it
+// belongs to, so no client-side segment-boundary reconstruction is needed here).
 export function flattenDevices(races) {
   const rows = [];
   for (const race of races) {
-    const withLocation = race.devices.flatMap(device => {
-      const groups = splitByLocation(device);
-      return groups.map(({ location, lines }) => {
-        const { timeSegment, bibsSegment } = buildSegmentView(lines);
-        return {
-          device: groups.length > 1 ? { ...device, lines } : device,
-          rawLocation: location,
-          locationSplit: groups.length > 1,
-          lines, timeSegment, bibsSegment,
-          modeStart: latestModeStart(lines),
-        };
-      });
-    });
-    withLocation.sort((a, b) => {
-      const ka = locationSortKey(a.rawLocation), kb = locationSortKey(b.rawLocation);
-      return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
-    });
-    for (const { device, rawLocation, locationSplit, lines, timeSegment, bibsSegment, modeStart } of withLocation) {
-      // locationSplit travels on `r` itself (not just the final row below) because
-      // computeIncorporationStatus(r) — called on `r` directly, right here — hands `r` straight
-      // to rowKey(), which needs locationSplit already present to decide whether to
-      // differentiate this row's key by rawLocation (see rowKey's own doc).
-      const r = { owner: race.owner, raceLabel: race.raceLabel, device, rawLocation, locationSplit };
+    const prepared = race.devices.map(device => {
+      const { timeSegment, bibsSegment } = buildSegmentView(device.lines);
+      const modeStart = latestModeStart(device.lines);
       // modeStart folded in alongside the post-Reset segment — not just as an isBibsExpected/
       // isTimeExpected fallback (see their own doc), but here too: a Reset with no fresh marker
       // immediately following it would otherwise leave both segments empty, wrongly showing this
       // row's own Where column as blank ("—") even though the last ModeStart record still knows
       // exactly where this device is (ToDo.MD: "the latest modestart record is still valid wrt
       // the location and mode").
-      const visibleForLocation = modeStart ? [...timeSegment, ...bibsSegment, modeStart] : [...timeSegment, ...bibsSegment];
+      const visible = modeStart ? [...timeSegment, ...bibsSegment, modeStart] : [...timeSegment, ...bibsSegment];
+      return {
+        device, timeSegment, bibsSegment, modeStart,
+        rawLocation: rawLocationOf(visible), location: locationSummary(visible),
+        locations: distinctLocationsOf(visible),
+      };
+    });
+    // Finish first, then CP1, CP2, ... ascending, then unrecognised last (see locationSortKey) —
+    // so devices within one race list in course order rather than the server's own directory
+    // order.
+    prepared.sort((a, b) => {
+      const ka = locationSortKey(a.rawLocation), kb = locationSortKey(b.rawLocation);
+      return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
+    });
+    for (const { device, timeSegment, bibsSegment, modeStart, rawLocation, location, locations } of prepared) {
+      const r = { owner: race.owner, raceLabel: race.raceLabel, device, rawLocation };
       rows.push({
         idx: rows.length,
         ...r,
         raceDate: race.raceDate,
         pending: !!device.pending,
-        location: locationSummary(visibleForLocation),
+        location,
+        locations,
         bibsVisible: bibsSegment.filter(hasRealBib).length,
         timeVisible: timeSegment.filter(hasRealSplit).length,
         bibsExpected: isBibsExpected(bibsSegment, modeStart),
         timeExpected: isTimeExpected(timeSegment, modeStart),
-        // device.lastSeen (server file mtime, or a pending file's own pulledAt) describes the
-        // whole physical file, not any one location within it — deliberately left unscoped, the
-        // same across every location-row a single device splits into.
         lastSeen: laterIso(device.lastSeen, getBleLastSeen(race.owner, race.raceLabel, device.name)),
-        lastUpdate: latestLineTimestamp(lines),
+        lastUpdate: latestLineTimestamp(device.lines),
         // Reuses the modeStart already resolved above rather than calling latestStartedAt(lines)
         // again — same lookup, no need to redo it.
         startedAt: modeStart ? (modeStart.timestamp ?? modeStart.timestampMillis ?? '') : '',

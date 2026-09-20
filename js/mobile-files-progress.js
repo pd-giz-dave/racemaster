@@ -7,11 +7,11 @@
 
 import { getSortedEntries } from './entries.js';
 import { entryInfo, getConflictedBibs } from './safety.js';
-import { getMobileCheckpointTimes, CP_RETIRE } from './mobile-checkpoints.js';
+import { getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime } from './utils.js';
 import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
 import { byLineNumber, setLastSyncedLineNumber } from './mobile-files-shared.js';
-import { buildSegmentView, rawLocationOf, resolveLocationKey } from './mobile-files-devices.js';
+import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
 
 // Maps a mobile Bibs-mode action onto the equivalent finishers.js action — "Pass" (Checkpoint
 // mode) is treated as a Finish, since it only makes sense here at all when the CP happened to
@@ -90,6 +90,18 @@ function findStartTimestamp(finishTimeRows) {
 // results.js, Safety Check's "Last CP" hint) already treats a CP time as an opaque display
 // string, so no further special-casing is needed there.
 //
+// An ORDINARY crossing's own bib always gets a `cpTimes` entry too, even when no elapsed time is
+// computable (no Finish file selected yet — validateAndCompute() no longer requires one — or its
+// own timestamp is unparseable): the value is '' rather than the row being skipped entirely. This
+// matters beyond display — applyComputedResults() derives *which bibs appear in
+// state.mobileCheckpoints at all* purely from `cpTimes` map keys (bibsSeen), and
+// getLatestCheckpoint() (mobile-checkpoints.js, Safety Check's "Last CP" hint) reads the same
+// map — skipping the entry would make a checkpoint-only sighting (the exact scenario a phone
+// adopted before any Finish phone exists produces) invisible everywhere downstream, not just
+// untimed. Safety Check's own toTimeOfDay() already prefers cpTimeOfDay over cpTimes when both
+// exist, so an empty elapsed string here costs nothing there — the device's own wall-clock time
+// still shows.
+//
 // `retireElapsed` is the separate, genuine elapsed-since-start moment a retire row's own
 // timestamp represents — when it's computable (a valid Start timestamp and a parseable row
 // timestamp), the same arithmetic an ordinary crossing gets. Kept apart from `cpTimes` rather
@@ -122,16 +134,20 @@ function computeCpTimes(bibsRows, startMs) {
       continue;
     }
     if (tod) cpTimeOfDay.set(bib, tod);
-    if (startMs == null) continue;
-    const ts = parseTimestamp(r.timestamp);
-    if (ts == null) continue;
-    const elapsed = Math.round((ts - startMs) / 1000);
-    if (elapsed < 0) continue; // bad data/clock skew — leave blank rather than show nonsense
-    cpTimes.set(bib, secondsToTime(elapsed));
+    let elapsedStr = '';
+    if (startMs != null) {
+      const ts = parseTimestamp(r.timestamp);
+      if (ts != null) {
+        const elapsed = Math.round((ts - startMs) / 1000);
+        if (elapsed >= 0) elapsedStr = secondsToTime(elapsed); // negative = bad data/clock skew, leave blank
+      }
+    }
+    cpTimes.set(bib, elapsedStr);
   }
-  // cpTimes: bib -> 'HH:MM:SS' elapsed | CP_RETIRE; cpTimeOfDay: bib -> 'HH:MM:SS' time-of-day
-  // (independent of startMs/elapsed validity — Safety Check's own preferred source, see
-  // deviceTimeOfDay's own doc); retireElapsed: bib -> 'HH:MM:SS' elapsed, retirees only.
+  // cpTimes: bib -> 'HH:MM:SS' elapsed | '' (seen, but no Finish file to anchor elapsed time
+  // against yet) | CP_RETIRE; cpTimeOfDay: bib -> 'HH:MM:SS' time-of-day (independent of
+  // startMs/elapsed validity — Safety Check's own preferred source, see deviceTimeOfDay's own
+  // doc); retireElapsed: bib -> 'HH:MM:SS' elapsed, retirees only.
   return { cpTimes, cpTimeOfDay, retireElapsed };
 }
 
@@ -262,51 +278,83 @@ export async function clearProgressData() {
 // phone has no stopwatch of its own, only an absolute per-bib timestamp, so they're
 // necessarily an approximation, primarily useful for safety awareness (roughly where on the
 // course an outstanding runner was last seen) rather than as a results input.
+//
+// A Finish file is not required at all: a race may genuinely have no phone at Finish yet (one
+// hasn't relocated there — see racemaster-mobile's own mid-race LOCATION-marker relocation), and
+// this still computes whatever it can from checkpoint files alone — cpTimesByCp/cpTimeOfDayByCp
+// populate from time-of-day data (see computeCpTimes' own doc for why elapsed times need a
+// Finish Start row but sightings don't), and a checkpoint retire still promotes to a DNF entry
+// in `expected` below. FinishTime itself, and elapsed (as opposed to time-of-day) checkpoint
+// times, simply stay empty until a Finish file exists to select.
+// Splits one selected row's own lines into one segment per location it's recorded at — a
+// relocated device's file can span more than one (see mobile-files-devices.js's own
+// flattenDevices() doc) — so each location buckets independently below, exactly as if it were
+// its own separate file. Each wire record's own `.location` is already resolved per-row on the
+// phone before push (racemaster-mobile's SyncRecordMapping.kt:withResolvedLocations), so
+// filtering straight on it keeps buildSegmentView()'s own RESET-boundary logic correctly scoped
+// to just that location, with no separate segment-boundary reconstruction needed here. A device
+// with no location recorded at all (locations.length === 0) still gets exactly one segment, its
+// whole (unfiltered) lines — the existing "no location recorded" error below is what catches
+// that, same as before this split existed.
+function locationSegmentsOf(r) {
+  const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
+  const locations = distinctLocationsOf([...timeSegment, ...bibsSegment]);
+  if (!locations.length) return [{ r, location: null, lines: r.device.lines }];
+  return locations.map(location => ({ r, location, lines: r.device.lines.filter(l => l.location === location) }));
+}
+
 export async function validateAndCompute(selected) {
   const raceLabels = [...new Set(selected.map(r => r.raceLabel))];
   if (raceLabels.length > 1) {
     return { error: `Cannot compute results — selected files are from different races: ${raceLabels.join(', ')}.` };
   }
 
-  const finishRows = [];
-  const cpBuckets = new Map(); // cp number -> row
+  const finishRows = []; // segments ({ r, location, lines }), not raw selected rows — see locationSegmentsOf
+  const cpBuckets = new Map(); // cp number -> segment
   for (const r of selected) {
-    const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
-    const visibleRows = [...timeSegment, ...bibsSegment];
-    if (!visibleRows.length) {
-      return { error: `Cannot compute results — "${r.device.name}" is empty (no entries in its current segment).` };
-    }
-    // A location genuinely changing mid-file (the marshal moved — ToDo.MD's own "allow for the
-    // location changing in a device file") is expected, not an error: rawLocationOf() already
-    // resolves that to whichever location is current (the latest line's own — see its own doc in
-    // mobile-files-devices.js), so this only ever fires when no visible row carries one at all.
-    const raw = rawLocationOf(visibleRows);
-    if (raw == null) {
-      return { error: `Cannot compute results — "${r.device.name}" has no location recorded.` };
-    }
-    const key = resolveLocationKey(raw);
-    if (!key) {
-      return { error: `Cannot compute results — location "${raw}" isn't recognised as Finish or a checkpoint.` };
-    }
-    if (key.kind === 'finish') {
-      finishRows.push(r);
-    } else if (cpBuckets.has(key.number)) {
-      return { error: `Cannot compute results — more than one file selected for CP${key.number}.` };
-    } else {
-      cpBuckets.set(key.number, r);
+    for (const seg of locationSegmentsOf(r)) {
+      const { timeSegment, bibsSegment } = buildSegmentView(seg.lines);
+      const visibleRows = [...timeSegment, ...bibsSegment];
+      const label = seg.location ? `${r.device.name} (${seg.location})` : r.device.name;
+      if (!visibleRows.length) {
+        return { error: `Cannot compute results — "${label}" is empty (no entries in its current segment).` };
+      }
+      // A location genuinely changing mid-file (the marshal moved) is expected, not an error —
+      // locationSegmentsOf() above already splits it into one segment per location, so
+      // rawLocationOf() here only ever sees rows already narrowed to a single location, and this
+      // only fires when a segment somehow carries no location at all.
+      const raw = rawLocationOf(visibleRows);
+      if (raw == null) {
+        return { error: `Cannot compute results — "${label}" has no location recorded.` };
+      }
+      const key = resolveLocationKey(raw);
+      if (!key) {
+        return { error: `Cannot compute results — location "${raw}" isn't recognised as Finish or a checkpoint.` };
+      }
+      if (key.kind === 'finish') {
+        finishRows.push(seg);
+      } else if (cpBuckets.has(key.number)) {
+        return { error: `Cannot compute results — more than one file selected for CP${key.number}.` };
+      } else {
+        cpBuckets.set(key.number, seg);
+      }
     }
   }
 
-  if (!finishRows.length) return { error: 'Select at least the Finish location file(s) too.' };
-
   const bibs = [], times = [];
-  for (const r of finishRows) {
-    const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
+  for (const seg of finishRows) {
+    const { timeSegment, bibsSegment } = buildSegmentView(seg.lines);
     bibs.push(...bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action)));
     times.push(...timeSegment.filter(t => TRANSFERABLE_TIME_ACTIONS.has(t.action)));
   }
 
-  if (!bibs.length && !times.length) return { error: 'Selected Finish file(s) have no transferable entries.' };
+  // Only an error when a Finish file WAS selected and turned out empty — no Finish file at all
+  // is now a legitimate, common state (see this function's own top-of-file doc), and bibs/times
+  // are always empty in that case by construction (the loop above only ever draws from
+  // finishRows), so this must not fire just because finishRows itself is empty.
+  if (finishRows.length && !bibs.length && !times.length) {
+    return { error: 'Selected Finish file(s) have no transferable entries.' };
+  }
 
   const dupBibSplits = findDuplicateSplitNumbers(bibs);
   if (dupBibSplits.length) {
@@ -319,22 +367,23 @@ export async function validateAndCompute(selected) {
 
   // The Finish bucket's own Time-mode Start row is the universal t=0 reference for every
   // timestamp-based elapsed calc below — checkpoint crossings, a checkpoint retire's own "when"
-  // (computeCpTimes' retireElapsed), and now a Finish-location retire's "when" too
+  // (computeCpTimes' retireElapsed), and a Finish-location retire's "when" too
   // (expectedFinisherEntries below). Found unconditionally (not just when cpBuckets.size), since
-  // a Finish-only selection still wants it for that last case.
+  // a Finish-only selection still wants it for that last case. null when there's no Finish file
+  // selected at all (or it has no ModeStart row) — computeCpTimes() below tolerates that, falling
+  // back to time-of-day-only sightings rather than refusing to compute anything.
   const startMs = findStartTimestamp(times);
 
-  // Checkpoint buckets need it to compute anything at all.
-  const cpTimesByCp = new Map(); // cp number -> Map<bib, 'HH:MM:SS'>
+  // Checkpoint buckets degrade gracefully with no startMs — see computeCpTimes' own doc — rather
+  // than refusing to compute anything: a bib's own device time-of-day is still worth showing
+  // (Safety Check's "Last CP" hint) even before any phone has reached Finish.
+  const cpTimesByCp = new Map(); // cp number -> Map<bib, 'HH:MM:SS' | ''>
   const cpTimeOfDayByCp = new Map(); // cp number -> Map<bib, 'HH:MM:SS'> — see computeCpTimes' own doc
   const retireElapsedByBib = new Map(); // bib -> 'HH:MM:SS', checkpoint retirees only
   const retireTimeOfDayByBib = new Map(); // bib -> 'HH:MM:SS', checkpoint retirees only
   if (cpBuckets.size) {
-    if (startMs == null) {
-      return { error: 'Cannot compute checkpoint times — no Start record found in the Finish location\'s time file; select it too.' };
-    }
-    for (const [cpNumber, r] of cpBuckets) {
-      const { bibsSegment } = buildSegmentView(r.device.lines);
+    for (const [cpNumber, seg] of cpBuckets) {
+      const { bibsSegment } = buildSegmentView(seg.lines);
       const cpRows = bibsSegment.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action));
       // computeCpTimes() itself already drops a malformed (non-positive-integer) bib — see its
       // own doc — so a crossing recorded for a bib that just doesn't match any current Entry
@@ -457,7 +506,12 @@ export function buildProgressColumns(baseColumns, cpNumbers) {
 // with at least one checkpoint sighting, even if never finished — that extra union is deliberate:
 // a bib seen only at a CP, with no finish, is exactly the safety-relevant case (still out on the
 // course, last seen at CP*n*). FinishTime here is the raw, unadjusted stopwatch/paired-split
-// value — the adjusted race time lives on the Results & Prize List page, not here.
+// value — the adjusted race time lives on the Results & Prize List page, not here. `cpTimes`
+// carries straight through from state.mobileCheckpoints (elapsed | CP_RETIRE, or '' when a Finish
+// file hasn't anchored an elapsed value yet — see computeCpTimes' own doc) purely so a caller can
+// still tell CP_RETIRE apart from an ordinary sighting; `cpTimesOfDay` is what the Progress tab's
+// own CP columns actually display (js/views/mobile-files-progress.js's own renderer) — the raw
+// device time-of-day, unadjusted, unlike the Splits tab's own elapsed-since-start figures.
 //
 // `invalid` (from entryInfo()'s own doc in safety.js) marks a bib with mobile activity but no
 // matching Entry — validateAndCompute() deliberately no longer rejects such a bib, so it needs
@@ -485,7 +539,8 @@ export function buildProgressRows() {
       const info = entryInfo(bib);
       rowsByBib.set(bib, {
         bibNumber: bib, name: info.name, category: info.category, course: info.course,
-        startTime: '', finishTime: '', cpTimes: {}, invalid: info.invalid, conflict: conflictedBibs.has(bib),
+        startTime: '', finishTime: '', cpTimes: {}, cpTimesOfDay: {},
+        invalid: info.invalid, conflict: conflictedBibs.has(bib),
       });
     }
     return rowsByBib.get(bib);
@@ -502,7 +557,9 @@ export function buildProgressRows() {
     else if (f.action === 'DNF')    ensure(bib).finishTime = 'DNF';
   }
   for (const r of state.mobileCheckpoints) {
-    ensure(+r.bibNumber).cpTimes = getMobileCheckpointTimes(r);
+    const row = ensure(+r.bibNumber);
+    row.cpTimes = getMobileCheckpointTimes(r);
+    row.cpTimesOfDay = getMobileCheckpointTimesOfDay(r);
   }
   return [...rowsByBib.values()].sort((a, b) => a.bibNumber - b.bibNumber);
 }

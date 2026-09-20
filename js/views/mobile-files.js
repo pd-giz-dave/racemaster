@@ -26,7 +26,7 @@ import {
   getSession, getIsAdmin, getUsername, apiListMobileFiles, apiGetMobileStatus, apiDeleteMobileFile,
   apiPushMobileSync, getPendingMobileFiles, removePendingMobileFile, apiTouchProgress,
 } from '../storage.js';
-import { showConfirmDialog, showStatus, wireTabBar, getEl } from '../ui.js';
+import { showConfirmDialog, showChoiceDialog, showStatus, wireTabBar, getEl } from '../ui.js';
 import { isBluetoothAvailable, resetLastPulledLineNumber, resetAllLastPulledLineNumbers } from '../mule-ble.js';
 import {
   rowKey, selectedKeys, saveSelectedKeys, computeIncorporationStatus, mergePendingIntoRaces, restoreSelectedKeysOnce,
@@ -113,15 +113,12 @@ async function deleteRow(r) {
   const label = fileLabel(r);
   // Naming the owner too when admin: this is the one page an admin can see two different users'
   // similarly-named races side by side, so the plain race/file name alone isn't always enough to
-  // be sure which one's about to be deleted. A relocated device (see mobile-files-devices.js's
-  // own flattenDevices()) shows up as more than one row — this deletes the server's one
-  // underlying file regardless of which of that device's location-rows was clicked, so that's
-  // called out explicitly rather than leaving an admin/operator to assume it only affects "this"
-  // location.
-  const locationNote = r.locationSplit
-    ? ` This removes every location this device recorded, not just "${r.rawLocation}".` : '';
+  // be sure which one's about to be deleted. One row is always exactly one server file (see
+  // mobile-files-devices.js's own flattenDevices()) — even a device that's relocated mid-race and
+  // now lists more than one Where value is still just this one file, so deleting it removes every
+  // location it's ever recorded at, not just the one currently shown.
   if (!await showConfirmDialog(
-    `Delete "${label}" from "${r.raceLabel}"${getIsAdmin() ? ` (owner: ${r.owner})` : ''}?${locationNote} This cannot be undone.`,
+    `Delete "${label}" from "${r.raceLabel}"${getIsAdmin() ? ` (owner: ${r.owner})` : ''}? This cannot be undone.`,
     'Delete', true
   )) return;
   const error = await deleteFileOnServer(r);
@@ -281,6 +278,26 @@ async function activateRace() {
   else showStatus('Nothing to activate — set the event name and date first.', true);
 }
 
+// "View" on a device row — a relocated device's file can hold more than one location's own
+// records (see mobile-files-devices.js's own flattenDevices() doc), but the modal itself still
+// shows just one segment at a time, so this asks first when there's a real choice to make. Each
+// wire record's own `.location` is already resolved per-row on the phone before push (see
+// racemaster-mobile's SyncRecordMapping.kt:withResolvedLocations) — a Reset that happened at a
+// given station carries that station's own location too, so filtering straight on `.location`
+// naturally keeps buildSegmentView()'s own RESET-boundary logic scoped to just the chosen
+// location, with no separate segment-extraction step needed here.
+async function viewDeviceRow(r) {
+  const locations = r.locations ?? [];
+  let location = locations[0] ?? null;
+  if (locations.length > 1) {
+    const choices = locations.map(loc => ({ label: loc, value: loc }));
+    location = await showChoiceDialog(`View which location for ${r.device.name}?`, choices, { vertical: true });
+    if (location === null) return;
+  }
+  const lines = location === null ? r.device.lines : r.device.lines.filter(l => l.location === location);
+  showDeviceModal(r.owner, r.raceLabel, r.device.name, lines);
+}
+
 export function wireMobileFiles() {
   initBle({ renderAll: renderMobileFiles, getLastKnownRaces: () => lastKnownRaces });
   initProgressActions({ renderAll: renderMobileFiles });
@@ -293,7 +310,7 @@ export function wireMobileFiles() {
     if (!btn) return;
     const r = currentRows[+btn.closest('[data-idx]')?.dataset.idx];
     if (!r) return;
-    if (btn.dataset.action === 'view')          showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+    if (btn.dataset.action === 'view')          viewDeviceRow(r);
     else if (btn.dataset.action === 'raw')      showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
     else if (btn.dataset.action === 'push')     pushPendingRow(r);
     else if (btn.dataset.action === 'discard')  discardPendingRow(r);
@@ -308,7 +325,7 @@ export function wireMobileFiles() {
     if (!r) return;
     if (btn.dataset.action === 'view') {
       if (r.kind === 'progress') showProgressFileModal(r.owner, r.raceLabel, r.progress);
-      else showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
+      else viewDeviceRow(r);
     } else if (btn.dataset.action === 'raw') {
       showRawModal(r.owner, r.raceLabel, r.device.name, r.device.lines);
     } else if (btn.dataset.action === 'delete') {

@@ -11,6 +11,16 @@ export function getTimingMethod(course) {
   return raw || 'Stopwatch';
 }
 
+/** Returns the Event Settings scheduled start time ('HH:MM:SS') for a course — Seniors'
+ *  state.event.startTime, or Juniors' own state.event.juniorStartTime. Used as a fallback
+ *  reference for computing an elapsed duration from a raw device time-of-day when there's no
+ *  device-recorded Start moment to anchor against directly (see results.js's getSplitsRows()
+ *  checkpoint fallback, utils.js's own timeOfDayToElapsed()). May be '' if unset. */
+export function getEventStartTime(course) {
+  const isJunior = course && ciEq(course, COURSE.JUNIORS);
+  return (isJunior ? state.event.juniorStartTime : state.event.startTime) || '';
+}
+
 /** Return true if the given course uses dibbers */
 export function usingDibbers(course) {
   return ciEq(getTimingMethod(course), 'Dibbers');

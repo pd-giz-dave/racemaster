@@ -136,11 +136,42 @@ export function entryInfo(bib) {
   };
 }
 
+// Every bib with SOME real record — a mobile checkpoint sighting, a mobile Start/Finish/DNF/etc
+// entry, or a manual stopwatch entry — but no matching Entry at all, and not yet accounted for
+// (getFinishedBibs() — already shown on the Finished/DNF tabs instead, via unresolvedBibsFor()'s
+// own equivalent union there). A person recording splits under a mistyped or genuinely
+// unregistered bib is still a person out on the course — this app has a duty of care to keep
+// tracking them until they're accounted for, the same reasoning that already keeps such a bib
+// visible (flagged) on Mobile Files' own Progress tab and this file's Finished/DNF rows, just not
+// previously extended to Outstanding.
+function unregisteredOutstandingBibs(finishedBibs) {
+  const seen = new Set();
+  for (const f of [...state.finishers, ...state.mobileProgress]) {
+    const bib = +f.number;
+    if (bib > 0) seen.add(bib);
+  }
+  for (const r of state.mobileCheckpoints) {
+    const bib = +r.bibNumber;
+    if (bib > 0) seen.add(bib);
+  }
+  return [...seen].filter(bib => !getEntry(bib) && !finishedBibs.has(bib));
+}
+
+// `course` filters the real, registered entries as before; an unregistered bib has no course
+// field to filter by at all — there's no way to know which course they're actually running — so
+// every one is included regardless of which course's tab is asking, rather than silently dropped
+// from whichever tab doesn't happen to match a course it never had. Carries `invalid: true` (see
+// entryInfo()'s own doc) purely so the view layer can flag it the same way Finished/DNF/Early
+// Starters rows already do — this app never distinguishes "no Entry yet" from "mistyped/
+// unregistered" from the data alone, and both need the same "shown, not silently dropped, but
+// clearly flagged" treatment.
 export function getOutstandingRows(course) {
   const finishedBibs = getFinishedBibs();
-  return [...state.entries]
-    .filter(e => { const b = +e.bibNumber; return b > 0 && !finishedBibs.has(b) && (!course || e.course === course); })
-    .sort((a, b) => +a.bibNumber - +b.bibNumber);
+  const registered = [...state.entries]
+    .filter(e => { const b = +e.bibNumber; return b > 0 && !finishedBibs.has(b) && (!course || e.course === course); });
+  const unregistered = unregisteredOutstandingBibs(finishedBibs)
+    .map(bib => ({ bibNumber: String(bib), name: '', course: '', category: '', gender: '', partner: null, invalid: true }));
+  return [...registered, ...unregistered].sort((a, b) => +a.bibNumber - +b.bibNumber);
 }
 
 // Where (literal "Finish", or "CPn") and when (raw elapsed-since-start, '' if unknown) a bib

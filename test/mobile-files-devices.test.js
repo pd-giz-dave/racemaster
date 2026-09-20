@@ -8,7 +8,7 @@ import { installLocalStorageMock } from './helpers/mock-browser.js';
 import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
-  flattenDevices, flattenAllFiles, latestStartedAt,
+  distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -139,12 +139,13 @@ describe('mobile-files-devices.js:locationSummary / rawLocationOf', () => {
     assert.equal(locationSummary(rows), 'Finish');
   });
 
-  // In practice flattenDevices() (see its own describe block below) already splits a device's
-  // rows by location BEFORE these are ever called on them, so this genuinely-mixed input only
-  // happens via a direct call like this one — the latest-wins fallback these two apply is just
-  // graceful degradation for that case, not the real mechanism ToDo.MD's own "allow for the
-  // location changing in a device file" is handled by any more.
-  it('falls back to the latest (highest lineNumber) row\'s location when given genuinely mixed-location rows directly', () => {
+  // A relocated device's rows can genuinely span more than one location again (a real
+  // HistoryAction.LOCATION marker mid-race, not a new file) — rawLocationOf()/locationSummary()
+  // deliberately still collapse that down to just the latest (current) one, for the single-value
+  // uses that want it (course-ordering the Devices list, the modal's own "Location:" summary).
+  // See distinctLocationsOf() (own describe block below) for the full per-location list the
+  // "Where" column and validateAndCompute()'s own per-location bucketing use instead.
+  it('resolves to the latest (highest lineNumber) row\'s location when given rows spanning more than one location', () => {
     const rows = [{ location: 'Finish', lineNumber: 1 }, { location: 'CP1', lineNumber: 2 }];
     assert.equal(rawLocationOf(rows), 'CP1');
     assert.equal(locationSummary(rows), 'CP1');
@@ -158,6 +159,31 @@ describe('mobile-files-devices.js:locationSummary / rawLocationOf', () => {
   it('handles an empty visible-rows list without throwing', () => {
     assert.equal(rawLocationOf([]), null);
     assert.match(locationSummary([]), /—/);
+  });
+});
+
+describe('mobile-files-devices.js:distinctLocationsOf', () => {
+  it('returns every distinct location, course-ordered (Finish, then CP ascending)', () => {
+    const rows = [
+      { location: 'CP2', lineNumber: 3 },
+      { location: 'Finish', lineNumber: 1 },
+      { location: 'CP1', lineNumber: 2 },
+    ];
+    assert.deepEqual(distinctLocationsOf(rows), ['Finish', 'CP1', 'CP2']);
+  });
+
+  it('deduplicates a location a device returned to after relocating away and back', () => {
+    const rows = [{ location: 'CP1' }, { location: 'CP2' }, { location: 'CP1' }];
+    assert.deepEqual(distinctLocationsOf(rows), ['CP1', 'CP2']);
+  });
+
+  it('ignores rows with no location at all, and returns an empty list when none carry one', () => {
+    assert.deepEqual(distinctLocationsOf([{ location: null }, { location: 'Finish' }]), ['Finish']);
+    assert.deepEqual(distinctLocationsOf([{ location: null }, {}]), []);
+  });
+
+  it('handles an empty visible-rows list without throwing', () => {
+    assert.deepEqual(distinctLocationsOf([]), []);
   });
 });
 
@@ -301,104 +327,73 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     assert.equal(rows[0].bibsExpected, true);
   });
 
-  // ToDo.MD: "allow for the location changing in a device file (it means the marshall has
-  // moved), when that happens a new devices line should be created to show the new 'Where'
-  // column, and the 'View' for that should only show the new location and the 'View' for the
-  // old should only show the old location" — see js/mobile-files-devices.js's own
-  // splitByLocation()/flattenDevices() doc for the full design.
-  describe('location changes (the marshal moved)', () => {
-    it('splits a device that has recorded at more than one location into one row per location', () => {
-      const races = [{
-        owner: 'alice', raceLabel: 'race-a', raceDate: null,
-        devices: [{ name: 'Phone', lines: [
+  // Two genuinely different physical phones at two different stations are — and stay — two
+  // separate rows, keyed by their own distinct device.name (unrelated to relocation: see
+  // distinctLocationsOf()'s own describe block below for the "one phone, two locations" case).
+  it('two different devices at different stations arrive — and stay — as two separate rows', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [
+        { name: 'Phone_cp1', lines: [
           { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
           { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
-          { lineNumber: 3, action: 'Finish', bibNumber: '6', location: 'CP2' },
-        ] }],
-      }];
-      const rows = flattenDevices(races);
-      assert.equal(rows.length, 2);
-      assert.deepEqual(rows.map(r => r.device.name), ['Phone', 'Phone']);
-      assert.deepEqual(rows.map(r => r.rawLocation).sort(), ['CP1', 'CP2']);
-      assert.ok(rows.every(r => r.locationSplit === true));
-    });
-
-    it('scopes each location-row\'s own counts to just its own location\'s entries', () => {
-      const races = [{
-        owner: 'alice', raceLabel: 'race-a', raceDate: null,
-        devices: [{ name: 'Phone', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
-          { lineNumber: 3, action: 'ModeStart', bibNumber: 'n/a', location: 'CP2' },
-          { lineNumber: 4, action: 'Finish', bibNumber: '6', location: 'CP2' },
-          { lineNumber: 5, action: 'Finish', bibNumber: '7', location: 'CP2' },
-        ] }],
-      }];
-      const rows = flattenDevices(races);
-      const cp1 = rows.find(r => r.rawLocation === 'CP1');
-      const cp2 = rows.find(r => r.rawLocation === 'CP2');
-      assert.equal(cp1.bibsVisible, 1);
-      assert.equal(cp2.bibsVisible, 2);
-    });
-
-    it('gives each location-row its own rowKey and independently-tracked incorporation status', () => {
-      const races = [{
-        owner: 'alice', raceLabel: 'race-a', raceDate: null,
-        devices: [{ name: 'Phone', lines: [
-          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'CP1' },
+        ] },
+        { name: 'Phone_cp2', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP2' },
           { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
-        ] }],
-      }];
-      selectedKeys.add(rowKey({ owner: 'alice', raceLabel: 'race-a', device: { name: 'Phone' }, rawLocation: 'CP1', locationSplit: true }));
-      const rows = flattenDevices(races);
-      const cp1 = rows.find(r => r.rawLocation === 'CP1');
-      const cp2 = rows.find(r => r.rawLocation === 'CP2');
-      assert.notEqual(rowKey(cp1), rowKey(cp2));
-      assert.equal(cp1.incorporationStatus, 'outstanding'); // selected, and has an unsynced line
-      assert.equal(cp2.incorporationStatus, 'none');         // never selected
-    });
+          { lineNumber: 3, action: 'Finish', bibNumber: '7', location: 'CP2' },
+        ] },
+      ],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows.length, 2);
+    const cp1 = rows.find(r => r.rawLocation === 'CP1');
+    const cp2 = rows.find(r => r.rawLocation === 'CP2');
+    assert.equal(cp1.bibsVisible, 1);
+    assert.equal(cp2.bibsVisible, 2);
+    assert.notEqual(rowKey(cp1), rowKey(cp2)); // distinct device.name is already enough
+  });
 
-    it('each location-row\'s View/Raw only sees that location\'s own lines (device.lines is scoped)', () => {
-      const races = [{
-        owner: 'alice', raceLabel: 'race-a', raceDate: null,
-        devices: [{ name: 'Phone', lines: [
-          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
-        ] }],
-      }];
-      const rows = flattenDevices(races);
-      const cp1 = rows.find(r => r.rawLocation === 'CP1');
-      const cp2 = rows.find(r => r.rawLocation === 'CP2');
-      assert.deepEqual(cp1.device.lines.map(l => l.bibNumber), ['5']);
-      assert.deepEqual(cp2.device.lines.map(l => l.bibNumber), ['6']);
-    });
+  it('a single device that relocated mid-race stays one row, listing every location it recorded at', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Roaming Phone', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+        { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2', location: 'CP2' },
+        { lineNumber: 4, action: 'Finish', bibNumber: '6', location: 'CP2' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows.length, 1); // still one row — same device file, not a new one
+    assert.deepEqual(rows[0].locations, ['CP1', 'CP2']);
+    assert.equal(rows[0].location, 'CP2'); // the single current/latest value is unchanged in meaning
+  });
 
-    it('does not split a device that has only ever recorded at one location', () => {
-      const races = [{
-        owner: 'alice', raceLabel: 'race-a', raceDate: null,
-        devices: [{ name: 'Phone', lines: [
-          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'Finish' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'Finish' },
-        ] }],
-      }];
-      const rows = flattenDevices(races);
-      assert.equal(rows.length, 1);
-      assert.equal(rows[0].locationSplit, false);
-      assert.equal(rows[0].rawLocation, 'Finish');
-    });
-
-    it('does not split a still-pending (not-yet-pushed) device even if its local lines already span two locations', () => {
-      const races = [{
-        owner: 'alice', raceLabel: 'race-a', raceDate: null,
-        devices: [{ name: 'Phone', pending: true, lines: [
-          { lineNumber: 1, action: 'Finish', bibNumber: '5', location: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
-        ] }],
-      }];
-      const rows = flattenDevices(races);
-      assert.equal(rows.length, 1);
-      assert.equal(rows[0].device.lines.length, 2); // Push still uploads everything as one payload
-    });
+  // Not just a single relocation — a marshal can move any number of times across a race, each
+  // move its own real HistoryAction.LOCATION marker on the phone (racemaster-mobile's own
+  // RaceRepository.relocateActiveModes has no limit on how many times it can be called). Three
+  // moves here (CP1 -> CP2 -> CP3 -> back to CP1) to confirm the web-app side stays generic too:
+  // still one row, every distinct location listed, a revisited one deduplicated rather than
+  // appearing twice.
+  it('a device relocated three times over stays one row, listing every distinct location it visited', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Roaming Phone', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
+        { lineNumber: 2, action: 'Finish', bibNumber: '1', location: 'CP1' },
+        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2', location: 'CP2' },
+        { lineNumber: 4, action: 'Finish', bibNumber: '2', location: 'CP2' },
+        { lineNumber: 5, action: 'Location', bibNumber: null, note: 'CP3', location: 'CP3' },
+        { lineNumber: 6, action: 'Finish', bibNumber: '3', location: 'CP3' },
+        { lineNumber: 7, action: 'Location', bibNumber: null, note: 'CP1', location: 'CP1' },
+        { lineNumber: 8, action: 'Finish', bibNumber: '4', location: 'CP1' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].locations, ['CP1', 'CP2', 'CP3']); // revisited CP1 not duplicated
+    assert.equal(rows[0].location, 'CP1'); // latest/current
   });
 
   // ToDo.MD: "when a race has been reset in a device file, the latest modestart record is still

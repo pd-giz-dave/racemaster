@@ -267,8 +267,13 @@ describe('server/mobile.js:getAvailableRacesForUser', () => {
   });
 
   it('sorts newest generatedAt first', () => {
-    writeProgress('alice', 'race-a', { raceName: 'A', raceDate: '', generatedAt: '2026-08-20T10:00:00.000Z', entries: [] });
-    writeProgress('alice', 'race-b', { raceName: 'B', raceDate: '', generatedAt: '2026-08-23T10:00:00.000Z', entries: [] });
+    // Relative to now, not a fixed date — a hardcoded absolute date here previously drifted
+    // outside the 30-day cutoff below as real time passed it, failing this test for a reason
+    // that had nothing to do with the sort behavior it's actually meant to check.
+    const older = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const newer = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+    writeProgress('alice', 'race-a', { raceName: 'A', raceDate: '', generatedAt: older, entries: [] });
+    writeProgress('alice', 'race-b', { raceName: 'B', raceDate: '', generatedAt: newer, entries: [] });
     const races = getAvailableRacesForUser('alice', 30);
     assert.deepEqual(races.map(r => r.raceLabel), ['race-b', 'race-a']);
   });

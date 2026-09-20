@@ -63,12 +63,57 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
-  it('resolves a file whose location changed mid-file to its latest (current) one, rather than rejecting it', () => {
-    const moved = finishRow();
-    moved.device.lines[0].location = 'CP1'; // stale — an earlier line, before the marshal moved to Finish
-    return validateAndCompute([moved]).then(result => {
+  it('splits a single relocated device file into one segment per location, bucketing each independently', () => {
+    // One CP-mode phone that recorded at CP1, relocated (a real HistoryAction.LOCATION marker on
+    // the phone — the web-app doesn't need to see the marker itself, just each row's own already-
+    // resolved .location, per SyncRecordMapping.kt:withResolvedLocations), then recorded at CP2.
+    const roaming = finishRow({ device: { name: 'Roaming Phone', lines: [
+      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', splitTime: null, location: 'CP1' },
+      { lineNumber: 2, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
+      { lineNumber: 3, action: 'Location', bibNumber: null, splitTime: null, note: 'CP2', location: 'CP2' },
+      { lineNumber: 4, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:15:00.00', location: 'CP2' },
+    ] } });
+    return validateAndCompute([finishRow(), roaming]).then(result => {
       assert.equal(result.error, undefined);
-      assert.equal(result.finishRows.length, 1); // bucketed by the LATEST location (Finish), not the first
+      assert.equal(result.cpBuckets.size, 2); // CP1 and CP2 bucketed independently, from the same device file
+      assert.equal(result.cpTimesByCp.get(1).get(1), '00:05:00');
+      assert.equal(result.cpTimesByCp.get(2).get(2), '00:15:00');
+    });
+  });
+
+  // Not just one relocation — a marshal can move any number of times, each its own real
+  // HistoryAction.LOCATION marker (racemaster-mobile's RaceRepository.relocateActiveModes has no
+  // limit on how many times it can be called in one race). Three CPs from one roaming device here
+  // to confirm locationSegmentsOf()/the bucketing loop stay correct beyond just two.
+  it('splits a device relocated three times over into three independent segments/buckets', () => {
+    const roaming = finishRow({ device: { name: 'Roaming Phone', lines: [
+      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', splitTime: null, location: 'CP1' },
+      { lineNumber: 2, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
+      { lineNumber: 3, action: 'Location', bibNumber: null, splitTime: null, note: 'CP2', location: 'CP2' },
+      { lineNumber: 4, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:15:00.00', location: 'CP2' },
+      { lineNumber: 5, action: 'Location', bibNumber: null, splitTime: null, note: 'CP3', location: 'CP3' },
+      { lineNumber: 6, action: 'Finish', splitNumber: 1, bibNumber: '3', timestamp: '2026/08/30 09:25:00.00', location: 'CP3' },
+    ] } });
+    return validateAndCompute([finishRow(), roaming]).then(result => {
+      assert.equal(result.error, undefined);
+      assert.equal(result.cpBuckets.size, 3);
+      assert.equal(result.cpTimesByCp.get(1).get(1), '00:05:00');
+      assert.equal(result.cpTimesByCp.get(2).get(2), '00:15:00');
+      assert.equal(result.cpTimesByCp.get(3).get(3), '00:25:00');
+    });
+  });
+
+  it('rejects when one of a relocated device\'s own segments collides with another selected file\'s checkpoint', () => {
+    const roaming = finishRow({ device: { name: 'Roaming Phone', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
+      { lineNumber: 2, action: 'Location', bibNumber: null, splitTime: null, note: 'CP2', location: 'CP2' },
+      { lineNumber: 3, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:15:00.00', location: 'CP2' },
+    ] } });
+    const cp1Again = finishRow({ device: { name: 'CP1 Phone', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '999', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
+    ] } });
+    return validateAndCompute([finishRow(), roaming, cp1Again]).then(result => {
+      assert.match(result.error, /more than one file selected for CP1/);
     });
   });
 
@@ -107,11 +152,19 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
-  it('rejects when no Finish-location file is selected at all', () => {
+  it('succeeds with a checkpoint-only selection — no Finish file required (one may not have relocated there yet)', () => {
     const cpOnly = finishRow();
     for (const l of cpOnly.device.lines) l.location = 'CP1';
     return validateAndCompute([cpOnly]).then(result => {
-      assert.match(result.error, /Select at least the Finish/);
+      assert.equal(result.error, undefined);
+      assert.equal(result.finishRows.length, 0);
+      assert.equal(result.cpBuckets.size, 1);
+      // No Finish file to anchor elapsed time against — the bib still shows up as seen (empty
+      // elapsed, not omitted; see computeCpTimes' own doc for why that matters), with its real
+      // device time-of-day intact.
+      assert.equal(result.cpTimesByCp.get(1).get(1), '');
+      assert.equal(result.cpTimeOfDayByCp.get(1).get(1), '09:20:00');
+      assert.deepEqual(result.expected, []); // nothing Finish-derived yet, and this bib didn't retire
     });
   });
 
@@ -181,14 +234,20 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     assert.equal(startEntry.timeOfDay, '09:05:00');
   });
 
-  it('rejects a checkpoint file when the Finish file\'s time-mode ModeStart row is missing', async () => {
+  it('degrades a checkpoint file to time-of-day-only (no error) when the Finish file\'s time-mode ModeStart row is missing', async () => {
     const noStart = finishRow();
     noStart.device.lines = noStart.device.lines.filter(l => l.action !== 'ModeStart');
     const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
     ] } });
     const result = await validateAndCompute([noStart, cp]);
-    assert.match(result.error, /no Start record/);
+    assert.equal(result.error, undefined);
+    // FinishTime itself is untouched — splitNumber pairing needs no start reference at all.
+    assert.deepEqual(result.expected, [{ action: 'Finish', number: 1, time: '00:20:00' }]);
+    // The checkpoint crossing has no elapsed time to anchor against (empty, not omitted — see
+    // computeCpTimes' own doc), but its real device time-of-day is still there.
+    assert.equal(result.cpTimesByCp.get(1).get(1), '');
+    assert.equal(result.cpTimeOfDayByCp.get(1).get(1), '09:10:00');
   });
 
   it('marks a checkpoint retire with CP_RETIRE (not a computed time) in cpTimesByCp, and adds a synthetic DNF carrying its real elapsed retire time for a bib with no Finish record', async () => {
@@ -257,6 +316,18 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
     await applyComputedResults([], cpTimesByCp, [finishRow()]);
     assert.equal(state.mobileCheckpoints.length, 1);
     assert.deepEqual(state.mobileCheckpoints[0], { bibNumber: 1, cpTimes: { 1: '00:10:00', 2: '00:15:00' } });
+  });
+
+  // The no-Finish-file case: computeCpTimes() now stores '' (not nothing) for a bib seen at a
+  // checkpoint with no elapsed time to compute — this proves that's what actually makes the bib
+  // appear in state.mobileCheckpoints at all (bibsSeen is derived from cpTimesByCp's own keys),
+  // not just an entry in cpTimeOfDayByCp that would otherwise never get attached to anything.
+  it('still creates a mobileCheckpoints row for a bib whose only cpTimes value is an empty string (seen, no elapsed time yet)', async () => {
+    const cpTimesByCp = new Map([[1, new Map([[1, '']])]]);
+    const cpTimeOfDayByCp = new Map([[1, new Map([[1, '09:12:34']])]]);
+    await applyComputedResults([], cpTimesByCp, [finishRow()], cpTimeOfDayByCp);
+    assert.equal(state.mobileCheckpoints.length, 1);
+    assert.deepEqual(state.mobileCheckpoints[0], { bibNumber: 1, cpTimes: { 1: '' }, cpTimesOfDay: { 1: '09:12:34' } });
   });
 
   it('applyComputedResults persists timeOfDay on a mobileProgress entry that has one', async () => {

@@ -2,13 +2,13 @@
 
 import { state } from './state.js';
 import { COURSE, GENDER } from './constants.js';
-import { ciEq, timeToSeconds, secondsToTime, isValidRaceTime } from './utils.js';
+import { ciEq, timeToSeconds, secondsToTime, isValidRaceTime, timeOfDayToElapsed } from './utils.js';
 import { calculateCategory, getCategoryPriority, genderFromCategory, derivePairGender } from './categories.js';
 import { getEntry, getSortedEntries, isEntryBanned, getEntryName } from './entries.js';
-import { adjustedFinishTime } from './time-utils.js';
+import { adjustedFinishTime, getEventStartTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
 import { getSIBib, getSIRaceTime, getSICourse, getSIStatus, getSINumSplits, getSISplitTime } from './si-results.js';
-import { getMobileCheckpointNumbers, getMobileCheckpointTimes, getMobileCheckpointBib } from './mobile-checkpoints.js';
+import { getMobileCheckpointNumbers, getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, getMobileCheckpointBib } from './mobile-checkpoints.js';
 import { getSortedMobileProgress } from './mobile-progress.js';
 
 
@@ -508,9 +508,20 @@ export function getSplitsRows(seniors, juniors) {
       // was actually seen.
       const finisherRecord = state.finishers.find(f => +f.number === bib && (f.action === 'Finish' || f.action === 'DNF')) || null;
       const raw = getMobileCheckpointTimes(mc);
+      const rawTod = getMobileCheckpointTimesOfDay(mc);
       const cpTimes = {};
       for (const n of cpNumbers) {
-        if (raw[n] != null) cpTimes[n] = adjustedFinishTime(entry, raw[n], finisherRecord);
+        // The device-anchored elapsed value (computeCpTimes' own doc in mobile-files-progress.js)
+        // is preferred when it exists — real Finish-file Start timestamp, no assumption needed.
+        // Without one (no Finish file selected/existing yet, the CP-only Update Progress case),
+        // fall back to the crossing's own raw time-of-day minus the race's scheduled start for
+        // this bib's course (Event Settings) — an approximation of an approximation, but still
+        // more useful than leaving the column blank until a Finish file eventually exists. The
+        // CP_RETIRE sentinel ('Retire', a genuinely non-empty non-blank string) never reaches the
+        // fallback branch, same as before.
+        const rawTime = (raw[n] && raw[n] !== '') ? raw[n]
+          : (rawTod[n] ? timeOfDayToElapsed(rawTod[n], getEventStartTime(entry.course)) : '');
+        if (rawTime) cpTimes[n] = adjustedFinishTime(entry, rawTime, finisherRecord);
       }
 
       const r = resultsByBib.get(bib);

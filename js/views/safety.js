@@ -29,16 +29,19 @@ function toTimeOfDay(elapsed, rawTimeOfDay) {
   return rawTimeOfDay || elapsedToTimeOfDay(elapsed, state.event.startTime) || elapsed;
 }
 
-// A DNF/Finished/Early-Starters row whose bib has no matching Entry (safety.js's own
-// entryInfo()/`invalid` field — Update Progress deliberately no longer rejects such a bib, see
-// mobile-files-progress.js's validateAndCompute()) gets the same row-error styling Finishers/
-// Entries already use for an equivalent case, plus this tooltip — it's still shown here (a real
-// mobile sighting, worth knowing about for safety purposes) rather than filtered out.
+// A DNF/Finished/Early-Starters/Outstanding row whose bib has no matching Entry (safety.js's own
+// entryInfo()/`invalid` field for the first three, getOutstandingRows()'s own equivalent
+// unregisteredOutstandingBibs() union for the last — Update Progress deliberately no longer
+// rejects such a bib, see mobile-files-progress.js's validateAndCompute()) gets the same
+// row-error styling Finishers/Entries already use for an equivalent case, plus this tooltip —
+// it's still shown here (a real mobile sighting, worth knowing about for safety purposes; someone
+// is genuinely out on the course under this bib, whether it's a typo or truly unregistered)
+// rather than filtered out.
 const INVALID_BIB_TITLE = 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry';
 
 const SAFETY_OUT_COLS = tableColumns(TABLES['safety-outstanding'], {
   bib:     e => e.bibNumber,
-  name:    e => getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : ''),
+  name:    e => e.invalid ? '--entry missing--' : (getEntryName(e) + (isEntryBanned(e) ? ' (banned)' : '')),
   course:  e => e.course || '',
   cat:     e => {
     const pg = e.partner ? derivePairGender(e.gender, e.partner.gender) : '';
@@ -124,10 +127,10 @@ export function renderSafety() {
   updateSafetyClockLine();
   renderConflictWarnings();
   renderTable('safety-outstanding-seniors-tbody', SAFETY_OUT_COLS, getOutstandingRows(COURSE.SENIORS), {
-    rowAttrs: e => ({ 'data-bib': e.bibNumber }),
+    rowAttrs: e => ({ 'data-bib': e.bibNumber, class: e.invalid ? 'row-error' : '', title: e.invalid ? INVALID_BIB_TITLE : '' }),
   });
   renderTable('safety-outstanding-juniors-tbody', SAFETY_OUT_COLS, getOutstandingRows(COURSE.JUNIORS), {
-    rowAttrs: e => ({ 'data-bib': e.bibNumber }),
+    rowAttrs: e => ({ 'data-bib': e.bibNumber, class: e.invalid ? 'row-error' : '', title: e.invalid ? INVALID_BIB_TITLE : '' }),
   });
 
   const dnfRows = getDnfRows();

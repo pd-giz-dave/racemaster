@@ -247,4 +247,61 @@ describe('results.js:getSplitsRows', () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0].bibNumber, 1);
   });
+
+  // No Finish file exists yet (validateAndCompute() no longer requires one), so computeCpTimes()
+  // never had a device Start timestamp to compute an elapsed value against — cpTimes[n] is ''.
+  // The Splits tab still wants *something*: it falls back to the crossing's own raw device
+  // time-of-day (cpTimesOfDay) minus Event Settings' own scheduled start time for the bib's
+  // course, rather than leaving the CP column blank until a Finish file eventually turns up.
+  it('falls back to the event start time for the bib\'s course when a checkpoint has no device-anchored elapsed time', () => {
+    state.entries = [entry(1)];
+    state.event.startTime = '19:30:00';
+    state.mobileCheckpoints = [
+      { bibNumber: 1, cpTimes: { 1: '' }, cpTimesOfDay: { 1: '19:40:00' } },
+    ];
+    const { rows } = getSplitsRows([], []);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].cpTimes[1], '00:10:00');
+  });
+
+  it('uses the junior start time for a junior bib\'s own fallback', () => {
+    state.entries = [entry(1, { course: 'Juniors', category: 'U12B' })];
+    state.event.startTime = '19:30:00';
+    state.event.juniorStartTime = '18:50:00';
+    state.mobileCheckpoints = [
+      { bibNumber: 1, cpTimes: { 1: '' }, cpTimesOfDay: { 1: '19:00:00' } },
+    ];
+    const { rows } = getSplitsRows([], []);
+    assert.equal(rows[0].cpTimes[1], '00:10:00');
+  });
+
+  it('prefers the real device-anchored elapsed time over the event-start fallback when both exist', () => {
+    state.entries = [entry(1)];
+    state.event.startTime = '19:30:00';
+    state.mobileCheckpoints = [
+      { bibNumber: 1, cpTimes: { 1: '00:05:00' }, cpTimesOfDay: { 1: '19:40:00' } },
+    ];
+    const { rows } = getSplitsRows([], []);
+    assert.equal(rows[0].cpTimes[1], '00:05:00'); // not the fallback's 00:10:00
+  });
+
+  it('leaves the CP column blank when neither a device-anchored elapsed time nor an event start time is available', () => {
+    state.entries = [entry(1)];
+    state.event.startTime = '';
+    state.mobileCheckpoints = [
+      { bibNumber: 1, cpTimes: { 1: '' }, cpTimesOfDay: { 1: '19:40:00' } },
+    ];
+    const { rows } = getSplitsRows([], []);
+    assert.equal(rows[0].cpTimes[1], undefined);
+  });
+
+  it('still shows CP_RETIRE unchanged rather than trying to compute a fallback for it', () => {
+    state.entries = [entry(1)];
+    state.event.startTime = '19:30:00';
+    state.mobileCheckpoints = [
+      { bibNumber: 1, cpTimes: { 1: 'Retire' }, cpTimesOfDay: { 1: '19:40:00' } },
+    ];
+    const { rows } = getSplitsRows([], []);
+    assert.equal(rows[0].cpTimes[1], 'Retire');
+  });
 });

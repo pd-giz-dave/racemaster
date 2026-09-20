@@ -18,6 +18,7 @@ beforeEach(() => {
   state.entries         = [];
   state.finishers        = [];
   state.mobileProgress   = [];
+  state.mobileCheckpoints = [];
   state.siResults        = [];
   state.preEntries       = [];
   state.people           = [];
@@ -85,6 +86,56 @@ describe('safety.js:getOutstandingRows', () => {
     state.finishers = [{ action: 'Finish', number: '1' }];
     assert.deepEqual(getOutstandingRows().map(e => e.bibNumber), ['2', '3']);
     assert.deepEqual(getOutstandingRows('Seniors').map(e => e.bibNumber), ['2']);
+  });
+
+  // Someone recording splits under a bib with no matching Entry is still a person out on the
+  // course — this app has a duty of care to keep tracking them, the same reasoning that already
+  // keeps such a bib visible (flagged) on the Finished/DNF tabs and Mobile Files' own Progress
+  // tab, now extended to Outstanding too.
+  it('includes a mobile checkpoint sighting for a bib with no matching entry, flagged invalid', () => {
+    state.mobileCheckpoints = [{ bibNumber: '5', cpTimes: { 1: '00:10:00' } }];
+    const rows = getOutstandingRows();
+    assert.deepEqual(rows.map(e => e.bibNumber), ['5']);
+    assert.equal(rows[0].invalid, true);
+  });
+
+  it('includes an unregistered bib from a mobile Start/Finish/DNF record too, not just a checkpoint sighting', () => {
+    state.mobileProgress = [{ action: 'Start', number: '7', time: '00:05:00' }];
+    assert.deepEqual(getOutstandingRows().map(e => e.bibNumber), ['7']);
+  });
+
+  it('includes an unregistered bib from a stopwatch record too', () => {
+    state.finishers = [{ action: 'Start', number: '9' }];
+    assert.deepEqual(getOutstandingRows().map(e => e.bibNumber), ['9']);
+  });
+
+  it('excludes an unregistered bib once it\'s been finished or DNF\'d — it belongs on those tabs instead', () => {
+    state.mobileCheckpoints = [{ bibNumber: '5', cpTimes: { 1: '00:10:00' } }];
+    state.mobileProgress = [{ action: 'DNF', number: '5' }];
+    assert.deepEqual(getOutstandingRows(), []);
+  });
+
+  it('excludes a bib once it gets a real matching entry, even with mobile activity recorded under it', () => {
+    state.entries = [{ bibNumber: '5', course: 'Seniors' }];
+    state.mobileCheckpoints = [{ bibNumber: '5', cpTimes: { 1: '00:10:00' } }];
+    assert.deepEqual(getOutstandingRows().map(e => e.bibNumber), ['5']);
+    assert.equal(getOutstandingRows()[0].invalid, undefined);
+  });
+
+  // An unregistered bib has no course field to filter by at all — shown regardless of which
+  // course's tab is asking, rather than silently dropped from whichever one doesn't match a
+  // course it never had.
+  it('includes an unregistered bib regardless of which course is asked for', () => {
+    state.mobileCheckpoints = [{ bibNumber: '5', cpTimes: { 1: '00:10:00' } }];
+    assert.deepEqual(getOutstandingRows('Seniors').map(e => e.bibNumber), ['5']);
+    assert.deepEqual(getOutstandingRows('Juniors').map(e => e.bibNumber), ['5']);
+  });
+
+  it('never double-counts the same unregistered bib seen via more than one source', () => {
+    state.mobileCheckpoints = [{ bibNumber: '5', cpTimes: { 1: '00:10:00' } }];
+    state.mobileProgress = [{ action: 'Start', number: '5', time: '00:00:00' }];
+    state.finishers = [{ action: 'Start', number: '5' }];
+    assert.deepEqual(getOutstandingRows().map(e => e.bibNumber), ['5']);
   });
 });
 

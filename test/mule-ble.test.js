@@ -410,6 +410,33 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(isConnected(), false);
   });
 
+  it('files a pulled device by its own bare, sanitised name — no location suffix', async (t) => {
+    // A relocation mid-race is now a real, undoable HistoryAction.LOCATION entry within the same
+    // race/file (racemaster-mobile's own RaceRepository.relocateActiveModes), not a new race
+    // filed under a new name — so the browser must file a pulled device the exact same way its
+    // own direct HTTP push does: one physical device, one server-side name, regardless of
+    // whatever station(s) its own history spans.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0, pollIntervalMs: 5000 };
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: () => [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 1, location: 'CP2', timestampMillis: 1_700_000_000_000 }],
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t);
+    const results = await pullPromise;
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].deviceName, 'phoneone');
+
+    disconnectPhone();
+  });
+
   it('retries a transient initial gatt.connect() failure and still connects', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };

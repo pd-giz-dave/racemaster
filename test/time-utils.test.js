@@ -4,7 +4,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { state } from '../js/state.js';
-import { getTimingMethod, usingDibbers, adjustedFinishTime } from '../js/time-utils.js';
+import { getTimingMethod, usingDibbers, adjustedFinishTime, getEventStartTime } from '../js/time-utils.js';
 
 beforeEach(() => {
   state.event           = { timingMethod: 'Stopwatch', juniorTimingMethod: 'Stopwatch' };
@@ -31,6 +31,25 @@ describe('time-utils.js:getTimingMethod', () => {
     state.event.timingMethod = 'Dibbers';
     state.event.juniorTimingMethod = 'Stopwatch';
     assert.equal(getTimingMethod('Juniors'), 'Stopwatch');
+  });
+});
+
+describe('time-utils.js:getEventStartTime', () => {
+  it('uses the senior start time for a non-junior course', () => {
+    state.event.startTime = '19:30:00';
+    state.event.juniorStartTime = '18:50:00';
+    assert.equal(getEventStartTime('Seniors'), '19:30:00');
+  });
+
+  it('uses the junior start time for the Juniors course', () => {
+    state.event.startTime = '19:30:00';
+    state.event.juniorStartTime = '18:50:00';
+    assert.equal(getEventStartTime('Juniors'), '18:50:00');
+  });
+
+  it('returns empty string when unset', () => {
+    state.event.startTime = undefined;
+    assert.equal(getEventStartTime('Seniors'), '');
   });
 });
 

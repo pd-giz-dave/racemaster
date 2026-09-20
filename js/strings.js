@@ -172,7 +172,7 @@ export const TOOLTIPS = {
   'btn-activate-race':           "Signal mobile phones that this event's race(s) are current, so their own setup-time server scan can find and rank it — only ever touches this event's own race(s), never a past or unrelated one",
   'btn-refresh-mobile-files':    'Reload mobile files from the server and from anything pulled locally over Bluetooth',
   'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Offers a direct reconnect for a phone connected to before; otherwise confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
-  'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s) (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — requires valid bib numbers, the same race, no empty files, and no more than one file per location',
+  'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s), if any, (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — a Finish file is not required, checkpoint files alone still populate what they can; requires valid bib numbers, the same race, no empty files, and no more than one file per location',
   'btn-clear-progress':          'Delete the finishers list and all checkpoint data computed by Update Progress — also clears their effects elsewhere, e.g. Safety Check',
   'btn-ble-logging':             'Log routine Bluetooth connect/pull activity to the browser console — off by default; a genuine connect/pull failure is always logged regardless',
 
@@ -299,7 +299,11 @@ export const HELP = {
         These records do not get a split number.</p>
   `,
   'view-safety': `
-    <p>In the <strong>Outstanding</strong> tab, shows all entrants who have <strong>not yet been recorded as finishers or retired</strong>.
+    <p>In the <strong>Outstanding</strong> tab, shows all entrants who have <strong>not yet been recorded as finishers or retired</strong> —
+        plus any bib a phone or the stopwatch has actually recorded (a checkpoint sighting, a Start, anything) that doesn't
+        match anyone in Entries at all, highlighted the same way as the other tabs (see below): whoever recorded splits
+        under that bib is genuinely out on the course, registered correctly or not, and this app has a duty of care to
+        keep tracking them until they're accounted for rather than letting a typo make them invisible.
         Use this at the end of the race to confirm that everyone is accounted for.</p>
     <p>When the list is empty, all entrants have either finished or been marked as DNF. Use the other tabs to get more specific lists.</p>
     <p>The <strong>Race start</strong> / <strong>Time now</strong> line above the tabs is there to judge how long ago
@@ -317,8 +321,9 @@ export const HELP = {
         for a mobile-recorded retire) each retirement was actually recorded, alongside <strong>When</strong> as
         described above. Both are blank when there's genuinely nothing to show — a manual retirement with no time
         given, or one that only came from SI results, which carries no location or time of its own.</p>
-    <p>A row highlighted in the <strong>Retirees / DNFs</strong>, <strong>Finished</strong> or <strong>Early
-        Starters</strong> tabs means a phone recorded that bib but it doesn't match anyone currently in Entries —
+    <p>A row highlighted in the <strong>Outstanding</strong>, <strong>Retirees / DNFs</strong>, <strong>Finished</strong>
+        or <strong>Early Starters</strong> tabs means a phone recorded that bib but it doesn't match anyone currently
+        in Entries —
         a typo on the device, or someone genuinely not yet entered. It's shown here anyway (a real sighting is
         worth knowing about for safety purposes) rather than silently dropped, and it's ignored on the Results &amp;
         Prize List page until the bib is corrected or added.</p>
@@ -484,10 +489,10 @@ export const HELP = {
         that's been set up or had a mode chosen, but has recorded nothing of that type yet, shows <strong>0</strong> — it's genuinely expected,
         just not here yet. Blank means that type was never in play on this device at all (e.g. a Time-mode phone's own Bibs column). A phone
         that's only just been adopted, with neither mode chosen yet, shows blank on both until one is.</p>
-    <p>If a marshal relocates mid-race, the device's file will carry more than one <strong>Location</strong> — that's expected, not an
-        error. The device gets a separate row per location it's actually recorded at, each with its own Bibs/Time counts scoped to just
-        that location; <strong>View</strong>/<strong>Raw</strong> on the old row keeps showing only what was recorded at the old location,
-        and the new row only what's been recorded since the move.</p>
+    <p>If a marshal relocates mid-race, the same device row will list more than one <strong>Where</strong> value — that's expected, not
+        an error: relocating stays the same file, marked by a move you can undo if it was a mistake. <strong>View</strong> shows just
+        one location's own entries — if the device has recorded at more than one, you'll be asked which before it opens.
+        <strong>Raw</strong> always shows the whole file, every location included, unfiltered — it's a debugging aid.</p>
     <p><strong>Last Seen</strong> is when the server (or, for a pending file, this browser) last actually heard from that
         device — useful for spotting a phone that's gone quiet. <strong>Last Update</strong> is the newest entry's own
         recorded timestamp, across every line on the device, not just what's currently visible — these two can differ,
@@ -497,7 +502,8 @@ export const HELP = {
         mode is actually chosen) — so at a glance you can confirm every station is actually set up and running, not
         just that a file exists for it.</p>
     <p><strong>View</strong> shows the Bibs and Time entries side by side, aligned by split number, with the location
-        and each entry's time-of-day. <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
+        and each entry's time-of-day, for whichever location was chosen (or the device's only one, if there's just one).
+        <strong>Raw</strong> shows every field of every line exactly as stored, with nothing filtered or folded —
         useful for troubleshooting. Deleting a device's file is done from the <strong>All Files</strong> tab now (see below),
         not here.</p>
     <p>Use <strong>Activate Race</strong> to signal mobile phones that this event's race(s) are current, so their own
@@ -546,11 +552,13 @@ export const HELP = {
         alone can't tell "still running" apart from "abandoned". Defaults to 2 days and is remembered across visits. This shadows the same
         facility in the RaceMaster Mobile app itself, which stops relaying (though never stops recording) a race once it's this old.</p>
     <p>Tick one or more files and use <strong>Update Progress</strong> to rebuild the Finishers list and the Progress tab
-        below together. It needs at least one <strong>Finish</strong> location file (typically one bibs file and one time
-        file, paired up by split number, though a single file with both is fine too) — this part is unchanged from before
-        and is the authoritative finish time: a bib with no matching split is still added, just left untimed, while any
-        split with no matching bib is simply ignored (the bibs will catch up on a later sync), and if a bib was already
-        added untimed by an earlier run, a later run supplying the missing time fills it in rather than duplicating the
+        below together. A <strong>Finish</strong> location file (typically one bibs file and one time file, paired up by
+        split number, though a single file with both is fine too) is <strong>not required</strong> — a race may genuinely
+        have no phone at Finish yet, if a marshal hasn't relocated there — so a selection of checkpoint files alone still
+        works, computing everything it can from them (see below). When a Finish file is selected it's still the
+        authoritative finish time: a bib with no matching split is still added, just left untimed, while any split with
+        no matching bib is simply ignored (the bibs will catch up on a later sync), and if a bib was already added
+        untimed by an earlier run, a later run supplying the missing time fills it in rather than duplicating the
         record. The old finishers list and all checkpoint data are cleared before each run, so it's always a full rebuild
         rather than a merge. Rejected if the selected files aren't all from the same race, if a selected file is empty
         (nothing in its current segment), or if more than one file resolves to the same location (Finish or a checkpoint)
@@ -561,13 +569,20 @@ export const HELP = {
         Files) — see Results &amp; Prize List's own help for the priority order and the conflict banner shown there and
         on Safety Check.</p>
     <p>You can also tick any number of <strong>checkpoint</strong> location files (any location containing a number, e.g.
-        "CP1", "Checkpoint 2") alongside the Finish file(s) — each contributes a <strong>raw</strong> elapsed time per bib,
-        computed as that bib's own crossing timestamp minus the Finish location's stopwatch Start time. Checkpoint mode has
-        no stopwatch of its own, so this is necessarily an approximation and, unlike FinishTime, is <strong>not</strong>
-        corrected for an individual early/late start or a clock offset here — that correction happens on the Results &amp;
-        Prize List page's Splits tab instead, the same place adjusted finish times are computed. This page's job is only to
-        provide the raw information; it's mainly useful here for judging roughly where an outstanding runner is on the
-        course (it also surfaces as a "Last CP" hint on the Safety Check page's Outstanding tab).</p>
+        "CP1", "Checkpoint 2"), alongside the Finish file(s) or on their own. The Progress tab below always shows each
+        checkpoint's own <strong>raw device time-of-day</strong> for that bib — the phone's own clock reading, straight
+        off the file, whether or not a Finish file exists — rather than a computed elapsed time, so it's never wrong,
+        just not yet converted. That conversion is the Results &amp; Prize List page's Splits tab's own job: it
+        prefers a real elapsed time (that bib's own crossing timestamp minus the Finish location's stopwatch Start
+        time) when a Finish file exists to anchor it, and otherwise falls back to that same crossing time-of-day minus
+        Event Settings' own scheduled start time for the bib's course — an approximation of an approximation, but
+        still more useful than nothing until a Finish file eventually exists. Checkpoint mode has no stopwatch of its
+        own, so even the real elapsed figure is necessarily an approximation and, unlike FinishTime, is
+        <strong>not</strong> corrected for an individual early/late start or a clock offset until that same Splits-tab
+        conversion. A checkpoint sighting for a bib with no matching Entry is still shown, flagged, everywhere it's
+        relevant — the Progress tab, and now the Safety Check page's own Outstanding tab too, not just its "Last CP"
+        hint — since a duty of care to track whoever recorded it doesn't depend on their bib being registered
+        correctly.</p>
     <p>Opening the Results &amp; Prize List page automatically re-runs Update Progress in the background using whatever
         selection was last ticked here, but only when something has actually changed since (new data pulled from a phone) —
         it never silently re-runs otherwise, so it can't quietly discard a manual Finishers-page edit with no visible sign.</p>
@@ -1155,7 +1170,7 @@ export const TABLES = {
   'mobile-files': [
     { id: 'select',    label: '',          title: 'Select for bulk actions', sticky: true },
     { id: 'raceLabel', label: 'Race',      title: 'Race name (date suffix dropped — see Race Date; hover for the full race label as recorded on the phone)', sticky: true, wrap: true },
-    { id: 'location',  label: 'Where',     title: 'This location\'s own course location — a relocated device gets one row per location it\'s recorded at, each scoped to just that location\'s own entries', sticky: true, wrap: true, cap: 80 },
+    { id: 'location',  label: 'Where',     title: 'Every course location this device has recorded at — more than one means it\'s relocated mid-race; View will ask which one to show', sticky: true, wrap: true, cap: 80 },
     { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset) — "0" means expected but none yet, blank means this device has no bibs mode of its own' },
     { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset) — "0" means expected but none yet, blank means this device has no Time mode of its own' },
     { id: 'owner',     label: 'Owner',     title: 'Account this file was uploaded under (admins only)' },
@@ -1173,6 +1188,6 @@ export const TABLES = {
     { id: 'category',   label: 'Cat',    title: 'Age category' },
     { id: 'start',      label: 'Start',  title: 'Explicit individual start time recorded for this bib, if any (early/late start)' },
     { id: 'finishTime', label: 'Finish', title: 'Raw finish time as recorded, from the Finishers list — not adjusted for start/clock offsets (see Results & Prize List for the adjusted race time)' },
-    { id: 'cp',         label: 'CP',     title: 'Approximate elapsed time at this checkpoint — raw, timestamp-based, not authoritative or offset-adjusted' },
+    { id: 'cp',         label: 'CP',     title: 'This checkpoint\'s own raw device time-of-day for this bib, straight off the phone — not an elapsed time (see Results & Prize List\'s Splits tab for the adjusted elapsed figure), and not authoritative' },
   ],
 };

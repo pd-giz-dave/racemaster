@@ -51,18 +51,15 @@ When set the race id becomes racename-mixed-date and the progress record contain
 
 ## Mobile-app changes to reflect through to Mobile Files processing
 
-- [ ] allow for device files only having a modestart setup record when updating progress,
+- [x] allow for device files only having a modestart setup record when updating progress,
       this is required so the web-app can adopt the phones before they have recorded anything
-- [ ] allow for the location changing in a device file (it means the marshall has moved),
-      when that happens a new devices line should be created to show the new "Where" column,
-      and the 'View' for that should only show the new location
-      and the 'View' for the old should only show the old location
-- [ ] do not count lines with a blank or n/a bib number as a bib line
-- [ ] do not count lines with a blank or n/a split time as a split line
-- [ ] if the modestart record is 'bibs' (ie. bib number is n/a) and there are no bib lines show a bib count of 0
-- [ ] if the modestart record is 'time' (ie. split time is n/a) and there are no splits show a split count of 0
-- [ ] when a race has been reset in a device file, the latest modestart record is still valid wrt the location and mode
-- [ ] drop the 'Setup' record from the device file, its no longer created, there will always be a modestart record
+- [x] allow for the location changing in a device file (it means the marshall has moved),
+- [x] do not count lines with a blank or n/a bib number as a bib line
+- [x] do not count lines with a blank or n/a split time as a split line
+- [x] if the modestart record is 'bibs' (ie. bib number is n/a) and there are no bib lines show a bib count of 0
+- [x] if the modestart record is 'time' (ie. split time is n/a) and there are no splits show a split count of 0
+- [x] when a race has been reset in a device file, the latest modestart record is still valid wrt the location and mode
+- [x] drop the 'Setup' record from the device file, its no longer created, there will always be a modestart record
 
 ## Re-write the help
 
