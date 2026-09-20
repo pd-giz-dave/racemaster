@@ -254,7 +254,7 @@ export function getPendingMobileFiles() {
 }
 
 // Append-merges [lines] into any existing pending entry for this device (deduped by
-// recordUuid), rather than replacing it outright — mule-ble.js's Bluetooth pulls now request
+// lineNumber), rather than replacing it outright — mule-ble.js's Bluetooth pulls now request
 // only the delta since last time (see its own getLastPulledLineNumber), so a failed push after
 // a second pull must not overwrite (and so silently lose) records from an earlier pull that
 // never made it to the server yet. Same append-merge semantics as server.js's own POST
@@ -269,8 +269,8 @@ export function savePendingMobileFile(owner, raceLabel, deviceName, deviceId, li
   const list = loadPendingMobileFiles();
   const existing = list.find(f => f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName);
   if (existing) {
-    const seenUuids = new Set(existing.lines.map(l => l.recordUuid).filter(Boolean));
-    existing.lines = [...existing.lines, ...lines.filter(l => l.recordUuid && !seenUuids.has(l.recordUuid))];
+    const seenLineNumbers = new Set(existing.lines.map(l => l.lineNumber).filter(n => Number.isFinite(n)));
+    existing.lines = [...existing.lines, ...lines.filter(l => Number.isFinite(l.lineNumber) && !seenLineNumbers.has(l.lineNumber))];
     existing.deviceId = deviceId;
     existing.pulledAt = new Date().toISOString();
   } else {

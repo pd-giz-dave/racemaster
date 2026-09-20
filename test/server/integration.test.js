@@ -224,21 +224,21 @@ describe('server integration: datasets', () => {
 });
 
 describe('server integration: mobile sync', () => {
-  it('push -> status -> list, with delta-merge dedup by recordUuid', async () => {
+  it('push -> status -> list, with delta-merge dedup by lineNumber', async () => {
     const token = await createAndLogin('mobile-user');
     const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const raceLabel = 'integration-race-26-08-23';
 
     const push1 = await fetch(`${base}/api/mobile/${raceLabel}`, {
       method: 'POST', headers: auth,
-      body: JSON.stringify({ devices: { PhoneA: [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 1 }] } }),
+      body: JSON.stringify({ devices: { PhoneA: [{ action: 'Finish', bibNumber: 1, lineNumber: 1 }] } }),
     });
     assert.deepEqual(await push1.json(), { ok: true, added: 1, received: 1, version: 1 });
 
     // Re-push the same record -> not re-added
     const push2 = await fetch(`${base}/api/mobile/${raceLabel}`, {
       method: 'POST', headers: auth,
-      body: JSON.stringify({ devices: { PhoneA: [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 1 }] } }),
+      body: JSON.stringify({ devices: { PhoneA: [{ action: 'Finish', bibNumber: 1, lineNumber: 1 }] } }),
     });
     assert.equal((await push2.json()).added, 0);
 

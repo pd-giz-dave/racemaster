@@ -235,7 +235,15 @@ function makeFakePhone({ deviceInfo, recordsByRequest, faults = {} }) {
       return jsonDataView(deviceInfo);
     },
   };
-  const ackChar  = { writeValueWithResponse: async () => {} };
+  // Records every AckPayload this fake phone receives (decoded), exposed via the returned
+  // device's _ackWrites getter — lets a test assert on sendSinkAck's actual grouped-origin shape
+  // instead of just that a write happened.
+  const ackWrites = [];
+  const ackChar  = {
+    writeValueWithResponse: async (bytes) => {
+      ackWrites.push(JSON.parse(new TextDecoder().decode(bytes)));
+    },
+  };
   // Accumulates deliverProgress()'s own chunked writes the same way the phone's own
   // PeripheralSyncService would — buffering raw bytes until a single 0x00-byte write marks the
   // end, then decoding the concatenated JSON. Each completed delivery is pushed onto
@@ -309,6 +317,9 @@ function makeFakePhone({ deviceInfo, recordsByRequest, faults = {} }) {
     // one write, not just that the final decoded result happens to be right).
     get _progressDeliveries() { return progressDeliveries; },
     get _progressWriteCount() { return progressWriteCount; },
+    // Test-only accessor for the fake ACK characteristic above — every decoded AckPayload this
+    // fake phone has received so far, in order.
+    get _ackWrites() { return ackWrites; },
     // Test-only helper (not part of the real BluetoothDevice API) — simulates the phone
     // dropping out of range/turning off, firing the same 'gattserverdisconnected' listener a
     // real disconnect would.
@@ -373,7 +384,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       deviceInfo,
       recordsByRequest: (req) => {
         lastRequest = req;
-        return [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 3, timestampMillis: 1_700_000_000_000 }];
+        return [{ action: 'Finish', bibNumber: 1, lineNumber: 3, timestampMillis: 1_700_000_000_000 }];
       },
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
@@ -393,8 +404,19 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(results[0].raceLabel, 'test-race');
     assert.equal(results[0].deviceId, 'dev1');
     assert.equal(results[0].lines.length, 1);
-    assert.equal(results[0].lines[0].recordUuid, 'u1');
+    assert.equal(results[0].lines[0].action, 'Finish');
     assert.equal(lastRequest.sinceLineNumber, 0); // first pull ever for this device+race
+
+    // sendSinkAck fires a best-effort ack back to the phone for exactly what was just pulled —
+    // grouped as a single AckedOrigin with a null origin, since this is the connected phone's own
+    // race, not a relay (see AckedOrigin's own doc in racemaster-mobile's MuleGattProfile.kt).
+    assert.equal(device._ackWrites.length, 1);
+    assert.deepEqual(device._ackWrites[0], {
+      deviceId: 'racemaster-web',
+      ackedOrigins: [{ originDeviceId: null, originRaceLabel: null, lineNumbers: [3] }],
+      deviceName: 'RaceMaster (web)',
+      isSink: true,
+    });
 
     // Delta cursor must now be advanced to the highest lineNumber just pulled (3).
     const cursors = JSON.parse(localStorage.getItem('racemaster-ble-last-pulled'));
@@ -420,7 +442,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0, pollIntervalMs: 5000 };
     const device = makeFakePhone({
       deviceInfo,
-      recordsByRequest: () => [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 1, location: 'CP2', timestampMillis: 1_700_000_000_000 }],
+      recordsByRequest: () => [{ action: 'Finish', bibNumber: 1, lineNumber: 1, location: 'CP2', timestampMillis: 1_700_000_000_000 }],
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
@@ -611,7 +633,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       recordsByRequest: (req) => {
         requestCount++;
         if (req.requestRelayManifest) return relayManifest;
-        return [{ recordUuid: 'r1', action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }];
+        return [{ action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }];
       },
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
@@ -651,7 +673,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race-20-01-01', relayCount: 0, lastLineNumber: 3 };
     const device = makeFakePhone({
       deviceInfo,
-      recordsByRequest: () => [{ recordUuid: 'r1', action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
+      recordsByRequest: () => [{ action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 
@@ -682,7 +704,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       recordsByRequest: (req) => {
         if (req.requestRelayManifest) return relayManifest;
         pullRequestCount++;
-        return [{ recordUuid: 'r1', action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }];
+        return [{ action: 'Finish', bibNumber: 2, lineNumber: 1, timestampMillis: 1_700_000_000_000 }];
       },
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
@@ -719,7 +741,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
       recordsByRequest: (req) => {
         if (req.requestRelayManifest) return relayManifest;
         pullRequestCount++;
-        return [{ recordUuid: 'r1', action: 'Finish', bibNumber: 3, lineNumber: 5, timestampMillis: 1_700_000_000_000 }];
+        return [{ action: 'Finish', bibNumber: 3, lineNumber: 5, timestampMillis: 1_700_000_000_000 }];
       },
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
@@ -739,13 +761,55 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     disconnectPhone();
   });
 
+  // The correctness property AckedOrigin grouping exists for: a single pull spanning this
+  // device's own race AND a relayed origin at once must ack each as its own group, not flatten
+  // them into one list — CP1's own line 5 and CP2's line 5 (a relayed origin) are unrelated
+  // records, and PeripheralSyncService.markSynced on the phone side relies on this grouping to
+  // route each to the correct table/source (see AckedOrigin's own doc in MuleGattProfile.kt).
+  it('acks a mixed own-race + relayed-leg pull as two separate AckedOrigin groups, not merged', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Mule', raceLabel: 'own-race', relayCount: 1 };
+    const relayManifest = [
+      { originDeviceId: 'origin1', originRaceLabel: 'relayed-race', originDeviceName: 'Origin Phone' },
+    ];
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => {
+        if (req.requestRelayManifest) return relayManifest;
+        if (req.originDeviceId === 'origin1') {
+          return [{ action: 'Finish', bibNumber: 2, lineNumber: 5, timestampMillis: 1_700_000_000_000 }];
+        }
+        return [{ action: 'Finish', bibNumber: 1, lineNumber: 5, timestampMillis: 1_700_000_000_000 }];
+      },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
+    await connectPromise;
+
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t); // own-race leg's own settle delay
+    await settleOnePull(t); // relay-manifest fetch's own settle delay
+    await settleOnePull(t); // the one relayed race's own settle delay
+    const results = await pullPromise;
+
+    assert.equal(results.length, 2);
+    assert.equal(device._ackWrites.length, 1);
+    const groups = device._ackWrites[0].ackedOrigins;
+    assert.equal(groups.length, 2);
+    assert.deepEqual(groups.find(g => g.originDeviceId === null), { originDeviceId: null, originRaceLabel: null, lineNumbers: [5] });
+    assert.deepEqual(groups.find(g => g.originDeviceId === 'origin1'), { originDeviceId: 'origin1', originRaceLabel: 'relayed-race', lineNumbers: [5] });
+    disconnectPhone();
+  });
+
   it("recovers a leg's pull that collides with a still-stuck prior GATT operation by reconnecting once, rather than failing the whole pull", async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     // First CONTROL write fails instantly with the real, field-confirmed generic GATT error a
     // still-in-flight prior operation leaves behind (2026-09-02) — the second (the retry, after
     // withGattRecovery's own reconnect) succeeds normally.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [{ recordUuid: 'r1', action: 'Finish', bibNumber: 4, lineNumber: 1, timestampMillis: 1_700_000_000_000 }], faults: { writeCount: 1 } });
+    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [{ action: 'Finish', bibNumber: 4, lineNumber: 1, timestampMillis: 1_700_000_000_000 }], faults: { writeCount: 1 } });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
     const connectPromise = connectToPhone();
     await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
@@ -771,7 +835,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
     const device = makeFakePhone({
       deviceInfo,
-      recordsByRequest: () => [{ recordUuid: 'r1', action: 'Finish', bibNumber: 4, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
+      recordsByRequest: () => [{ action: 'Finish', bibNumber: 4, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
       // Read #1 is connectToPhone()'s own initial verification and must succeed; read #2 is
       // pullFromConnectedPhone()'s own top-of-tick refresh — the exact call the 2026-09-02 field
       // log's "pull failed ... could not refresh DeviceInfo ... GATT operation failed for unknown
@@ -1120,7 +1184,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     };
     const device = makeFakePhone({
       deviceInfo,
-      recordsByRequest: () => [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
+      recordsByRequest: () => [{ action: 'Finish', bibNumber: 1, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
       faults: { progressWriteFails: true },
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });

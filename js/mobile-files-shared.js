@@ -256,7 +256,7 @@ export function sortRaces(races) {
 // race grouping, same date-sort position. p.lines is only ever the *delta* since this device's
 // own last successful BLE pull (see mule-ble.js's delta-sync), never the whole file — so a
 // pending device's lines are merged into whatever the server already knows about that same
-// device (deduping by recordUuid, same convention as storage.js's own savePendingMobileFile),
+// device (deduping by lineNumber, same convention as storage.js's own savePendingMobileFile),
 // not used to replace it outright. Replacing outright used to be correct back when a pull always
 // returned everything, but doing that now would make the server's already-known lines vanish
 // the moment a single new delta line arrives while offline.
@@ -270,8 +270,8 @@ export function mergePendingIntoRaces(races, pending) {
     }
     const known = race.devices.find(d => d.name === p.deviceName);
     const knownLines = known ? known.lines : [];
-    const seenUuids = new Set(knownLines.map(l => l.recordUuid).filter(Boolean));
-    const lines = [...knownLines, ...p.lines.filter(l => l.recordUuid && !seenUuids.has(l.recordUuid))];
+    const seenLineNumbers = new Set(knownLines.map(l => l.lineNumber).filter(n => Number.isFinite(n)));
+    const lines = [...knownLines, ...p.lines.filter(l => Number.isFinite(l.lineNumber) && !seenLineNumbers.has(l.lineNumber))];
     race.devices = race.devices.filter(d => d.name !== p.deviceName);
     race.devices.push({ name: p.deviceName, deviceId: p.deviceId, lines, pending: true, lastSeen: p.pulledAt });
   }

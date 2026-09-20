@@ -434,7 +434,6 @@ function formatTimestamp(epochMillis) {
 // (timestamp, a pre-formatted string) — see server.js's coerce() for the server-side twin.
 function toStoredLine(r) {
   return {
-    recordUuid: r.recordUuid,
     action: r.action,
     bibNumber: r.bibNumber ?? null,
     splitTime: r.splitTime ?? null,
@@ -529,28 +528,43 @@ function collectDataStream(dataChar, device, label) {
 // so sending several small ones is fully protocol-compatible, not a hack.
 const ACK_BATCH_SIZE = 10;
 
-async function sendSinkAck(service, recordUuids) {
+// [ackedOrigins]: one { originDeviceId, originRaceLabel, lineNumbers } group per pull leg — a
+// null originDeviceId/originRaceLabel means the connected phone's own race, not a relay; see
+// AckedOrigin's own doc in racemaster-mobile's MuleGattProfile.kt. A single ack write must never
+// merge two different origins' line numbers into one flat list (CP1's line 5 and CP2's line 5 are
+// unrelated records), so batching flattens to (origin, lineNumber) pairs and regroups per chunk,
+// mirroring MulePullClient.ackBatches on the phone side, rather than just slicing a flat array.
+async function sendSinkAck(service, ackedOrigins) {
   // Aggregated across every leg this pull touched (own race + however many relay origins), so
   // there's no single per-leg label to echo the way the pull functions below have — but it's
   // always sent to whichever phone this connection actually is, which is exactly as useful here.
   const name = getConnectedDeviceName() || 'unknown device';
   const ackChar = await service.getCharacteristic(ACK_CHAR_UUID);
-  for (let i = 0; i < recordUuids.length; i += ACK_BATCH_SIZE) {
-    const batch = recordUuids.slice(i, i + ACK_BATCH_SIZE);
+  const flat = ackedOrigins.flatMap(o => o.lineNumbers.map(lineNumber => (
+    { originDeviceId: o.originDeviceId, originRaceLabel: o.originRaceLabel, lineNumber }
+  )));
+  for (let i = 0; i < flat.length; i += ACK_BATCH_SIZE) {
+    const chunk = flat.slice(i, i + ACK_BATCH_SIZE);
+    const grouped = new Map();
+    for (const { originDeviceId, originRaceLabel, lineNumber } of chunk) {
+      const key = `${originDeviceId ?? ''}\u0000${originRaceLabel ?? ''}`;
+      if (!grouped.has(key)) grouped.set(key, { originDeviceId, originRaceLabel, lineNumbers: [] });
+      grouped.get(key).lineNumbers.push(lineNumber);
+    }
     try {
       await ackChar.writeValueWithResponse(encodeJson({
         deviceId: WEB_DEVICE_ID,
-        recordUuids: batch,
+        ackedOrigins: [...grouped.values()],
         deviceName: 'RaceMaster (web)',
         isSink: true,
       }));
-      bleLog(`[mule-ble] sent sink ack to "${name}" for ${batch.length} record(s)`);
+      bleLog(`[mule-ble] sent sink ack to "${name}" for ${chunk.length} record(s)`);
     } catch (e) {
       // Previously swallowed with zero logging — non-fatal to the pull itself (the caller
       // already has the data either way), but a silently-failing ack write here is exactly
       // what "records reach the web app fine but never turn green on the phone" looks like,
       // so this needs to be visible rather than invisible-by-design.
-      bleError(`[mule-ble] sink ack write failed for "${name}", batch of ${batch.length} record(s) — phone will still show them as unsynced`, e);
+      bleError(`[mule-ble] sink ack write failed for "${name}", batch of ${chunk.length} record(s) — phone will still show them as unsynced`, e);
     }
   }
 }
@@ -1484,7 +1498,11 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [], adopt
         requestKey: computeRequestKey(null, null, since),
       }, connectedName));
       advanceLastPulledLineNumber(deviceInfo.deviceId, raceLabel, ownLines);
-      results.push({ raceLabel, deviceName, deviceId: deviceInfo.deviceId, lines: ownLines });
+      // originDeviceId/originRaceLabel null: this leg is the connected phone's own race, not a
+      // relay — see sendSinkAck's own doc on why this must stay distinct from deviceId (which is
+      // this same phone's true device id, used for local storage/cursor keying, not the ack's
+      // origin identity).
+      results.push({ raceLabel, deviceName, deviceId: deviceInfo.deviceId, originDeviceId: null, originRaceLabel: null, lines: ownLines });
     } catch (e) {
       bleError(`[mule-ble] pull failed for own race "${raceLabel}" for "${connectedName}"`, e);
       errors.push(e);
@@ -1680,7 +1698,7 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [], adopt
         requestKey: computeRequestKey(relay.originDeviceId, relay.originRaceLabel, since),
       }, relayDeviceLabel));
       advanceLastPulledLineNumber(relay.originDeviceId, raceLabel, lines);
-      results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, lines });
+      results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, originDeviceId: relay.originDeviceId, originRaceLabel: relay.originRaceLabel, lines });
     } catch (e) {
       bleError(`[mule-ble] pull failed for relayed race "${raceLabel}" for "${relayDeviceLabel}" (relayed via "${connectedName}")`, e);
       errors.push(e);
@@ -1696,8 +1714,11 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [], adopt
   // data home to the racemaster server, so it always identifies as a sink.
   // Skipped once connectionLost — the connection's already confirmed dead, and unlike every call
   // above, this one has no timeout of its own to bound how long a doomed attempt could hang for.
-  if (results.length && !connectionLost) {
-    await sendSinkAck(service, results.flatMap(r => r.lines.map(l => l.recordUuid)));
+  const ackedOrigins = results
+    .filter(r => r.lines.length)
+    .map(r => ({ originDeviceId: r.originDeviceId, originRaceLabel: r.originRaceLabel, lineNumbers: r.lines.map(l => l.lineNumber) }));
+  if (ackedOrigins.length && !connectionLost) {
+    await sendSinkAck(service, ackedOrigins);
   }
 
   // Only throw if every leg failed — a fully-failed pull should still surface as an error

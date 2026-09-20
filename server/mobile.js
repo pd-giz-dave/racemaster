@@ -12,7 +12,7 @@
 // app's own history list displays them, specifically so a bib-less Bibs line can never be
 // wire-indistinguishable from a Time line by both fields being null at once), not by which array they're
 // (hence there's no need to repeat deviceName per line, or split the array by category,
-// either). Append-merged on every sync (new recordUuids added, existing ones left alone; see
+// either). Append-merged on every sync (new lineNumbers added, existing ones left alone; see
 // server/routes/mobile.js's merge loop), since the app sends only the lineNumber delta, not
 // its full current record set, each time.
 
@@ -78,7 +78,7 @@ export function writeProgress(username, raceLabel, payload) {
 // successful push (see js/progress-sync.js), not its full recomputed set every time, so a plain
 // replace would silently drop every entry this push didn't happen to include. Mirrors
 // POST /api/mobile/:raceLabel's own upsert-by-key merge loop, keyed by bibNumber instead of
-// recordUuid. `updatedAt` is stamped here (server-authoritative, like generatedAt already was —
+// lineNumber. `updatedAt` is stamped here (server-authoritative, like generatedAt already was —
 // see routes/mobile.js's own "ignoring client's value" precedent), not trusted from the caller,
 // so a delta fetch's own `since` filtering (see GET .../progress below) can rely on it. `removed`
 // (bib numbers no longer present on the web app's own side, e.g. an Entries deletion) are dropped

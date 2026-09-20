@@ -231,26 +231,26 @@ describe('mobile-files-shared.js:sortRaces', () => {
 });
 
 describe('mobile-files-shared.js:mergePendingIntoRaces', () => {
-  it('adds a pending device to an existing race, deduping already-known lines by recordUuid', () => {
+  it('adds a pending device to an existing race, deduping already-known lines by lineNumber', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
-      devices: [{ name: 'Phone One', lines: [{ recordUuid: 'u1', lineNumber: 1 }] }],
+      devices: [{ name: 'Phone One', lines: [{ lineNumber: 1 }] }],
     }];
     const pending = [{
       owner: 'alice', raceLabel: 'race-a', deviceName: 'Phone One', deviceId: 'dev1', pulledAt: '2026-08-30T10:00:00.000Z',
-      lines: [{ recordUuid: 'u1', lineNumber: 1 }, { recordUuid: 'u2', lineNumber: 2 }],
+      lines: [{ lineNumber: 1 }, { lineNumber: 2 }],
     }];
     const merged = mergePendingIntoRaces(races, pending);
     assert.equal(merged.length, 1);
     const device = merged[0].devices.find(d => d.name === 'Phone One');
-    assert.equal(device.lines.length, 2); // u1 not duplicated, u2 added
+    assert.equal(device.lines.length, 2); // lineNumber 1 not duplicated, 2 added
     assert.equal(device.pending, true);
   });
 
   it('creates a brand-new race entry for a pending file the server has never seen', () => {
     const merged = mergePendingIntoRaces([], [{
       owner: 'alice', raceLabel: 'race-a-26-08-30', deviceName: 'Phone One', deviceId: 'dev1',
-      pulledAt: '2026-08-30T10:00:00.000Z', lines: [{ recordUuid: 'u1', lineNumber: 1 }],
+      pulledAt: '2026-08-30T10:00:00.000Z', lines: [{ lineNumber: 1 }],
     }]);
     assert.equal(merged.length, 1);
     assert.equal(merged[0].raceLabel, 'race-a-26-08-30');

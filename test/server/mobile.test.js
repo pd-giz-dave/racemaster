@@ -31,7 +31,7 @@ describe('server/mobile.js:path builders', () => {
 
 describe('server/mobile.js:readMobileDeviceFile / writeMobileDeviceFile', () => {
   it('round-trips a device\'s line array, creating directories as needed', () => {
-    const lines = [{ recordUuid: 'u1', action: 'Finish', bibNumber: 1 }];
+    const lines = [{ lineNumber: 1, action: 'Finish', bibNumber: 1 }];
     writeMobileDeviceFile('alice', 'race1', 'PhoneA', lines);
     assert.deepEqual(readMobileDeviceFile('alice', 'race1', 'PhoneA'), lines);
   });
@@ -202,8 +202,8 @@ describe('server/mobile.js:parseRaceLabelDate', () => {
 
 describe('server/mobile.js:getMobileRacesForUser', () => {
   beforeEach(() => {
-    writeMobileDeviceFile('alice', 'race-26-08-23', 'PhoneB', [{ recordUuid: 'u1' }]);
-    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ recordUuid: 'u2' }, { recordUuid: 'u3' }]);
+    writeMobileDeviceFile('alice', 'race-26-08-23', 'PhoneB', [{ lineNumber: 1 }]);
+    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ lineNumber: 1 }, { lineNumber: 2 }]);
     writeMobileDeviceFile('bob',   'race-26-08-25', 'PhoneC', []);
   });
 
@@ -279,7 +279,7 @@ describe('server/mobile.js:getAvailableRacesForUser', () => {
   });
 
   it('returns the lean shape only — no devices/lines/recordCount', () => {
-    writeMobileDeviceFile('alice', 'race-a', 'PhoneA', [{ recordUuid: 'u1' }]);
+    writeMobileDeviceFile('alice', 'race-a', 'PhoneA', [{ lineNumber: 1 }]);
     writeProgress('alice', 'race-a', { raceName: 'A', raceDate: '', generatedAt: new Date().toISOString(), entries: [] });
     const race = getAvailableRacesForUser('alice', 30)[0];
     assert.deepEqual(Object.keys(race).sort(), ['generatedAt', 'raceDate', 'raceLabel', 'raceName']);
@@ -295,8 +295,8 @@ describe('server/mobile.js:getAvailableRacesForUser', () => {
 
 describe('server/mobile.js:getMobileRacesStatusForUser', () => {
   beforeEach(() => {
-    writeMobileDeviceFile('alice', 'race-26-08-23', 'PhoneB', [{ recordUuid: 'u1' }]);
-    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ recordUuid: 'u2' }, { recordUuid: 'u3' }]);
+    writeMobileDeviceFile('alice', 'race-26-08-23', 'PhoneB', [{ lineNumber: 1 }]);
+    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ lineNumber: 1 }, { lineNumber: 2 }]);
     writeMobileDeviceFile('bob',   'race-26-08-25', 'PhoneC', []);
   });
 
@@ -337,7 +337,7 @@ describe('server/mobile.js:getMobileRacesStatusForUser', () => {
 
     const before = status.devices[0];
     await new Promise(r => setTimeout(r, 5));
-    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ recordUuid: 'u2' }, { recordUuid: 'u3' }, { recordUuid: 'u4' }]);
+    writeMobileDeviceFile('alice', 'race-26-08-20', 'PhoneA', [{ lineNumber: 1 }, { lineNumber: 2 }, { lineNumber: 3 }]);
     const after = getMobileRacesStatusForUser('alice').find(r => r.raceLabel === 'race-26-08-20').devices[0];
     assert.notEqual(after.mtime, before.mtime);
     assert.notEqual(after.size, before.size);

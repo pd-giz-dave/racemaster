@@ -27,8 +27,8 @@ describe('storage.js:flushPendingMobileFiles', () => {
   it('pushes and clears only the signed-in user\'s pending files', async () => {
     signIn({ username: 'me' });
     seedPending([
-      { owner: 'me',           raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ recordUuid: '1' }] },
-      { owner: 'me',           raceLabel: 'r2', deviceName: 'PhoneB', deviceId: 'b', lines: [{ recordUuid: '2' }] },
+      { owner: 'me',           raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ lineNumber: 1 }] },
+      { owner: 'me',           raceLabel: 'r2', deviceName: 'PhoneB', deviceId: 'b', lines: [{ lineNumber: 2 }] },
       { owner: 'someone-else', raceLabel: 'r3', deviceName: 'PhoneC', deviceId: 'c', lines: [] },
     ]);
     const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
@@ -44,7 +44,7 @@ describe('storage.js:flushPendingMobileFiles', () => {
 
   it('a file the server rejects with {error} stays queued for the next attempt', async () => {
     signIn();
-    seedPending([{ owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ recordUuid: '1' }] }]);
+    seedPending([{ owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ lineNumber: 1 }] }]);
     installFetchMock(() => jsonResponse({ error: 'bad payload' }));
 
     await storage.flushPendingMobileFiles();
@@ -55,8 +55,8 @@ describe('storage.js:flushPendingMobileFiles', () => {
   it('a network error mid-flush stops immediately, leaving everything queued for the next tick', async () => {
     signIn();
     seedPending([
-      { owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ recordUuid: '1' }] },
-      { owner: 'me', raceLabel: 'r2', deviceName: 'PhoneB', deviceId: 'b', lines: [{ recordUuid: '2' }] },
+      { owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ lineNumber: 1 }] },
+      { owner: 'me', raceLabel: 'r2', deviceName: 'PhoneB', deviceId: 'b', lines: [{ lineNumber: 2 }] },
     ]);
     let calls = 0;
     installFetchMock(() => { calls++; throw new Error('offline'); });
@@ -68,7 +68,7 @@ describe('storage.js:flushPendingMobileFiles', () => {
   });
 
   it('does nothing when signed out', async () => {
-    seedPending([{ owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ recordUuid: '1' }] }]);
+    seedPending([{ owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ lineNumber: 1 }] }]);
     const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
 
     await storage.flushPendingMobileFiles();

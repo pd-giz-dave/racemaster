@@ -24,7 +24,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
   // label (see js/progress-sync.js), not its full recomputed set every time; `removed` names any
   // bib no longer present at all (e.g. an Entries deletion), the one thing a pure upsert can't
   // express. mergeProgress() (server/mobile.js) does the actual upsert-by-bibNumber merge into
-  // whatever's already stored, mirroring POST /api/mobile/:raceLabel's own merge-by-recordUuid
+  // whatever's already stored, mirroring POST /api/mobile/:raceLabel's own merge-by-lineNumber
   // shape — this route used to just replace the whole file every time, back when the web app sent
   // everything on every push; see mergeProgress's own doc for why that's no longer good enough
   // (metered mobile data + unreliable field connectivity, per TODO.md's own delta-payload
@@ -113,7 +113,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
   // race's own name/label as recorded on the phone — a single push (from a mule
   // that's pulled from several phones) can span more than one device, so records are
   // grouped by `deviceName` here before being written out. Each section a device appears in
-  // this push is append-merged (new recordUuids added, existing ones left alone) into
+  // this push is append-merged (new lineNumbers added, existing ones left alone) into
   // whatever's already stored — see the merge loop below; a section for a device not
   // present in this push is left untouched.
   //
@@ -138,7 +138,6 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     if (!devices) { jsonReply(res, 400, { error: 'Expected {devices: {"<deviceName>": [...lines]}}' }); return true; }
 
     const coerce = (r) => ({
-      recordUuid: typeof r?.recordUuid === 'string' ? r.recordUuid : '',
       action: String(r?.action || 'Finish'),
       bibNumber: r?.bibNumber ?? null,
       splitTime: r?.splitTime ?? null,
@@ -176,13 +175,15 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       received += records.length;
 
       const current = readMobileDeviceFile(username, raceLabel, deviceName);
-      const previousUuids = new Set(current.map(r => r.recordUuid).filter(Boolean));
-      const genuinelyNew = records.map(coerce).filter(r => r.recordUuid && !previousUuids.has(r.recordUuid));
+      const previousLineNumbers = new Set(current.map(r => r.lineNumber).filter(n => Number.isFinite(n)));
+      const genuinelyNew = records.map(coerce).filter(r => Number.isFinite(r.lineNumber) && !previousLineNumbers.has(r.lineNumber));
       added += genuinelyNew.length;
       // Append-merge, not replace: the app now sends only the lineNumber delta rather than
       // its full current record set every time, so wholesale-replacing this file with just
       // the delta would drop every previously-stored line not present in this smaller
-      // payload. recordUuid still backstops dedup for a re-sent/overlapping range.
+      // payload. lineNumber still backstops dedup for a re-sent/overlapping range — this file
+      // is already scoped to one device (its own filename), so a bare lineNumber is already
+      // unambiguous here, the same way the /status route's own maxLineNumber cursor treats it.
       writeMobileDeviceFile(username, raceLabel, deviceName, [...current, ...genuinelyNew]);
     }
 
