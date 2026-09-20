@@ -712,7 +712,28 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.19-alpha - current version</h3>
+    <h3>v0.0.20-alpha - current version</h3>
+    <ul>
+      <li>Relocating mid-race is now a real, undoable event on the same device file, not a new one —
+          matches the RaceMaster Mobile app's own new mid-race Relocate screen. The Devices tab shows
+          one row per device again, with a <strong>Where</strong> column listing every location it's
+          recorded at; <strong>View</strong> asks which one when there's more than one, and
+          <strong>Raw</strong> always shows the whole file as a debugging aid</li>
+      <li><strong>Update Progress</strong> no longer requires a Finish file — a checkpoint-only
+          selection (a phone adopted before any phone has reached Finish yet) now computes everything
+          it can from checkpoint data alone, rather than refusing outright</li>
+      <li>The Progress tab's checkpoint columns now show each crossing's own raw device
+          <strong>time-of-day</strong>, straight off the phone, instead of a computed elapsed time — the
+          Results &amp; Prize List page's Splits tab is where an adjusted elapsed time is computed, now
+          falling back to Event Settings' own scheduled start time for the bib's course when there's no
+          Finish file yet to anchor against directly</li>
+      <li>A bib recorded by a phone with no matching Entry now shows <strong>--entry missing--</strong>
+          on the Progress tab instead of a blank name, and is included on Safety Check's own
+          <strong>Outstanding</strong> tab, flagged, alongside the Finished/DNF/Early Starters tabs that
+          already did this — someone recording splits under an unregistered or mistyped bib is still a
+          person on the course</li>
+    </ul>
+    <h3>v0.0.19-alpha</h3>
     <ul>
       <li>Results &amp; Prize List and Safety Check now spot and warn about a <strong>bib number
           conflict</strong> — the same bib recorded differently by more than one source (SI Results,
