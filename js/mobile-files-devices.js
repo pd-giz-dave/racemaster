@@ -9,6 +9,27 @@ import {
   byLineNumber, computeIncorporationStatus, getBleLastSeen, laterIso, latestLineTimestamp, parsePhoneTimestamp,
 } from './mobile-files-shared.js';
 
+// ---- Location resolution (mirrors racemaster-mobile's SyncRecordMapping.withResolvedLocations,
+// now generalised to three marker actions instead of one) ----
+//
+// A device's location is constant except at three boundary-marker rows — 'Setup' (Setup Race),
+// 'ModeStart' (a mode being started/reset) and 'Location' (an explicit mid-race relocation) —
+// each of which carries the location as of that point in its own `note` field (racemaster-
+// mobile's RaceRepository.recordSetupMarker/TimeModeRepository.startStopwatch/BibsModeRepository.
+// startBibsMode/CpModeRepository.startCpMode/insertLocationMarkerAndReset). The wire/stored line
+// shape no longer carries a `location` field of its own at all (see racemaster-mobile's
+// SyncRecord doc) — this walks a device's lines once, in lineNumber order, tracking the most
+// recent such marker's `note` as the running "current location", and stamps every row with it.
+const LOCATION_MARKER_ACTIONS = new Set(['Setup', 'ModeStart', 'Location']);
+
+export function withResolvedLocations(lines, initialLocation = 'Finish') {
+  let current = initialLocation;
+  return [...lines].sort(byLineNumber).map(r => {
+    if (LOCATION_MARKER_ACTIONS.has(r.action) && r.note) current = r.note;
+    return { ...r, location: current };
+  });
+}
+
 // ---- Segment view (mirrors racemaster-mobile's observeCurrentSegment + foldLatestVisible) ----
 //
 // A device's file interleaves two independent, separately-numbered families of rows — Time
@@ -255,13 +276,15 @@ function locationSortKey(rawLocation) {
 // `location` stays the single current/latest value (for sorting), and the new `locations` field
 // carries the full course-ordered list for the "Where" column. js/views/mobile-files.js's `view`
 // handlers use `locations` to decide whether to prompt before narrowing `device.lines` down to
-// one location's own rows (each row's own `.location`, resolved per-record on the phone before
-// push — see SyncRecordMapping.kt's withResolvedLocations — already says which station it
-// belongs to, so no client-side segment-boundary reconstruction is needed here).
+// one location's own rows (each row's own `.location` — resolved here, once, via
+// withResolvedLocations(), since the wire/stored shape no longer carries the field itself — says
+// which station it belongs to, so no further client-side segment-boundary reconstruction is
+// needed downstream).
 export function flattenDevices(races) {
   const rows = [];
   for (const race of races) {
-    const prepared = race.devices.map(device => {
+    const prepared = race.devices.map(rawDevice => {
+      const device = { ...rawDevice, lines: withResolvedLocations(rawDevice.lines) };
       const { timeSegment, bibsSegment } = buildSegmentView(device.lines);
       const modeStart = latestModeStart(device.lines);
       // modeStart folded in alongside the post-Reset segment — not just as an isBibsExpected/

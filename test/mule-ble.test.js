@@ -442,7 +442,7 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0, pollIntervalMs: 5000 };
     const device = makeFakePhone({
       deviceInfo,
-      recordsByRequest: () => [{ action: 'Finish', bibNumber: 1, lineNumber: 1, location: 'CP2', timestampMillis: 1_700_000_000_000 }],
+      recordsByRequest: () => [{ action: 'Finish', bibNumber: 1, lineNumber: 1, timestampMillis: 1_700_000_000_000 }],
     });
     installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
 

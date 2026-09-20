@@ -141,12 +141,6 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       action: String(r?.action || 'Finish'),
       bibNumber: r?.bibNumber ?? null,
       splitTime: r?.splitTime ?? null,
-      // Which physical point on the course this record came from (e.g. "Finish", "Start",
-      // "Checkpoint 2") — the Android app's RaceEntity.location, repeated on every record
-      // since there's no separate per-race metadata channel on this wire protocol to send
-      // it through just once. Defaults to "Finish" to match that field's own default, for
-      // any record that predates this field existing.
-      location: typeof r?.location === 'string' && r.location ? r.location : 'Finish',
       splitNumber: r?.splitNumber ?? null,
       // Permanent, ascending history position — see the Android app's RaceEntity.nextLineNumber.
       // What the merge logic below (and the /status route) key off for delta-sync.

@@ -289,13 +289,13 @@ export async function clearProgressData() {
 // Splits one selected row's own lines into one segment per location it's recorded at — a
 // relocated device's file can span more than one (see mobile-files-devices.js's own
 // flattenDevices() doc) — so each location buckets independently below, exactly as if it were
-// its own separate file. Each wire record's own `.location` is already resolved per-row on the
-// phone before push (racemaster-mobile's SyncRecordMapping.kt:withResolvedLocations), so
-// filtering straight on it keeps buildSegmentView()'s own RESET-boundary logic correctly scoped
-// to just that location, with no separate segment-boundary reconstruction needed here. A device
-// with no location recorded at all (locations.length === 0) still gets exactly one segment, its
-// whole (unfiltered) lines — the existing "no location recorded" error below is what catches
-// that, same as before this split existed.
+// its own separate file. Each row's own `.location` is already resolved per-row by
+// flattenDevices()'s own withResolvedLocations() call (mobile-files-devices.js) before `selected`
+// ever reaches here, so filtering straight on it keeps buildSegmentView()'s own RESET-boundary
+// logic correctly scoped to just that location, with no separate segment-boundary reconstruction
+// needed here. A device with no location recorded at all (locations.length === 0) still gets
+// exactly one segment, its whole (unfiltered) lines — the existing "no location recorded" error
+// below is what catches that, same as before this split existed.
 function locationSegmentsOf(r) {
   const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
   const locations = distinctLocationsOf([...timeSegment, ...bibsSegment]);

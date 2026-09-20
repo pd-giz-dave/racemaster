@@ -281,9 +281,9 @@ async function activateRace() {
 // "View" on a device row — a relocated device's file can hold more than one location's own
 // records (see mobile-files-devices.js's own flattenDevices() doc), but the modal itself still
 // shows just one segment at a time, so this asks first when there's a real choice to make. Each
-// wire record's own `.location` is already resolved per-row on the phone before push (see
-// racemaster-mobile's SyncRecordMapping.kt:withResolvedLocations) — a Reset that happened at a
-// given station carries that station's own location too, so filtering straight on `.location`
+// row's own `.location` is already resolved per-row by flattenDevices()'s own
+// withResolvedLocations() call before `r` ever reaches here — a Reset that happened at a given
+// station carries that station's own location too, so filtering straight on `.location`
 // naturally keeps buildSegmentView()'s own RESET-boundary logic scoped to just the chosen
 // location, with no separate segment-extraction step needed here.
 async function viewDeviceRow(r) {

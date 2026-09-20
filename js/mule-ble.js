@@ -437,7 +437,6 @@ function toStoredLine(r) {
     action: r.action,
     bibNumber: r.bibNumber ?? null,
     splitTime: r.splitTime ?? null,
-    location: r.location,
     splitNumber: r.splitNumber ?? null,
     lineNumber: r.lineNumber,
     refLineNumber: r.refLineNumber ?? null,

@@ -8,7 +8,7 @@ import { installLocalStorageMock } from './helpers/mock-browser.js';
 import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
-  distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt,
+  distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt, withResolvedLocations,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -205,14 +205,97 @@ describe('mobile-files-devices.js:resolveLocationKey', () => {
   });
 });
 
+describe('mobile-files-devices.js:withResolvedLocations', () => {
+  it('with no location markers at all, every row gets the initial location', () => {
+    const rows = [
+      { action: 'Finish', bibNumber: 101, lineNumber: 1 },
+      { action: 'Finish', bibNumber: 102, lineNumber: 2 },
+    ];
+    assert.deepEqual(withResolvedLocations(rows, 'Finish').map(r => r.location), ['Finish', 'Finish']);
+  });
+
+  it('rows before a Location marker keep the old location, rows after get the new one', () => {
+    const rows = [
+      { action: 'Finish', bibNumber: 101, lineNumber: 1 },
+      { action: 'Location', note: 'CP2', lineNumber: 2 },
+      { action: 'Finish', bibNumber: 102, lineNumber: 3 },
+    ];
+    const resolved = withResolvedLocations(rows, 'CP1');
+    assert.deepEqual(resolved.map(r => [r.location, r.bibNumber]), [['CP1', 101], ['CP2', undefined], ['CP2', 102]]);
+  });
+
+  it('multiple relocations each take effect from their own point onward', () => {
+    const rows = [
+      { action: 'Finish', lineNumber: 1 },
+      { action: 'Location', note: 'CP2', lineNumber: 2 },
+      { action: 'Finish', lineNumber: 3 },
+      { action: 'Location', note: 'CP3', lineNumber: 4 },
+      { action: 'Finish', lineNumber: 5 },
+    ];
+    assert.deepEqual(withResolvedLocations(rows, 'CP1').map(r => r.location), ['CP1', 'CP2', 'CP2', 'CP3', 'CP3']);
+  });
+
+  // Unlike racemaster-mobile's own now-deleted Kotlin equivalent (which only ever special-cased
+  // the LOCATION action, since SETUP/MODE_START didn't carry a location in `note` before this
+  // change), this also has to treat 'Setup' and 'ModeStart' as location markers — SETUP/
+  // MODE_START now carry the race's own current location in `note` too (see
+  // racemaster-mobile's RaceRepository.recordSetupMarker/TimeModeRepository.startStopwatch).
+  it('a Setup or ModeStart marker\'s own note also takes effect, same as a Location marker', () => {
+    const setupRows = [
+      { action: 'Setup', note: 'CP2', lineNumber: 1 },
+      { action: 'Finish', lineNumber: 2 },
+    ];
+    assert.deepEqual(withResolvedLocations(setupRows, 'Finish').map(r => r.location), ['CP2', 'CP2']);
+
+    const modeStartRows = [
+      { action: 'ModeStart', bibNumber: 'n/a', note: 'CP3', lineNumber: 1 },
+      { action: 'Finish', lineNumber: 2 },
+    ];
+    assert.deepEqual(withResolvedLocations(modeStartRows, 'Finish').map(r => r.location), ['CP3', 'CP3']);
+  });
+
+  it('defaults the initial location to "Finish" when not given', () => {
+    const rows = [{ action: 'Finish', lineNumber: 1 }];
+    assert.equal(withResolvedLocations(rows)[0].location, 'Finish');
+  });
+
+  it('sorts by lineNumber before walking, regardless of input order', () => {
+    const rows = [
+      { action: 'Finish', bibNumber: 102, lineNumber: 3 },
+      { action: 'Location', note: 'CP2', lineNumber: 2 },
+      { action: 'Finish', bibNumber: 101, lineNumber: 1 },
+    ];
+    const resolved = withResolvedLocations(rows, 'CP1');
+    assert.deepEqual(resolved.map(r => r.bibNumber), [101, undefined, 102]);
+    assert.deepEqual(resolved.map(r => r.location), ['CP1', 'CP2', 'CP2']);
+  });
+
+  it('a marker with no note (e.g. a corrupt or pre-convention row) does not change the running location', () => {
+    const rows = [
+      { action: 'Location', note: null, lineNumber: 1 },
+      { action: 'Finish', lineNumber: 2 },
+    ];
+    assert.deepEqual(withResolvedLocations(rows, 'Finish').map(r => r.location), ['Finish', 'Finish']);
+  });
+});
+
 describe('mobile-files-devices.js:flattenDevices', () => {
   it('produces one row per device, sorted Finish first then CP number ascending', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [
-        { name: 'CP2 Phone', lines: [{ bibNumber: 1, lineNumber: 1, action: 'Finish', location: 'CP2' }] },
-        { name: 'Finish Phone', lines: [{ bibNumber: 1, lineNumber: 1, action: 'Finish', location: 'Finish' }] },
-        { name: 'CP1 Phone', lines: [{ bibNumber: 1, lineNumber: 1, action: 'Finish', location: 'CP1' }] },
+        { name: 'CP2 Phone', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP2' },
+          { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+        ] },
+        { name: 'Finish Phone', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'Finish' },
+          { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+        ] },
+        { name: 'CP1 Phone', lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+        ] },
       ],
     }];
     const rows = flattenDevices(races);
@@ -241,7 +324,7 @@ describe('mobile-files-devices.js:flattenDevices', () => {
   it('reflects computeIncorporationStatus for a currently-selected row', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
-      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'Finish', bibNumber: 1, location: 'Finish' }] }],
+      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'Finish', bibNumber: 1 }] }],
     }];
     selectedKeys.add(rowKey({ owner: 'alice', raceLabel: 'race-a', device: { name: 'A' } }));
     const rows = flattenDevices(races);
@@ -258,7 +341,7 @@ describe('mobile-files-devices.js:flattenDevices', () => {
   it('shows a bib count of 0 for a device with only its own bibs ModeStart marker (bibNumber "n/a")', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
-      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' }] }],
+      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' }] }],
     }];
     const rows = flattenDevices(races);
     assert.equal(rows[0].bibsVisible, 0);
@@ -290,7 +373,7 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [
-        { lineNumber: 1, action: 'ModeStart', splitTime: '00:00:00', location: 'Finish' },
+        { lineNumber: 1, action: 'ModeStart', splitTime: '00:00:00', note: 'Finish' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -305,8 +388,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [
-        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', location: 'Finish' },
-        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', location: 'Finish' },
+        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', note: 'Finish' },
+        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -318,8 +401,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [
-        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-        { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+        { lineNumber: 2, action: 'Finish', bibNumber: '5' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -335,13 +418,13 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [
         { name: 'Phone_cp1', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5' },
         ] },
         { name: 'Phone_cp2', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP2' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '6', location: 'CP2' },
-          { lineNumber: 3, action: 'Finish', bibNumber: '7', location: 'CP2' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP2' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '6' },
+          { lineNumber: 3, action: 'Finish', bibNumber: '7' },
         ] },
       ],
     }];
@@ -358,10 +441,10 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'Roaming Phone', lines: [
-        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-        { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
-        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2', location: 'CP2' },
-        { lineNumber: 4, action: 'Finish', bibNumber: '6', location: 'CP2' },
+        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+        { lineNumber: 2, action: 'Finish', bibNumber: '5' },
+        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2' },
+        { lineNumber: 4, action: 'Finish', bibNumber: '6' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -380,14 +463,14 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'Roaming Phone', lines: [
-        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-        { lineNumber: 2, action: 'Finish', bibNumber: '1', location: 'CP1' },
-        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2', location: 'CP2' },
-        { lineNumber: 4, action: 'Finish', bibNumber: '2', location: 'CP2' },
-        { lineNumber: 5, action: 'Location', bibNumber: null, note: 'CP3', location: 'CP3' },
-        { lineNumber: 6, action: 'Finish', bibNumber: '3', location: 'CP3' },
-        { lineNumber: 7, action: 'Location', bibNumber: null, note: 'CP1', location: 'CP1' },
-        { lineNumber: 8, action: 'Finish', bibNumber: '4', location: 'CP1' },
+        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+        { lineNumber: 2, action: 'Finish', bibNumber: '1' },
+        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2' },
+        { lineNumber: 4, action: 'Finish', bibNumber: '2' },
+        { lineNumber: 5, action: 'Location', bibNumber: null, note: 'CP3' },
+        { lineNumber: 6, action: 'Finish', bibNumber: '3' },
+        { lineNumber: 7, action: 'Location', bibNumber: null, note: 'CP1' },
+        { lineNumber: 8, action: 'Finish', bibNumber: '4' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -407,8 +490,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5' },
           { lineNumber: 3, action: 'Reset' }, // no fresh ModeStart follows
         ] }],
       }];
@@ -420,8 +503,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '5', location: 'CP1' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 2, action: 'Finish', bibNumber: '5' },
           { lineNumber: 3, action: 'Reset' },
         ] }],
       }];
@@ -435,8 +518,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', splitTime: 'n/a', location: 'Finish' },
-          { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:10:00', location: 'Finish' },
+          { lineNumber: 1, action: 'ModeStart', splitTime: 'n/a', note: 'Finish' },
+          { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:10:00' },
           // A Time-family Reset needs its own non-null splitTime to land in the Time bucket at
           // all (buildSegmentView classifies purely on splitTime null-ness) — otherwise it'd
           // fall into the Bibs bucket instead and never cut this family's segment off.
@@ -453,10 +536,10 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-          { lineNumber: 2, action: 'Reset', location: 'CP1' },
-          { lineNumber: 3, action: 'ModeStart', bibNumber: 'n/a', location: 'CP1' },
-          { lineNumber: 4, action: 'Finish', bibNumber: '9', location: 'CP1' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 2, action: 'Reset' },
+          { lineNumber: 3, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 4, action: 'Finish', bibNumber: '9' },
         ] }],
       }];
       const rows = flattenDevices(races);
