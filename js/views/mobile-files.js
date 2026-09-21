@@ -185,6 +185,9 @@ async function pushPendingRow(r) {
   if (!session) { showStatus('Sign in first.', true); return; }
   let result;
   try {
+    // r.device.lines, not resolvedLines — uploads exactly what was pulled, matching the real wire
+    // shape (no client-computed `location` field of its own — see flattenDevices()'s own doc in
+    // mobile-files-devices.js).
     result = await apiPushMobileSync(session.token, r.raceLabel, r.device.name, r.device.lines);
   } catch {
     // Server unreachable — fetch() itself rejects. The file stays right where it is, still
@@ -294,12 +297,13 @@ async function activateRace() {
 
 // "View" on a device row — a relocated device's file can hold more than one location's own
 // records (see mobile-files-devices.js's own flattenDevices() doc), but the modal itself still
-// shows just one segment at a time, so this asks first when there's a real choice to make. Each
-// row's own `.location` is already resolved per-row by flattenDevices()'s own
-// withResolvedLocations() call before `r` ever reaches here — a Reset that happened at a given
-// station carries that station's own location too, so filtering straight on `.location`
-// naturally keeps buildSegmentView()'s own RESET-boundary logic scoped to just the chosen
-// location, with no separate segment-extraction step needed here.
+// shows just one segment at a time, so this asks first when there's a real choice to make. Reads
+// `r.device.resolvedLines` (the current, interpreted picture — each row's own `.location` already
+// resolved by flattenDevices()'s own withResolvedLocations() call), never `r.device.lines` (the
+// genuinely raw array — see that function's own doc for why the two are kept apart) — a Reset
+// that happened at a given station carries that station's own location too, so filtering straight
+// on `.location` naturally keeps buildSegmentView()'s own RESET-boundary logic scoped to just the
+// chosen location, with no separate segment-extraction step needed here.
 async function viewDeviceRow(r) {
   const locations = r.locations ?? [];
   let location = locations[0] ?? null;
@@ -308,7 +312,7 @@ async function viewDeviceRow(r) {
     location = await showChoiceDialog(`View which location for ${r.device.name}?`, choices, { vertical: true });
     if (location === null) return;
   }
-  const lines = location === null ? r.device.lines : r.device.lines.filter(l => l.location === location);
+  const lines = location === null ? r.device.resolvedLines : r.device.resolvedLines.filter(l => l.location === location);
   showDeviceModal(r.owner, r.raceLabel, r.device.name, lines);
 }
 

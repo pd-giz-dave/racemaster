@@ -102,7 +102,7 @@ describe('mobile-files-devices.js:latestStartedAt', () => {
 
   it('reads a Bibs/CP-mode device\'s own ModeStart marker, not a per-bib Start entry', () => {
     const lines = [
-      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', timestamp: '2026/08/30 08:55:00' },
+      { lineNumber: 1, action: 'ModeStart', bibNumber: null, timestamp: '2026/08/30 08:55:00' },
       // A runner's own explicit early/late start — action:'Start', a completely different (and
       // now unambiguous) action string from this device's own action:'ModeStart' marker, ever
       // since ModeStart replaced the former per-family Start/Clock markers (ToDo.MD: "use the
@@ -235,23 +235,18 @@ describe('mobile-files-devices.js:withResolvedLocations', () => {
     assert.deepEqual(withResolvedLocations(rows, 'CP1').map(r => r.location), ['CP1', 'CP2', 'CP2', 'CP3', 'CP3']);
   });
 
-  // Unlike racemaster-mobile's own now-deleted Kotlin equivalent (which only ever special-cased
-  // the LOCATION action, since SETUP/MODE_START didn't carry a location in `note` before this
-  // change), this also has to treat 'Setup' and 'ModeStart' as location markers — SETUP/
-  // MODE_START now carry the race's own current location in `note` too (see
-  // racemaster-mobile's RaceRepository.recordSetupMarker/TimeModeRepository.startStopwatch).
-  it('a Setup or ModeStart marker\'s own note also takes effect, same as a Location marker', () => {
-    const setupRows = [
-      { action: 'Setup', note: 'CP2', lineNumber: 1 },
-      { action: 'Finish', lineNumber: 2 },
+  // Unlike the Location marker, a ModeStart row's own `note` now states its explicit mode (e.g.
+  // "Time"/"Bibs"/"CP" — see racemaster-mobile's SyncRecord doc/AppMode.wireName()), not a
+  // location — it must NOT be treated as a location marker, even though it always immediately
+  // follows a real Location marker in practice (racemaster-mobile's RaceRepository.recordModeStart
+  // always writes the pair together).
+  it('a ModeStart marker\'s own note (the mode name) is never mistaken for a location', () => {
+    const rows = [
+      { action: 'Location', note: 'CP2', lineNumber: 1 },
+      { action: 'ModeStart', bibNumber: null, note: 'Bibs', lineNumber: 2 },
+      { action: 'Finish', lineNumber: 3 },
     ];
-    assert.deepEqual(withResolvedLocations(setupRows, 'Finish').map(r => r.location), ['CP2', 'CP2']);
-
-    const modeStartRows = [
-      { action: 'ModeStart', bibNumber: 'n/a', note: 'CP3', lineNumber: 1 },
-      { action: 'Finish', lineNumber: 2 },
-    ];
-    assert.deepEqual(withResolvedLocations(modeStartRows, 'Finish').map(r => r.location), ['CP3', 'CP3']);
+    assert.deepEqual(withResolvedLocations(rows, 'Finish').map(r => r.location), ['CP2', 'CP2', 'CP2']);
   });
 
   it('defaults the initial location to "Finish" when not given', () => {
@@ -285,21 +280,46 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [
         { name: 'CP2 Phone', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP2' },
-          { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+          { lineNumber: 1, action: 'Location', note: 'CP2' },
+          { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+          { bibNumber: 1, lineNumber: 3, action: 'Finish' },
         ] },
         { name: 'Finish Phone', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'Finish' },
-          { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+          { lineNumber: 1, action: 'Location', note: 'Finish' },
+          { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+          { bibNumber: 1, lineNumber: 3, action: 'Finish' },
         ] },
         { name: 'CP1 Phone', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
-          { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+          { lineNumber: 1, action: 'Location', note: 'CP1' },
+          { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+          { bibNumber: 1, lineNumber: 3, action: 'Finish' },
         ] },
       ],
     }];
     const rows = flattenDevices(races);
     assert.deepEqual(rows.map(r => r.device.name), ['Finish Phone', 'CP1 Phone', 'CP2 Phone']);
+  });
+
+  // The conflation this guards against: flattenDevices() used to overwrite device.lines with the
+  // withResolvedLocations() output, so every consumer — including "View Raw", which is supposed
+  // to show exactly and only what arrived over the wire — silently got the client-processed array
+  // instead. device.lines must stay byte-for-byte the raw input; device.resolvedLines is the only
+  // place the resolved (location-stamped) view lives.
+  it('keeps device.lines exactly as the raw input (no synthetic fields added), with device.resolvedLines carrying the resolved view separately', () => {
+    const rawLines = [
+      { lineNumber: 1, action: 'Location', note: 'CP1' },
+      { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+      { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+    ];
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Phone', lines: rawLines }],
+    }];
+    const rows = flattenDevices(races);
+    assert.deepEqual(rows[0].device.lines, rawLines); // exactly the raw input, nothing added
+    assert.ok(rows[0].device.lines.every(l => !('location' in l))); // no synthetic field at all
+    assert.equal(rows[0].device.resolvedLines.length, rawLines.length);
+    assert.ok(rows[0].device.resolvedLines.every(l => l.location === 'CP1')); // the resolved view
   });
 
   it('assigns a sequential idx per row, spanning every race', () => {
@@ -338,10 +358,10 @@ describe('mobile-files-devices.js:flattenDevices', () => {
   // formatCount's own `expected` argument, and js/views/mobile-files-devices.js /
   // mobile-files-all.js, which render bibs/time using bibsVisible/bibsExpected and
   // timeVisible/timeExpected together).
-  it('shows a bib count of 0 for a device with only its own bibs ModeStart marker (bibNumber "n/a")', () => {
+  it('shows a bib count of 0 for a device with only its own bibs ModeStart marker', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
-      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' }] }],
+      devices: [{ name: 'A', lines: [{ lineNumber: 1, action: 'ModeStart', bibNumber: null, note: 'Bibs' }] }],
     }];
     const rows = flattenDevices(races);
     assert.equal(rows[0].bibsVisible, 0);
@@ -369,11 +389,11 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     assert.equal(formatCount(rows[0].timeVisible, rows[0].timeExpected), '');
   });
 
-  it('shows a split count of 0 for a Time-mode device with only its own ModeStart marker (splitTime non-null)', () => {
+  it('shows a split count of 0 for a Time-mode device with only its own ModeStart marker', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [
-        { lineNumber: 1, action: 'ModeStart', splitTime: '00:00:00', note: 'Finish' },
+        { lineNumber: 1, action: 'ModeStart', splitTime: null, note: 'Time' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -388,8 +408,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [
-        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', note: 'Finish' },
-        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00' },
+        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: null, note: 'Time' },
+        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: 1200 },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -401,7 +421,7 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'A', lines: [
-        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+        { lineNumber: 1, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
         { lineNumber: 2, action: 'Finish', bibNumber: '5' },
       ] }],
     }];
@@ -418,13 +438,15 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [
         { name: 'Phone_cp1', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '5' },
+          { lineNumber: 1, action: 'Location', note: 'CP1' },
+          { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+          { lineNumber: 3, action: 'Finish', bibNumber: '5' },
         ] },
         { name: 'Phone_cp2', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP2' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '6' },
-          { lineNumber: 3, action: 'Finish', bibNumber: '7' },
+          { lineNumber: 1, action: 'Location', note: 'CP2' },
+          { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+          { lineNumber: 3, action: 'Finish', bibNumber: '6' },
+          { lineNumber: 4, action: 'Finish', bibNumber: '7' },
         ] },
       ],
     }];
@@ -441,10 +463,11 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'Roaming Phone', lines: [
-        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
-        { lineNumber: 2, action: 'Finish', bibNumber: '5' },
-        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2' },
-        { lineNumber: 4, action: 'Finish', bibNumber: '6' },
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'CP1' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+        { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+        { lineNumber: 4, action: 'Location', bibNumber: null, note: 'CP2' },
+        { lineNumber: 5, action: 'Finish', bibNumber: '6' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -463,14 +486,15 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
       devices: [{ name: 'Roaming Phone', lines: [
-        { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
-        { lineNumber: 2, action: 'Finish', bibNumber: '1' },
-        { lineNumber: 3, action: 'Location', bibNumber: null, note: 'CP2' },
-        { lineNumber: 4, action: 'Finish', bibNumber: '2' },
-        { lineNumber: 5, action: 'Location', bibNumber: null, note: 'CP3' },
-        { lineNumber: 6, action: 'Finish', bibNumber: '3' },
-        { lineNumber: 7, action: 'Location', bibNumber: null, note: 'CP1' },
-        { lineNumber: 8, action: 'Finish', bibNumber: '4' },
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'CP1' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+        { lineNumber: 3, action: 'Finish', bibNumber: '1' },
+        { lineNumber: 4, action: 'Location', bibNumber: null, note: 'CP2' },
+        { lineNumber: 5, action: 'Finish', bibNumber: '2' },
+        { lineNumber: 6, action: 'Location', bibNumber: null, note: 'CP3' },
+        { lineNumber: 7, action: 'Finish', bibNumber: '3' },
+        { lineNumber: 8, action: 'Location', bibNumber: null, note: 'CP1' },
+        { lineNumber: 9, action: 'Finish', bibNumber: '4' },
       ] }],
     }];
     const rows = flattenDevices(races);
@@ -490,9 +514,10 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
-          { lineNumber: 2, action: 'Finish', bibNumber: '5' },
-          { lineNumber: 3, action: 'Reset' }, // no fresh ModeStart follows
+          { lineNumber: 1, action: 'Location', bibNumber: null, note: 'CP1' },
+          { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+          { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+          { lineNumber: 4, action: 'Reset' }, // no fresh ModeStart follows
         ] }],
       }];
       const rows = flattenDevices(races);
@@ -503,7 +528,7 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
           { lineNumber: 2, action: 'Finish', bibNumber: '5' },
           { lineNumber: 3, action: 'Reset' },
         ] }],
@@ -518,12 +543,14 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', splitTime: 'n/a', note: 'Finish' },
-          { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:10:00' },
+          { lineNumber: 1, action: 'Location', bibNumber: null, note: 'Finish' },
+          { lineNumber: 2, action: 'ModeStart', splitTime: null, note: 'Time' },
+          { lineNumber: 3, action: 'Split', splitNumber: 1, splitTime: 600 },
           // A Time-family Reset needs its own non-null splitTime to land in the Time bucket at
-          // all (buildSegmentView classifies purely on splitTime null-ness) — otherwise it'd
-          // fall into the Bibs bucket instead and never cut this family's segment off.
-          { lineNumber: 3, action: 'Reset', splitTime: 'n/a' },
+          // all (buildSegmentView classifies a real row purely on splitTime null-ness) —
+          // otherwise it'd fall into the Bibs bucket instead and never cut this family's
+          // segment off.
+          { lineNumber: 4, action: 'Reset', splitTime: 0 },
         ] }],
       }];
       const rows = flattenDevices(races);
@@ -536,9 +563,9 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
-          { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 1, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
           { lineNumber: 2, action: 'Reset' },
-          { lineNumber: 3, action: 'ModeStart', bibNumber: 'n/a', note: 'CP1' },
+          { lineNumber: 3, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
           { lineNumber: 4, action: 'Finish', bibNumber: '9' },
         ] }],
       }];

@@ -113,6 +113,18 @@ export function secondsToTime(secs) {
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
+/** Convert a whole number of *elapsed* seconds (since a race/split start, not since midnight)
+ *  to an "HH:MM:SS" string — unlike secondsToTime() above, hours are never capped/wrapped at 24,
+ *  since a real elapsed duration (a multi-day ultra, say) can genuinely exceed that. Mirrors
+ *  racemaster-mobile's own SplitTimeFormat.kt:formatElapsedSplitTime. */
+export function formatElapsedSeconds(secs) {
+  secs = Math.max(0, Math.round(secs || 0));
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
 /** Return true iff the time is a valid HH:MM:SS race time (not DNF/DSQ) */
 export function isValidRaceTime(t) {
   if (!t) return false;

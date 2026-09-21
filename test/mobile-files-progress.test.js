@@ -26,25 +26,34 @@ beforeEach(() => {
 // A minimal Finish-location device row: one Time-mode phone with a ModeStart marker + one Split,
 // one Bibs-mode phone with one Finish — enough for validateAndCompute() to pair a real finish time.
 function finishRow(overrides = {}) {
-  return {
+  const merged = {
     owner: 'alice', raceLabel: 'race-a',
     device: {
       name: 'Finish Phone',
       lines: [
-        // splitTime set (even though it's the fixed t=0 marker) so buildSegmentView classifies
-        // this as the Time-mode family, not the Bibs-mode one — a Bibs-mode per-bib "Start"
-        // action also exists (a runner's own early/late start, unrelated to this device marker —
-        // see BIBS_ACTION_TO_FINISHER's own doc), and only splitTime null/non-null tells the two
-        // families apart; action:'ModeStart' itself (ToDo.MD: "use the ModeStart records and not
-        // start or clock records") is what identifies this specific row as the family's own
-        // session-start marker, not an ordinary entry.
-        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: '00:00:00.00', timestamp: '2026/08/30 09:00:00.00', location: 'Finish' },
-        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: '00:20:00.00', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
+        // note:'Time' (even though this marker's own splitTime is always null now — see
+        // SyncRecord's own doc) is what buildSegmentView classifies this as the Time-mode
+        // family, not the Bibs-mode one, by — a Bibs-mode per-bib "Start" action also exists (a
+        // runner's own early/late start, unrelated to this device marker — see
+        // BIBS_ACTION_TO_FINISHER's own doc); action:'ModeStart' itself (ToDo.MD: "use the
+        // ModeStart records and not start or clock records") is what identifies this specific
+        // row as the family's own session-start marker, not an ordinary entry.
+        { lineNumber: 1, action: 'ModeStart', splitNumber: 0, splitTime: null, note: 'Time', timestamp: '2026/08/30 09:00:00.00', location: 'Finish' },
+        { lineNumber: 2, action: 'Split', splitNumber: 1, splitTime: 1200, timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
         { lineNumber: 3, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
       ],
     },
     ...overrides,
   };
+  // validateAndCompute() reads r.device.resolvedLines (the current, interpreted picture — see
+  // mobile-files-devices.js's own flattenDevices() doc for why that's kept apart from
+  // r.device.lines, the genuinely raw array). Every fixture in this file builds `device.lines`
+  // directly, by hand, with `.location` already set on each line — exactly what flattenDevices()
+  // would have produced as resolvedLines — so defaulting resolvedLines to the same array here,
+  // once, means every finishRow({ device: {...} }) override throughout this file gets a matching
+  // resolvedLines for free, without needing to be touched individually.
+  if (!merged.device.resolvedLines) merged.device.resolvedLines = merged.device.lines;
+  return merged;
 }
 
 describe('mobile-files-progress.js:validateAndCompute', () => {
@@ -68,7 +77,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     // the phone — the web-app doesn't need to see the marker itself, just each row's own already-
     // resolved .location, per SyncRecordMapping.kt:withResolvedLocations), then recorded at CP2.
     const roaming = finishRow({ device: { name: 'Roaming Phone', lines: [
-      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', splitTime: null, location: 'CP1' },
+      { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'CP', location: 'CP1' },
       { lineNumber: 2, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
       { lineNumber: 3, action: 'Location', bibNumber: null, splitTime: null, note: 'CP2', location: 'CP2' },
       { lineNumber: 4, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:15:00.00', location: 'CP2' },
@@ -87,7 +96,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
   // to confirm locationSegmentsOf()/the bucketing loop stay correct beyond just two.
   it('splits a device relocated three times over into three independent segments/buckets', () => {
     const roaming = finishRow({ device: { name: 'Roaming Phone', lines: [
-      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', splitTime: null, location: 'CP1' },
+      { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'CP', location: 'CP1' },
       { lineNumber: 2, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
       { lineNumber: 3, action: 'Location', bibNumber: null, splitTime: null, note: 'CP2', location: 'CP2' },
       { lineNumber: 4, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:15:00.00', location: 'CP2' },
@@ -135,7 +144,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
   // marker, unchanged in substance by the wire-format rename.
   it('succeeds harmlessly (one inert entry, not an error) for a Finish-location device with only its own ModeStart marker', () => {
     const modeStartOnly = finishRow({ device: { name: 'Just Adopted', lines: [
-      { lineNumber: 1, action: 'ModeStart', bibNumber: 'n/a', splitTime: null, location: 'Finish' },
+      { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Finish' },
     ] } });
     return validateAndCompute([modeStartOnly]).then(result => {
       assert.equal(result.error, undefined);
@@ -225,7 +234,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const withLateStart = finishRow();
     withLateStart.device.lines.push(
       { lineNumber: 4, action: 'Start', splitNumber: 2, bibNumber: '2', timestamp: '2026/08/30 09:05:00.00', location: 'Finish' },
-      { lineNumber: 5, action: 'Split', splitNumber: 2, splitTime: '00:05:00.00', timestamp: '2026/08/30 09:05:00.00', location: 'Finish' },
+      { lineNumber: 5, action: 'Split', splitNumber: 2, splitTime: 300, timestamp: '2026/08/30 09:05:00.00', location: 'Finish' },
     );
     const result = await validateAndCompute([withLateStart]);
     assert.equal(result.error, undefined);
@@ -237,6 +246,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
   it('degrades a checkpoint file to time-of-day-only (no error) when the Finish file\'s time-mode ModeStart row is missing', async () => {
     const noStart = finishRow();
     noStart.device.lines = noStart.device.lines.filter(l => l.action !== 'ModeStart');
+    noStart.device.resolvedLines = noStart.device.lines; // keep the two in sync — see finishRow()'s own doc
     const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
     ] } });

@@ -9,7 +9,7 @@
 
 import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
-import { escHtml } from '../utils.js';
+import { escHtml, formatElapsedSeconds } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf } from '../mobile-files-shared.js';
 import { buildSegmentView, whenOf, locationSummary, formatCount, flattenDevices } from '../mobile-files-devices.js';
@@ -47,7 +47,7 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
       <td>${bib ? whenOf(bib) : ''}</td>
       <td>${bib ? escHtml(bib.note ?? '') : ''}</td>
       <td>${time ? escHtml(time.action) : ''}</td>
-      <td>${time ? escHtml(time.splitTime ?? '') : ''}</td>
+      <td>${time && time.splitTime != null ? formatElapsedSeconds(time.splitTime) : ''}</td>
       <td>${time ? whenOf(time) : ''}</td>
       <td>${time ? escHtml(time.note ?? '') : ''}</td>
     </tr>`).join('');
@@ -84,6 +84,9 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
 }
 
 // Raw listing — every field of every line, unfiltered and unfolded, straight from the file.
+// Always called with a device's own `device.lines` (never `device.resolvedLines` — see
+// flattenDevices()'s own doc in mobile-files-devices.js), so there's no client-computed field to
+// strip here: whatever keys these lines actually carry are shown, exactly as stored.
 export function showRawModal(owner, raceLabel, deviceName, lines) {
   const fields = [...new Set(lines.flatMap(r => Object.keys(r)))];
   const sorted = [...lines].sort((a, b) => (a.lineNumber ?? 0) - (b.lineNumber ?? 0));

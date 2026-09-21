@@ -8,7 +8,7 @@
 import { getSortedEntries } from './entries.js';
 import { entryInfo, getConflictedBibs } from './safety.js';
 import { getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, CP_RETIRE } from './mobile-checkpoints.js';
-import { secondsToTime } from './utils.js';
+import { secondsToTime, formatElapsedSeconds } from './utils.js';
 import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
 import { byLineNumber, setLastSyncedLineNumber } from './mobile-files-shared.js';
 import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
@@ -37,13 +37,6 @@ const BIB_REQUIRED_FINISHER_ACTIONS = new Set(['Start', 'Finish', 'DNF', 'Pass']
 // own doc above for why the wire rename doesn't touch the OUTPUT vocabulary) and ordinary Split
 // rows pair with a bib.
 const TRANSFERABLE_TIME_ACTIONS = new Set(['ModeStart', 'Split']);
-
-// "HH:MM:SS.CC" (elapsed, as stored in splitTime) → "HH:MM:SS" — finishers.js's own
-// parseFinishTime() splits on any non-digit run and rejects more than 3 numeric parts, so a
-// trailing ".CC" must be stripped before it's usable as a finisher time.
-function stripCentiseconds(splitTime) {
-  return (splitTime || '').split('.')[0];
-}
 
 // "yyyy/MM/dd HH:mm:ss" (the phone's own local time) → epoch millis, for the timestamp
 // arithmetic checkpoint times need (see computeCpTimes below). Returns null on anything
@@ -214,10 +207,15 @@ function expectedFinisherEntries(bibs, times, startMs) {
           if (elapsed >= 0) time = secondsToTime(elapsed);
         }
       }
-    } else if (action === 'Clock') {
+    } else if (action === 'Clock' && b.action === 'Clock') {
+      // A genuine wire "Clock" action (Bibs mode's own operator-typed manual clock reading) —
+      // its own note is a real free-text time value. A ModeStart row also maps to this same
+      // output action (see BIBS_ACTION_TO_FINISHER's own doc) but its `note` is now the
+      // explicit mode name (see SyncRecord's own doc), never a time reading — must not be read
+      // here, so it falls through to the plain '' default below instead.
       time = b.note || '';
     } else {
-      time = paired ? stripCentiseconds(paired.splitTime) : '';
+      time = paired?.splitTime != null ? formatElapsedSeconds(paired.splitTime) : '';
     }
     // Only actually carried when non-empty (Start/DNF with a usable device timestamp) — keeps
     // every other entry's shape exactly as before rather than padding it with a field it has no
@@ -289,18 +287,20 @@ export async function clearProgressData() {
 // Splits one selected row's own lines into one segment per location it's recorded at — a
 // relocated device's file can span more than one (see mobile-files-devices.js's own
 // flattenDevices() doc) — so each location buckets independently below, exactly as if it were
-// its own separate file. Each row's own `.location` is already resolved per-row by
-// flattenDevices()'s own withResolvedLocations() call (mobile-files-devices.js) before `selected`
-// ever reaches here, so filtering straight on it keeps buildSegmentView()'s own RESET-boundary
-// logic correctly scoped to just that location, with no separate segment-boundary reconstruction
-// needed here. A device with no location recorded at all (locations.length === 0) still gets
-// exactly one segment, its whole (unfiltered) lines — the existing "no location recorded" error
-// below is what catches that, same as before this split existed.
+// its own separate file. Reads `r.device.resolvedLines` — each row's own `.location`, already
+// resolved per-row by flattenDevices()'s own withResolvedLocations() call — never
+// `r.device.lines` (the genuinely raw array that function keeps apart from it specifically so
+// this kind of "current, interpreted picture" work doesn't get the raw one by mistake): filtering
+// straight on `.location` keeps buildSegmentView()'s own RESET-boundary logic correctly scoped to
+// just that location, with no separate segment-boundary reconstruction needed here. A device with
+// no location recorded at all (locations.length === 0) still gets exactly one segment, its whole
+// (unfiltered) lines — the existing "no location recorded" error below is what catches that, same
+// as before this split existed.
 function locationSegmentsOf(r) {
-  const { timeSegment, bibsSegment } = buildSegmentView(r.device.lines);
+  const { timeSegment, bibsSegment } = buildSegmentView(r.device.resolvedLines);
   const locations = distinctLocationsOf([...timeSegment, ...bibsSegment]);
-  if (!locations.length) return [{ r, location: null, lines: r.device.lines }];
-  return locations.map(location => ({ r, location, lines: r.device.lines.filter(l => l.location === location) }));
+  if (!locations.length) return [{ r, location: null, lines: r.device.resolvedLines }];
+  return locations.map(location => ({ r, location, lines: r.device.resolvedLines.filter(l => l.location === location) }));
 }
 
 export async function validateAndCompute(selected) {

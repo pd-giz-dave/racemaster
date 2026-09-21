@@ -9,18 +9,17 @@ import {
   byLineNumber, computeIncorporationStatus, getBleLastSeen, laterIso, latestLineTimestamp, parsePhoneTimestamp,
 } from './mobile-files-shared.js';
 
-// ---- Location resolution (mirrors racemaster-mobile's SyncRecordMapping.withResolvedLocations,
-// now generalised to three marker actions instead of one) ----
+// ---- Location resolution (mirrors racemaster-mobile's SyncRecordMapping's own doc) ----
 //
-// A device's location is constant except at three boundary-marker rows — 'Setup' (Setup Race),
-// 'ModeStart' (a mode being started/reset) and 'Location' (an explicit mid-race relocation) —
-// each of which carries the location as of that point in its own `note` field (racemaster-
-// mobile's RaceRepository.recordSetupMarker/TimeModeRepository.startStopwatch/BibsModeRepository.
-// startBibsMode/CpModeRepository.startCpMode/insertLocationMarkerAndReset). The wire/stored line
-// shape no longer carries a `location` field of its own at all (see racemaster-mobile's
-// SyncRecord doc) — this walks a device's lines once, in lineNumber order, tracking the most
-// recent such marker's `note` as the running "current location", and stamps every row with it.
-const LOCATION_MARKER_ACTIONS = new Set(['Setup', 'ModeStart', 'Location']);
+// A device's location is constant except at 'Location' boundary-marker rows (Setup Race and
+// Relocate both write one, immediately followed by their own ModeStart — see racemaster-mobile's
+// RaceRepository.recordModeStart), which carry the location as of that point in their own `note`
+// field. ModeStart's own `note` carries the explicit mode name instead now (see SyncRecord's own
+// doc) — only 'Location' rows carry location. The wire/stored line shape no longer carries a
+// `location` field of its own at all — this walks a device's lines once, in lineNumber order,
+// tracking the most recent Location marker's `note` as the running "current location", and
+// stamps every row with it.
+const LOCATION_MARKER_ACTIONS = new Set(['Location']);
 
 export function withResolvedLocations(lines, initialLocation = 'Finish') {
   let current = initialLocation;
@@ -68,70 +67,45 @@ export function formatCount(visible, expected) {
   return (expected || visible > 0) ? String(visible) : '';
 }
 
-// A Bibs-family row with no real bib of its own — the family's own ModeStart marker (bibs
-// variant: action:'ModeStart' with bibNumber:'n/a' — the mobile app sends 'n/a' rather than null,
-// since null is already reserved as the Time-family discriminator — see server/mobile.js's own
-// doc) — carries a blank/'n/a' bibNumber, never a real one, and must not inflate the "Bibs"
-// visible count as if a bib had actually been recorded. Checked both by action (action:'ModeStart'
-// is never a real bib, whatever value it happens to carry) and by value (blank/null/'n/a', for a
-// genuinely corrupt row, or an old file predating the ModeStart convention entirely) — either is
-// enough on its own to exclude a row here. There's no longer a separate mode-agnostic "Setup"
-// record to also account for — ToDo.MD: "drop the 'Setup' record from the device file, its no
-// longer created, there will always be a modestart record" — a brand new, not-yet-synced device
-// simply has zero lines at all until its first real ModeStart arrives (see flattenDevices() below
-// for how that shows up: blank on both counts, same outcome the old Setup record used to
-// produce, just without a line of its own to represent it).
+// A Bibs-family row with no real bib of its own — the family's own ModeStart marker (bibNumber
+// always null now — see SyncRecord's own doc, mode is declared in `note` instead) must not
+// inflate the "Bibs" visible count as if a bib had actually been recorded. A brand new, not-yet-
+// synced device simply has zero lines at all until its first real ModeStart arrives (see
+// flattenDevices() below for how that shows up: blank on both counts).
 function hasRealBib(r) {
-  if (r.action === 'ModeStart') return false;
-  if (r.bibNumber == null) return false;
-  const s = String(r.bibNumber).trim();
-  return s !== '' && s.toLowerCase() !== 'n/a';
+  return r.action !== 'ModeStart' && r.bibNumber != null;
 }
 
-// The Time family's own equivalent ModeStart marker (time variant: action:'ModeStart', splitTime
-// either the literal 'n/a' sentinel or a real-looking placeholder value — see this file's own
-// latestStartedAt for where the marker itself is read) must not inflate the "Time" visible count
-// as if a split had actually been recorded. Same dual action-or-value check as hasRealBib above,
-// for the same reason: whichever convention a given marker actually uses, either check alone is
-// enough to exclude it. Deliberately still kept IN the segment itself (findStartTimestamp in
+// The Time family's own equivalent — its ModeStart marker's splitTime is always null now too
+// (see SyncRecord's own doc) and must not inflate the "Time" visible count as if a split had
+// actually been recorded. Deliberately still kept IN the segment itself (findStartTimestamp in
 // mobile-files-progress.js, and this file's own latestStartedAt, both need it) — only excluded
 // from the "Time" visible COUNT, so a Time-mode device with nothing but its own ModeStart marker
 // correctly shows a split count of 0 rather than 1.
 function hasRealSplit(r) {
-  if (r.action === 'ModeStart') return false;
-  if (r.splitTime == null) return false;
-  const s = String(r.splitTime).trim();
-  return s !== '' && s.toLowerCase() !== 'n/a';
+  return r.action !== 'ModeStart' && r.splitTime != null;
 }
 
-// Whether Bibs are genuinely expected on this device at all — ANY bibsSegment row with a
-// non-null bibNumber, real or the bibs ModeStart marker's own 'n/a' sentinel, asserts it (a
-// modestart record with a bib of 'n/a' IS a bibs expectation, per ToDo.MD). An empty bibsSegment
-// (nothing recorded on this family at all — including no ModeStart of its own, e.g. a brand new
-// device with no lines yet) correctly asserts nothing, now that there's no longer a separate
-// "Setup" record whose own bibNumber:null needed excluding as a special case.
+// Whether Bibs/Time are genuinely expected on this device at all — driven purely by the file's
+// own latest ModeStart record's explicit mode declaration in `note` (see SyncRecord's own doc;
+// AppMode.wireName() on the mobile side) rather than inspecting bibNumber/splitTime anywhere —
+// every real device file now always carries a ModeStart marker (mode selection is mandatory at
+// Setup Race), so there's no longer a realistic case where real entries exist without one
+// already having declared the family; no segment-inspection fallback is kept.
 //
 // `modeStart` (the file's own latest ModeStart record, whole-file — see latestModeStart() below —
 // not just the post-Reset segment) covers ToDo.MD's "when a race has been reset in a device file,
 // the latest modestart record is still valid wrt the location and mode": a Reset with no fresh
 // marker immediately following it (the phone's own convention is to write one right away, but
-// this must degrade gracefully rather than assume that always holds) would otherwise empty out
-// bibsSegment entirely, wrongly reporting "never expected" for a device that plainly declared its
-// own mode moments earlier.
-function isBibsExpected(bibsSegment, modeStart) {
-  if (modeStart?.bibNumber != null) return true;
-  return bibsSegment.some(r => r.bibNumber != null);
+// this must degrade gracefully rather than assume that always holds) would otherwise leave this
+// with nothing to go on, wrongly reporting "never expected" for a device that plainly declared
+// its own mode moments earlier.
+function isBibsExpected(modeStart) {
+  return modeStart?.note === 'Bibs' || modeStart?.note === 'CP';
 }
 
-// Whether Splits are genuinely expected on this device — every timeSegment row already has a
-// real (non-null) splitTime by construction (see buildSegmentView's own splitTime!=null filter),
-// so any row at all here — the ModeStart marker included — already satisfies ToDo.MD's "a
-// modestart record with a blank bib and a non-blank split time is a splits expectation".
-// `modeStart` — see isBibsExpected's own doc just above — covers the same "still valid across a
-// markerless Reset" case for the Time family.
-function isTimeExpected(timeSegment, modeStart) {
-  if (modeStart?.splitTime != null) return true;
-  return timeSegment.length > 0;
+function isTimeExpected(modeStart) {
+  return modeStart?.note === 'Time';
 }
 
 // The device's (or, once split by location, this location-group's) own latest ModeStart record,
@@ -155,9 +129,18 @@ function latestModeStart(lines) {
 // diff against or patch around what's already there — it just wipes Finishers and rebuilds from
 // the segment. Exported: mobile-files-progress.js's own validateAndCompute() resolves each
 // selected file's segment the same way js/views/mobile-files-devices.js's showDeviceModal() does.
+// A real (non-marker) row's own splitTime nullness is still the genuine structural signal for
+// which family it belongs to (a real Time row always has one, a real Bibs/CP row never does) —
+// unchanged. A ModeStart row's own splitTime is always null now regardless of mode (see
+// SyncRecord's own doc), so its placement instead reads its own explicit mode declaration.
+function isTimeFamilyRow(r) {
+  if (r.action === 'ModeStart') return r.note === 'Time';
+  return r.splitTime != null;
+}
+
 export function buildSegmentView(lines) {
-  const timeRows = lines.filter(r => r.splitTime != null);
-  const bibsRows = lines.filter(r => r.splitTime == null);
+  const timeRows = lines.filter(isTimeFamilyRow);
+  const bibsRows = lines.filter(r => !isTimeFamilyRow(r));
   return {
     timeSegment: foldLatestVisible(currentSegment(timeRows)).sort(byLineNumber),
     bibsSegment: foldLatestVisible(currentSegment(bibsRows)).sort(byLineNumber),
@@ -275,20 +258,27 @@ function locationSortKey(rawLocation) {
 // genuinely span more than one location again. This function still returns one row per device —
 // `location` stays the single current/latest value (for sorting), and the new `locations` field
 // carries the full course-ordered list for the "Where" column. js/views/mobile-files.js's `view`
-// handlers use `locations` to decide whether to prompt before narrowing `device.lines` down to
-// one location's own rows (each row's own `.location` — resolved here, once, via
+// handlers use `locations` to decide whether to prompt before narrowing `device.resolvedLines`
+// down to one location's own rows (each row's own `.location` — resolved here, once, via
 // withResolvedLocations(), since the wire/stored shape no longer carries the field itself — says
 // which station it belongs to, so no further client-side segment-boundary reconstruction is
 // needed downstream).
+//
+// `device.lines` is deliberately left exactly as received — genuinely raw, whatever arrived over
+// the wire/from the server, no field added or changed. The resolved (location-stamped) view lives
+// on its own, `device.resolvedLines`, so a consumer wanting "what's actually stored" (Raw, Push)
+// and one wanting "the current, interpreted picture" (View, Update Progress's own
+// locationSegmentsOf() in mobile-files-progress.js) each read the one that's actually theirs,
+// rather than both being handed the same post-processed array with no way to tell which they got.
 export function flattenDevices(races) {
   const rows = [];
   for (const race of races) {
     const prepared = race.devices.map(rawDevice => {
-      const device = { ...rawDevice, lines: withResolvedLocations(rawDevice.lines) };
-      const { timeSegment, bibsSegment } = buildSegmentView(device.lines);
-      const modeStart = latestModeStart(device.lines);
-      // modeStart folded in alongside the post-Reset segment — not just as an isBibsExpected/
-      // isTimeExpected fallback (see their own doc), but here too: a Reset with no fresh marker
+      const resolvedLines = withResolvedLocations(rawDevice.lines);
+      const device = { ...rawDevice, resolvedLines };
+      const { timeSegment, bibsSegment } = buildSegmentView(resolvedLines);
+      const modeStart = latestModeStart(resolvedLines);
+      // modeStart folded in alongside the post-Reset segment — a Reset with no fresh marker
       // immediately following it would otherwise leave both segments empty, wrongly showing this
       // row's own Where column as blank ("—") even though the last ModeStart record still knows
       // exactly where this device is (ToDo.MD: "the latest modestart record is still valid wrt
@@ -318,8 +308,8 @@ export function flattenDevices(races) {
         locations,
         bibsVisible: bibsSegment.filter(hasRealBib).length,
         timeVisible: timeSegment.filter(hasRealSplit).length,
-        bibsExpected: isBibsExpected(bibsSegment, modeStart),
-        timeExpected: isTimeExpected(timeSegment, modeStart),
+        bibsExpected: isBibsExpected(modeStart),
+        timeExpected: isTimeExpected(modeStart),
         lastSeen: laterIso(device.lastSeen, getBleLastSeen(race.owner, race.raceLabel, device.name)),
         lastUpdate: latestLineTimestamp(device.lines),
         // Reuses the modeStart already resolved above rather than calling latestStartedAt(lines)
