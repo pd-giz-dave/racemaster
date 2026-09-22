@@ -432,6 +432,45 @@ describe('mule-ble.js:connectToPhone + pullFromConnectedPhone (fake GATT)', () =
     assert.equal(isConnected(), false);
   });
 
+  it('pulls from scratch and resets the cursor when the phone\'s own lastLineNumber has dropped below it', async (t) => {
+    // Reproduces the real-world bug: our own stored cursor is stale-high (8) from a race that
+    // was since deleted and recreated under the same label — the phone's current race genuinely
+    // only has 2 lines. Requesting "since 8" would return nothing and silently miss the new
+    // race forever; the decrease itself must be recognized and treated as a reset signal.
+    localStorage.setItem('racemaster-ble-last-pulled', JSON.stringify({ 'dev1 test-race': 8 }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0, pollIntervalMs: 5000, lastLineNumber: 2 };
+    let lastRequest = null;
+    const device = makeFakePhone({
+      deviceInfo,
+      recordsByRequest: (req) => {
+        lastRequest = req;
+        return [
+          { action: 'NewRace', lineNumber: 1, timestampMillis: 1_700_000_000_000 },
+          { action: 'Split', splitNumber: 1, lineNumber: 2, timestampMillis: 1_700_000_000_001 },
+        ];
+      },
+    });
+    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
+
+    const connectPromise = connectToPhone();
+    await settleConnectRetry(t);
+    await connectPromise;
+    const pullPromise = pullFromConnectedPhone();
+    await settleOnePull(t);
+    const results = await pullPromise;
+
+    assert.equal(lastRequest.sinceLineNumber, 0); // reset, not the stale cursor (8)
+    assert.equal(results[0].lines.length, 2);
+    assert.equal(results[0].lines[0].action, 'NewRace');
+
+    // The cursor now correctly reflects the new race's own max (2), not stuck at the old 8.
+    const cursors = JSON.parse(localStorage.getItem('racemaster-ble-last-pulled'));
+    assert.equal(cursors['dev1 test-race'], 2);
+
+    disconnectPhone();
+  });
+
   it('files a pulled device by its own bare, sanitised name — no location suffix', async (t) => {
     // A relocation mid-race is now a real, undoable HistoryAction.LOCATION entry within the same
     // race/file (racemaster-mobile's own RaceRepository.relocateActiveModes), not a new race

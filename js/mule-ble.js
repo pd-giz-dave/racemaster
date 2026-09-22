@@ -1491,10 +1491,25 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [], adopt
     const raceLabel = sanitiseName(deviceInfo.raceLabel);
     const deviceName = sanitiseName(deviceInfo.deviceName || deviceInfo.deviceId) || 'unknown-device';
     const since = getLastPulledLineNumber(deviceInfo.deviceId, raceLabel);
+    // A decrease is impossible under normal monotonic operation — the only way this phone's
+    // own reported lastLineNumber can be LOWER than our already-pulled cursor is if its race
+    // identity was reset out from under us (a local race deleted and recreated under the same
+    // label — see the mobile app's HistoryAction.NEW_RACE). Reset our own cursor and pull from
+    // scratch in that case; continuing to request "since <our now-stale, too-high cursor>"
+    // would return nothing and silently miss the new race — including its own NewRace marker —
+    // forever. advanceLastPulledLineNumber below only ever moves the cursor forward, so without
+    // this explicit reset a correctly-fetched low-numbered pull would never actually update it.
+    // Guarded on `typeof === 'number'`, not just falsy/nullish coalescing to 0 — a DeviceInfo
+    // payload that genuinely omits this field (an older phone build) must never be treated the
+    // same as a genuine "0" (a confirmed-empty race), which would otherwise force every single
+    // poll into a full re-pull forever the moment our own cursor ever advances past 0.
+    const raceLikelyReset = typeof deviceInfo.lastLineNumber === 'number' && deviceInfo.lastLineNumber < since;
+    if (raceLikelyReset) resetLastPulledLineNumber(deviceInfo.deviceId, raceLabel);
+    const effectiveSince = raceLikelyReset ? 0 : since;
     try {
       const ownLines = await withGattRecovery(connectedName, () => pullOne(service, {
-        sinceLineNumber: since,
-        requestKey: computeRequestKey(null, null, since),
+        sinceLineNumber: effectiveSince,
+        requestKey: computeRequestKey(null, null, effectiveSince),
       }, connectedName));
       advanceLastPulledLineNumber(deviceInfo.deviceId, raceLabel, ownLines);
       // originDeviceId/originRaceLabel null: this leg is the connected phone's own race, not a
@@ -1689,12 +1704,17 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [], adopt
     const raceLabel = sanitiseName(relay.originRaceLabel);
     const deviceName = sanitiseName(relay.originDeviceName || relay.originDeviceId) || 'unknown-device';
     const since = getLastPulledLineNumber(relay.originDeviceId, raceLabel);
+    // See the identical check above (own-race leg) — a decrease means the origin device's race
+    // was reset out from under this whole relay chain. Same typeof guard, same reasoning.
+    const raceLikelyReset = typeof relay.lastLineNumber === 'number' && relay.lastLineNumber < since;
+    if (raceLikelyReset) resetLastPulledLineNumber(relay.originDeviceId, raceLabel);
+    const effectiveSince = raceLikelyReset ? 0 : since;
     try {
       const lines = await withGattRecovery(relayDeviceLabel, () => pullOne(service, {
-        sinceLineNumber: since,
+        sinceLineNumber: effectiveSince,
         originDeviceId: relay.originDeviceId,
         originRaceLabel: relay.originRaceLabel,
-        requestKey: computeRequestKey(relay.originDeviceId, relay.originRaceLabel, since),
+        requestKey: computeRequestKey(relay.originDeviceId, relay.originRaceLabel, effectiveSince),
       }, relayDeviceLabel));
       advanceLastPulledLineNumber(relay.originDeviceId, raceLabel, lines);
       results.push({ raceLabel, deviceName, deviceId: relay.originDeviceId, originDeviceId: relay.originDeviceId, originRaceLabel: relay.originRaceLabel, lines });

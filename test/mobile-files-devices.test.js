@@ -272,6 +272,33 @@ describe('mobile-files-devices.js:withResolvedLocations', () => {
     ];
     assert.deepEqual(withResolvedLocations(rows, 'Finish').map(r => r.location), ['Finish', 'Finish']);
   });
+
+  // A NewRace marker (racemaster-mobile's HistoryAction.NEW_RACE) is always a race's own very
+  // first line, written before even its own initial LOCATION marker — deliberately
+  // location-agnostic, since its real location arrives moments later via that LOCATION row.
+  // Without this, it would inherit the `initialLocation` default ("Finish") and get misreported
+  // as if it happened there, even when the device's real (and only) location is something else
+  // entirely — confirmed in the field via a spurious "Finish" entry in the Devices list's Where
+  // column for a device that had only ever recorded at CP1.
+  it('a NewRace marker is location-agnostic — never inherits the initial-location default', () => {
+    const rows = [
+      { action: 'NewRace', lineNumber: 1 },
+      { action: 'Location', note: 'CP1', lineNumber: 2 },
+      { action: 'ModeStart', note: 'CP', lineNumber: 3 },
+    ];
+    const resolved = withResolvedLocations(rows, 'Finish');
+    assert.equal(resolved[0].location, null);
+    assert.deepEqual(resolved.slice(1).map(r => r.location), ['CP1', 'CP1']);
+  });
+
+  it('a NewRace marker never pollutes distinctLocationsOf with the initial-location default', () => {
+    const rows = withResolvedLocations([
+      { action: 'NewRace', lineNumber: 1 },
+      { action: 'Location', note: 'CP1', lineNumber: 2 },
+      { action: 'Pass', bibNumber: 101, lineNumber: 3 },
+    ], 'Finish');
+    assert.deepEqual(distinctLocationsOf(rows), ['CP1']);
+  });
 });
 
 describe('mobile-files-devices.js:flattenDevices', () => {

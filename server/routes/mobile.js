@@ -117,6 +117,14 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
   // whatever's already stored — see the merge loop below; a section for a device not
   // present in this push is left untouched.
   //
+  // Exception: a "NewRace" record anywhere in a device's own section (racemaster-mobile's
+  // HistoryAction.NEW_RACE — always that device's own very first history line for a brand-new
+  // race) means this file's whole existing content is from a DIFFERENT, since-superseded race
+  // that merely reused the same label — a local race deleted and recreated under an identical
+  // name (confirmed in the field: a genuine Stop permanently masked by a stale Reset left over
+  // from an earlier race at the very same lineNumber). Wipe that device's file and write only
+  // this push's own records in that case, instead of merging — see the loop below.
+  //
   // ┌──────────────────────────────────────────────────────────────────────────────────┐
   // │ ⚠️  BIG FAT WARNING — DO NOT ADD `await` BETWEEN readMobileDeviceFile AND         │
   // │ writeMobileDeviceFile BELOW. Multiple phones/mules can legitimately push to the  │
@@ -168,7 +176,16 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       deviceCount++;
       received += records.length;
 
-      const current = readMobileDeviceFile(username, raceLabel, deviceName);
+      const previousFile = readMobileDeviceFile(username, raceLabel, deviceName);
+      // See this route's own doc above — a NewRace marker means whatever's already stored is
+      // stale, from a different race that reused this exact label. Checked against the RAW
+      // records (before coerce()'s own 'Finish' fallback applies to a missing/falsy action),
+      // same as every other field this loop reads off them.
+      const startingFresh = records.some(r => r?.action === 'NewRace');
+      if (startingFresh && previousFile.length > 0) {
+        console.log(`[mobile-sync] ${username}/${raceLabel}/${deviceName}: NewRace marker — discarding ${previousFile.length} stale line(s) from a previous race under this label`);
+      }
+      const current = startingFresh ? [] : previousFile;
       const previousLineNumbers = new Set(current.map(r => r.lineNumber).filter(n => Number.isFinite(n)));
       const genuinelyNew = records.map(coerce).filter(r => Number.isFinite(r.lineNumber) && !previousLineNumbers.has(r.lineNumber));
       added += genuinelyNew.length;
@@ -178,6 +195,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       // payload. lineNumber still backstops dedup for a re-sent/overlapping range — this file
       // is already scoped to one device (its own filename), so a bare lineNumber is already
       // unambiguous here, the same way the /status route's own maxLineNumber cursor treats it.
+      // (startingFresh's own `current = []` above makes this a full replace in that one case.)
       writeMobileDeviceFile(username, raceLabel, deviceName, [...current, ...genuinelyNew]);
     }
 

@@ -268,9 +268,20 @@ export function getPendingMobileFiles() {
 export function savePendingMobileFile(owner, raceLabel, deviceName, deviceId, lines) {
   const list = loadPendingMobileFiles();
   const existing = list.find(f => f.owner === owner && f.raceLabel === raceLabel && f.deviceName === deviceName);
-  if (existing) {
+  // A "NewRace" marker anywhere in this freshly-pulled batch (see the mobile app's
+  // HistoryAction.NEW_RACE) means whatever's already pending for this exact identity is from a
+  // different, since-superseded race that merely reused the same label — replace it outright
+  // instead of append-merging, mirroring the server's own wipe-not-merge rule for the same
+  // signal (server/routes/mobile.js) — this is exactly the local stand-in for that server-side
+  // merge while it's unreachable, so it must not let stale content survive underneath it.
+  const startingFresh = lines.some(l => l?.action === 'NewRace');
+  if (existing && !startingFresh) {
     const seenLineNumbers = new Set(existing.lines.map(l => l.lineNumber).filter(n => Number.isFinite(n)));
     existing.lines = [...existing.lines, ...lines.filter(l => Number.isFinite(l.lineNumber) && !seenLineNumbers.has(l.lineNumber))];
+    existing.deviceId = deviceId;
+    existing.pulledAt = new Date().toISOString();
+  } else if (existing) {
+    existing.lines = lines;
     existing.deviceId = deviceId;
     existing.pulledAt = new Date().toISOString();
   } else {

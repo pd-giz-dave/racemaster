@@ -19,6 +19,39 @@ function seedPending(files) {
   localStorage.setItem('racemaster-pending-mobile', JSON.stringify(files));
 }
 
+describe('storage.js:savePendingMobileFile', () => {
+  beforeEach(() => {
+    installLocalStorageMock();
+  });
+
+  it('append-merges into an existing pending entry, deduped by lineNumber', () => {
+    seedPending([{ owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ lineNumber: 1 }], pulledAt: '2026-01-01T00:00:00.000Z' }]);
+
+    storage.savePendingMobileFile('me', 'r1', 'PhoneA', 'a', [{ lineNumber: 1 }, { lineNumber: 2 }]);
+
+    const [entry] = storage.getPendingMobileFiles();
+    assert.deepEqual(entry.lines.map(l => l.lineNumber), [1, 2]);
+  });
+
+  it('a NewRace marker replaces the whole pending entry instead of merging with stale content', () => {
+    // The pending entry here is from a different, since-superseded race that happened to reuse
+    // the same label — merging would leave its stale rows sitting alongside the new race's.
+    seedPending([{ owner: 'me', raceLabel: 'r1', deviceName: 'PhoneA', deviceId: 'a', lines: [{ action: 'Reset', lineNumber: 1 }], pulledAt: '2026-01-01T00:00:00.000Z' }]);
+
+    storage.savePendingMobileFile('me', 'r1', 'PhoneA', 'a', [{ action: 'NewRace', lineNumber: 1 }, { action: 'Stop', lineNumber: 2 }]);
+
+    const [entry] = storage.getPendingMobileFiles();
+    assert.deepEqual(entry.lines.map(l => l.action), ['NewRace', 'Stop']);
+  });
+
+  it('a NewRace marker with no existing pending entry just creates one normally', () => {
+    storage.savePendingMobileFile('me', 'r1', 'PhoneA', 'a', [{ action: 'NewRace', lineNumber: 1 }]);
+
+    const [entry] = storage.getPendingMobileFiles();
+    assert.equal(entry.lines.length, 1);
+  });
+});
+
 describe('storage.js:flushPendingMobileFiles', () => {
   beforeEach(() => {
     installLocalStorageMock();

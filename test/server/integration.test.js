@@ -249,6 +249,45 @@ describe('server integration: mobile sync', () => {
     const race = list.find(r => r.raceLabel === raceLabel);
     assert.equal(race.recordCount, 1);
   });
+
+  it('a NewRace marker wipes a device\'s stale stored file instead of merging with it', async () => {
+    // Reproduces the real-world bug this exists to fix: a local race deleted and recreated
+    // under the exact same label pushes its own fresh, low-numbered history — without this,
+    // its lineNumber 1 would collide with (and be silently dropped in favor of) the old race's
+    // already-stored lineNumber 1, permanently masking the new race's real data.
+    const token = await createAndLogin('mobile-newrace-user');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'integration-newrace-race';
+
+    // First race: a genuine Reset at lineNumber 1.
+    const firstPush = await fetch(`${base}/api/mobile/${raceLabel}`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ devices: { PhoneA: [{ action: 'Reset', lineNumber: 1 }] } }),
+    });
+    assert.deepEqual(await firstPush.json(), { ok: true, added: 1, received: 1, version: 1 });
+
+    // Second, unrelated race reusing the same label: its own fresh history starts with a
+    // NewRace marker, then a genuine Stop, both at lineNumbers the old race already "has".
+    const secondPush = await fetch(`${base}/api/mobile/${raceLabel}`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        devices: { PhoneA: [{ action: 'NewRace', lineNumber: 1 }, { action: 'Stop', lineNumber: 2 }] },
+      }),
+    });
+    // Both records are genuinely new to the wiped file, not just the one past the old max.
+    assert.deepEqual(await secondPush.json(), { ok: true, added: 2, received: 2, version: 1 });
+
+    const status = await (await fetch(`${base}/api/mobile/${raceLabel}/status`, { headers: auth })).json();
+    assert.deepEqual(status, { phonea: 2 });
+
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === raceLabel);
+    assert.equal(race.recordCount, 2);
+    const phoneA = race.devices.find(d => d.name.toLowerCase() === 'phonea');
+    // The old Reset must be genuinely gone (wiped), not merged alongside the new content.
+    assert.equal(phoneA.lines.some(r => r.action === 'Reset'), false);
+    assert.deepEqual(phoneA.lines.map(r => r.action), ['NewRace', 'Stop']);
+  });
 });
 
 describe('server integration: progress', () => {

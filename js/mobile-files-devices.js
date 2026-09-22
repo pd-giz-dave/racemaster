@@ -25,6 +25,13 @@ export function withResolvedLocations(lines, initialLocation = 'Finish') {
   let current = initialLocation;
   return [...lines].sort(byLineNumber).map(r => {
     if (LOCATION_MARKER_ACTIONS.has(r.action) && r.note) current = r.note;
+    // NewRace (racemaster-mobile's HistoryAction.NEW_RACE) is always a race's own very first
+    // line, deliberately location-agnostic — its real location arrives moments later via the
+    // LOCATION marker that always immediately follows it (same recordModeStart transaction).
+    // Stamping it with whatever `current` happens to be (the `initialLocation` default, on a
+    // brand-new race) would misreport it as if it happened there — confirmed in the field: a
+    // device's Where column showing a spurious "Finish" entry alongside its real location.
+    if (r.action === 'NewRace') return { ...r, location: null };
     return { ...r, location: current };
   });
 }
@@ -71,9 +78,11 @@ export function formatCount(visible, expected) {
 // always null now — see SyncRecord's own doc, mode is declared in `note` instead) must not
 // inflate the "Bibs" visible count as if a bib had actually been recorded. A brand new, not-yet-
 // synced device simply has zero lines at all until its first real ModeStart arrives (see
-// flattenDevices() below for how that shows up: blank on both counts).
+// flattenDevices() below for how that shows up: blank on both counts). NewRace (racemaster-
+// mobile's HistoryAction.NEW_RACE — always a race's own first line, bibNumber always null) gets
+// the same treatment, same reasoning.
 function hasRealBib(r) {
-  return r.action !== 'ModeStart' && r.bibNumber != null;
+  return r.action !== 'ModeStart' && r.action !== 'NewRace' && r.bibNumber != null;
 }
 
 // The Time family's own equivalent — its ModeStart marker's splitTime is always null now too
@@ -81,9 +90,10 @@ function hasRealBib(r) {
 // actually been recorded. Deliberately still kept IN the segment itself (findStartTimestamp in
 // mobile-files-progress.js, and this file's own latestStartedAt, both need it) — only excluded
 // from the "Time" visible COUNT, so a Time-mode device with nothing but its own ModeStart marker
-// correctly shows a split count of 0 rather than 1.
+// correctly shows a split count of 0 rather than 1. NewRace gets the same exclusion, same
+// reasoning as hasRealBib above.
 function hasRealSplit(r) {
-  return r.action !== 'ModeStart' && r.splitTime != null;
+  return r.action !== 'ModeStart' && r.action !== 'NewRace' && r.splitTime != null;
 }
 
 // Whether Bibs/Time are genuinely expected on this device at all — driven purely by the file's

@@ -289,6 +289,24 @@ describe('mobile-files-shared.js:mergePendingIntoRaces', () => {
     assert.equal(merged[0].raceLabel, 'race-a-26-08-30');
     assert.deepEqual(merged[0].raceDate, { yy: '26', mm: '08', dd: '30' });
   });
+
+  it('a NewRace marker in the pending entry ignores the server\'s stale lines instead of merging with them', () => {
+    // The server's own copy here is from a different, since-superseded race that reused the
+    // same label — its push hasn't landed yet (this device is still offline), so the server's
+    // own reported lineNumber 1 must not mask the pending entry's own fresh NewRace marker at
+    // the same number.
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Phone One', lines: [{ action: 'Reset', lineNumber: 1 }] }],
+    }];
+    const pending = [{
+      owner: 'alice', raceLabel: 'race-a', deviceName: 'Phone One', deviceId: 'dev1', pulledAt: '2026-08-30T10:00:00.000Z',
+      lines: [{ action: 'NewRace', lineNumber: 1 }, { action: 'Stop', lineNumber: 2 }],
+    }];
+    const merged = mergePendingIntoRaces(races, pending);
+    const device = merged[0].devices.find(d => d.name === 'Phone One');
+    assert.deepEqual(device.lines.map(l => l.action), ['NewRace', 'Stop']);
+  });
 });
 
 describe('mobile-files-shared.js:byLineNumber', () => {

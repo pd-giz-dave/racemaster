@@ -269,7 +269,16 @@ export function mergePendingIntoRaces(races, pending) {
       merged.push(race);
     }
     const known = race.devices.find(d => d.name === p.deviceName);
-    const knownLines = known ? known.lines : [];
+    // A NewRace marker in the pending entry's own lines (see storage.js's savePendingMobileFile
+    // — it's already been wiped-and-replaced there, so p.lines is the new race's own fresh,
+    // correct content) means whatever the server has reported for this device is from a
+    // different, since-superseded race that reused the same label — the server hasn't applied
+    // its own wipe yet (this push hasn't landed), so merging with it here would resurrect the
+    // very staleness this whole mechanism exists to prevent, e.g. the old race's lineNumber 1
+    // masking the new race's own NewRace marker at the same number. Use the pending entry's own
+    // lines alone in that case; the server's copy is superseded the moment the real push lands.
+    const startingFresh = p.lines.some(l => l?.action === 'NewRace');
+    const knownLines = (known && !startingFresh) ? known.lines : [];
     const seenLineNumbers = new Set(knownLines.map(l => l.lineNumber).filter(n => Number.isFinite(n)));
     const lines = [...knownLines, ...p.lines.filter(l => Number.isFinite(l.lineNumber) && !seenLineNumbers.has(l.lineNumber))];
     race.devices = race.devices.filter(d => d.name !== p.deviceName);
