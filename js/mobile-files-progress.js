@@ -15,8 +15,10 @@ import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsO
 
 // Maps a mobile Bibs-mode action onto the equivalent finishers.js action — "Pass" (Checkpoint
 // mode) is treated as a Finish, since it only makes sense here at all when the CP happened to
-// be the finish line. "Stop"/"Reset" are session-boundary markers with no finisher meaning —
-// left out of this map entirely so they're dropped rather than transferred.
+// be the finish line. "Reset"/"Ping" are session-boundary/heartbeat markers with no finisher
+// meaning — left out of this map entirely so they're dropped rather than transferred (moot in
+// practice for these two specifically, since mobile-files-devices.js's own current-segment view
+// already excludes both before this map ever sees a row).
 //
 // `ModeStart` (the Bibs-family device marker on the wire — see mobile-files-devices.js's own
 // hasRealBib/latestStartedAt doc; ToDo.MD: "use the ModeStart records and not start or clock
@@ -32,7 +34,7 @@ const BIBS_ACTION_TO_FINISHER = {
 };
 const TRANSFERABLE_BIBS_ACTIONS = new Set(Object.keys(BIBS_ACTION_TO_FINISHER));
 const BIB_REQUIRED_FINISHER_ACTIONS = new Set(['Start', 'Finish', 'DNF', 'Pass']);
-// Time mode's own "Stop"/"Reset"/"Undo" markers carry no split of their own — only its own
+// Time mode's own "Reset"/"Undo"/"Ping" markers carry no split of their own — only its own
 // ModeStart marker (the fixed t=0 mark, formerly action:'Start' — see BIBS_ACTION_TO_FINISHER's
 // own doc above for why the wire rename doesn't touch the OUTPUT vocabulary) and ordinary Split
 // rows pair with a bib.
@@ -181,10 +183,13 @@ function computeCpTimes(bibsRows, startMs) {
 // retireElapsed — a DNF row has no paired split (NO_SPLIT_ACTIONS in finishers.js), so this is
 // the only source such a time can come from.
 //
-// `timeOfDay` — a Start or DNF row's own device timestamp, straight out of deviceTimeOfDay, no
-// arithmetic — is Safety Check's preferred source for the Early Starters/Retirees tabs (see
-// that file's own doc); unlike `time` above it needs no startMs at all, so it's set whenever the
-// row itself has one, independent of whether the elapsed figure could be computed.
+// `timeOfDay` — a Start, Finish or DNF row's own device timestamp, straight out of
+// deviceTimeOfDay, no arithmetic — is both Safety Check's preferred source for the Early
+// Starters/Retirees tabs (see that file's own doc) and the Progress tab's own Start/Finish
+// columns (buildProgressRows() below, mirroring how its CP columns already prefer
+// cpTimesOfDay over cpTimes — see that function's own doc); unlike `time` above it needs no
+// startMs at all, so it's set whenever the row itself has one, independent of whether the
+// elapsed figure could be computed.
 function expectedFinisherEntries(bibs, times, startMs) {
   const timeBySplit = new Map(times.map(t => [t.splitNumber, t]));
   const out = [];
@@ -197,7 +202,7 @@ function expectedFinisherEntries(bibs, times, startMs) {
     // are treated differently: this one is dropped outright rather than flagged.
     if (bibRequired && (!Number.isFinite(number) || number <= 0)) continue;
     const paired = timeBySplit.get(b.splitNumber);
-    const timeOfDay = (action === 'DNF' || action === 'Start') ? deviceTimeOfDay(b.timestamp) : '';
+    const timeOfDay = (action === 'DNF' || action === 'Start' || action === 'Finish') ? deviceTimeOfDay(b.timestamp) : '';
     let time = '';
     if (action === 'DNF') {
       if (startMs != null) {
@@ -539,7 +544,8 @@ export function buildProgressRows() {
       const info = entryInfo(bib);
       rowsByBib.set(bib, {
         bibNumber: bib, name: info.name, category: info.category, course: info.course,
-        startTime: '', finishTime: '', cpTimes: {}, cpTimesOfDay: {},
+        startTime: '', finishTime: '', startTimeOfDay: '', finishTimeOfDay: '',
+        cpTimes: {}, cpTimesOfDay: {},
         invalid: info.invalid, conflict: conflictedBibs.has(bib),
       });
     }
@@ -549,12 +555,27 @@ export function buildProgressRows() {
     const bib = +e.bibNumber;
     if (bib > 0) ensure(bib);
   }
+  // startTime/finishTime (elapsed) are kept for other consumers (finishers.js/results.js/
+  // safety.js all read a mobileProgress 'Finish' entry's own `.time` as a genuine elapsed finish
+  // time for results computation) — startTimeOfDay/finishTimeOfDay (mirroring cpTimesOfDay below)
+  // are what this tab's own renderer actually displays; see that function's own doc.
   for (const f of state.mobileProgress) {
     const bib = +f.number;
     if (bib <= 0) continue;
-    if (f.action === 'Start')       ensure(bib).startTime  = f.time || '';
-    else if (f.action === 'Finish') ensure(bib).finishTime = f.time || '';
-    else if (f.action === 'DNF')    ensure(bib).finishTime = 'DNF';
+    if (f.action === 'Start') {
+      ensure(bib).startTime = f.time || '';
+      ensure(bib).startTimeOfDay = f.timeOfDay || '';
+    } else if (f.action === 'Finish') {
+      ensure(bib).finishTime = f.time || '';
+      ensure(bib).finishTimeOfDay = f.timeOfDay || '';
+    } else if (f.action === 'DNF') {
+      ensure(bib).finishTime = 'DNF';
+      // Stored even though the renderer shows the literal 'DNF' text, not a time, for this row
+      // (same as cpTimesOfDay staying populated under a CP_RETIRE sentinel — see that field's own
+      // doc) — keeps the two fields' own presence consistent regardless of what a given render
+      // actually chooses to show.
+      ensure(bib).finishTimeOfDay = f.timeOfDay || '';
+    }
   }
   for (const r of state.mobileCheckpoints) {
     const row = ensure(+r.bibNumber);

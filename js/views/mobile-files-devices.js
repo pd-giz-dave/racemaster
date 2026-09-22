@@ -11,45 +11,31 @@ import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
 import { escHtml, formatElapsedSeconds } from '../utils.js';
 import { TABLES } from '../strings.js';
-import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf } from '../mobile-files-shared.js';
-import { buildSegmentView, whenOf, locationSummary, formatCount, flattenDevices } from '../mobile-files-devices.js';
+import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, byLineNumber } from '../mobile-files-shared.js';
+import { buildSegmentView, whenOf, locationSummary, formatCount, flattenDevices, latestModeStart } from '../mobile-files-devices.js';
 
+// ToDo.MD's "Random tweaks": the segment view used to pair a Bibs-family row and a Time-family
+// row side by side by splitNumber, because a device's current segment could genuinely hold both
+// at once. It can't any more — a device's mode (Time vs Bibs/CP) is now declared once, explicitly,
+// by its own ModeStart record (see mobile-files-devices.js's own isTimeFamilyRow doc), so only one
+// of buildSegmentView()'s two segments is ever really populated for a given view. One flat list,
+// one shared "Bib/Split" column (showing whichever of bibNumber/splitTime this particular row
+// actually carries), rather than two column groups mostly left blank.
 export function showDeviceModal(owner, raceLabel, deviceName, lines) {
   const { timeSegment, bibsSegment } = buildSegmentView(lines);
-  const visibleRows = [...timeSegment, ...bibsSegment];
+  const visibleRows = [...timeSegment, ...bibsSegment].sort(byLineNumber);
+  // Scoped to the same current segment Location/counts already are (see latestModeStart()'s own
+  // doc) — a completely-reset device (every visit properly closed) correctly shows '—' here too,
+  // not whatever mode used to apply before the reset (ToDo.MD: "device view shows a blank
+  // location but has retained the mode, that should be blank too").
+  const mode = latestModeStart(timeSegment, bibsSegment)?.note || '—';
 
-  // Rows with a real splitNumber pair a bibs-recording phone's entry with a time-recording
-  // phone's entry at the same position in the sequence. Rows with no real splitNumber (DNF —
-  // see NO_SPLIT_ACTIONS in finishers.js) never pair with anything and must get a row of their
-  // own — falling back to a shared "0" for all of them (as this used to, via `splitNumber ?? 0`)
-  // collapsed them onto one slot, real splitNumber-0 row included, so only the first one found
-  // there was ever shown, silently hiding the rest (e.g. a DNF hidden behind Clock's own real 0).
-  const bySplit = new Map(); // real splitNumber -> { bib, time, order }
-  const solo = [];           // one entry per row with no real splitNumber: { bib|time, order }
-  const place = (r, side) => {
-    if (r.splitNumber == null) { solo.push({ [side]: r, order: r.lineNumber ?? 0 }); return; }
-    const p = bySplit.get(r.splitNumber) || { order: r.lineNumber ?? 0 };
-    p[side] = r;
-    p.order = Math.min(p.order, r.lineNumber ?? 0);
-    bySplit.set(r.splitNumber, p);
-  };
-  for (const r of bibsSegment) place(r, 'bib');
-  for (const r of timeSegment) place(r, 'time');
-
-  const displayRows = [...bySplit.entries()].map(([n, p]) => ({ n, ...p }))
-    .concat(solo.map(p => ({ n: null, ...p })))
-    .sort((a, b) => a.order - b.order);
-
-  const rows = displayRows.map(({ n, bib, time }) => `<tr>
-      <td>${n ?? ''}</td>
-      <td>${bib ? escHtml(bib.action) : ''}</td>
-      <td>${bib ? escHtml(bib.bibNumber ?? '') : ''}</td>
-      <td>${bib ? whenOf(bib) : ''}</td>
-      <td>${bib ? escHtml(bib.note ?? '') : ''}</td>
-      <td>${time ? escHtml(time.action) : ''}</td>
-      <td>${time && time.splitTime != null ? formatElapsedSeconds(time.splitTime) : ''}</td>
-      <td>${time ? whenOf(time) : ''}</td>
-      <td>${time ? escHtml(time.note ?? '') : ''}</td>
+  const rows = visibleRows.map(r => `<tr>
+      <td>${r.splitNumber ?? ''}</td>
+      <td>${escHtml(r.action)}</td>
+      <td>${r.splitTime != null ? formatElapsedSeconds(r.splitTime) : escHtml(r.bibNumber ?? '')}</td>
+      <td>${whenOf(r)}</td>
+      <td>${escHtml(r.note ?? '')}</td>
     </tr>`).join('');
 
   const overlay = document.createElement('div');
@@ -57,17 +43,13 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
   overlay.innerHTML = `
     <div class="modal-box" style="width:820px">
       <h2>${escHtml(deviceName)} — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
-      <p style="margin:0 0 12px;font-size:0.875rem">Location: ${locationSummary(visibleRows)}</p>
+      <p style="margin:0 0 12px;font-size:0.875rem">Location: ${locationSummary(visibleRows)} &nbsp; Mode: ${escHtml(mode)}</p>
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
-            <th rowspan="2">Split #</th>
-            <th colspan="4">Bibs</th>
-            <th colspan="4">Time</th>
-          </tr><tr>
-            <th>Action</th><th>Bib</th><th>When</th><th>Note</th><th>Action</th><th>Split Time</th><th>When</th><th>Note</th>
+            <th>Split #</th><th>Action</th><th>Bib/Split</th><th>When</th><th>Note</th>
           </tr></thead>
-          <tbody>${rows || '<tr><td colspan="9" style="color:var(--muted)">No entries in the current segment.</td></tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">No entries in the current segment.</td></tr>'}</tbody>
         </table>
       </div>
       <div class="modal-actions">
@@ -129,7 +111,10 @@ function buildColumns(isAdminUser) {
     device:    r => escHtml(r.device.name) + (r.pending
       ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
       : ''),
-    location:  r => `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || '—')}</span>`,
+    // 'Unknown' (not the View modal's own '—') once every visit's been properly closed — a
+    // completely reset device (ToDo.MD: "the device list should show unknown in the where
+    // column"), distinct from the View modal's own blank-dash convention for the same state.
+    location:  r => `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || 'Unknown')}</span>`,
     bibs:      r => formatCount(r.bibsVisible, r.bibsExpected),
     time:      r => formatCount(r.timeVisible, r.timeExpected),
     lastSeen:   r => formatDateTime(r.lastSeen),

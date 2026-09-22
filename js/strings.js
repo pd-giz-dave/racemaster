@@ -488,7 +488,9 @@ export const HELP = {
         marker never counts as a bib or a split itself. What a blank vs. a literal <strong>0</strong> means is deliberately different: a phone
         that's been set up or had a mode chosen, but has recorded nothing of that type yet, shows <strong>0</strong> — it's genuinely expected,
         just not here yet. Blank means that type was never in play on this device at all (e.g. a Time-mode phone's own Bibs column). A phone
-        that's only just been adopted, with neither mode chosen yet, shows blank on both until one is.</p>
+        that's only just been adopted, with neither mode chosen yet, shows blank on both until one is. A device reset all the way back
+        to the beginning (no mode/location currently in play at all any more) goes back to that same blank state too, with <strong>Where</strong>
+        reading <strong>Unknown</strong> until a fresh mode/location is set.</p>
     <p>If a marshal relocates mid-race, the same device row will list more than one <strong>Where</strong> value — that's expected, not
         an error: relocating stays the same file, marked by a move you can undo if it was a mistake. <strong>View</strong> shows just
         one location's own entries — if the device has recorded at more than one, you'll be asked which before it opens.
@@ -1207,8 +1209,8 @@ export const TABLES = {
     { id: 'name',       label: 'Name',   title: "Competitor's name" },
     { id: 'course',     label: 'Course', title: 'Senior or junior course' },
     { id: 'category',   label: 'Cat',    title: 'Age category' },
-    { id: 'start',      label: 'Start',  title: 'Explicit individual start time recorded for this bib, if any (early/late start)' },
-    { id: 'finishTime', label: 'Finish', title: 'Raw finish time as recorded, from the Finishers list — not adjusted for start/clock offsets (see Results & Prize List for the adjusted race time)' },
+    { id: 'start',      label: 'Start',  title: 'This bib\'s own raw device time-of-day for an explicit individual start, if any (early/late start) — not an elapsed time' },
+    { id: 'finishTime', label: 'Finish', title: 'This bib\'s own raw device time-of-day for its finish, straight off the phone — not an elapsed time (see Results & Prize List for the adjusted race time), or literal "DNF"' },
     { id: 'cp',         label: 'CP',     title: 'This checkpoint\'s own raw device time-of-day for this bib, straight off the phone — not an elapsed time (see Results & Prize List\'s Splits tab for the adjusted elapsed figure), and not authoritative' },
   ],
 };

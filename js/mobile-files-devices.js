@@ -36,20 +36,21 @@ export function withResolvedLocations(lines, initialLocation = 'Finish') {
   });
 }
 
-// ---- Segment view (mirrors racemaster-mobile's observeCurrentSegment + foldLatestVisible) ----
+// ---- Segment view (mirrors racemaster-mobile's HistoryFold.kt) ----
 //
 // A device's file interleaves two independent, separately-numbered families of rows — Time
 // splits (splitTime non-null) and Bibs/CP entries (splitTime null, bibNumber instead) — each
-// with its own Reset boundary and its own edit-echo/undo-marker history. "Current segment" means
-// only the rows since that family's own most recent Reset, folded down to one row per logical
-// entry (the latest edit, with anything since-undone dropped) — exactly what the phone's own
-// live screen would be showing. See HistoryLineDao.observeCurrentSegment / HistoryFold.
-// foldLatestVisible in racemaster-mobile for the reference implementation this mirrors.
-
-function currentSegment(rows) {
-  const resetLine = rows.reduce((max, r) => r.action === 'Reset' ? Math.max(max, r.lineNumber ?? 0) : max, 0);
-  return rows.filter(r => (r.lineNumber ?? 0) > resetLine);
-}
+// with its own edit-echo/undo-marker history. "Current segment" here means every visit (the span
+// from one 'Location' row up to, but not including, the next) that hasn't been individually
+// closed by a Reset targeting it (via that Reset row's own refLineNumber — see
+// resetTargetLineNumbers below), folded down to one row per logical entry (the latest edit, with
+// anything since-undone dropped) — deliberately NOT narrowed to only the most-recently-visited
+// location's own visits the way racemaster-mobile's own live mode-screen view is (see
+// HistoryFold.currentSegmentRows there): a roaming device (CP marshal moving CP1 -> CP2 -> CP3
+// with no Reset in between) still has every one of those visits open at once here, which is
+// exactly what locationSegmentsOf() below (mobile-files-progress.js's own per-location bucketing)
+// needs to work with — unlike the phone's own single-station screen, this file has no one
+// "current location" of its own to narrow down to.
 
 function foldLatestVisible(rows) {
   const latestByRoot = new Map();
@@ -59,6 +60,80 @@ function foldLatestVisible(rows) {
     if (!cur || (r.lineNumber ?? 0) > (cur.lineNumber ?? 0)) latestByRoot.set(key, r);
   }
   return [...latestByRoot.values()].filter(r => r.action !== 'Undo');
+}
+
+// Every Location lineNumber some 'Reset' row's own refLineNumber has targeted — a visit whose own
+// locationLineNumber is in this set has been individually closed and never becomes current again,
+// even if a later visit shares its note. Computed from the RAW row list (Reset rows are excluded
+// from foldLatestVisible's own input below, so this must be sourced separately, same as
+// racemaster-mobile's HistoryFold.resetTargets).
+function resetTargetLineNumbers(rows) {
+  const targets = new Set();
+  for (const r of rows) {
+    if (r.action === 'Reset' && r.refLineNumber != null) targets.add(r.refLineNumber);
+  }
+  return targets;
+}
+
+// A "markerless" Reset — no refLineNumber at all — is the pre-this-feature convention (still
+// possible from older/degraded data, or a Reset the phone otherwise failed to attach one to): it
+// can't name which specific visit it closed, so it degrades to the old, cruder behavior instead
+// of being silently ignored — a hard wall dropping every row at or before it, exactly what
+// currentSegment() always did before location-grouping existed. The highest such lineNumber
+// across the whole file (0 if none) is all that's needed; applied as a final filter in
+// currentSegment() below, on top of (not instead of) the precise, refLineNumber-targeted closing
+// above.
+function legacyResetWallLine(rows) {
+  return rows.reduce((max, r) => (r.action === 'Reset' && r.refLineNumber == null) ? Math.max(max, r.lineNumber ?? 0) : max, 0);
+}
+
+// Splits already fold-collapsed, ascending-by-lineNumber rows into per-Location "visits" — see
+// racemaster-mobile's HistoryFold.visits. Rows before the first real Location marker (there
+// normally are none — every real device file's very first row for a family is always its own
+// Location marker, see RaceRepository.recordModeStart — but older/degraded data, or a test
+// fixture, might have none at all) are bucketed into an implicit visit of their own
+// (locationLineNumber: 0, note: null) rather than dropped outright, so a file with no Location
+// markers at all still shows everything, exactly as before this location-grouping existed. A
+// bare `{action:'Reset'}` with no refLineNumber (the pre-this-feature convention) can never
+// target lineNumber 0, so it can't close this implicit visit either — same "no boundary marker
+// recognized, show everything" degradation.
+function locationVisits(rows) {
+  const result = [];
+  let current = null;
+  for (const r of rows) {
+    if (r.action === 'Location') {
+      if (current) result.push(current);
+      current = { locationLineNumber: r.lineNumber, note: r.note, rows: [r] };
+    } else {
+      if (!current) current = { locationLineNumber: 0, note: null, rows: [] };
+      current.rows.push(r);
+    }
+  }
+  if (current) result.push(current);
+  return result;
+}
+
+function currentSegment(rows) {
+  const resetTargets = resetTargetLineNumbers(rows);
+  const wallLine = legacyResetWallLine(rows);
+  // 'Reset' must be excluded from foldLatestVisible's own input — a Reset row's own refLineNumber
+  // points at a DIFFERENT row (the Location it invalidates, not its own edit history), so leaving
+  // it in would let it hijack that Location row's fold group and silently make it vanish as if
+  // edited away (see racemaster-mobile's own HistoryAction.RESET doc — this is the fold-
+  // corruption fix). 'Ping' (a pure heartbeat — see HistoryAction.PING's own doc) is excluded the
+  // same way, for the same "must never appear in a display list" reason. Unlike
+  // racemaster-mobile's own live mode-screen view, 'ModeStart'/'NewRace' rows are deliberately
+  // NOT excluded here — this segment still feeds locationSegmentsOf()/Compute Results
+  // (mobile-files-progress.js), which read a bucket's own ModeStart row for baseline/context;
+  // hasRealBib/hasRealSplit/isTimeFamilyRow already separately keep them out of visible COUNTS
+  // without needing them gone from the row list itself.
+  const displayFiltered = rows.filter(r => r.action !== 'Reset' && r.action !== 'Ping');
+  const folded = foldLatestVisible(displayFiltered).sort(byLineNumber);
+  const visits = locationVisits(folded);
+  return visits
+    .filter(v => !resetTargets.has(v.locationLineNumber))
+    .flatMap(v => v.rows)
+    .filter(r => (r.lineNumber ?? 0) > wallLine);
 }
 
 // `expected` distinguishes "0 recorded, but this family genuinely IS in play here" (shows a
@@ -96,20 +171,18 @@ function hasRealSplit(r) {
   return r.action !== 'ModeStart' && r.action !== 'NewRace' && r.splitTime != null;
 }
 
-// Whether Bibs/Time are genuinely expected on this device at all — driven purely by the file's
-// own latest ModeStart record's explicit mode declaration in `note` (see SyncRecord's own doc;
-// AppMode.wireName() on the mobile side) rather than inspecting bibNumber/splitTime anywhere —
-// every real device file now always carries a ModeStart marker (mode selection is mandatory at
-// Setup Race), so there's no longer a realistic case where real entries exist without one
-// already having declared the family; no segment-inspection fallback is kept.
+// Whether Bibs/Time are genuinely expected on this device at all — driven purely by the CURRENT
+// segment's own latest ModeStart record's explicit mode declaration in `note` (see SyncRecord's
+// own doc; AppMode.wireName() on the mobile side) rather than inspecting bibNumber/splitTime
+// anywhere — every real device file now always carries a ModeStart marker (mode selection is
+// mandatory at Setup Race), so there's no longer a realistic case where real entries exist
+// without one already having declared the family; no segment-inspection fallback is kept.
 //
-// `modeStart` (the file's own latest ModeStart record, whole-file — see latestModeStart() below —
-// not just the post-Reset segment) covers ToDo.MD's "when a race has been reset in a device file,
-// the latest modestart record is still valid wrt the location and mode": a Reset with no fresh
-// marker immediately following it (the phone's own convention is to write one right away, but
-// this must degrade gracefully rather than assume that always holds) would otherwise leave this
-// with nothing to go on, wrongly reporting "never expected" for a device that plainly declared
-// its own mode moments earlier.
+// `modeStart` is null once every visit has been properly closed (a completely reset device — see
+// latestModeStart() below) — both then correctly return false, matching ToDo.MD's "when a mobile
+// file is completely reset ... both bibs and time columns should be blank as its mode is also now
+// unknown" (formatCount()'s own `expected:false` is what turns that into a blank cell rather than
+// a literal "0").
 function isBibsExpected(modeStart) {
   return modeStart?.note === 'Bibs' || modeStart?.note === 'CP';
 }
@@ -118,23 +191,32 @@ function isTimeExpected(modeStart) {
   return modeStart?.note === 'Time';
 }
 
-// The device's (or, once split by location, this location-group's) own latest ModeStart record,
-// full stop — whole-file, deliberately ignoring Reset boundaries entirely (a Reset always
-// immediately records a fresh ModeStart for the new segment in the common case — see
-// racemaster-mobile's own Help text — but ToDo.MD's own "the latest modestart record is still
-// valid wrt the location and mode" means this must keep working even when that doesn't happen).
+// The CURRENT segment's own latest ModeStart record — i.e. belonging to whichever visit is still
+// open, scoped the exact same way timeSegment/bibsSegment (buildSegmentView() below) already are,
+// not the whole file regardless of Reset boundaries the way this used to work. ToDo.MD: "when a
+// mobile file is completely reset (all the way back to the beginning) device view shows a blank
+// location but has retained the mode, that should be blank too" — a device whose only/every visit
+// has been properly closed (a Reset with a real refLineNumber targeting it — see
+// resetTargetLineNumbers/currentSegment above) now correctly reports no current mode at all, the
+// same way its own location/visible rows already correctly go empty, rather than falling back to
+// whatever mode used to be declared there. Since a ModeStart row is never itself excluded from
+// currentSegment()'s own output (see that function's own doc), this can just search the two
+// already-computed segments directly rather than re-deriving anything of its own.
+//
 // Returns the record itself (not just its timestamp — contrast latestStartedAt() below, which is
 // this same lookup for just that one field), so callers can also read its own bibNumber/splitTime
-// (isBibsExpected/isTimeExpected above) or location (flattenDevices below).
-function latestModeStart(lines) {
-  const candidates = lines.filter(r => r.action === 'ModeStart');
+// (isBibsExpected/isTimeExpected above), location (flattenDevices below), or mode declaration
+// (its own `note` — 'Time'/'Bibs'/'CP', see SyncRecord's own doc — read directly by
+// js/views/mobile-files-devices.js's showDeviceModal() for its own "Mode:" summary line).
+export function latestModeStart(timeSegment, bibsSegment) {
+  const candidates = [...timeSegment, ...bibsSegment].filter(r => r.action === 'ModeStart');
   if (!candidates.length) return null;
   return candidates.reduce((a, b) => (b.lineNumber ?? 0) > (a.lineNumber ?? 0) ? b : a);
 }
 
-// A Reset or an Undo on the phone is already fully reflected here — currentSegment() drops
-// everything at/before the family's last Reset, and foldLatestVisible() drops anything whose
-// latest state is an Undo marker. Compute Results (mobile-files-progress.js) exploits this:
+// A Reset or an Undo on the phone is already fully reflected here — currentSegment() drops every
+// visit a Reset has individually closed (see its own doc), and foldLatestVisible() drops anything
+// whose latest state is an Undo marker. Compute Results (mobile-files-progress.js) exploits this:
 // since the segment is always the true, current picture, syncing to Finishers never needs to
 // diff against or patch around what's already there — it just wipes Finishers and rebuilds from
 // the segment. Exported: mobile-files-progress.js's own validateAndCompute() resolves each
@@ -143,17 +225,60 @@ function latestModeStart(lines) {
 // which family it belongs to (a real Time row always has one, a real Bibs/CP row never does) —
 // unchanged. A ModeStart row's own splitTime is always null now regardless of mode (see
 // SyncRecord's own doc), so its placement instead reads its own explicit mode declaration.
+// 'Location'/'Reset'/'NewRace' are NOT handled here any more (see rowIsTimeFamily's own doc for
+// why they need context this per-row function doesn't have) — every other action is still
+// classified purely from its own fields.
 function isTimeFamilyRow(r) {
   if (r.action === 'ModeStart') return r.note === 'Time';
   return r.splitTime != null;
 }
 
+// A 'Location'/'Reset'/'NewRace' row's own splitTime is now always null regardless of family
+// (racemaster-mobile's SyncRecordMapping.toSyncRecord: a boundary marker is never a real timed
+// split, same treatment as ModeStart/Ping) — so unlike every other shared-action row, none of
+// these three can be told apart from a Bibs/CP one by splitTime alone any more. Each is resolved
+// from its own structural neighbour instead, walking toward whichever Location row anchors that
+// segment, then reading that Location's own next-row ModeStart the same way isTimeFamilyRow
+// already reads a ModeStart row's note directly:
+//  - 'Location': the very next row by lineNumber is always that Location's own ModeStart, in the
+//    same write transaction (racemaster-mobile's RaceRepository.recordModeStart writes the pair
+//    back to back).
+//  - 'Reset': its own refLineNumber always names the Location row of the segment it's closing
+//    (racemaster-mobile's RaceRepository.closeCurrentSegment) — resolved via `byLineNumber`,
+//    then the same rule as above.
+//  - 'NewRace': always immediately followed by that race's own very first Location row, in the
+//    same write transaction (racemaster-mobile's RaceRepository.recordModeStart's own NEW_RACE
+//    branch) — resolved the same way, one hop further out.
+// Falls back to "not Time" (grouped with Bibs/CP, matching isTimeFamilyRow's own default) if the
+// expected neighbour is missing — shouldn't happen on real data, but degrades harmlessly rather
+// than throwing.
+function rowIsTimeFamily(r, index, sortedRows, byLineNumber) {
+  if (r.action === 'Location') {
+    const next = sortedRows[index + 1];
+    return next?.action === 'ModeStart' && next.note === 'Time';
+  }
+  if (r.action === 'Reset' && r.refLineNumber != null) {
+    const target = byLineNumber.get(r.refLineNumber);
+    return target?.action === 'Location' && rowIsTimeFamily(target, sortedRows.indexOf(target), sortedRows, byLineNumber);
+  }
+  if (r.action === 'NewRace') {
+    const next = sortedRows[index + 1];
+    return next?.action === 'Location' && rowIsTimeFamily(next, index + 1, sortedRows, byLineNumber);
+  }
+  return isTimeFamilyRow(r);
+}
+
 export function buildSegmentView(lines) {
-  const timeRows = lines.filter(isTimeFamilyRow);
-  const bibsRows = lines.filter(r => !isTimeFamilyRow(r));
+  const sorted = [...lines].sort(byLineNumber);
+  const byLineNum = new Map(sorted.map(r => [r.lineNumber, r]));
+  const timeRows = [];
+  const bibsRows = [];
+  sorted.forEach((r, i) => {
+    (rowIsTimeFamily(r, i, sorted, byLineNum) ? timeRows : bibsRows).push(r);
+  });
   return {
-    timeSegment: foldLatestVisible(currentSegment(timeRows)).sort(byLineNumber),
-    bibsSegment: foldLatestVisible(currentSegment(bibsRows)).sort(byLineNumber),
+    timeSegment: currentSegment(timeRows).sort(byLineNumber),
+    bibsSegment: currentSegment(bibsRows).sort(byLineNumber),
   };
 }
 
@@ -173,19 +298,18 @@ export function whenOf(r) {
 // action:'Start' entry (Bibs/CP mode's own early/late-start record) — that's a completely
 // different action string now, nothing here needs to filter it out by family any more.
 //
-// "Most recent" (highest lineNumber across the whole file), not the current segment's own marker:
-// a Reset always immediately records a fresh ModeStart for the new segment (see racemaster-
-// mobile's own Help text), so this gives the same answer either way without needing this file's
-// own segment-boundary logic at all — simpler, and correct even for a file this segment logic
-// can't yet resolve for some other reason.
+// Scoped to the CURRENT segment only, same as latestModeStart() itself now is (see its own doc) —
+// a completely-reset device (every visit properly closed) correctly returns '' here too, not the
+// timestamp of whatever ModeStart used to apply before the reset.
 //
 // Returns the raw "yyyy/mm/dd HH:MM:SS" timestamp (same shape latestLineTimestamp() above
 // returns for Last Update, formatted the same way via formatStoredTimestamp() at render time —
 // js/views/mobile-files-devices.js) from whichever qualifying record is latest, or '' if the
-// device has no such record at all (nothing pulled yet, or an old file predating this marker
-// convention).
+// device has no such record at all (nothing pulled yet, every visit closed, or an old file
+// predating this marker convention).
 export function latestStartedAt(lines) {
-  const latest = latestModeStart(lines);
+  const { timeSegment, bibsSegment } = buildSegmentView(lines);
+  const latest = latestModeStart(timeSegment, bibsSegment);
   return latest ? (latest.timestamp ?? latest.timestampMillis ?? '') : '';
 }
 
@@ -287,13 +411,15 @@ export function flattenDevices(races) {
       const resolvedLines = withResolvedLocations(rawDevice.lines);
       const device = { ...rawDevice, resolvedLines };
       const { timeSegment, bibsSegment } = buildSegmentView(resolvedLines);
-      const modeStart = latestModeStart(resolvedLines);
-      // modeStart folded in alongside the post-Reset segment — a Reset with no fresh marker
-      // immediately following it would otherwise leave both segments empty, wrongly showing this
-      // row's own Where column as blank ("—") even though the last ModeStart record still knows
-      // exactly where this device is (ToDo.MD: "the latest modestart record is still valid wrt
-      // the location and mode").
-      const visible = modeStart ? [...timeSegment, ...bibsSegment, modeStart] : [...timeSegment, ...bibsSegment];
+      const modeStart = latestModeStart(timeSegment, bibsSegment);
+      // No separate folding-in needed any more — modeStart, when it exists at all, is already one
+      // of the rows currentSegment() itself returned (see that function's own doc: a ModeStart row
+      // is never excluded from its output), so it's already present in timeSegment/bibsSegment.
+      // Once every visit's been properly closed (a completely reset device), modeStart is
+      // correctly null and `visible` is just the (now empty) segments — Where/Mode/Bibs/Time/
+      // Started At all then report blank/unknown together, not some blank and some stale (ToDo.MD:
+      // "when a mobile file is completely reset ... that should be blank too").
+      const visible = [...timeSegment, ...bibsSegment];
       return {
         device, timeSegment, bibsSegment, modeStart,
         rawLocation: rawLocationOf(visible), location: locationSummary(visible),

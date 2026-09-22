@@ -39,7 +39,8 @@ describe('progress-sync.js:startProgressSync', () => {
     assert.equal(body.raceName, 'Test Fell Race');
     assert.deepEqual(body.entries, [{
       bibNumber: 1, name: 'Dave', category: 'MSEN', course: 'Seniors',
-      startTime: '00:00:00', finishTime: '00:45:00', cpTimes: { 1: '00:10:00' }, cpTimesOfDay: {},
+      startTime: '00:00:00', finishTime: '00:45:00', startTimeOfDay: '', finishTimeOfDay: '',
+      cpTimes: { 1: '00:10:00' }, cpTimesOfDay: {},
     }]);
   });
 
@@ -188,7 +189,8 @@ describe('progress-sync.js:startProgressSync', () => {
     const body = JSON.parse(fetchMock.calls[0].opts.body);
     assert.deepEqual(body.entries, [{
       bibNumber: 1, name: 'Dave', category: 'MSEN', course: 'Seniors',
-      startTime: '', finishTime: '', cpTimes: {}, cpTimesOfDay: {},
+      startTime: '', finishTime: '', startTimeOfDay: '', finishTimeOfDay: '',
+      cpTimes: {}, cpTimesOfDay: {},
     }]);
   });
 

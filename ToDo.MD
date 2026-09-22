@@ -65,3 +65,15 @@ When set the race id becomes racename-mixed-date and the progress record contain
 
 Claude's version is too verbose.
 Needs re-structuring so people will actually read it and understand it.
+
+## Random tweaks
+
+- [x] the segment view in the web-app has columns for both time and bibs, but nowadays there is
+  only ever 1 mode per segment, so rationalise the view for this, eg:
+  Location: <...> Mode: <...>
+  Split# Action Bib/Split When Note
+  ...
+- [x] progress view on the mobile files page is showing elapsed times for start and finish, they should be time-of-day
+- [x] when a mobile file is completely reset (all the way back to the beginning) device view shows a blank location
+      but has retained the mode, that should be blank too, also the device list should show unknown in the where
+      column and both bibs and time columns should be blank as its mode is also now unknown

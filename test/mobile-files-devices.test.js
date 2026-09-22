@@ -38,45 +38,170 @@ describe('mobile-files-devices.js:formatCount', () => {
 describe('mobile-files-devices.js:buildSegmentView', () => {
   it('splits Time (splitTime non-null) rows from Bibs/CP (splitTime null) rows', () => {
     const lines = [
-      { splitTime: '00:10:00', lineNumber: 1, action: 'Split' },
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { splitTime: '00:10:00', lineNumber: 2, action: 'Split' },
       { bibNumber: 5, lineNumber: 2, action: 'Finish' },
     ];
     const { timeSegment, bibsSegment } = buildSegmentView(lines);
-    assert.equal(timeSegment.length, 1);
-    assert.equal(bibsSegment.length, 1);
+    assert.equal(timeSegment.filter(r => r.action === 'Split').length, 1);
+    assert.equal(bibsSegment.filter(r => r.action === 'Finish').length, 1);
   });
 
-  it('drops everything at or before the family\'s own most recent Reset', () => {
+  // racemaster-mobile's SyncRecordMapping.toSyncRecord sends a null splitTime for EVERY
+  // Location row now, Time-mode included (it's a boundary marker, never a real timed split —
+  // same treatment as ModeStart/Ping) — so unlike every other row, a Location row can no longer
+  // be told apart from a Bibs/CP one by splitTime alone. It's classified instead by the
+  // ModeStart row immediately following it (see locationRowIsTimeFamily's own doc).
+  it('classifies a Time-mode Location row (null splitTime) as Time via its own following ModeStart, not Bibs', () => {
     const lines = [
-      { bibNumber: 1, lineNumber: 1, action: 'Finish' },
-      { lineNumber: 2, action: 'Reset' },
-      { bibNumber: 2, lineNumber: 3, action: 'Finish' },
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Time', splitTime: null },
+      { splitTime: '00:10:00', lineNumber: 3, action: 'Split' },
+    ];
+    const { timeSegment, bibsSegment } = buildSegmentView(lines);
+    assert.equal(timeSegment.filter(r => r.action === 'Location').length, 1);
+    assert.equal(bibsSegment.filter(r => r.action === 'Location').length, 0);
+  });
+
+  it('classifies a Bibs/CP Location row as Bibs via its own following ModeStart', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'CP1' },
+      { lineNumber: 2, action: 'ModeStart', note: 'CP', bibNumber: null },
+      { lineNumber: 3, action: 'Pass', bibNumber: 101 },
+    ];
+    const { timeSegment, bibsSegment } = buildSegmentView(lines);
+    assert.equal(bibsSegment.filter(r => r.action === 'Location').length, 1);
+    assert.equal(timeSegment.filter(r => r.action === 'Location').length, 0);
+  });
+
+  // A 'Reset' row's own splitTime is null now regardless of family too, and unlike every other
+  // row it must land in the SAME bucket as the Location row its own refLineNumber targets — not
+  // just for display, but because currentSegment() computes its resetTargets set purely from
+  // whichever bucket a Reset actually ended up in; a misclassified Reset would silently fail to
+  // close the visit it was supposed to, leaving stale rows in the wrong segment forever.
+  it('classifies a Time-mode Reset row as Time via its own refLineNumber target, so it can close that visit', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Time', splitTime: null },
+      { splitTime: '00:10:00', lineNumber: 3, action: 'Split' },
+      { lineNumber: 4, action: 'Reset', refLineNumber: 1, splitTime: null },
+      { lineNumber: 5, action: 'Location', note: 'Finish' },
+      { lineNumber: 6, action: 'ModeStart', note: 'Time', splitTime: null },
+      { splitTime: '00:20:00', lineNumber: 7, action: 'Split' },
+    ];
+    const { timeSegment, bibsSegment } = buildSegmentView(lines);
+    assert.deepEqual(timeSegment.filter(r => r.action === 'Split').map(r => r.splitTime), ['00:20:00']);
+    assert.equal(bibsSegment.length, 0);
+  });
+
+  it('classifies a Bibs/CP Reset row as Bibs via its own refLineNumber target, so it can close that visit', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', bibNumber: null },
+      { bibNumber: 1, lineNumber: 3, action: 'Finish' },
+      { lineNumber: 4, action: 'Reset', refLineNumber: 1 },
+      { lineNumber: 5, action: 'Location', note: 'Finish' },
+      { lineNumber: 6, action: 'ModeStart', note: 'Bibs', bibNumber: null },
+      { bibNumber: 2, lineNumber: 7, action: 'Finish' },
+    ];
+    const { timeSegment, bibsSegment } = buildSegmentView(lines);
+    assert.deepEqual(bibsSegment.filter(r => r.action === 'Finish').map(r => r.bibNumber), [2]);
+    assert.equal(timeSegment.length, 0);
+  });
+
+  // A 'NewRace' row's own splitTime is null now regardless of family too (see SyncRecordMapping's
+  // own doc) — unlike Reset it isn't filtered out of the visible segment, so a misclassified one
+  // would show up in the wrong bucket outright. It's always immediately followed by its own race's
+  // first Location row (same write transaction), which is what resolves its family here.
+  it('classifies a Time-mode NewRace row as Time via its own following Location', () => {
+    const lines = [
+      { lineNumber: 1, action: 'NewRace', splitTime: null },
+      { lineNumber: 2, action: 'Location', note: 'Finish' },
+      { lineNumber: 3, action: 'ModeStart', note: 'Time', splitTime: null },
+      { splitTime: '00:10:00', lineNumber: 4, action: 'Split' },
+    ];
+    const { timeSegment, bibsSegment } = buildSegmentView(lines);
+    assert.equal(timeSegment.filter(r => r.action === 'NewRace').length, 1);
+    assert.equal(bibsSegment.filter(r => r.action === 'NewRace').length, 0);
+  });
+
+  it('classifies a Bibs/CP NewRace row as Bibs via its own following Location', () => {
+    const lines = [
+      { lineNumber: 1, action: 'NewRace' },
+      { lineNumber: 2, action: 'Location', note: 'Finish' },
+      { lineNumber: 3, action: 'ModeStart', note: 'Bibs', bibNumber: null },
+      { bibNumber: 1, lineNumber: 4, action: 'Finish' },
+    ];
+    const { timeSegment, bibsSegment } = buildSegmentView(lines);
+    assert.equal(bibsSegment.filter(r => r.action === 'NewRace').length, 1);
+    assert.equal(timeSegment.filter(r => r.action === 'NewRace').length, 0);
+  });
+
+  it('drops every visit a Reset has individually closed', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+      { lineNumber: 3, action: 'Reset', refLineNumber: 1 },
+      { lineNumber: 4, action: 'Location', note: 'Finish' },
+      { bibNumber: 2, lineNumber: 5, action: 'Finish' },
     ];
     const { bibsSegment } = buildSegmentView(lines);
-    assert.equal(bibsSegment.length, 1);
-    assert.equal(bibsSegment[0].bibNumber, 2);
+    assert.deepEqual(bibsSegment.map(r => r.bibNumber).filter(b => b != null), [2]);
   });
 
   it('folds to the latest edit of each logical entry and drops anything whose latest state is Undo', () => {
     const lines = [
-      { bibNumber: 1, lineNumber: 1, refLineNumber: 1, action: 'Finish' },
-      { bibNumber: 1, lineNumber: 2, refLineNumber: 1, action: 'Undo' }, // undoes line 1
-      { bibNumber: 2, lineNumber: 3, refLineNumber: 3, action: 'Finish' },
-      { bibNumber: 2, lineNumber: 4, refLineNumber: 3, action: 'Finish' }, // a correction, not an undo
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { bibNumber: 1, lineNumber: 2, refLineNumber: 2, action: 'Finish' },
+      { bibNumber: 1, lineNumber: 3, refLineNumber: 2, action: 'Undo' }, // undoes line 2
+      { bibNumber: 2, lineNumber: 4, refLineNumber: 4, action: 'Finish' },
+      { bibNumber: 2, lineNumber: 5, refLineNumber: 4, action: 'Finish' }, // a correction, not an undo
     ];
     const { bibsSegment } = buildSegmentView(lines);
-    // bib 1's only entry was undone entirely; bib 2's latest edit (line 4) survives.
-    assert.equal(bibsSegment.length, 1);
-    assert.equal(bibsSegment[0].lineNumber, 4);
+    // bib 1's only entry was undone entirely; bib 2's latest edit (line 5) survives.
+    const bibRows = bibsSegment.filter(r => r.bibNumber != null);
+    assert.equal(bibRows.length, 1);
+    assert.equal(bibRows[0].lineNumber, 5);
   });
 
   it('sorts the resulting segment by lineNumber', () => {
     const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
       { bibNumber: 2, lineNumber: 5, action: 'Finish' },
       { bibNumber: 1, lineNumber: 2, action: 'Finish' },
     ];
     const { bibsSegment } = buildSegmentView(lines);
-    assert.deepEqual(bibsSegment.map(r => r.lineNumber), [2, 5]);
+    assert.deepEqual(bibsSegment.map(r => r.lineNumber), [1, 2, 5]);
+  });
+
+  it('a roaming device (relocated with no Reset in between) keeps every visit open at once, not just the most recent', () => {
+    // Unlike racemaster-mobile's own live mode-screen view (which narrows to only the most
+    // recently visited location's own visits — see HistoryFold.currentSegmentRows), this web-app
+    // view deliberately keeps every not-yet-Reset visit regardless of location, since
+    // locationSegmentsOf() (mobile-files-progress.js) needs all of them to bucket per station.
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+      { lineNumber: 3, action: 'Location', note: 'CP1' },
+      { bibNumber: 2, lineNumber: 4, action: 'Finish' },
+      { lineNumber: 5, action: 'Location', note: 'Finish' }, // relocate back to Finish
+      { bibNumber: 3, lineNumber: 6, action: 'Finish' },
+    ];
+    const { bibsSegment } = buildSegmentView(lines);
+    assert.deepEqual(bibsSegment.map(r => r.bibNumber).filter(b => b != null).sort(), [1, 2, 3]);
+  });
+
+  it('a Reset closes only the one visit its own refLineNumber targets, leaving every other open visit untouched', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { bibNumber: 1, lineNumber: 2, action: 'Finish' },
+      { lineNumber: 3, action: 'Location', note: 'CP1' },
+      { bibNumber: 2, lineNumber: 4, action: 'Finish' },
+      // Reset closes only Finish's own visit (line 1) — CP1's own visit (line 3) stays open.
+      { lineNumber: 5, action: 'Reset', refLineNumber: 1 },
+    ];
+    const { bibsSegment } = buildSegmentView(lines);
+    assert.deepEqual(bibsSegment.map(r => r.bibNumber).filter(b => b != null), [2]);
   });
 });
 
@@ -444,6 +569,23 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     assert.equal(rows[0].timeExpected, true);
   });
 
+  // See racemaster-mobile's HistoryAction.PING doc: "shows in history files but is ignored, but
+  // does not show in the mode screen lists" — a Ping row must never inflate either visible count,
+  // matching the treatment every other boundary marker already gets here.
+  it('a Ping heartbeat row never inflates either visible count', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'Location', note: 'Finish' },
+        { lineNumber: 2, action: 'ModeStart', splitNumber: 0, splitTime: null, note: 'Time' },
+        { lineNumber: 3, action: 'Split', splitNumber: 1, splitTime: 1200 },
+        { lineNumber: 4, action: 'Ping' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].timeVisible, 1);
+  });
+
   it('still counts a real bib after the ModeStart marker (marker itself excluded, the real bib is not)', () => {
     const races = [{
       owner: 'alice', raceLabel: 'race-a', raceDate: null,
@@ -530,28 +672,34 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     assert.equal(rows[0].location, 'CP1'); // latest/current
   });
 
-  // ToDo.MD: "when a race has been reset in a device file, the latest modestart record is still
-  // valid wrt the location and mode" — a Reset with no fresh ModeStart written immediately after
-  // it (the phone's own convention is to write one right away, but this must degrade gracefully
-  // rather than assume that always holds) would otherwise empty out both the post-Reset segment
-  // and the visible-location rows, wrongly reporting "no mode/location" for a device that plainly
-  // still has one.
-  describe('a Reset with no fresh ModeStart immediately after it', () => {
-    it('still shows the last ModeStart\'s own location, not blank', () => {
+  // ToDo.MD: "when a mobile file is completely reset (all the way back to the beginning) device
+  // view shows a blank location but has retained the mode, that should be blank too, also the
+  // device list should show unknown in the where column and both bibs and time columns should be
+  // blank as its mode is also now unknown" — a markerless Reset (no refLineNumber — the "hard
+  // wall" degradation, see legacyResetWallLine's own doc) closes out EVERYTHING at/before it,
+  // including whatever ModeStart used to apply — location, mode, and bibs/time expectation must
+  // all go blank/unknown together, not just location while mode/expectation silently keep the old
+  // value (the bug this whole block guards against: latestModeStart() used to search the WHOLE
+  // file regardless of Reset boundaries, so it kept reporting a "still valid" mode/location even
+  // once the segment itself had gone empty).
+  describe('a markerless Reset closing out everything (a completely reset device)', () => {
+    it('reports no current location at all, not the pre-reset one', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
           { lineNumber: 1, action: 'Location', bibNumber: null, note: 'CP1' },
           { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
           { lineNumber: 3, action: 'Finish', bibNumber: '5' },
-          { lineNumber: 4, action: 'Reset' }, // no fresh ModeStart follows
+          { lineNumber: 4, action: 'Reset' }, // markerless — no refLineNumber, no fresh ModeStart follows
         ] }],
       }];
       const rows = flattenDevices(races);
-      assert.equal(rows[0].location, 'CP1');
+      assert.equal(rows[0].rawLocation, null);
+      assert.equal(rows[0].location, '—'); // showDeviceModal's own locationSummary() fallback
+      assert.deepEqual(rows[0].locations, []);
     });
 
-    it('still shows the last ModeStart\'s own bibs/time expectation ("0", not blank)', () => {
+    it('reports no bibs/time expectation at all — both counts go blank, not "0"', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
@@ -561,12 +709,13 @@ describe('mobile-files-devices.js:flattenDevices', () => {
         ] }],
       }];
       const rows = flattenDevices(races);
-      assert.equal(rows[0].bibsVisible, 0);   // the Reset genuinely cleared the visible count
-      assert.equal(rows[0].bibsExpected, true); // but the mode itself is still valid
-      assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '0');
+      assert.equal(rows[0].bibsVisible, 0);
+      assert.equal(rows[0].bibsExpected, false); // the mode itself is unknown now, not just empty
+      assert.equal(rows[0].timeExpected, false);
+      assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), ''); // blank, not '0'
     });
 
-    it('still resolves rawLocation for validateAndCompute-style bucketing after a markerless Reset', () => {
+    it('leaves rawLocation/timeExpected unknown too — a Time-mode device closed the same way', () => {
       const races = [{
         owner: 'alice', raceLabel: 'race-a', raceDate: null,
         devices: [{ name: 'A', lines: [
@@ -581,8 +730,8 @@ describe('mobile-files-devices.js:flattenDevices', () => {
         ] }],
       }];
       const rows = flattenDevices(races);
-      assert.equal(rows[0].rawLocation, 'Finish');
-      assert.equal(rows[0].timeExpected, true);
+      assert.equal(rows[0].rawLocation, null);
+      assert.equal(rows[0].timeExpected, false);
       assert.equal(rows[0].timeVisible, 0);
     });
 

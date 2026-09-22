@@ -213,7 +213,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const result = await validateAndCompute([finishRow()]);
     assert.equal(result.error, undefined);
     assert.equal(result.expected.length, 1);
-    assert.deepEqual(result.expected[0], { action: 'Finish', number: 1, time: '00:20:00' });
+    assert.deepEqual(result.expected[0], { action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' });
   });
 
   it('computes an approximate checkpoint time relative to the Finish file\'s own Start row', async () => {
@@ -253,7 +253,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const result = await validateAndCompute([noStart, cp]);
     assert.equal(result.error, undefined);
     // FinishTime itself is untouched — splitNumber pairing needs no start reference at all.
-    assert.deepEqual(result.expected, [{ action: 'Finish', number: 1, time: '00:20:00' }]);
+    assert.deepEqual(result.expected, [{ action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' }]);
     // The checkpoint crossing has no elapsed time to anchor against (empty, not omitted — see
     // computeCpTimes' own doc), but its real device time-of-day is still there.
     assert.equal(result.cpTimesByCp.get(1).get(1), '');
@@ -273,7 +273,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     // 09:00 Start), not blank, plus its own device timeOfDay straight off the CP1 row's own
     // timestamp — Safety Check's Retirees tab "when" column prefers that over the elapsed value.
     assert.deepEqual(result.expected, [
-      { action: 'Finish', number: 1, time: '00:20:00' },
+      { action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' },
       { action: 'DNF', number: 2, time: '00:10:00', timeOfDay: '09:10:00' },
     ]);
   });
@@ -286,7 +286,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const result = await validateAndCompute([withRetiree]);
     assert.equal(result.error, undefined);
     assert.deepEqual(result.expected, [
-      { action: 'Finish', number: 1, time: '00:20:00' },
+      { action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' },
       { action: 'DNF', number: 2, time: '00:15:00', timeOfDay: '09:15:00' },
     ]);
   });
@@ -300,7 +300,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     const result = await validateAndCompute([finishRow(), cp]);
     assert.equal(result.error, undefined);
     assert.equal(result.expected.length, 1);
-    assert.deepEqual(result.expected[0], { action: 'Finish', number: 1, time: '00:20:00' });
+    assert.deepEqual(result.expected[0], { action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' });
   });
 });
 
@@ -404,6 +404,30 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
     assert.equal(rows[0].startTime, '09:00:00');
     assert.equal(rows[0].finishTime, '09:20:00');
     assert.equal(rows[1].finishTime, 'DNF');
+  });
+
+  // ToDo.MD's "Random tweaks": the Progress tab shows time-of-day, not elapsed, for Start/Finish
+  // (mirroring the CP columns' own cpTimesOfDay/cpTimes split) — startTime/finishTime (elapsed)
+  // stay populated too, since other consumers (finishers.js/results.js/safety.js) still need a
+  // 'Finish' entry's own elapsed `.time` as a genuine finish time for results computation.
+  it('populates startTimeOfDay/finishTimeOfDay from timeOfDay, alongside the unchanged elapsed startTime/finishTime', () => {
+    state.mobileProgress = [
+      { action: 'Start', number: 1, time: '00:00:00', timeOfDay: '09:00:00' },
+      { action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' },
+    ];
+    const rows = buildProgressRows();
+    assert.equal(rows[0].startTime, '00:00:00');
+    assert.equal(rows[0].startTimeOfDay, '09:00:00');
+    assert.equal(rows[0].finishTime, '00:20:00');
+    assert.equal(rows[0].finishTimeOfDay, '09:20:00');
+  });
+
+  it('a DNF keeps the literal finishTime text, but still carries finishTimeOfDay separately (same as cpTimeOfDay under CP_RETIRE)', () => {
+    state.mobileProgress = [{ action: 'DNF', number: 2, time: '', timeOfDay: '09:15:00' }];
+    const rows = buildProgressRows();
+    const row2 = rows.find(r => r.bibNumber === 2);
+    assert.equal(row2.finishTime, 'DNF');
+    assert.equal(row2.finishTimeOfDay, '09:15:00');
   });
 
   it('also includes a bib seen only at a checkpoint, never finished — the safety-relevant case', () => {

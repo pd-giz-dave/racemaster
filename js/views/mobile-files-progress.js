@@ -257,8 +257,14 @@ export function renderMobileProgressTable() {
     name:       r => escHtml(r.invalid ? '--entry missing--' : r.name),
     category:   r => escHtml(r.category),
     course:     r => escHtml(r.course),
-    start:      r => escHtml(r.startTime || ''),
-    finishTime: r => escHtml(r.finishTime || ''),
+    // Time-of-day, not elapsed — the raw device reading, straight out of the file (this tab's own
+    // job, per buildProgressRows()'s doc; adjusted elapsed times are the Results & Prize List
+    // Splits tab's job, not this one), same reasoning the CP columns just below already apply.
+    // 'DNF' is the one exception: finishTime (not finishTimeOfDay) still carries that literal
+    // text, and must keep showing as-is rather than being replaced by the retiring row's own
+    // crossing time-of-day.
+    start:      r => escHtml(r.startTimeOfDay || ''),
+    finishTime: r => escHtml(r.finishTime === 'DNF' ? 'DNF' : (r.finishTimeOfDay || '')),
   };
   // Time-of-day, not elapsed — the raw device reading, straight out of the file (this tab's own
   // job, per buildProgressRows()'s doc; adjusted elapsed times are the Results & Prize List
