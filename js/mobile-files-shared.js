@@ -205,29 +205,21 @@ export function raceNameOf(raceLabel) {
   return (raceLabel || '').replace(/-\d{2}-\d{2}-\d{2}$/, '');
 }
 
-// Same "<name>-yy-mm-dd" (or "<name>-<course>-yy-mm-dd") convention a phone's own raceLabel
-// already uses (2-digit year FIRST — see parseRaceLabelDate above and js/mule-ble.js's
-// raceLabelAgeDays, both of which parse a label's trailing "-dd-dd-dd" strictly as yy-mm-dd) —
-// state.event.date is stored dd/mm/yyyy, so the day and year swap position here. Getting this
-// order wrong doesn't error — it just silently misdates the race for every consumer of that
-// shared parsing, which is exactly what was happening before this was fixed (see git history) —
-// never re-derive this independently elsewhere; this is now the one place it lives
-// (js/progress-sync.js imports it back).
-//
-// `course`, when given, is sanitised and inserted the same way racemaster-mobile's own
-// buildRaceLabel(name, course, timestamp) does (RaceLabels.kt) once a course has been chosen at
-// Start time on the phone — a race folder there is "<name>-<date>" only until then, and
-// "<name>-<course>-<date>" from then on. One web-app event/dataset has no course of its own (it
-// covers Seniors AND Juniors at once — see js/constants.js's COURSE), so a caller that needs to
-// reach an actual per-course race folder (js/progress-sync.js's push, mobile-files-ble.js's own
-// progress-delivery leg) must derive one label per course explicitly, not guess at a single
-// course-less one and hope it happens to match — see this file's own plan doc/commit history for
-// the bug that came from doing exactly that.
+// The race's own server folder label: "<name>[-<course>]-<yy>-<mm>-<dd>", the same date-suffixed
+// convention racemaster-mobile uses for a phone's own initial arbitrary label (e.g.
+// "unknown-26-09-23" — its SetupRaceScreen default). Phones don't need to type this exactly:
+// they either pick it from Setup Race's server scan (which lists these folders' progress.json)
+// or are adopted into it (js/mobile-files-adoption.js). state.event.date is dd/mm/yyyy, so day
+// and year swap position here — 2-digit year FIRST, matching parseRaceLabelDate/raceNameOf above
+// and mule-ble.js's raceLabelAgeDays. `course`, when given, is inserted before the date: one
+// web-app event covers Seniors AND Juniors at once (js/constants.js's COURSE), so a caller that
+// needs an actual per-course folder (progress-sync.js's push, the BLE delivery/adoption legs)
+// derives one label per course. '' until the event has both a name and a date.
 export function deriveRaceLabel(event, course) {
   const [dd, mm, yyyy] = (event.date || '').split('/');
-  if (!dd || !mm || !yyyy || !event.name) return '';
+  if (!event.name || !dd || !mm || !yyyy) return '';
   const name = sanitiseName(event.name) || 'race';
-  const date = `${yyyy.slice(-2)}-${mm}-${dd}`;
+  const date = `${yyyy.slice(-2)}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
   return course ? `${name}-${sanitiseName(course)}-${date}` : `${name}-${date}`;
 }
 
@@ -478,9 +470,11 @@ const CACHED_PROGRESS_RACES_KEY = 'racemaster-mobile-cached-progress-races';
 // entirely — nothing useful to cache about them.
 export function saveCachedProgressRaces(races) {
   try {
+    // Adoption markers ride along too (js/mobile-files-adoption.js) — a reload while offline must
+    // still know which devices to send a Bluetooth adoption to.
     const slim = races
-      .filter(r => r.progress)
-      .map(r => ({ owner: r.owner, raceLabel: r.raceLabel, raceDate: r.raceDate, progress: r.progress, devices: [] }));
+      .filter(r => r.progress || (r.adoptions && Object.keys(r.adoptions).length))
+      .map(r => ({ owner: r.owner, raceLabel: r.raceLabel, raceDate: r.raceDate, progress: r.progress ?? null, adoptions: r.adoptions, devices: [] }));
     localStorage.setItem(CACHED_PROGRESS_RACES_KEY, JSON.stringify({
       context: currentDatasetContext(), races: slim,
     }));

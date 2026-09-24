@@ -50,10 +50,9 @@ export function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
 // startTime, finishTime, cpTimes}]} file the web app pushes (see POST .../progress) — the Mobile
 // Files page's own Progress tab contents, covering every entry regardless of mobile activity
 // (see js/mobile-files-progress.js's buildProgressRows()), so this is also what a phone in Bibs
-// or Checkpoint mode reads to know which bib is on which course (formerly a separate
-// bib-allocations.json/tab, retired once this file's own entry coverage made it redundant). Not
-// a per-device sync file, so it lives in the same owner-scoped race dir but is deliberately
-// excluded from device enumeration in getMobileRacesForUser() below.
+// or Checkpoint mode reads to know which bib is on which course. Not a per-device sync file, so
+// it lives in the same owner-scoped race dir but is deliberately excluded from device
+// enumeration (see isReservedMobileFile below).
 export function progressFilePath(username, raceLabel) {
   return path.join(mobileRaceDir(username, raceLabel), 'progress.json');
 }
@@ -112,6 +111,54 @@ export function touchProgress(username, raceLabel) {
   const touched = { ...existing, generatedAt: new Date().toISOString() };
   writeProgress(username, raceLabel, touched);
   return touched;
+}
+
+// Every *.json in a race dir is a device's own history file EXCEPT these.
+export const ADOPTIONS_FILE = 'adoptions.json';
+const RESERVED_MOBILE_FILES = new Set(['progress.json', ADOPTIONS_FILE]);
+export function isReservedMobileFile(file) {
+  return RESERVED_MOBILE_FILES.has(file);
+}
+
+// Adoption markers for devices pushing under [raceLabel] (typically a phone's arbitrary initial
+// race name) — { "<deviceName>": { raceLabel: "<true race label>", adoptedAt } }. Keyed by
+// device name, not the folder as a whole: many phones share the same default arbitrary name, and
+// the server knows a device only by its name (no deviceId is ever pushed). Written by the web app
+// (or a mule on its behalf) when the operator ticks that device's row; read by the phone itself
+// (or a mule for a Bluetooth-only phone) to adopt the true race identity. See ToDo "Concept gap".
+export function adoptionsFilePath(username, raceLabel) {
+  return path.join(mobileRaceDir(username, raceLabel), ADOPTIONS_FILE);
+}
+
+export function readAdoptions(username, raceLabel) {
+  const fp = adoptionsFilePath(username, raceLabel);
+  if (!fs.existsSync(fp)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+// null [targetRaceLabel] clears that device's entry; the file itself is removed once empty so an
+// all-cleared folder doesn't linger just for it.
+export function setAdoption(username, raceLabel, deviceName, targetRaceLabel) {
+  const adoptions = readAdoptions(username, raceLabel);
+  if (targetRaceLabel) {
+    adoptions[deviceName] = { raceLabel: targetRaceLabel, adoptedAt: new Date().toISOString() };
+  } else {
+    delete adoptions[deviceName];
+  }
+  const fp = adoptionsFilePath(username, raceLabel);
+  if (Object.keys(adoptions).length === 0) {
+    try { fs.unlinkSync(fp); } catch { /* already absent */ }
+  } else {
+    const dir = mobileRaceDir(username, raceLabel);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(fp, JSON.stringify(adoptions, null, 2), 'utf8');
+  }
+  return adoptions;
 }
 
 // Whether a caller who says "I already have generatedAt=knownGeneratedAt" already holds the
@@ -192,10 +239,7 @@ export function getMobileRacesForUser(username, adminAccess = false) {
     const devices = [];
     let recordCount = 0;
     for (const file of files) {
-      // 'bib-allocations.json' is a retired file kind (see this module's own progressFilePath
-      // doc) — no longer generated, but still excluded here defensively in case one is left over
-      // on disk from before this change, so it never gets misinterpreted as a device file.
-      if (!file.endsWith('.json') || file === 'bib-allocations.json' || file === 'progress.json') continue;
+      if (!file.endsWith('.json') || isReservedMobileFile(file)) continue;
       const deviceName = file.slice(0, -'.json'.length);
       const records = readMobileDeviceFile(owner, raceLabel, deviceName);
       recordCount += records.length;
@@ -213,6 +257,7 @@ export function getMobileRacesForUser(username, adminAccess = false) {
     results.push({
       owner, raceLabel, devices, recordCount, raceDate: parseRaceLabelDate(raceLabel),
       progress: readProgress(owner, raceLabel),
+      adoptions: readAdoptions(owner, raceLabel),
     });
   }
 
@@ -232,7 +277,7 @@ export function getMobileRacesStatusForUser(username, adminAccess = false) {
   for (const { owner, raceLabel, raceDirPath, files } of walkMobileRaceDirs(username, adminAccess)) {
     const devices = [];
     for (const file of files) {
-      if (!file.endsWith('.json') || file === 'bib-allocations.json' || file === 'progress.json') continue;
+      if (!file.endsWith('.json') || isReservedMobileFile(file)) continue;
       const deviceName = file.slice(0, -'.json'.length);
       try {
         const st = fs.statSync(path.join(raceDirPath, file));

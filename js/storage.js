@@ -221,6 +221,19 @@ export async function apiPushProgress(token, owner, raceLabel, payload) {
   return res.json();
 }
 
+// Writes (or, with a null target, clears) a device's adoption marker — server/routes/mobile.js's
+// POST /api/mobile/:owner/:raceLabel/adoptions. [owner]/[raceLabel] are the folder the device's
+// own file lives in (its Devices-tab row), not the dataset. Throws on a non-2xx.
+export async function apiSetAdoption(token, owner, raceLabel, deviceName, targetRaceLabel) {
+  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/adoptions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ deviceName, raceLabel: targetRaceLabel || null }),
+  });
+  if (!res.ok) throw new Error(`Adoption write failed (${res.status})`);
+  return res.json();
+}
+
 // "Activate Race" (js/views/event.js) — server.js's POST .../progress/touch, refreshing
 // progress.json's own generatedAt with no entries sent at all. Same owner-scoping as
 // apiPushProgress above.

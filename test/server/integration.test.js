@@ -288,6 +288,99 @@ describe('server integration: mobile sync', () => {
     assert.equal(phoneA.lines.some(r => r.action === 'Reset'), false);
     assert.deepEqual(phoneA.lines.map(r => r.action), ['NewRace', 'Stop']);
   });
+
+  it('adoption markers: set by owner route, read per device, cleared, and never listed as a device', async () => {
+    const token = await createAndLogin('mobile-adopt-user');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const arbitrary = 'unknown-26-09-23';
+    await fetch(`${base}/api/mobile/${arbitrary}`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ devices: { 'brave-reef': [{ action: 'NewRace', lineNumber: 1 }], 'quiet-fox': [{ action: 'NewRace', lineNumber: 1 }] } }),
+    });
+
+    const set = await fetch(`${base}/api/mobile/mobile-adopt-user/${arbitrary}/adoptions`, {
+      method: 'POST', headers: auth, body: JSON.stringify({ deviceName: 'brave-reef', raceLabel: 'lmv-seniors' }),
+    });
+    assert.equal(set.status, 200);
+
+    // Keyed per device — the other phone sharing the same arbitrary folder is untouched.
+    const get = n => fetch(`${base}/api/mobile/${arbitrary}/adoption/${n}`, { headers: auth }).then(r => r.json());
+    assert.deepEqual(await get('brave-reef'), { raceLabel: 'lmv-seniors' });
+    assert.deepEqual(await get('quiet-fox'), { raceLabel: null });
+
+    const status = await (await fetch(`${base}/api/mobile/${arbitrary}/status`, { headers: auth })).json();
+    assert.deepEqual(status, { 'brave-reef': 1, 'quiet-fox': 1 });
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === arbitrary);
+    assert.deepEqual(race.devices.map(d => d.name), ['brave-reef', 'quiet-fox']);
+    assert.equal(race.adoptions['brave-reef'].raceLabel, 'lmv-seniors');
+    const quick = await (await fetch(`${base}/api/mobile/status`, { headers: auth })).json();
+    assert.deepEqual(quick.find(r => r.raceLabel === arbitrary).devices.map(d => d.name), ['brave-reef', 'quiet-fox']);
+
+    // Own-folder variant (a mule writing on the web app's behalf), and clearing.
+    await fetch(`${base}/api/mobile/${arbitrary}/adoptions`, {
+      method: 'POST', headers: auth, body: JSON.stringify({ deviceName: 'brave-reef', raceLabel: null }),
+    });
+    assert.deepEqual(await get('brave-reef'), { raceLabel: null });
+  });
+
+  it('a non-owner cannot write an adoption into someone else\'s folder', async () => {
+    await createAndLogin('adopt-folder-owner');
+    const other = await createAndLogin('adopt-intruder');
+    const r = await fetch(`${base}/api/mobile/adopt-folder-owner/some-race/adoptions`, {
+      method: 'POST', headers: { Authorization: `Bearer ${other}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceName: 'x', raceLabel: 'y' }),
+    });
+    assert.equal(r.status, 403);
+  });
+
+  it('a lagging mule resending an already-known NewRace record does not wipe a faster mule\'s fuller push', async () => {
+    // Reproduces the "every push" bug: two mule phones relaying the SAME still-current race for
+    // the same physical device (PhoneA), both pushing under the one shared owner login (see this
+    // route's own doc above — data lands under the *pushing user's* own folder, and two mules
+    // relaying the same source device always share that one login) — mule-a fully caught up,
+    // mule-b genuinely behind (it hasn't pulled PhoneA's later splits yet). The Android app's own
+    // MuleRepository.pushToServer bypasses its normal delta filter and resends a mule's ENTIRE
+    // held history — that device's own NewRace record included — whenever the server's reported
+    // status looks ahead of what that one mule alone has pulled, which is exactly what happens
+    // here once mule-a's fuller push lands first. Without this route's own fix, mule-b's later,
+    // smaller push would look indistinguishable from a genuine race recreation and wipe mule-a's
+    // already-delivered splits down to mule-b's own stale subset.
+    const token = await createAndLogin('mobile-mule-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'integration-lagging-mule-race';
+    const newRaceRecord = { action: 'NewRace', lineNumber: 1, timestamp: '2026/09/23 10:00:00' };
+
+    // mule-a is fully caught up: NewRace plus two genuine splits.
+    const pushA = await fetch(`${base}/api/mobile/${raceLabel}`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        devices: {
+          PhoneA: [
+            newRaceRecord,
+            { action: 'Finish', bibNumber: 101, lineNumber: 2, timestamp: '2026/09/23 10:01:00' },
+            { action: 'Finish', bibNumber: 102, lineNumber: 3, timestamp: '2026/09/23 10:02:00' },
+          ],
+        },
+      }),
+    });
+    assert.deepEqual(await pushA.json(), { ok: true, added: 3, received: 3, version: 1 });
+
+    // mule-b is still behind — its own bypass resends everything it personally holds for
+    // PhoneA, which is only that same NewRace record (same lineNumber, same timestamp: the same
+    // generation, just an incomplete copy of it).
+    const pushB = await fetch(`${base}/api/mobile/${raceLabel}`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ devices: { PhoneA: [newRaceRecord] } }),
+    });
+    assert.deepEqual(await pushB.json(), { ok: true, added: 0, received: 1, version: 1 });
+
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === raceLabel);
+    const phoneA = race.devices.find(d => d.name.toLowerCase() === 'phonea');
+    // Both of mule-a's already-delivered splits must survive mule-b's later, smaller push.
+    assert.deepEqual(phoneA.lines.map(r => r.action), ['NewRace', 'Finish', 'Finish']);
+  });
 });
 
 describe('server integration: progress', () => {

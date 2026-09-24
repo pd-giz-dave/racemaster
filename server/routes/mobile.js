@@ -8,6 +8,7 @@ import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
   mergeProgress, touchProgress, readProgress, progressIsUnchanged,
   getMobileRacesForUser, getMobileRacesStatusForUser, getAvailableRacesForUser,
+  isReservedMobileFile, readAdoptions, setAdoption,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
@@ -105,6 +106,47 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     return true;
   }
 
+  // Adoption markers — see server/mobile.js's own readAdoptions doc. Body {deviceName, raceLabel}
+  // (raceLabel null/empty clears that device's adoption).
+  //   POST /api/mobile/:owner/:raceLabel/adoptions — the web app, same owner-or-admin rule as the
+  //     progress POST above ([owner] is the folder the device's own file actually lives in).
+  //   POST /api/mobile/:raceLabel/adoptions — the caller's own folder: a mule writing on behalf of
+  //     a web app that can reach it over Bluetooth but not the server itself.
+  // Both checked before the catch-all POST /api/mobile/:raceLabel below.
+  const adoptionsPost = /^\/api\/mobile\/(?:([^/]+)\/)?([^/]+)\/adoptions$/.exec(pathname);
+  if (adoptionsPost && req.method === 'POST') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const owner = adoptionsPost[1] !== undefined ? sanitiseName(decodeURIComponent(adoptionsPost[1])) : username;
+    const raceLabel = sanitiseName(decodeURIComponent(adoptionsPost[2]));
+    if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
+    if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' }); return true; }
+    let body;
+    try { body = JSON.parse(await readBody(req)); }
+    catch { jsonReply(res, 400, { error: 'Invalid JSON' }); return true; }
+    const deviceName = sanitiseName(String(body?.deviceName ?? ''));
+    if (!deviceName) { jsonReply(res, 400, { error: 'deviceName required' }); return true; }
+    const target = body?.raceLabel ? sanitiseName(String(body.raceLabel)) : null;
+    const adoptions = setAdoption(owner, raceLabel, deviceName, target || null);
+    console.log(`[adoption] ${username} -> ${owner}/${raceLabel}/${deviceName}: ${target ? `adopted into ${target}` : 'cleared'}`);
+    jsonReply(res, 200, { ok: true, adoptions });
+    return true;
+  }
+
+  // GET /api/mobile/:raceLabel/adoption/:deviceName — a phone (or a mule on a Bluetooth-only
+  // phone's behalf) asking "has [deviceName], pushing under [raceLabel], been adopted into a real
+  // race?". The caller's own folder, like GET .../status. {raceLabel} or {raceLabel: null}.
+  const adoptionGet = /^\/api\/mobile\/([^/]+)\/adoption\/([^/]+)$/.exec(pathname);
+  if (adoptionGet && req.method === 'GET') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const raceLabel = sanitiseName(decodeURIComponent(adoptionGet[1]));
+    const deviceName = sanitiseName(decodeURIComponent(adoptionGet[2]));
+    if (!raceLabel || !deviceName) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
+    jsonReply(res, 200, { raceLabel: readAdoptions(username, raceLabel)[deviceName]?.raceLabel ?? null });
+    return true;
+  }
+
   // POST /api/mobile/:raceLabel  —  Android App Mule Mode's sync target.
   //
   // Lands in data/mobile/<username>/<raceLabel>/<deviceName>.json — one file per physical
@@ -178,10 +220,30 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
 
       const previousFile = readMobileDeviceFile(username, raceLabel, deviceName);
       // See this route's own doc above — a NewRace marker means whatever's already stored is
-      // stale, from a different race that reused this exact label. Checked against the RAW
-      // records (before coerce()'s own 'Finish' fallback applies to a missing/falsy action),
-      // same as every other field this loop reads off them.
-      const startingFresh = records.some(r => r?.action === 'NewRace');
+      // stale, from a different race that reused this exact label. Matched against the SPECIFIC
+      // stored record at that same lineNumber (same lineNumber AND same timestamp — not just "a
+      // NewRace marker is present somewhere in this push"): every race's history starts with a
+      // NewRace record at lineNumber 1, so a mule that's simply lagging behind another, faster
+      // mule already relaying the SAME still-current race (see MuleRepository.pushToServer's own
+      // startingFreshDevices doc — its bypass resends a device's entire held history, that
+      // device's own NewRace record included, whenever the server's reported status looks ahead
+      // of what that one mule alone has pulled, which is a routine multi-mule timing gap, not
+      // evidence of staleness) would otherwise look indistinguishable from a genuine race
+      // recreation and wipe out data another mule already delivered — confirmed in the field: a
+      // lagging mule's own push was dumping and fully re-loading the file on every push. A
+      // NewRace record already stored at the exact same lineNumber+timestamp is this same
+      // generation's own marker being harmlessly resent; only a lineNumber with no matching
+      // stored record (or nothing stored at all) means whatever's already there predates this
+      // generation. Checked against the RAW incoming record (before coerce()'s own 'Finish'
+      // fallback applies to a missing/falsy action), same as every other field this loop reads
+      // off them, but against the already-coerced previousFile (which is what was itself written
+      // by an earlier call to this exact route).
+      const incomingNewRace = records.find(r => r?.action === 'NewRace' && Number.isFinite(r?.lineNumber));
+      const startingFresh = incomingNewRace != null && !previousFile.some(
+        stored => stored.action === 'NewRace' &&
+          stored.lineNumber === incomingNewRace.lineNumber &&
+          stored.timestamp === incomingNewRace.timestamp,
+      );
       if (startingFresh && previousFile.length > 0) {
         console.log(`[mobile-sync] ${username}/${raceLabel}/${deviceName}: NewRace marker — discarding ${previousFile.length} stale line(s) from a previous race under this label`);
       }
@@ -248,7 +310,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     try { files = fs.readdirSync(dir); } catch { /* no folder yet — nothing pushed for this race */ }
     const maxLineNumber = (records) => records.reduce((max, r) => Math.max(max, r.lineNumber || 0), 0);
     for (const file of files) {
-      if (!file.endsWith('.json')) continue;
+      if (!file.endsWith('.json') || isReservedMobileFile(file)) continue;
       const deviceName = file.slice(0, -'.json'.length);
       result[deviceName] = maxLineNumber(readMobileDeviceFile(username, raceLabel, deviceName));
     }

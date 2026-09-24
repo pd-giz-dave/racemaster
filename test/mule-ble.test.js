@@ -18,7 +18,7 @@ import {
   resetLastPulledLineNumber, resetAllLastPulledLineNumbers,
   getRaceStaleAfterDays, setRaceStaleAfterDays,
   getKnownDevices, connectToPhone, reconnectToKnownDevice, pullFromConnectedPhone, abandonConnection,
-  getAdoptedDevices, setAdoptedDevice, removeAdoptedDevice, getCachedRelayEntries,
+  adoptionTargetFor, adoptionPayload,
 } from '../js/mule-ble.js';
 
 const SERVICE_UUID          = '6d6f6269-6c65-2e72-6163-656d61737465';
@@ -1264,7 +1264,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await connectPromise;
 
     const pullPromise = pullFromConnectedPhone({
-      adoptedTargets: [{ deviceId: 'dev1', raceLabel: 'the-real-race-seniors-26-08-23', progress: currentProgress }],
+      adoptedTargets: [{ deviceName: 'phoneone', fromRaceLabel: 'some-temporary-manually-typed-name', raceLabel: 'the-real-race-seniors-26-08-23', progress: currentProgress }],
     });
     await settleOnePull(t);
     await pullPromise;
@@ -1289,7 +1289,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await connectPromise;
 
     const pullPromise = pullFromConnectedPhone({
-      adoptedTargets: [{ deviceId: 'dev1', raceLabel: 'the-real-race', progress: currentProgress }],
+      adoptedTargets: [{ deviceName: 'phoneone', fromRaceLabel: 'temp', raceLabel: 'the-real-race', progress: currentProgress }],
     });
     await settleOnePull(t);
     await pullPromise;
@@ -1312,7 +1312,7 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await connectPromise;
 
     const pullPromise = pullFromConnectedPhone({
-      adoptedTargets: [{ deviceId: 'leaf-dev', raceLabel: 'the-real-race-seniors-26-08-23', progress: currentProgress }],
+      adoptedTargets: [{ deviceName: 'leafphone', fromRaceLabel: 'leaf-temp-race', raceLabel: 'the-real-race-seniors-26-08-23', progress: currentProgress }],
     });
     await settleOnePull(t); // relay-manifest fetch's own settle delay
     await settleOnePull(t); // the one relayed race's own record-pull settle delay
@@ -1342,208 +1342,24 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
   });
 });
 
-describe('mule-ble.js:getAdoptedDevices / setAdoptedDevice / removeAdoptedDevice', () => {
-  it('defaults to empty', () => {
-    assert.deepEqual(getAdoptedDevices(), {});
+describe('mule-ble.js:adoptionTargetFor / adoptionPayload', () => {
+  const targets = [{ deviceName: 'brave-reef', fromRaceLabel: 'unknown-26-09-23', raceLabel: 'lmv-seniors', progress: null }];
+
+  it('matches on the sanitised (deviceName, raceLabel) the device itself reports', () => {
+    assert.equal(adoptionTargetFor(targets, 'Brave-Reef', 'unknown-26-09-23'), targets[0]);
   });
 
-  it('round-trips a set device through localStorage, keyed by deviceId', () => {
-    setAdoptedDevice('dev1', 'Phone One', 'race-seniors-26-08-23');
-
-    assert.deepEqual(getAdoptedDevices(), { dev1: { raceLabel: 'race-seniors-26-08-23', deviceName: 'Phone One' } });
+  it('does not match a same-named device under a different race label, or once renamed', () => {
+    assert.equal(adoptionTargetFor(targets, 'brave-reef', 'other-race'), null);
+    assert.equal(adoptionTargetFor(targets, 'brave-reef', 'lmv-seniors'), null);
   });
 
-  it('setting a device already adopted replaces its previous assignment', () => {
-    setAdoptedDevice('dev1', 'Phone One', 'race-seniors-26-08-23');
-    setAdoptedDevice('dev1', 'Phone One', 'race-juniors-26-08-23');
-
-    assert.equal(getAdoptedDevices().dev1.raceLabel, 'race-juniors-26-08-23');
-  });
-
-  it('removeAdoptedDevice clears only the named device', () => {
-    setAdoptedDevice('dev1', 'Phone One', 'race-a');
-    setAdoptedDevice('dev2', 'Phone Two', 'race-b');
-
-    removeAdoptedDevice('dev1');
-
-    assert.deepEqual(getAdoptedDevices(), { dev2: { raceLabel: 'race-b', deviceName: 'Phone Two' } });
-  });
-
-  it('removing a never-adopted device is a no-op', () => {
-    removeAdoptedDevice('never-adopted');
-
-    assert.deepEqual(getAdoptedDevices(), {});
-  });
-});
-
-describe('mule-ble.js:getCachedRelayEntries', () => {
-  it('starts empty before any pull has fetched a manifest', () => {
-    assert.deepEqual(getCachedRelayEntries(), []);
-  });
-});
-
-describe('mule-ble.js:connectToPhone picker filter (Mule Mode only)', () => {
-  const MULE_MODE_MARKER_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
-
-  it('filters requestDevice() to both the GATT service UUID and the Mule Mode marker UUID', async (t) => {
-    // Fake timers needed for real reasons now, same as every other test in this file that
-    // reaches connectToPhone(): GATT_CONNECT_SETTLE_MS is a genuine required delay before the
-    // first DeviceInfo verification attempt (see settleConnectRetry's own call sites below), not
-    // just cleanup for a dangling Promise.race timeout.
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    let requestDeviceOptions = null;
-    installNavigatorMock({
-      bluetooth: { requestDevice: async (options) => { requestDeviceOptions = options; return device; } },
-    });
-
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-    disconnectPhone();
-
-    // Both UUIDs required in one filter object — Web Bluetooth's "advertised UUIDs must be a
-    // superset of filter.services" semantics — not the manufacturerData/dataPrefix approach
-    // tried first (see MULE_MODE_MARKER_SERVICE_UUID's own doc for why that was abandoned:
-    // confirmed unreliable in the field on at least one real platform, whereas service-UUID
-    // filtering is pushed down into the OS's own native discovery filter and proven reliable).
-    assert.equal(requestDeviceOptions.filters.length, 1);
-    assert.deepEqual(requestDeviceOptions.filters[0].services, [SERVICE_UUID, MULE_MODE_MARKER_SERVICE_UUID]);
-  });
-});
-
-describe('mule-ble.js:onDisconnect wasDeliberate', () => {
-  it('receives wasDeliberate: true for disconnectPhone(), false for an unexpected drop', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-
-    const seen = [];
-    onDisconnect(wasDeliberate => seen.push(wasDeliberate));
-
-    disconnectPhone();
-    assert.deepEqual(seen, [true]);
-
-    // Reconnect, then simulate a genuinely unexpected drop — the earlier deliberate disconnect
-    // must not still be "remembered" as making this one expected too.
-    const _reconnect = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await _reconnect;
-    device._simulateUnexpectedDisconnect();
-    assert.deepEqual(seen, [true, false]);
-  });
-
-  it('calling disconnectPhone() with nothing live to disconnect does not misclassify a later unexpected drop as deliberate', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    // Calling disconnectPhone() while already idle is a real path — e.g. the "declined the
-    // connect confirmation" UI branch calls it unconditionally, and the phone can have already
-    // dropped out during that wait. Since there's no live device.gatt.connected, the real
-    // .gatt.disconnect() call (and the forgetConnection() that would normally reset the
-    // deliberate flag) never happens — this must not leave anything stuck for next time.
-    assert.equal(isConnected(), false);
-    disconnectPhone();
-
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device } });
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-
-    const seen = [];
-    onDisconnect(wasDeliberate => seen.push(wasDeliberate));
-    device._simulateUnexpectedDisconnect();
-
-    assert.deepEqual(seen, [false]);
-  });
-});
-
-describe('mule-ble.js:forgetConnection no longer forgets on a mere unexpected drop — only a failed reconnect attempt does', () => {
-  it('an unexpected drop (e.g. briefly out of range) leaves the device remembered', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
-
-    // The overwhelmingly common "unexpected drop" in the field is a mule going briefly out of
-    // Bluetooth range — routine, not evidence the remembered identity has gone stale. Forgetting
-    // it here would force a full re-pick through the browser's slow native picker for something
-    // that would very likely reconnect instantly via the known-device shortcut instead.
-    device._simulateUnexpectedDisconnect();
-    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
-  });
-
-  it('a deliberate disconnectPhone() call also leaves the device remembered', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-
-    disconnectPhone();
-    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
-  });
-
-  it('a reconnect attempt against a device that has actually gone stale still forgets it, once that attempt itself fails', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    // Connects fine the first time (so it becomes known), but every gatt.connect() call from the
-    // 2nd onward fails outright — simulates the identity having genuinely gone stale (e.g. its
-    // BLE address rotated) by the time a later reconnect is attempted.
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [], faults: { connectsFrom: 2 } });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-
-    device._simulateUnexpectedDisconnect();
-    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']); // still remembered, per the test above
-
-    const reconnectPromise = reconnectToKnownDevice(device);
-    const rejectionAssertion = assert.rejects(() => reconnectPromise);
-    await settleReconnectCooldown(t); // RECONNECT_COOLDOWN_MS before the first connect attempt even starts
-    await settleReconnectCooldown(t); // attempt 1 fails, RECONNECT_COOLDOWN_MS before attempt 2
-    await settleReconnectCooldown(t); // attempt 2 fails, RECONNECT_COOLDOWN_MS before attempt 3
-    await settleConnectRetry(t); // attempt 3 fails — gives up, no further wait scheduled
-    await rejectionAssertion;
-
-    assert.deepEqual(await getKnownDevices(), []); // the connect-failure safety net forgot it
-  });
-});
-
-describe('mule-ble.js:abandonConnection', () => {
-  it('disconnects but leaves the device remembered — deliberately no automatic reconnect attempt', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    const deviceInfo = { deviceId: 'dev1', deviceName: 'Phone One', raceLabel: 'test-race', relayCount: 0 };
-    const device = makeFakePhone({ deviceInfo, recordsByRequest: () => [] });
-    installNavigatorMock({ bluetooth: { requestDevice: async () => device, getDevices: async () => [device] } });
-    const connectPromise = connectToPhone();
-    await settleConnectRetry(t); // GATT_CONNECT_SETTLE_MS before the first DeviceInfo verification attempt
-    await connectPromise;
-    assert.equal(isConnected(), true);
-
-    abandonConnection();
-
-    assert.equal(isConnected(), false);
-    // No longer forgotten (see forgetConnection's own doc) — a persistently failing connection
-    // is most often the same "mule briefly out of range" case as a plain unexpected drop, not
-    // confirmation the remembered identity has gone stale.
-    assert.deepEqual((await getKnownDevices()).map(k => k.name), ['Phone One']);
-  });
-
-  it('is a safe no-op when nothing is connected', () => {
-    assert.doesNotThrow(() => abandonConnection());
-    assert.equal(isConnected(), false);
+  it('builds an adoption-only payload with no entries when no progress is cached', () => {
+    const p = adoptionPayload(targets[0], 'dev-1');
+    assert.deepEqual(p.entries, []);
+    assert.equal(p.targetDeviceId, 'dev-1');
+    assert.equal(p.targetRaceLabel, 'lmv-seniors');
+    assert.equal(p.fromRaceLabel, 'unknown-26-09-23');
+    assert.equal(p.targetDeviceName, 'brave-reef');
   });
 });

@@ -24,8 +24,11 @@
 
 import {
   getSession, getIsAdmin, getUsername, apiListMobileFiles, apiGetMobileStatus, apiDeleteMobileFile,
-  apiPushMobileSync, getPendingMobileFiles, removePendingMobileFile, apiTouchProgress,
+  apiPushMobileSync, getPendingMobileFiles, removePendingMobileFile, apiTouchProgress, apiSetAdoption,
 } from '../storage.js';
+import {
+  eventCourseLabels, adoptionFor, completedAdoptions, loadPendingAdoptions, setPendingAdoption, clearPendingAdoption,
+} from '../mobile-files-adoption.js';
 import { showConfirmDialog, showChoiceDialog, showStatus, wireTabBar, getEl } from '../ui.js';
 import { isBluetoothAvailable, resetLastPulledLineNumber, resetAllLastPulledLineNumbers } from '../mule-ble.js';
 import {
@@ -359,6 +362,7 @@ export function wireMobileFiles() {
     if (!r) return;
     if (cb.checked) selectedKeys.add(rowKey(r)); else selectedKeys.delete(rowKey(r));
     saveSelectedKeys();
+    void syncRowAdoption(r, cb.checked);
     // Colour is selection-driven now — reflect the change immediately rather than waiting for
     // the next full re-render (a fresh fetch or a Refresh/Update Progress click).
     r.incorporationStatus = computeIncorporationStatus(r);
@@ -399,6 +403,65 @@ export function wireMobileFiles() {
 // message was for no reason the operator asked for. The header's own online/offline indicator
 // (js/connect.js's pingServerNow()) already covers connectivity; this function's job on a
 // silent tick is just to quietly update the data.
+// The Devices tab's row tick doubles as adoption (see js/mobile-files-adoption.js): a device whose
+// race label isn't one of the loaded event's own course labels gets told which real race it is —
+// ticking adopts (asking which course when there's more than one), unticking clears it. Recorded
+// locally first so an offline tick isn't lost; flushPendingAdoptions() delivers it to the server.
+async function syncRowAdoption(r, checked) {
+  const courseLabels = eventCourseLabels(state.event, coursesInUse());
+  if (!courseLabels.length || courseLabels.includes(r.raceLabel)) return;
+  const current = adoptionFor(progressRaces(), r.owner, r.raceLabel, r.device.name);
+  let target = null;
+  if (checked) {
+    target = courseLabels.length === 1 ? courseLabels[0]
+      : await showChoiceDialog(`Adopt "${r.device.name}" into which race?`, courseLabels.map(l => ({ label: l, value: l })));
+    if (!target) {
+      selectedKeys.delete(rowKey(r));
+      saveSelectedKeys();
+      await renderMobileFiles({ silent: true });
+      return;
+    }
+    if (target === current) return;
+  } else if (!current) {
+    return;
+  }
+  setPendingAdoption(r.owner, r.raceLabel, r.device.name, target);
+  showStatus(target ? `Adopting "${r.device.name}" into "${target}"…` : `Un-adopting "${r.device.name}"…`);
+  await renderMobileFiles({ silent: true });
+}
+
+async function flushPendingAdoptions(token) {
+  for (const p of Object.values(loadPendingAdoptions())) {
+    try {
+      await apiSetAdoption(token, p.owner, p.fromRaceLabel, p.deviceName, p.raceLabel);
+      clearPendingAdoption(p.owner, p.fromRaceLabel, p.deviceName);
+    } catch {
+      return; // offline or refused — left pending for the next render
+    }
+  }
+}
+
+// Once an adopted phone has re-pushed under its real race label, its old file and marker are
+// redundant (the phone no longer pushes to the old folder) — remove both, and carry the tick
+// across to the new row so it keeps feeding progress. Returns whether anything changed.
+async function finishCompletedAdoptions(token, races) {
+  const done = completedAdoptions(races);
+  for (const a of done) {
+    try {
+      await apiSetAdoption(token, a.owner, a.fromRaceLabel, a.deviceName, null);
+      const oldRace = races.find(r => r.owner === a.owner && r.raceLabel === a.fromRaceLabel);
+      if (oldRace?.devices.some(d => d.name === a.deviceName)) {
+        await apiDeleteMobileFile(token, a.owner, a.fromRaceLabel, a.deviceName);
+      }
+      if (selectedKeys.delete(rowKey({ owner: a.owner, raceLabel: a.fromRaceLabel, device: { name: a.deviceName } }))) {
+        selectedKeys.add(rowKey({ owner: a.owner, raceLabel: a.raceLabel, device: { name: a.deviceName } }));
+      }
+    } catch { /* not permitted or offline — retried on the next render */ }
+  }
+  if (done.length) saveSelectedKeys();
+  return done.length > 0;
+}
+
 export async function renderMobileFiles({ silent = false } = {}) {
   // A real page reload (F5) starts selectedKeys empty with no route back to what was ticked
   // before — see restoreSelectedKeysOnce()'s own doc in mobile-files-shared.js for why this is
@@ -424,7 +487,11 @@ export async function renderMobileFiles({ silent = false } = {}) {
   const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
   if (!silent) showStatus('Loading…');
   try {
-    const races = await apiListMobileFiles(session.token);
+    await flushPendingAdoptions(session.token);
+    let races = await apiListMobileFiles(session.token);
+    if (Array.isArray(races) && await finishCompletedAdoptions(session.token, races)) {
+      races = await apiListMobileFiles(session.token);
+    }
     lastKnownRaces = Array.isArray(races) ? races : [];
     saveCachedProgressRaces(lastKnownRaces);
     const merged = filterStaleRaces(mergePendingIntoRaces(lastKnownRaces, pending));

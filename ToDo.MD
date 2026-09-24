@@ -77,3 +77,12 @@ Needs re-structuring so people will actually read it and understand it.
 - [x] when a mobile file is completely reset (all the way back to the beginning) device view shows a blank location
       but has retained the mode, that should be blank too, also the device list should show unknown in the where
       column and both bibs and time columns should be blank as its mode is also now unknown
+
+## Noticed issues
+
+- [x] the mobile/owner/race folder created should follow the same convention the mobile app uses when creating its
+      initial 'arbitrary' race label, ie. mobile/owner/race-<yy-mm-dd>,
+      the _adoptions.meta.json file should use that race label
+- [x] the date in the race label used above should be the race date as set in event settings, not todays date
+- [x] rename _adoptions.meta.json to adoptions.json and add it to the exclusion list alongside progress.json
+- [x] remove the bib_allocations.json exclusion, it is no longer generated
