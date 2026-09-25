@@ -495,10 +495,27 @@ export const HELP = {
         an error: relocating stays the same file, marked by a move you can undo if it was a mistake. <strong>View</strong> shows just
         one location's own entries — if the device has recorded at more than one, you'll be asked which before it opens.
         <strong>Raw</strong> always shows the whole file, every location included, unfiltered — it's a debugging aid.</p>
-    <p><strong>Last Seen</strong> is when the server (or, for a pending file, this browser) last actually heard from that
-        device — useful for spotting a phone that's gone quiet. <strong>Last Update</strong> is the newest entry's own
-        recorded timestamp, across every line on the device, not just what's currently visible — these two can differ,
-        e.g. a phone still connected but with nothing new to send.</p>
+    <p><strong>Last Seen</strong> is the time of the newest line in the device's own history — every phone writes a
+        Ping heartbeat when it has nothing else to record, so this stays current for as long as the phone itself is
+        alive, and goes stale when it isn't, even if a Mule is still relaying its old data. <strong>Last Update</strong>
+        is the newest genuine entry (Pings don't count), across every line on the device, not just what's currently
+        visible. <strong>Bluetooth</strong> is when this browser last pulled the device over Bluetooth, and how —
+        <em>direct</em> from the phone, or <em>via</em> the connected Mule — updated on every successful poll, so it's
+        the quickest check that the Bluetooth link itself is working. Read together: a current Bluetooth time with an old
+        Last Seen means the link to the Mule is fine but that phone has stopped.</p>
+    <p><strong>Adopting a phone.</strong> A phone set up without the real race name (it defaults to
+        <em>unknown-yy-mm-dd</em>) is brought into the current race by ticking its row. Ticking a row whose race isn't
+        one of this event's own (derived from Event Settings' name and date, one per course in use — you're asked which
+        course when there's more than one) adopts it: the adoption is written to the server next to that phone's file,
+        and delivered over Bluetooth when connected. The phone picks it up over the server within about 30 seconds, or
+        via a Mule that can see it, and renames its race to match; until it does, the row shows <strong>→ race</strong>,
+        and it already counts as part of that race for Update Progress. Once the phone's data arrives under the real race,
+        its old file is removed and the tick moves across with it. Unticking an adopted row that hasn't renamed yet
+        cancels the adoption. If this browser can't reach the server, the adoption is kept here and sent when it can —
+        and a Mule that can reach the server records it on this browser's behalf.</p>
+    <p>A race deleted on the phone itself disappears from here too — the phone replaces it with a deletion marker that
+        reaches the server (and every Mule) like any other data, and the server then refuses any older copy a Mule may
+        still be holding, so it can't reappear.</p>
     <p><strong>Started At</strong>, shown the same dd/mm/yy hh:mm format as Last Seen/Last Update, is when this
         device most recently went active — its latest ModeStart marker (written the moment Bibs/Checkpoint or Time
         mode is actually chosen) — so at a glance you can confirm every station is actually set up and running, not
@@ -630,8 +647,9 @@ export const HELP = {
         seen only at a checkpoint, with no finish yet, still gets its own row with a blank FinishTime — that's the
         safety-relevant case.</p>
     <p>This table is also published as <code>progress.json</code>, split by course — one file alongside each
-        course's own device files, each carrying only that course's own rows, since a phone's own race is always
-        course-specific from the moment a course is chosen at Start time. Kept up to date within a couple of seconds
+        course's own device files, each carrying only that course's own rows. A course's race folder is named
+        <em>&lt;event&gt;-&lt;course&gt;-yy-mm-dd</em> from the Event Settings name and date — the name a phone uses when it
+        picks this race from its own server scan, or when it's adopted into it. Kept up to date within a couple of seconds
         of any relevant edit (an Entries change, or an Update/Clear Progress run). The file is public and needs no
         sign-in to fetch, so it deliberately carries only bib number, name, course, category, and timing data —
         never anything else from an entry (no DOB, club, or contact details).</p>
@@ -714,7 +732,31 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.20-alpha - current version</h3>
+    <h3>v0.0.21-alpha - current version</h3>
+    <ul>
+      <li><strong>Adopting a phone</strong> into the current race is now just ticking its row on the Devices tab —
+          e.g. a phone that came online as <em>unknown-26-09-25</em>. The adoption is recorded on the server
+          (as well as delivered over Bluetooth), so a phone that only has WiFi picks it up too, and a Mule relays it
+          to phones it can see. The row shows <strong>→ race</strong> until the phone renames itself; its old file is
+          then tidied up automatically and the tick moves across with it. An adopted phone counts as part of its new
+          race for Update Progress straight away, so ticking it alongside that race's phones no longer fails the
+          "different races" check</li>
+      <li>Race folders are named <em>&lt;event&gt;-&lt;course&gt;-yy-mm-dd</em> from the Event Settings date — the
+          same convention the phones use for their own default name</li>
+      <li>Progress now reliably reaches phones again, over Bluetooth and the server — the race label the web app
+          looked for had drifted out of step with the phones' own</li>
+      <li>A race deleted on a phone is now removed everywhere — here, on the server, and on every Mule — and a Mule
+          still holding an older copy can no longer bring it back</li>
+      <li><strong>Last Seen</strong> now comes from the phone's own newest line (kept current by its Ping
+          heartbeat), so a phone that no longer exists no longer looks alive just because a Mule is still relaying
+          it. <strong>Last Update</strong> ignores Pings. A new <strong>Bluetooth</strong> column shows when this
+          browser last pulled each device, direct or via which Mule — the "is the Bluetooth link working" check</li>
+      <li>Auto-update progress no longer re-saves the dataset (bumping its version) when nothing has actually
+          changed — every phone's Ping used to trigger it</li>
+      <li>Matches RaceMaster Mobile's Reset redesign (no more Stop; Reset walks back one segment at a time), and
+          Mobile Files keeps its progress data through a page reload while offline</li>
+    </ul>
+    <h3>v0.0.20-alpha</h3>
     <ul>
       <li>Relocating mid-race is now a real, undoable event on the same device file, not a new one —
           matches the RaceMaster Mobile app's own new mid-race Relocate screen. The Devices tab shows
@@ -1191,14 +1233,14 @@ export const TABLES = {
     { id: 'actions',    label: 'Actions',    title: 'Edit or delete' },
   ],
   'mobile-files': [
-    { id: 'select',    label: '',          title: 'Select for bulk actions', sticky: true },
+    { id: 'select',    label: '',          title: 'Tick to include in Update Progress — ticking a phone whose race isn\'t this event\'s own also adopts it into this race (see Help)', sticky: true },
     { id: 'raceLabel', label: 'Race',      title: 'Race name (date suffix dropped — see Race Date; hover for the full race label as recorded on the phone)', sticky: true, wrap: true },
     { id: 'location',  label: 'Where',     title: 'Every course location this device has recorded at — more than one means it\'s relocated mid-race; View will ask which one to show', sticky: true, wrap: true, cap: 80 },
     { id: 'bibs',      label: 'Bibs',      title: 'Bib entries currently visible (since this device\'s last Reset) — "0" means expected but none yet, blank means this device has no bibs mode of its own' },
     { id: 'time',      label: 'Time',      title: 'Time splits currently visible (since this device\'s last Reset) — "0" means expected but none yet, blank means this device has no Time mode of its own' },
     { id: 'owner',     label: 'Owner',     title: 'Account this file was uploaded under (admins only)' },
     { id: 'raceDate',  label: 'Race Date', title: 'Race date parsed from the race label' },
-    { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file' },
+    { id: 'device',    label: 'Device',    title: 'Physical phone that recorded this file — "→ race" means it\'s been adopted into that race and hasn\'t renamed itself yet' },
     { id: 'lastSeen',   label: 'Last Seen',   title: 'Time of the newest line in this device\'s own history (kept current by its Ping heartbeat) — not when a mule last relayed it' },
     { id: 'lastUpdate', label: 'Last Update', title: 'Timestamp of this device\'s newest recorded entry, across all lines (not just those currently visible)' },
     { id: 'bleContact', label: 'Bluetooth', title: 'When this browser last pulled this device over Bluetooth — direct from the phone, or via the connected mule. Shows the Bluetooth link is working; a mule can still relay a phone that no longer exists (see Last Seen)' },
