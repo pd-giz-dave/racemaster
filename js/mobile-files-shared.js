@@ -274,9 +274,25 @@ export function mergePendingIntoRaces(races, pending) {
     const seenLineNumbers = new Set(knownLines.map(l => l.lineNumber).filter(n => Number.isFinite(n)));
     const lines = [...knownLines, ...p.lines.filter(l => Number.isFinite(l.lineNumber) && !seenLineNumbers.has(l.lineNumber))];
     race.devices = race.devices.filter(d => d.name !== p.deviceName);
-    race.devices.push({ name: p.deviceName, deviceId: p.deviceId, lines, pending: true, lastSeen: p.pulledAt });
+    // Deleted on the phone (a lone tombstone NewRace — see isTombstonedLines): pushed on to the
+    // server like any other pull, but never shown.
+    if (!isTombstonedLines(lines)) {
+      race.devices.push({ name: p.deviceName, deviceId: p.deviceId, lines, pending: true, lastSeen: p.pulledAt });
+    }
   }
   return sortRaces(merged);
+}
+
+// A device file whose current generation opens with a NewRace noted "Deleted" — the race was
+// deleted on the phone (racemaster-mobile's RaceRepository.requestDeleteRace). The server hides
+// these from its own listings (server/mobile.js's isTombstoned); this is the same check for a
+// Bluetooth-pulled copy not yet pushed.
+export function isTombstonedLines(lines) {
+  let latest = null;
+  for (const l of lines) {
+    if (l?.action === 'NewRace' && Number.isFinite(l.lineNumber) && (!latest || l.lineNumber > latest.lineNumber)) latest = l;
+  }
+  return latest?.note === 'Deleted';
 }
 
 // Sorts by the file's own lineNumber — the one field every row has and that's never ambiguous.

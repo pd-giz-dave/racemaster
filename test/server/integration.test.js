@@ -324,6 +324,72 @@ describe('server integration: mobile sync', () => {
     assert.deepEqual(await get('brave-reef'), { raceLabel: null });
   });
 
+  it('a deletion tombstone hides the file, refuses an older generation, and yields to a newer race', async () => {
+    const token = await createAndLogin('mobile-tombstone-user');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'tombstone-race-26-09-25';
+    const push = records => fetch(`${base}/api/mobile/${raceLabel}`, {
+      method: 'POST', headers: auth, body: JSON.stringify({ devices: { 'brave-reef': records } }),
+    }).then(r => r.json());
+    const oldGen = [
+      { action: 'NewRace', lineNumber: 1, timestamp: '2026/09/25 09:00:00' },
+      { action: 'Finish', bibNumber: 101, lineNumber: 2, timestamp: '2026/09/25 09:10:00' },
+      { action: 'Finish', bibNumber: 102, lineNumber: 3, timestamp: '2026/09/25 09:11:00' },
+    ];
+    await push(oldGen);
+
+    // Deleted on the phone: its history becomes a lone tombstone NewRace.
+    const tombstone = { action: 'NewRace', lineNumber: 1, note: 'Deleted', timestamp: '2026/09/25 10:00:00' };
+    await push([tombstone]);
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    assert.deepEqual(list.find(r => r.raceLabel === raceLabel)?.devices ?? [], []);
+    // Still reported to the phone, so it can confirm the tombstone landed.
+    const status = await (await fetch(`${base}/api/mobile/${raceLabel}/status`, { headers: auth })).json();
+    assert.deepEqual(status, { 'brave-reef': 1 });
+
+    // A lagging mule resends the old generation (whole history) and then just its deltas.
+    assert.deepEqual((await push(oldGen)).superseded, ['brave-reef']);
+    assert.deepEqual((await push(oldGen.slice(1))).superseded, ['brave-reef']);
+    const afterStale = await (await fetch(`${base}/api/mobile/${raceLabel}/status`, { headers: auth })).json();
+    assert.deepEqual(afterStale, { 'brave-reef': 1 });
+
+    // The same label reused later on the phone: a newer NewRace replaces the tombstone.
+    const res = await push([{ action: 'NewRace', lineNumber: 1, timestamp: '2026/09/26 08:00:00' }]);
+    assert.equal(res.superseded, undefined);
+    const relisted = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    assert.deepEqual(relisted.find(r => r.raceLabel === raceLabel).devices.map(d => d.name), ['brave-reef']);
+  });
+
+  it('a race adopted into a label holding this device\'s tombstone lands once its full history is sent', async () => {
+    // Field report: nifty-wombat deleted its webtest-seniors race (tombstone at line 1), then a new
+    // race set up as unknown-26-09-25 was adopted into webtest-seniors. The phone's status cursor
+    // (1, from the tombstone) made it send only lines 2+, which the server refused as deltas
+    // against a tombstone — forever. The generations route is what lets the sender notice.
+    const token = await createAndLogin('mobile-adopt-tombstone-user');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const label = 'webtest-seniors-26-09-15';
+    const post = body => fetch(`${base}/api/mobile/${label}`, { method: 'POST', headers: auth, body: JSON.stringify(body) }).then(r => r.json());
+    await post({ devices: { 'nifty-wombat': [{ action: 'NewRace', lineNumber: 1, note: 'Deleted', timestamp: '2026/09/25 15:19:40' }] } });
+
+    const generations = await (await fetch(`${base}/api/mobile/${label}/generations`, { headers: auth })).json();
+    assert.deepEqual(generations, { 'nifty-wombat': '2026/09/25 15:19:40' });
+
+    const newerRace = [
+      { action: 'NewRace', lineNumber: 1, timestamp: '2026/09/25 15:47:55' },
+      { action: 'Finish', bibNumber: 101, lineNumber: 2, timestamp: '2026/09/25 15:50:00' },
+    ];
+    assert.deepEqual((await post({ devices: { 'nifty-wombat': newerRace.slice(1) } })).superseded, ['nifty-wombat']);
+    assert.equal((await post({ devices: { 'nifty-wombat': newerRace } })).added, 2);
+
+    // An OLDER race adopted in: a relay's copy is refused, the device's own push is not.
+    await post({ devices: { 'nifty-wombat': [{ action: 'NewRace', lineNumber: 1, note: 'Deleted', timestamp: '2026/09/25 16:00:00' }] } });
+    const olderRace = [{ action: 'NewRace', lineNumber: 1, timestamp: '2026/09/25 14:00:00' }, { action: 'Finish', bibNumber: 7, lineNumber: 2 }];
+    assert.deepEqual((await post({ devices: { 'nifty-wombat': olderRace } })).superseded, ['nifty-wombat']);
+    const own = await post({ devices: { 'nifty-wombat': olderRace }, authoritative: ['nifty-wombat'] });
+    assert.equal(own.superseded, undefined);
+    assert.equal(own.added, 2);
+  });
+
   it('a non-owner cannot write an adoption into someone else\'s folder', async () => {
     await createAndLogin('adopt-folder-owner');
     const other = await createAndLogin('adopt-intruder');

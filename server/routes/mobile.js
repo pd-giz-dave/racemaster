@@ -8,7 +8,7 @@ import {
   mobileRaceDir, mobileDeviceFilePath, readMobileDeviceFile, writeMobileDeviceFile,
   mergeProgress, touchProgress, readProgress, progressIsUnchanged,
   getMobileRacesForUser, getMobileRacesStatusForUser, getAvailableRacesForUser,
-  isReservedMobileFile, readAdoptions, setAdoption,
+  isReservedMobileFile, readAdoptions, setAdoption, classifyPush, latestNewRace,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
@@ -212,6 +212,13 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     let added = 0;
     let received = 0;
     let deviceCount = 0;
+    // Devices this push comes straight from (see classifyPush's own doc) — the pushing phone's
+    // own entry, or the web app's direct Bluetooth pull of a phone.
+    const authoritative = new Set((Array.isArray(body?.authoritative) ? body.authoritative : [])
+      .map(n => sanitiseName(String(n))).filter(Boolean));
+    // Device names whose batch was refused as an older/deleted generation (see classifyPush) —
+    // lets a mule drop its stale copy instead of resending it forever.
+    const superseded = [];
     for (const [rawDeviceName, records] of Object.entries(devices)) {
       if (!Array.isArray(records)) continue;
       const deviceName = sanitiseName(rawDeviceName) || 'unknown-device';
@@ -219,31 +226,21 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       received += records.length;
 
       const previousFile = readMobileDeviceFile(username, raceLabel, deviceName);
-      // See this route's own doc above — a NewRace marker means whatever's already stored is
-      // stale, from a different race that reused this exact label. Matched against the SPECIFIC
-      // stored record at that same lineNumber (same lineNumber AND same timestamp — not just "a
-      // NewRace marker is present somewhere in this push"): every race's history starts with a
-      // NewRace record at lineNumber 1, so a mule that's simply lagging behind another, faster
-      // mule already relaying the SAME still-current race (see MuleRepository.pushToServer's own
-      // startingFreshDevices doc — its bypass resends a device's entire held history, that
-      // device's own NewRace record included, whenever the server's reported status looks ahead
-      // of what that one mule alone has pulled, which is a routine multi-mule timing gap, not
-      // evidence of staleness) would otherwise look indistinguishable from a genuine race
-      // recreation and wipe out data another mule already delivered — confirmed in the field: a
-      // lagging mule's own push was dumping and fully re-loading the file on every push. A
-      // NewRace record already stored at the exact same lineNumber+timestamp is this same
-      // generation's own marker being harmlessly resent; only a lineNumber with no matching
-      // stored record (or nothing stored at all) means whatever's already there predates this
-      // generation. Checked against the RAW incoming record (before coerce()'s own 'Finish'
-      // fallback applies to a missing/falsy action), same as every other field this loop reads
-      // off them, but against the already-coerced previousFile (which is what was itself written
-      // by an earlier call to this exact route).
-      const incomingNewRace = records.find(r => r?.action === 'NewRace' && Number.isFinite(r?.lineNumber));
-      const startingFresh = incomingNewRace != null && !previousFile.some(
-        stored => stored.action === 'NewRace' &&
-          stored.lineNumber === incomingNewRace.lineNumber &&
-          stored.timestamp === incomingNewRace.timestamp,
-      );
+      // See classifyPush (server/mobile.js). A NewRace already stored at the same lineNumber and
+      // timestamp is the same generation being resent — a mule lagging behind a faster one
+      // resends a device's whole history, NewRace included (confirmed in the field: that used to
+      // dump and reload the file on every push). A genuinely newer NewRace (a race recreated
+      // under the same label, or a deletion tombstone) replaces the file; an OLDER one, or plain
+      // deltas against a tombstone, is refused — otherwise a mule that pulled the race before
+      // it was deleted/replaced on the phone would resurrect it on its next push. Checked
+      // against the RAW incoming records (before coerce()'s own 'Finish' fallback).
+      const kind = classifyPush(previousFile, records, authoritative.has(deviceName));
+      if (kind === 'superseded') {
+        superseded.push(deviceName);
+        console.log(`[mobile-sync] ${username}/${raceLabel}/${deviceName}: refused ${records.length} record(s) from an older/deleted generation`);
+        continue;
+      }
+      const startingFresh = kind === 'fresh';
       if (startingFresh && previousFile.length > 0) {
         console.log(`[mobile-sync] ${username}/${raceLabel}/${deviceName}: NewRace marker — discarding ${previousFile.length} stale line(s) from a previous race under this label`);
       }
@@ -262,7 +259,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     }
 
     console.log(`[mobile-sync] ${username}/${raceLabel}: updated ${deviceCount} device file(s), ${received} record(s) received`);
-    jsonReply(res, 200, { ok: true, added, received, version: 1 });
+    jsonReply(res, 200, { ok: true, added, received, version: 1, ...(superseded.length ? { superseded } : {}) });
     return true;
   }
 
@@ -287,6 +284,30 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
 
     console.log(`[mobile-files] ${username} deleted ${owner}/${raceLabel}/${deviceName}`);
     jsonReply(res, 200, { ok: true });
+    return true;
+  }
+
+  // GET /api/mobile/:raceLabel/generations — which generation of each device's history the
+  // server holds for this race: {"<deviceName>": "<that generation's NewRace timestamp>" | null}.
+  // A sender compares it with the generation it's about to send; they differ whenever the
+  // server's copy is from a race the device has since deleted, recreated, or been adopted away
+  // from, and then /status's line cursor doesn't describe the sender's lines at all — the
+  // sender must send its full history (NewRace included) instead of just the lines past it.
+  // Tombstoned files included. The caller's own folder, like /status.
+  if (/^\/api\/mobile\/[^/]+\/generations$/.test(pathname) && req.method === 'GET') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const raceLabel = sanitiseName(decodeURIComponent(pathname.slice('/api/mobile/'.length, -'/generations'.length)));
+    if (!raceLabel) { jsonReply(res, 400, { error: 'Invalid race label' }); return true; }
+    const result = {};
+    let files = [];
+    try { files = fs.readdirSync(mobileRaceDir(username, raceLabel)); } catch { /* nothing pushed for this race yet */ }
+    for (const file of files) {
+      if (!file.endsWith('.json') || isReservedMobileFile(file)) continue;
+      const deviceName = file.slice(0, -'.json'.length);
+      result[deviceName] = latestNewRace(readMobileDeviceFile(username, raceLabel, deviceName))?.timestamp ?? null;
+    }
+    jsonReply(res, 200, result);
     return true;
   }
 

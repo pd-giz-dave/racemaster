@@ -199,11 +199,14 @@ export async function apiDeleteMobileFile(token, owner, raceLabel, deviceName) {
 // Same endpoint a phone's own WiFi sync posts to (server.js's POST /api/mobile/:raceLabel) —
 // used to push a Bluetooth-pulled device file (see mule-ble.js) into the server exactly as if
 // the phone had sent it directly.
-export async function apiPushMobileSync(token, raceLabel, deviceName, lines) {
+// [authoritative]: these lines were pulled straight from that phone (not relayed through a mule)
+// — the server then lets a changed generation from it replace what's stored even if older (see
+// server/mobile.js's classifyPush).
+export async function apiPushMobileSync(token, raceLabel, deviceName, lines, { authoritative = false } = {}) {
   const res = await fetch(`/api/mobile/${encodeURIComponent(raceLabel)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ devices: { [deviceName]: lines } }),
+    body: JSON.stringify({ devices: { [deviceName]: lines }, ...(authoritative ? { authoritative: [deviceName] } : {}) }),
   });
   return res.json();
 }

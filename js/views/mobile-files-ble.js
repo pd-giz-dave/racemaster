@@ -25,6 +25,7 @@ import {
   getRecommendedPollIntervalMs, isBleLoggingEnabled, setBleLoggingEnabled,
   getKnownDevices, reconnectToKnownDevice, abandonConnection, forgetKnownDevice,
   getConnectedDeviceInfo, getRaceStaleAfterDays, setRaceStaleAfterDays, isRecoveringGattOperation,
+  resetLastPulledLineNumber,
 } from '../mule-ble.js';
 import { buildAdoptedTargets } from '../mobile-files-adoption.js';
 import { recordBleLastSeen, mergePendingIntoRaces, deriveRaceLabel, findCurrentRaceProgress } from '../mobile-files-shared.js';
@@ -464,11 +465,17 @@ export async function pullAndSyncConnectedPhone({ silent = false } = {}) {
     if (silent && totalLines === 0) { refreshDevicesTableFromCache(); return; }
 
     let synced = 0, pending = 0;
-    for (const { raceLabel, deviceName, deviceId, lines } of pulled) {
+    for (const { raceLabel, deviceName, deviceId, originDeviceId, lines } of pulled) {
       let pushed;
       try {
-        const result = await apiPushMobileSync(session.token, raceLabel, deviceName, lines);
+        // originDeviceId null: the connected phone's own race, pulled straight from it.
+        const result = await apiPushMobileSync(session.token, raceLabel, deviceName, lines, { authoritative: originDeviceId == null });
         pushed = !result.error;
+        // Refused as belonging to an older/deleted generation than the server holds — these
+        // were only the lines past our pull cursor, which described a different generation.
+        // Pull this device from scratch next time, so its full history (NewRace included) goes
+        // up instead; nothing to keep pending, the phone still holds it all.
+        if (pushed && result.superseded?.includes(deviceName)) resetLastPulledLineNumber(deviceId, raceLabel);
       } catch {
         pushed = false; // e.g. server unreachable — the expected case out in the field
       }

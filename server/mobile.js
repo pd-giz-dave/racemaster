@@ -113,6 +113,48 @@ export function touchProgress(username, raceLabel) {
   return touched;
 }
 
+// A NewRace record whose note is this marks the device's race as deleted on the phone (a
+// tombstone — see racemaster-mobile's RaceRepository.requestDeleteRace): the file is kept, so a
+// lagging mule's older copy can be recognised and refused, but hidden from every listing.
+export const DELETED_NOTE = 'Deleted';
+
+// The NewRace record opening the generation [lines] currently holds (the highest-numbered one).
+export function latestNewRace(lines) {
+  let latest = null;
+  for (const r of lines) {
+    if (r?.action === 'NewRace' && Number.isFinite(r.lineNumber) && (!latest || r.lineNumber > latest.lineNumber)) latest = r;
+  }
+  return latest;
+}
+
+export function isTombstoned(lines) {
+  return latestNewRace(lines)?.note === DELETED_NOTE;
+}
+
+// How a device's pushed [records] relate to what's already [stored] for it — generations are
+// ordered by their NewRace timestamp (the phone's own "yyyy/MM/dd HH:mm:ss", so one device's
+// markers compare correctly as strings):
+//   'fresh'      — a NewRace not already stored, and not older than the stored one: wipe + replace
+//   'superseded' — an older generation than the stored one, or plain deltas against a tombstone:
+//                  refused, so a lagging mule can't resurrect a deleted or replaced race
+//   'merge'      — the same generation (or no NewRace involved): append-merge as usual
+//
+// [authoritative] means the push comes straight from the device itself (its own self-push, or
+// the web app's direct Bluetooth pull of it) — the device's current history is the truth, so a
+// NewRace from it always replaces what's stored even when older (e.g. an older race adopted into
+// a label where this device earlier deleted a newer one); the timestamp ordering exists to stop
+// a *relay* resending a stale copy.
+export function classifyPush(stored, records, authoritative = false) {
+  const incoming = records.find(r => r?.action === 'NewRace' && Number.isFinite(r?.lineNumber));
+  const held = latestNewRace(stored);
+  if (!incoming) return held?.note === DELETED_NOTE ? 'superseded' : 'merge';
+  if (held && held.lineNumber === incoming.lineNumber && held.timestamp === incoming.timestamp) return 'merge';
+  if (authoritative) return 'fresh';
+  const bothTimed = typeof held?.timestamp === 'string' && typeof incoming.timestamp === 'string';
+  if (bothTimed && incoming.timestamp < held.timestamp) return 'superseded';
+  return 'fresh';
+}
+
 // Every *.json in a race dir is a device's own history file EXCEPT these.
 export const ADOPTIONS_FILE = 'adoptions.json';
 const RESERVED_MOBILE_FILES = new Set(['progress.json', ADOPTIONS_FILE]);
@@ -242,6 +284,8 @@ export function getMobileRacesForUser(username, adminAccess = false) {
       if (!file.endsWith('.json') || isReservedMobileFile(file)) continue;
       const deviceName = file.slice(0, -'.json'.length);
       const records = readMobileDeviceFile(owner, raceLabel, deviceName);
+      // Deleted on the phone — kept on disk only to refuse a stale resend (see classifyPush).
+      if (isTombstoned(records)) continue;
       recordCount += records.length;
       // File mtime — i.e. when the server last actually received a sync from this device —
       // distinct from the records' own `timestamp` fields (when each split/entry happened on
@@ -279,6 +323,7 @@ export function getMobileRacesStatusForUser(username, adminAccess = false) {
     for (const file of files) {
       if (!file.endsWith('.json') || isReservedMobileFile(file)) continue;
       const deviceName = file.slice(0, -'.json'.length);
+      if (isTombstoned(readMobileDeviceFile(owner, raceLabel, deviceName))) continue;
       try {
         const st = fs.statSync(path.join(raceDirPath, file));
         devices.push({ name: deviceName, mtime: st.mtime.toISOString(), size: st.size });

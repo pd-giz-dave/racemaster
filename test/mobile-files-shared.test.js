@@ -280,6 +280,18 @@ describe('mobile-files-shared.js:mergePendingIntoRaces', () => {
     assert.equal(device.pending, true);
   });
 
+  it('hides a device whose pending copy is a deletion tombstone, including the server\'s copy it replaces', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Phone One', lines: [{ action: 'NewRace', lineNumber: 1 }, { lineNumber: 2 }] }],
+    }];
+    const merged = mergePendingIntoRaces(races, [{
+      owner: 'alice', raceLabel: 'race-a', deviceName: 'Phone One', deviceId: 'dev1', pulledAt: '2026-09-25T10:00:00.000Z',
+      lines: [{ action: 'NewRace', note: 'Deleted', lineNumber: 1 }],
+    }]);
+    assert.deepEqual(merged[0].devices, []);
+  });
+
   it('creates a brand-new race entry for a pending file the server has never seen', () => {
     const merged = mergePendingIntoRaces([], [{
       owner: 'alice', raceLabel: 'race-a-26-08-30', deviceName: 'Phone One', deviceId: 'dev1',
