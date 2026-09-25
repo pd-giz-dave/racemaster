@@ -426,6 +426,26 @@ describe('mobile-files-devices.js:withResolvedLocations', () => {
   });
 });
 
+describe('mobile-files-devices.js:flattenDevices — Last Seen / Last Update', () => {
+  // Field report: a phone that no longer existed showed Last Seen "now", because a mule relaying
+  // it kept rewriting its server file. Last Seen comes only from the phone's own lines.
+  it('Last Seen is the newest line in the file, never the file\'s own write time', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{
+        name: 'gone-phone', lastSeen: new Date().toISOString(),
+        lines: [
+          { action: 'NewRace', lineNumber: 1, timestamp: '2026/09/20 09:00:00' },
+          { action: 'Ping', lineNumber: 2, timestamp: '2026/09/20 10:00:00' },
+        ],
+      }],
+    }];
+    const [row] = flattenDevices(races);
+    assert.equal(row.lastSeen, new Date(2026, 8, 20, 10, 0, 0).toISOString());
+    assert.equal(row.lastUpdate, '2026/09/20 09:00:00');
+  });
+});
+
 describe('mobile-files-devices.js:flattenDevices', () => {
   it('produces one row per device, sorted Finish first then CP number ascending', () => {
     const races = [{

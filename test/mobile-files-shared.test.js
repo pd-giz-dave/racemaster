@@ -9,8 +9,8 @@ import { setRaceStaleAfterDays } from '../js/mule-ble.js';
 import {
   selectedKeys, rowKey, loadSelectedKeys, saveSelectedKeys, currentDatasetContext,
   loadLastSynced, saveLastSynced, getLastSyncedLineNumber, setLastSyncedLineNumber, maxLineNumber,
-  loadBleLastSeen, recordBleLastSeen, getBleLastSeen,
-  laterIso, formatRaceDate, formatDateTime, formatStoredTimestamp, latestLineTimestamp,
+  recordBleContact, getBleContact,
+  formatRaceDate, formatDateTime, formatStoredTimestamp, latestLineTimestamp, latestEntryTimestamp, latestLineIso,
   parseRaceLabelDate, raceNameOf, deriveRaceLabel, sortRaces, mergePendingIntoRaces,
   byLineNumber, computeIncorporationStatus,
   getServerPollIntervalSeconds, setServerPollIntervalSeconds, hasNewMobileData, filterStaleRaces,
@@ -141,35 +141,6 @@ describe('mobile-files-shared.js:last-synced tracking', () => {
   });
 });
 
-describe('mobile-files-shared.js:BLE last-seen tracking', () => {
-  it('getBleLastSeen returns null until recordBleLastSeen has been called for that key', () => {
-    assert.equal(getBleLastSeen('alice', 'race', 'Phone One'), null);
-    recordBleLastSeen('alice', 'race', 'Phone One');
-    assert.match(getBleLastSeen('alice', 'race', 'Phone One'), /^\d{4}-\d{2}-\d{2}T/);
-  });
-
-  it('is keyed independently per owner/raceLabel/deviceName', () => {
-    recordBleLastSeen('alice', 'race-a', 'Phone One');
-    assert.equal(getBleLastSeen('alice', 'race-b', 'Phone One'), null);
-    assert.equal(getBleLastSeen('bob', 'race-a', 'Phone One'), null);
-  });
-
-  it('loadBleLastSeen falls back to an empty map on corrupt storage', () => {
-    localStorage.setItem('racemaster-mobile-ble-last-seen', 'not json');
-    assert.deepEqual(loadBleLastSeen(), {});
-  });
-});
-
-describe('mobile-files-shared.js:laterIso', () => {
-  it('returns whichever of the two timestamps is later, or the only one present', () => {
-    assert.equal(laterIso(null, '2026-08-30T10:00:00.000Z'), '2026-08-30T10:00:00.000Z');
-    assert.equal(laterIso('2026-08-30T10:00:00.000Z', null), '2026-08-30T10:00:00.000Z');
-    assert.equal(laterIso(null, null), null);
-    assert.equal(laterIso('2026-08-30T10:00:00.000Z', '2026-08-30T11:00:00.000Z'), '2026-08-30T11:00:00.000Z');
-    assert.equal(laterIso('2026-08-30T11:00:00.000Z', '2026-08-30T10:00:00.000Z'), '2026-08-30T11:00:00.000Z');
-  });
-});
-
 describe('mobile-files-shared.js:formatRaceDate / formatDateTime / formatStoredTimestamp', () => {
   it('formatRaceDate renders dd/mm/yy, or an "Unknown" placeholder for a null date', () => {
     assert.equal(formatRaceDate({ dd: '30', mm: '08', yy: '26' }), '30/08/26');
@@ -190,6 +161,34 @@ describe('mobile-files-shared.js:formatRaceDate / formatDateTime / formatStoredT
     assert.equal(formatStoredTimestamp('2026/08/30 12:34:56'), '30/08/26 12:34');
     assert.match(formatStoredTimestamp(''), /—/);
     assert.match(formatStoredTimestamp('garbage'), /—/);
+  });
+});
+
+describe('mobile-files-shared.js:recordBleContact / getBleContact', () => {
+  it('records when and how a device was last reached over Bluetooth, per owner/race/device', () => {
+    assert.equal(getBleContact('alice', 'race', 'gone-phone'), null);
+    recordBleContact('alice', 'race', 'gone-phone', 'radiant-cobra');
+    recordBleContact('alice', 'race', 'mule-phone', 'direct');
+    assert.equal(getBleContact('alice', 'race', 'gone-phone').via, 'radiant-cobra');
+    assert.match(getBleContact('alice', 'race', 'gone-phone').at, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(getBleContact('alice', 'race', 'mule-phone').via, 'direct');
+    assert.equal(getBleContact('bob', 'race', 'gone-phone'), null);
+  });
+});
+
+describe('mobile-files-shared.js:latestEntryTimestamp / latestLineIso', () => {
+  const lines = [
+    { action: 'Finish', timestamp: '2026/09/25 10:00:00' },
+    { action: 'Ping', timestamp: '2026/09/25 11:00:00' },
+  ];
+
+  it('Last Update ignores a later Ping heartbeat', () => {
+    assert.equal(latestEntryTimestamp(lines), '2026/09/25 10:00:00');
+  });
+
+  it('Last Seen is the newest line of any kind, Pings included, as an ISO instant', () => {
+    assert.equal(latestLineIso(lines), new Date(2026, 8, 25, 11, 0, 0).toISOString());
+    assert.equal(latestLineIso([]), null);
   });
 });
 

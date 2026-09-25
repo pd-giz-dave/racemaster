@@ -309,7 +309,10 @@ function locationSegmentsOf(r) {
 }
 
 export async function validateAndCompute(selected) {
-  const raceLabels = [...new Set(selected.map(r => r.raceLabel))];
+  // An adopted phone counts as part of the race it's been adopted into — it keeps reporting its
+  // arbitrary name (e.g. "unknown-26-09-25") until it picks the adoption up and renames, and
+  // ticking it is exactly what adopts it, so it's always selected alongside that race's phones.
+  const raceLabels = [...new Set(selected.map(r => r.adoptedInto ?? r.raceLabel))];
   if (raceLabels.length > 1) {
     return { error: `Cannot compute results — selected files are from different races: ${raceLabels.join(', ')}.` };
   }

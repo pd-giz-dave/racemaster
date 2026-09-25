@@ -5,8 +5,9 @@
 // is the thin rendering layer on top of this that actually puts these rows on screen.
 
 import { escHtml } from './utils.js';
+import { effectiveAdoptions } from './mobile-files-adoption.js';
 import {
-  byLineNumber, computeIncorporationStatus, getBleLastSeen, laterIso, latestLineTimestamp, parsePhoneTimestamp,
+  byLineNumber, computeIncorporationStatus, getBleContact, latestEntryTimestamp, latestLineIso, parsePhoneTimestamp,
 } from './mobile-files-shared.js';
 
 // ---- Location resolution (mirrors racemaster-mobile's SyncRecordMapping's own doc) ----
@@ -406,6 +407,10 @@ function locationSortKey(rawLocation) {
 // rather than both being handed the same post-processed array with no way to tell which they got.
 export function flattenDevices(races) {
   const rows = [];
+  // Where each device has been adopted (js/mobile-files-adoption.js) — carried on its row as
+  // adoptedInto, so anything grouping rows by race treats an adopted phone as part of the race
+  // it's joining, not the arbitrary name it's still reporting until it renames.
+  const adoptedInto = new Map(effectiveAdoptions(races).map(a => [`${a.owner} ${a.fromRaceLabel} ${a.deviceName}`, a.raceLabel]));
   for (const race of races) {
     const prepared = race.devices.map(rawDevice => {
       const resolvedLines = withResolvedLocations(rawDevice.lines);
@@ -439,6 +444,7 @@ export function flattenDevices(races) {
         idx: rows.length,
         ...r,
         raceDate: race.raceDate,
+        adoptedInto: adoptedInto.get(`${race.owner} ${race.raceLabel} ${device.name}`) ?? null,
         pending: !!device.pending,
         location,
         locations,
@@ -446,8 +452,9 @@ export function flattenDevices(races) {
         timeVisible: timeSegment.filter(hasRealSplit).length,
         bibsExpected: isBibsExpected(modeStart),
         timeExpected: isTimeExpected(modeStart),
-        lastSeen: laterIso(device.lastSeen, getBleLastSeen(race.owner, race.raceLabel, device.name)),
-        lastUpdate: latestLineTimestamp(device.lines),
+        lastSeen: latestLineIso(device.lines),
+        bleContact: getBleContact(race.owner, race.raceLabel, device.name),
+        lastUpdate: latestEntryTimestamp(device.lines),
         // Reuses the modeStart already resolved above rather than calling latestStartedAt(lines)
         // again — same lookup, no need to redo it.
         startedAt: modeStart ? (modeStart.timestamp ?? modeStart.timestampMillis ?? '') : '',

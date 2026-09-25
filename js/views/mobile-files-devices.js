@@ -13,7 +13,6 @@ import { escHtml, formatElapsedSeconds } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, byLineNumber } from '../mobile-files-shared.js';
 import { buildSegmentView, whenOf, locationSummary, formatCount, flattenDevices, latestModeStart } from '../mobile-files-devices.js';
-import { adoptionKey, effectiveAdoptions } from '../mobile-files-adoption.js';
 
 // ToDo.MD's "Random tweaks": the segment view used to pair a Bibs-family row and a Time-family
 // row side by side by splitNumber, because a device's current segment could genuinely hold both
@@ -106,7 +105,7 @@ function adoptedSuffix(target) {
   return target ? ` <span style="font-size:0.75rem;color:var(--muted)">→ ${escHtml(target)}</span>` : '';
 }
 
-function buildColumns(isAdminUser, adoptions = new Map()) {
+function buildColumns(isAdminUser) {
   return tableColumns(TABLES['mobile-files'], {
     select:    r => `<input type="checkbox" class="mobile-file-select" data-idx="${r.idx}" aria-label="Select ${escHtml(r.device.name)}"${selectedKeys.has(rowKey(r)) ? ' checked' : ''}>`,
     owner:     isAdminUser ? r => escHtml(r.owner) : undefined,
@@ -115,7 +114,7 @@ function buildColumns(isAdminUser, adoptions = new Map()) {
     // identifier this row's own file paths/API calls use under the hood.
     raceLabel: r => `<span title="${escHtml(r.raceLabel)}">${escHtml(raceNameOf(r.raceLabel))}</span>`,
     raceDate:  r => formatRaceDate(r.raceDate),
-    device:    r => escHtml(r.device.name) + adoptedSuffix(adoptions.get(adoptionKey(r.owner, r.raceLabel, r.device.name))) + (r.pending
+    device:    r => escHtml(r.device.name) + adoptedSuffix(r.adoptedInto) + (r.pending
       ? ' <span style="font-size:0.7rem;background:var(--accent);color:#fff;border-radius:4px;padding:0 4px">pending upload</span>'
       : ''),
     // 'Unknown' (not the View modal's own '—') once every visit's been properly closed — a
@@ -125,6 +124,9 @@ function buildColumns(isAdminUser, adoptions = new Map()) {
     bibs:      r => formatCount(r.bibsVisible, r.bibsExpected),
     time:      r => formatCount(r.timeVisible, r.timeExpected),
     lastSeen:   r => formatDateTime(r.lastSeen),
+    bleContact: r => r.bleContact
+      ? `${formatDateTime(r.bleContact.at)} ${r.bleContact.via === 'direct' ? 'direct' : `via ${escHtml(r.bleContact.via)}`}`
+      : '<span style="color:var(--muted)">—</span>',
     lastUpdate: r => formatStoredTimestamp(r.lastUpdate),
     startedAt: r => formatStoredTimestamp(r.startedAt),
     actions:   r => r.pending ? `
@@ -145,8 +147,7 @@ export let currentRows = [];
 
 export function renderRaceList(races, isAdminUser) {
   currentRows = flattenDevices(races);
-  const adoptions = new Map(effectiveAdoptions(races).map(a => [adoptionKey(a.owner, a.fromRaceLabel, a.deviceName), a.raceLabel]));
-  renderTable('mobile-files-tbody', buildColumns(isAdminUser, adoptions), currentRows, {
+  renderTable('mobile-files-tbody', buildColumns(isAdminUser), currentRows, {
     rowAttrs: r => ({
       'data-idx': r.idx,
       class: r.incorporationStatus === 'outstanding' ? 'row-outstanding'

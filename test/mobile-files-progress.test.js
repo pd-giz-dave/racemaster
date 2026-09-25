@@ -65,6 +65,17 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
+  // Field report: three phones in the current race, a fourth still reporting "unknown-26-09-25" —
+  // ticking it (which is what adopts it) put it in the selection before it had renamed, and the
+  // different-races check refused the whole computation.
+  it('counts an adopted phone as part of the race it was adopted into', () => {
+    const known = finishRow({ raceLabel: 'webtest-seniors-26-09-15' });
+    const adopted = finishRow({ raceLabel: 'unknown-26-09-25', adoptedInto: 'webtest-seniors-26-09-15' });
+    return validateAndCompute([known, adopted]).then(result => {
+      assert.doesNotMatch(result.error ?? '', /different races/);
+    });
+  });
+
   it('rejects a file with an empty current segment', () => {
     const empty = finishRow({ device: { name: 'Empty Phone', lines: [] } });
     return validateAndCompute([empty]).then(result => {

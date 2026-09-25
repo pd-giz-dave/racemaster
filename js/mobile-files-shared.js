@@ -106,40 +106,26 @@ export function maxLineNumber(lines) {
   return lines.reduce((max, l) => Math.max(max, l.lineNumber ?? 0), 0);
 }
 
-// ---- "Last actually polled over Bluetooth" tracking ----
+// ---- Bluetooth contact (the Devices tab's own Bluetooth column) ----
 //
-// device.lastSeen (see mobile-files-devices.js's flattenDevices()) is either the server's own
-// file mtime for a synced device, or a pending file's own pulledAt — neither of which updates on
-// a poll that found nothing new: pullAndSyncConnectedPhone() (js/views/mobile-files-ble.js)
-// skips its push loop entirely whenever totalLines is 0 (see its own doc), so a phone polled
-// repeatedly with nothing new to report would otherwise show the same stale Last Seen from
-// whenever it was first synced, even though this browser just successfully talked to it again a
-// moment ago. This tracks that contact independently of whether it found anything new, persisted
-// (not just in memory, same as LAST_SYNCED_KEY above) so it survives a page reload — keyed the
-// same way rowKey() is, since a pull's own results carry owner/raceLabel/deviceName but no
-// ready-made row object to key off.
-const BLE_LAST_SEEN_KEY = 'racemaster-mobile-ble-last-seen';
+// When this browser last pulled each device over Bluetooth, and how — straight from the phone
+// ('direct') or relayed through the connected mule (its name). Feedback that the Bluetooth link
+// is working, deliberately kept apart from Last Seen (the phone's own newest line — see
+// latestLineIso): a mule can keep relaying a phone that no longer exists, which proves the link
+// to the mule, not that the phone is alive. Persisted so it survives a reload; keyed like rowKey().
+const BLE_CONTACT_KEY = 'racemaster-mobile-ble-contact';
 
-export function loadBleLastSeen() {
-  try { return JSON.parse(localStorage.getItem(BLE_LAST_SEEN_KEY) || '{}'); } catch { return {}; }
+function loadBleContacts() {
+  try { return JSON.parse(localStorage.getItem(BLE_CONTACT_KEY) || '{}'); } catch { return {}; }
 }
-export function recordBleLastSeen(owner, raceLabel, deviceName) {
-  const map = loadBleLastSeen();
-  map[`${owner} ${raceLabel} ${deviceName}`] = new Date().toISOString();
-  try { localStorage.setItem(BLE_LAST_SEEN_KEY, JSON.stringify(map)); } catch { /* storage unavailable/full — best effort only */ }
+export function recordBleContact(owner, raceLabel, deviceName, via) {
+  const map = loadBleContacts();
+  map[`${owner} ${raceLabel} ${deviceName}`] = { at: new Date().toISOString(), via: via || 'direct' };
+  try { localStorage.setItem(BLE_CONTACT_KEY, JSON.stringify(map)); } catch { /* best effort only */ }
 }
-export function getBleLastSeen(owner, raceLabel, deviceName) {
-  return loadBleLastSeen()[`${owner} ${raceLabel} ${deviceName}`] || null;
-}
-
-// Later of two ISO timestamps (either may be null/undefined) — device.lastSeen and a
-// getBleLastSeen() lookup are both real UTC toISOString() output, so a plain Date comparison is
-// all that's needed; no need for the string-surgery formatStoredTimestamp() below deals with,
-// which is only for the phone's own non-ISO "yyyy/mm/dd HH:MM:SS" wire format.
-export function laterIso(a, b) {
-  if (!a) return b || null;
-  if (!b) return a;
-  return new Date(a) > new Date(b) ? a : b;
+// { at: ISO, via: 'direct' | '<mule name>' } or null if never pulled over Bluetooth.
+export function getBleContact(owner, raceLabel, deviceName) {
+  return loadBleContacts()[`${owner} ${raceLabel} ${deviceName}`] || null;
 }
 
 export function formatRaceDate(raceDate) {
@@ -178,13 +164,31 @@ export function formatStoredTimestamp(ts) {
 // this still reflects real recency after a Reset. Distinct from device.lastSeen (see above):
 // this is when the newest split/entry actually happened on the phone, not when the server (or
 // this browser, for a pending file) last heard from it.
-export function latestLineTimestamp(lines) {
+// [filter] narrows which lines count — see latestEntryTimestamp below.
+export function latestLineTimestamp(lines, filter = () => true) {
   let max = null;
   for (const l of lines) {
+    if (!filter(l)) continue;
     const ts = l.timestamp ?? l.timestampMillis;
     if (ts && (!max || ts > max)) max = ts;
   }
   return max;
+}
+
+// Last Update: the newest genuine entry — a Ping heartbeat proves the phone is alive, it isn't
+// an update (it still counts towards Last Seen — see latestLineIso).
+export function latestEntryTimestamp(lines) {
+  return latestLineTimestamp(lines, l => l.action !== 'Ping');
+}
+
+// Last Seen: the newest line of any kind in the device's own history, as an ISO instant (null if
+// none). Taken from the phone's own record timestamps — kept current by its Ping heartbeat —
+// never from when the server file was last written or when this browser last pulled it: a mule
+// relaying a phone that no longer exists still rewrites/re-delivers its file, which made a
+// long-gone phone read as seen "now".
+export function latestLineIso(lines) {
+  const t = parsePhoneTimestamp(latestLineTimestamp(lines));
+  return t == null ? null : new Date(t).toISOString();
 }
 
 // Mirrors server.js's parseRaceLabelDate/sort exactly — needed client-side because a

@@ -28,7 +28,7 @@ import {
   resetLastPulledLineNumber,
 } from '../mule-ble.js';
 import { buildAdoptedTargets } from '../mobile-files-adoption.js';
-import { recordBleLastSeen, mergePendingIntoRaces, deriveRaceLabel, findCurrentRaceProgress } from '../mobile-files-shared.js';
+import { recordBleContact, mergePendingIntoRaces, deriveRaceLabel, findCurrentRaceProgress } from '../mobile-files-shared.js';
 import { COURSE } from '../constants.js';
 import { state } from '../state.js';
 import { renderRaceList } from './mobile-files-devices.js';
@@ -306,10 +306,9 @@ function onBleDisconnected(wasDeliberate) {
 
 // Re-renders the Devices table from already-cached data (lastKnownRaces + current pending
 // files) — no server fetch, unlike renderAll() itself. Used by a silent auto-pull tick that
-// found nothing new to sync (see pullAndSyncConnectedPhone below): the table still needs
-// refreshing so its Last Seen column picks up recordBleLastSeen()'s update for this poll (BLE
-// last-seen tracking, see mobile-files-shared.js), but a full renderAll() call every ~10s purely
-// for that would mean an extra server round trip, and its own "Loading…" status flicker, on
+// found nothing new to sync (see pullAndSyncConnectedPhone below) — still refreshed so the
+// Bluetooth column picks up this poll's contact (see recordBleContact); a full renderAll() call
+// every ~10s would mean an extra server round trip, and its own "Loading…" status flicker, on
 // every single tick.
 function refreshDevicesTableFromCache() {
   const pending = getPendingMobileFiles().filter(f => f.owner === getUsername());
@@ -442,11 +441,11 @@ export async function pullAndSyncConnectedPhone({ silent = false } = {}) {
     // below) is proof the link is genuinely working again, not just still nominally connected.
     consecutivePullFailures = 0;
     if (connectionIssue) { connectionIssue = false; updateConnectButtonLabel(); }
-    // Recorded for every leg this pull touched, even one with zero new lines — see
-    // mobile-files-shared.js's own BLE_LAST_SEEN_KEY doc for why device.lastSeen alone (server
-    // mtime / a pending file's own pulledAt, neither of which changes when there's nothing new
-    // to write) isn't enough on its own to reflect "we just successfully talked to this phone".
-    for (const { raceLabel, deviceName } of pulled) recordBleLastSeen(username, raceLabel, deviceName);
+    // Every leg this pull reached, even one with nothing new — the Devices tab's Bluetooth column
+    // (see recordBleContact). originDeviceId null: the connected phone's own race, pulled direct.
+    for (const { raceLabel, deviceName, originDeviceId } of pulled) {
+      recordBleContact(username, raceLabel, deviceName, originDeviceId == null ? 'direct' : getConnectedDeviceName());
+    }
     const totalLines = pulled.reduce((n, r) => n + r.lines.length, 0);
     // Echoes what the phone's own DeviceInfo reported alongside this pull (relayCount — how many
     // other devices it's currently relaying data for on this Mule's behalf) — refreshed by
