@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 
 import { state } from '../js/state.js';
 import { installLocalStorageMock, installWindowMock } from './helpers/mock-browser.js';
+import { isDirty } from '../js/storage.js';
 import {
   validateAndCompute, clearProgressData, applyComputedResults,
   buildProgressColumns, buildProgressRows, CP_RETIRE,
@@ -330,6 +331,29 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
     const { added } = await applyComputedResults(expected, new Map(), [r]);
     assert.equal(added, 1);
     assert.deepEqual(state.mobileProgress, expected);
+  });
+
+  // Field report: every Ping re-ran auto-update, which cleared and rewrote identical arrays and
+  // bumped the dataset's server version every few seconds with nothing actually changed.
+  it('applyComputedResults leaves an identical rebuild unsaved', async () => {
+    const expected = [{ action: 'Finish', number: 1, time: '00:20:00' }];
+    const cpTimesByCp = new Map([[1, new Map([[1, '00:10:00']])]]);
+    await applyComputedResults(expected, cpTimesByCp, [finishRow()]);
+    localStorage.removeItem('racemaster-dirty');
+
+    await applyComputedResults(expected, cpTimesByCp, [finishRow()]);
+
+    assert.equal(isDirty(), false);
+    assert.deepEqual(state.mobileProgress, expected);
+  });
+
+  it('applyComputedResults still saves a rebuild that changed', async () => {
+    await applyComputedResults([{ action: 'Finish', number: 1, time: '00:20:00' }], new Map(), [finishRow()]);
+    localStorage.removeItem('racemaster-dirty');
+
+    await applyComputedResults([{ action: 'Finish', number: 1, time: '00:21:00' }], new Map(), [finishRow()]);
+
+    assert.equal(isDirty(), true);
   });
 
   it('applyComputedResults rebuilds mobileCheckpoints from the cpTimesByCp map, one row per bib seen', async () => {

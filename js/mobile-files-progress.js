@@ -446,26 +446,37 @@ export async function validateAndCompute(selected) {
 // provide the raw information that needs. Never touches the manually-entered Finishers list.
 // Returns { added } for the caller's own status message.
 export async function applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp = new Map()) {
-  await clearProgressData();
-
-  state.mobileProgress = expected.map(({ action, number, time, timeOfDay }) =>
+  const progress = expected.map(({ action, number, time, timeOfDay }) =>
     timeOfDay ? { action, number, time, timeOfDay } : { action, number, time });
-  await saveMobileProgress();
 
   const bibsSeen = new Set();
   for (const cpMap of cpTimesByCp.values()) for (const bib of cpMap.keys()) bibsSeen.add(bib);
-  state.mobileCheckpoints = [...bibsSeen].map(bib => {
+  const checkpoints = [...bibsSeen].map(bib => {
     const cpTimes = {};
     const cpTimesOfDay = {};
     for (const [cpNumber, cpMap] of cpTimesByCp) if (cpMap.has(bib)) cpTimes[cpNumber] = cpMap.get(bib);
     for (const [cpNumber, todMap] of cpTimeOfDayByCp) if (todMap.has(bib)) cpTimesOfDay[cpNumber] = todMap.get(bib);
     return Object.keys(cpTimesOfDay).length ? { bibNumber: bib, cpTimes, cpTimesOfDay } : { bibNumber: bib, cpTimes };
   });
-  await saveMobileCheckpoints();
 
   // Mark every selected file as "seen as of now" — this run covered whatever these files held at
   // this moment. See mobile-files-shared.js's own tracking block for why a lineNumber is enough.
   for (const r of selected) setLastSyncedLineNumber(r);
+
+  // Nothing to write when the rebuild comes out identical — the usual case for an auto-update
+  // triggered by a line that changes no result (every phone's Ping heartbeat is one). Writing
+  // anyway (a clear, then the same arrays back) marked the dataset changed and re-uploaded it,
+  // bumping its version every few seconds with no real change (confirmed in the field).
+  if (JSON.stringify(progress) === JSON.stringify(state.mobileProgress) &&
+      JSON.stringify(checkpoints) === JSON.stringify(state.mobileCheckpoints)) {
+    return { added: expected.length };
+  }
+
+  await clearProgressData();
+  state.mobileProgress = progress;
+  await saveMobileProgress();
+  state.mobileCheckpoints = checkpoints;
+  await saveMobileCheckpoints();
 
   // Home/Safety Check/Results & Prize List all read state.mobileProgress/state.mobileCheckpoints
   // live (see this function's own doc above) — correct the moment this function returns, but
