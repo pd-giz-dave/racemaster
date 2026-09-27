@@ -732,7 +732,13 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.21-alpha - current version</h3>
+    <h3>v0.0.22-alpha - current version</h3>
+    <ul>
+      <li>SI results import now accepts <strong>BibNumber</strong> as an alternative to <strong>RaceNumber</strong>
+          for the bib column, and tolerates the bib value being bracketed by arbitrary text (e.g. <em>"Bib #123"</em>
+          or <em>"(123)"</em>) rather than requiring it to be purely numeric — matching SI's latest export format</li>
+    </ul>
+    <h3>v0.0.21-alpha</h3>
     <ul>
       <li><strong>Adopting a phone</strong> into the current race is now just ticking its row on the Devices tab —
           e.g. a phone that came online as <em>unknown-26-09-25</em>. The adoption is recorded on the server
