@@ -14,7 +14,7 @@ EXCLUDES=(
   --exclude='.claude' --exclude='.git' --exclude='.idea' --exclude='coverage' --exclude='data'
   --exclude='mobile' --exclude='results' --exclude='scripts' --exclude='test'
   --exclude='.dockerignore' --exclude='.gitignore'
-  --exclude='admins.txt' --exclude='sessions.txt' --exclude='users.txt' --exclude='*.log'
+  --exclude='admins.txt' --exclude='sessions.txt' --exclude='users.txt' --exclude='*.log' --exclude='*.log.*'
 )
 SRC="$(dirname "$0")/../"
 
