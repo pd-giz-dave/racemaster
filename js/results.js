@@ -7,7 +7,7 @@ import { calculateCategory, getCategoryPriority, genderFromCategory, derivePairG
 import { getEntry, getSortedEntries, isEntryBanned, getEntryName } from './entries.js';
 import { adjustedFinishTime, getEventStartTime } from './time-utils.js';
 import { getSortedFinishers } from './finishers.js';
-import { getSIBib, getSIRaceTime, getSICourse, getSIStatus, getSINumSplits, getSISplitTime } from './si-results.js';
+import { getSIBib, getSIRaceTime, getSIFinishTime, getSIStartTime, getSICourse, getSIStatus, getSINumSplits, getSISplitTime } from './si-results.js';
 import { getMobileCheckpointNumbers, getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, getMobileCheckpointBib } from './mobile-checkpoints.js';
 import { getSortedMobileProgress } from './mobile-progress.js';
 
@@ -461,8 +461,10 @@ export function getSplitsRows(seniors, juniors) {
   if (!maxSplits && !maxCp) return { maxSplits: 0, maxCp: 0, cpNumbers: [], rows: [] };
 
   const resultsByBib = new Map();
+  const dnfByBib = new Map();
   for (const r of [...seniors, ...juniors]) {
     if (r.position < 9999) resultsByBib.set(+r.bibNumber, r);
+    else                   dnfByBib.set(+r.bibNumber, r);
   }
 
   const rowsByBib = new Map();
@@ -472,11 +474,23 @@ export function getSplitsRows(seniors, juniors) {
       const n = getSINumSplits(si);
       if (!n) continue;
       const bib = getSIBib(si);
-      const r = bib > 0 ? resultsByBib.get(bib) : null;
-      if (!r) continue;
+      if (bib <= 0) continue;
+      const r   = resultsByBib.get(bib);
+      const dnf = dnfByBib.get(bib);
+      if (!r && !dnf) continue;
 
       const cumTimes = Array.from({ length: n }, (_, i) => getSISplitTime(si, i + 1));
-      const raceTime = getSIRaceTime(si) || r.time;
+      // RaceTime (elapsed) and FinishTime (time-of-day) are not interchangeable, and SI only
+      // populates one depending on outcome: a finisher gets RaceTime; a DNF (e.g. a mispunch —
+      // missed a control but still crossed the line) gets FinishTime instead, with RaceTime left
+      // blank — so the finish leg for a DNF is derived from FinishTime and a start-of-day time,
+      // the same time-of-day-to-elapsed conversion the mobile-checkpoint fallback below already
+      // uses. SI's own per-row StartTime is preferred over Event Settings' start time for that
+      // conversion — real data has shown Event Settings drift stale while SI's own StartTime
+      // stays authoritative.
+      const raceTime = r
+        ? (getSIRaceTime(si) || r.time)
+        : (timeOfDayToElapsed(getSIFinishTime(si), getSIStartTime(si) || getEventStartTime(dnf.course)) || '');
 
       // index 0 = start (always valid, always 0); 1..n = controls; n+1 = finish.
       // A zero-second leg (two controls reached in the same second) is legitimate
@@ -490,7 +504,11 @@ export function getSplitsRows(seniors, juniors) {
       const splits = cumTimes.map((cumulative, i) => ({ cumulative, delta: legDelta(i + 1) }));
       const finishTime = { cumulative: raceTime, delta: legDelta(n + 1) };
 
-      rowsByBib.set(bib, { position: r.position, bibNumber: bib, name: getEntryName(r), category: r.category, splits, finishTime, cpTimes: {} });
+      if (r) {
+        rowsByBib.set(bib, { position: r.position, bibNumber: bib, name: getEntryName(r), category: r.category, splits, finishTime, cpTimes: {} });
+      } else {
+        rowsByBib.set(bib, { position: Number.MAX_SAFE_INTEGER, bibNumber: bib, name: getEntryName(dnf), category: dnf.category, splits, finishTime, cpTimes: {}, status: 'dnf' });
+      }
     }
   }
 
@@ -543,6 +561,14 @@ export function getSplitsRows(seniors, juniors) {
         rowsByBib.set(bib, { position: Number.MAX_SAFE_INTEGER, bibNumber: bib, name: getEntryName(entry), category: entry.category || '', splits: [], finishTime: {}, cpTimes, status: dnf ? 'dnf' : 'outstanding' });
       }
     }
+  }
+
+  // Union in every remaining DNF (formatResults()'s own position-9999 sentinel) not already
+  // surfaced above via SI splits or a checkpoint sighting — otherwise a DNF with neither just
+  // vanishes from the Splits tab instead of showing up, same sort-to-bottom key as one that was.
+  for (const [bib, dnf] of dnfByBib) {
+    if (rowsByBib.has(bib)) continue;
+    rowsByBib.set(bib, { position: Number.MAX_SAFE_INTEGER, bibNumber: bib, name: getEntryName(dnf), category: dnf.category, splits: [], finishTime: {}, cpTimes: {}, status: 'dnf' });
   }
 
   const rows = [...rowsByBib.values()].sort((a, b) => a.position - b.position || a.bibNumber - b.bibNumber);

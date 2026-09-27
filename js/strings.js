@@ -737,6 +737,11 @@ export const PAGES = {
       <li>SI results import now accepts <strong>BibNumber</strong> as an alternative to <strong>RaceNumber</strong>
           for the bib column, and tolerates the bib value being bracketed by arbitrary text (e.g. <em>"Bib #123"</em>
           or <em>"(123)"</em>) rather than requiring it to be purely numeric — matching SI's latest export format</li>
+      <li>The Splits tab now includes DNFs at the bottom of the list, instead of dropping them
+          entirely — showing whatever's actually known: any controls they reached before retiring,
+          and, for a DNF who still crossed the finish line (e.g. a mispunch — missed a control),
+          the finish leg too, worked out from SI's own FinishTime and StartTime columns since
+          RaceTime is left blank for a DNF</li>
     </ul>
     <h3>v0.0.21-alpha</h3>
     <ul>

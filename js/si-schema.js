@@ -35,12 +35,22 @@ export const SI = {
 
   // Column names and field aliases for importing SI results
   resultsImport: {
-    required: ['RaceNumber', 'Name (Free Format)', 'Category', 'Club', 'CourseClass', 'RaceTime', 'Position', 'Status'],
-    bib:      ['RaceNumber', 'BibNumber', 'BibNo', 'Bib', 'Number', 'bibNumber'],
-    raceTime: ['RaceTime', 'Race time', 'Time', 'FinishTime', 'Finish time'],
-    course:   ['CourseClass', 'Course', 'Class'],
-    status:   ['Status'],
-    name:     ['Name (Free Format)', 'Surname', 'Name', 'Last name', 'Lastname'],
+    required:   ['RaceNumber', 'Name (Free Format)', 'Category', 'Club', 'CourseClass', 'RaceTime', 'Position', 'Status'],
+    bib:        ['RaceNumber', 'BibNumber', 'BibNo', 'Bib', 'Number', 'bibNumber'],
+    // RaceTime and FinishTime are NOT aliases of each other — a real SI export carries both,
+    // as different things: RaceTime is elapsed time (blank for a DNF), FinishTime is time-of-day
+    // (present whenever the runner actually crossed the line, DNF or not — e.g. a mispunch DNF
+    // still has a FinishTime). Do not merge these two lists.
+    raceTime:   ['RaceTime', 'Race time', 'Time'],
+    finishTime: ['FinishTime', 'Finish time'],
+    startTime:  ['StartTime', 'Start time'],
+    course:     ['CourseClass', 'Course', 'Class'],
+    status:     ['Status'],
+    name:       ['Name (Free Format)', 'Surname', 'Name', 'Last name', 'Lastname'],
+    // Generic control-point time column — SI dedups repeated CSV headers by suffixing "_N" from
+    // the second occurrence on, so '##' resolves to '' for control 1 and '_N' for control N>=2
+    // (see getSISplitTime() in si-results.js, the only place this template is expanded).
+    split:      'Split##',
   },
 
   // Field lookup aliases for importing pre-entries (SI Entries / EntryCentral)

@@ -101,17 +101,19 @@ function hasSIColumn(headers, col) {
 // so pull out the first run of digits rather than parsing the whole field as a number.
 export function getSIBib(r)        { return +(getField(r, ...SI.resultsImport.bib).match(/\d+/) || [0])[0] || 0; }
 export function getSIRaceTime(r)   { return normaliseTime(getField(r, ...SI.resultsImport.raceTime)) || ''; }
+// FinishTime and StartTime are time-of-day, not elapsed — never run them through the same
+// accessor as RaceTime.
+export function getSIFinishTime(r) { return normaliseTime(getField(r, ...SI.resultsImport.finishTime)) || ''; }
+export function getSIStartTime(r)  { return normaliseTime(getField(r, ...SI.resultsImport.startTime)) || ''; }
 export function getSICourse(r)     { return getField(r, ...SI.resultsImport.course); }
 export function getSIStatus(r)     { return getField(r, ...SI.resultsImport.status); }
 export function getSINumSplits(r)  { return +getField(r, 'NumSplits') || 0; }
 
-/**
- * n is the 1-based split number. SI's export dedups repeated CSV headers by
- * suffixing "_N" from the second occurrence on — split 1 is the bare
- * 'ControlCode'/'Split' columns, split 2+ are 'ControlCode_2'/'Split_2' etc.
- */
+/** n is the 1-based split number — see SI.resultsImport.split's own doc comment in si-schema.js
+ *  for the "_N" numbering convention this expands. */
 export function getSISplitTime(r, n) {
-  return normaliseTime(getField(r, n === 1 ? 'Split' : `Split_${n}`)) || '';
+  const col = SI.resultsImport.split.replace('##', n === 1 ? '' : `_${n}`);
+  return normaliseTime(getField(r, col)) || '';
 }
 
 /** Set of bibs accounted for in SI results (have a race time or a non-blank status). */

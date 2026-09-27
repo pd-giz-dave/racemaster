@@ -304,4 +304,100 @@ describe('results.js:getSplitsRows', () => {
     const { rows } = getSplitsRows([], []);
     assert.equal(rows[0].cpTimes[1], 'Retire');
   });
+
+  it('shows SI split data reached before retiring for a DNF bib, at the bottom of the list', () => {
+    state.entries = [entry(1), entry(2)];
+    const seniorsResults = [
+      { bibNumber: '1', position: 1, name: 'Runner 1', category: 'MSEN', time: '01:00:00' },
+      { bibNumber: '2', position: 9999, name: 'Runner 2', category: 'MSEN', time: 'DNF' },
+    ];
+    state.siResults = [
+      { RaceNumber: '1', RaceTime: '01:00:00', NumSplits: '1', Split: '00:30:00' },
+      { RaceNumber: '2', RaceTime: '', Status: 'DNF', NumSplits: '1', Split: '00:20:00' },
+    ];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1].bibNumber, 2);
+    assert.equal(rows[1].status, 'dnf');
+    assert.equal(rows[1].splits[0].cumulative, '00:20:00');
+    assert.equal(rows[1].finishTime.cumulative, '');
+  });
+
+  // Matches real SI export data (e.g. data/mercia/master-public.json bibs 450_/470_): a DNF from
+  // a mispunch (missed a control) still crossed the finish line, so RaceTime (elapsed) is blank
+  // but FinishTime (time-of-day) is present — the finish leg is derived from FinishTime and the
+  // event's own start time for the bib's course, same as the mobile-checkpoint fallback.
+  it('shows the finish leg for a DNF who crossed the line but is DNF for another reason (e.g. a mispunch), derived from FinishTime', () => {
+    state.entries = [entry(1)];
+    state.event.startTime = '11:05:00';
+    const seniorsResults = [
+      { bibNumber: '1', position: 9999, name: 'Runner 1', category: 'MSEN', time: 'DNF', course: 'Seniors' },
+    ];
+    state.siResults = [
+      { RaceNumber: '1', RaceTime: '', FinishTime: '12:05:00', Status: 'Mispunch', NumSplits: '1', Split: '00:30:00' },
+    ];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].status, 'dnf');
+    assert.equal(rows[0].splits[0].cumulative, '00:30:00');
+    assert.equal(rows[0].finishTime.cumulative, '01:00:00');
+  });
+
+  // Real data has shown Event Settings' own start time can drift stale while SI's own per-row
+  // StartTime stays correct — prefer SI's when the row carries one.
+  it('prefers SI\'s own StartTime over Event Settings\' when computing a DNF\'s finish leg from FinishTime', () => {
+    state.entries = [entry(1)];
+    state.event.startTime = '00:11:00'; // stale/wrong
+    const seniorsResults = [
+      { bibNumber: '1', position: 9999, name: 'Runner 1', category: 'MSEN', time: 'DNF', course: 'Seniors' },
+    ];
+    state.siResults = [
+      { RaceNumber: '1', RaceTime: '', StartTime: '11:05:00', FinishTime: '12:05:00', Status: 'DNF', NumSplits: '1', Split: '00:30:00' },
+    ];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows[0].finishTime.cumulative, '01:00:00');
+  });
+
+  it('merges mobile CP times onto a DNF row that already has SI split data', () => {
+    state.entries = [entry(2)];
+    const seniorsResults = [
+      { bibNumber: '2', position: 9999, name: 'Runner 2', category: 'MSEN', time: 'DNF' },
+    ];
+    state.siResults = [
+      { RaceNumber: '2', RaceTime: '', Status: 'DNF', NumSplits: '1', Split: '00:20:00' },
+    ];
+    state.mobileCheckpoints = [{ bibNumber: 2, cpTimes: { 1: '00:10:00' } }];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].splits[0].cumulative, '00:20:00');
+    assert.equal(rows[0].cpTimes[1], '00:10:00');
+  });
+
+  it('includes a DNF with no checkpoint sighting at all, at the bottom of the list', () => {
+    state.entries = [entry(1), entry(2)];
+    const seniorsResults = [
+      { bibNumber: '1', position: 1, name: 'Runner 1', category: 'MSEN', time: '01:00:00' },
+      { bibNumber: '2', position: 9999, name: 'Runner 2', category: 'MSEN', time: 'DNF' },
+    ];
+    state.siResults = [{ RaceNumber: '1', RaceTime: '01:00:00', NumSplits: '1', Split: '00:30:00' }];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].bibNumber, 1);
+    assert.equal(rows[1].bibNumber, 2);
+    assert.equal(rows[1].status, 'dnf');
+  });
+
+  it('does not duplicate a DNF already surfaced via a checkpoint sighting', () => {
+    state.entries = [entry(2)];
+    const seniorsResults = [
+      { bibNumber: '2', position: 9999, name: 'Runner 2', category: 'MSEN', time: 'DNF' },
+    ];
+    state.finishers = [{ number: '2', action: 'DNF', time: '' }];
+    state.mobileCheckpoints = [{ bibNumber: 2, cpTimes: { 1: '00:10:00' } }];
+    const { rows } = getSplitsRows(seniorsResults, []);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].bibNumber, 2);
+    assert.equal(rows[0].status, 'dnf');
+    assert.equal(rows[0].cpTimes[1], '00:10:00');
+  });
 });

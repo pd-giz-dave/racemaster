@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { state } from '../js/state.js';
 import { installLocalStorageMock, installWindowMock } from './helpers/mock-browser.js';
 import {
-  importSIResults, clearSIResults, verifySIResults, getSIBib, getSIRaceTime, getSICourse,
-  getSIStatus, getSINumSplits, getSISplitTime, getSIAccountedBibs,
+  importSIResults, clearSIResults, verifySIResults, getSIBib, getSIRaceTime, getSIFinishTime,
+  getSIStartTime, getSICourse, getSIStatus, getSINumSplits, getSISplitTime, getSIAccountedBibs,
 } from '../js/si-results.js';
 
 const REQUIRED_HEADER = 'RaceNumber,Name (Free Format),Category,Club,CourseClass,RaceTime,Position,Status';
@@ -31,6 +31,15 @@ describe('si-results.js:field accessors', () => {
   it('getSIBib is 0 and getSIRaceTime is empty string when absent/unparseable', () => {
     assert.equal(getSIBib({}), 0);
     assert.equal(getSIRaceTime({ RaceTime: 'garbage' }), '');
+  });
+
+  // RaceTime (elapsed) and FinishTime (time-of-day) coexist as separate columns on a real SI
+  // export and are never aliases of each other — a row with both must read each independently.
+  it('getSIFinishTime/getSIStartTime read their own columns independently of RaceTime', () => {
+    const row = { RaceTime: '', FinishTime: '12:31:49', StartTime: '11:05:00' };
+    assert.equal(getSIRaceTime(row), '');
+    assert.equal(getSIFinishTime(row), '12:31:49');
+    assert.equal(getSIStartTime(row), '11:05:00');
   });
 
   it('getSIBib reads the BibNumber column alias', () => {
