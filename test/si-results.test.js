@@ -33,6 +33,16 @@ describe('si-results.js:field accessors', () => {
     assert.equal(getSIRaceTime({ RaceTime: 'garbage' }), '');
   });
 
+  it('getSIBib reads the BibNumber column alias', () => {
+    assert.equal(getSIBib({ BibNumber: '7' }), 7);
+  });
+
+  it('getSIBib extracts the number when it is bracketed by arbitrary text', () => {
+    assert.equal(getSIBib({ BibNumber: 'Bib #123' }), 123);
+    assert.equal(getSIBib({ BibNumber: '(45)' }), 45);
+    assert.equal(getSIBib({ RaceNumber: 'EL-9' }), 9);
+  });
+
   it('getSINumSplits and getSISplitTime read split-numbered columns (split 1 is unsuffixed)', () => {
     const row = { NumSplits: '2', Split: '00:10:00', Split_2: '00:20:00' };
     assert.equal(getSINumSplits(row), 2);
@@ -107,6 +117,14 @@ describe('si-results.js:importSIResults', () => {
     assert.equal(r.imported, 1);
     assert.equal(r.errors.length, 0);
     assert.equal(state.siResults.length, 1);
+  });
+
+  it('accepts a CSV using the BibNumber column alias in place of RaceNumber', async () => {
+    const header = 'BibNumber,Name (Free Format),Category,Club,CourseClass,RaceTime,Position,Status';
+    const csv = `${header}\nBib #1,Dave Smith,MSEN,Club,Seniors,01:00:00,1,`;
+    const r = await importSIResults(csv);
+    assert.equal(r.imported, 1);
+    assert.equal(r.errors.length, 0);
   });
 });
 

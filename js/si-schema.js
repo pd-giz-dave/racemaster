@@ -36,7 +36,7 @@ export const SI = {
   // Column names and field aliases for importing SI results
   resultsImport: {
     required: ['RaceNumber', 'Name (Free Format)', 'Category', 'Club', 'CourseClass', 'RaceTime', 'Position', 'Status'],
-    bib:      ['RaceNumber', 'BibNo', 'Bib', 'Number', 'bibNumber'],
+    bib:      ['RaceNumber', 'BibNumber', 'BibNo', 'Bib', 'Number', 'bibNumber'],
     raceTime: ['RaceTime', 'Race time', 'Time', 'FinishTime', 'Finish time'],
     course:   ['CourseClass', 'Course', 'Class'],
     status:   ['Status'],

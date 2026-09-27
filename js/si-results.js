@@ -18,7 +18,7 @@ export async function importSIResults(csvText) {
   const { headers, rows } = parseSICSV(csvText);
   if (!rows.length) return { imported: 0, errors: ['No data in file'] };
 
-  const missing = SI.resultsImport.required.filter(col => !headers.includes(col));
+  const missing = SI.resultsImport.required.filter(col => !hasSIColumn(headers, col));
   if (missing.length) {
     return { imported: 0, errors: [`Missing required columns: ${missing.join(', ')}`] };
   }
@@ -87,7 +87,19 @@ function getField(row, ...keys) {
   return '';
 }
 
-export function getSIBib(r)        { return +getField(r, ...SI.resultsImport.bib)      || 0; }
+/** True if headers contains col, or (when col is part of an alias group) any of its aliases. */
+function hasSIColumn(headers, col) {
+  if (headers.includes(col)) return true;
+  for (const key of ['bib', 'raceTime', 'course', 'status', 'name']) {
+    const aliases = SI.resultsImport[key];
+    if (aliases.includes(col)) return aliases.some(a => headers.includes(a));
+  }
+  return false;
+}
+
+// Bib values may have arbitrary text bracketing the number (e.g. "Bib #123", "(123)"),
+// so pull out the first run of digits rather than parsing the whole field as a number.
+export function getSIBib(r)        { return +(getField(r, ...SI.resultsImport.bib).match(/\d+/) || [0])[0] || 0; }
 export function getSIRaceTime(r)   { return normaliseTime(getField(r, ...SI.resultsImport.raceTime)) || ''; }
 export function getSICourse(r)     { return getField(r, ...SI.resultsImport.course); }
 export function getSIStatus(r)     { return getField(r, ...SI.resultsImport.status); }
