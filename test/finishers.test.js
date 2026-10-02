@@ -179,6 +179,11 @@ describe('finishers.js:getOutstandingCount', () => {
     state.siResults = [{ RaceNumber: '2', RaceTime: '00:30:00' }];
     assert.equal(getOutstandingCount('Juniors'), 0);
   });
+
+  it('recognises SI column aliases, not just the literal RaceNumber/RaceTime names — same lookup Safety Check uses', () => {
+    state.siResults = [{ BibNumber: '2', 'Race time': '00:30:00' }];
+    assert.equal(getOutstandingCount('Juniors'), 0);
+  });
 });
 
 describe('finishers.js:getSortedFinishers', () => {

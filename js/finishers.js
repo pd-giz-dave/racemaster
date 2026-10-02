@@ -6,6 +6,7 @@ import { saveFinishers } from './state.js';
 import { COURSE } from './constants.js';
 import { ciEq, normaliseTime } from './utils.js';
 import { getEntry } from './entries.js';
+import { getSIAccountedBibs } from './si-results.js';
 
 export const SPECIAL_BIB_LABELS = [
   ['Clock',   'No time=relative to 0; ss or mm:ss=late-start offset; hh:mm:ss=time of day'],
@@ -150,13 +151,11 @@ export function getOutstandingCount(course) {
       .map(f => +f.number)
       .filter(n => n > 0)
   );
-  // Inline SI results lookup (can't import si-results.js — circular dep)
-  for (const r of state.siResults) {
-    const bib = +(Object.keys(r).reduce((v, k) => v || (k.trim().toUpperCase() === 'RACENUMBER' ? r[k] : ''), '') || 0);
-    const time   = Object.keys(r).reduce((v, k) => v || (k.trim().toUpperCase() === 'RACETIME' ? r[k] : ''), '');
-    const status = Object.keys(r).reduce((v, k) => v || (k.trim().toUpperCase() === 'STATUS'   ? r[k] : ''), '');
-    if (bib > 0 && (time || status)) finishedOrRetiredBibs.add(bib);
-  }
+  // Same SI-accounted-for lookup the Safety Check page's own outstanding list uses
+  // (getFinishedBibs() in safety.js) — alias-aware (RaceNumber/BibNumber/Bib/..., RaceTime/
+  // "Race time"/Time/...) and digit-extracting, unlike a literal "RACENUMBER"/"RACETIME" column
+  // name match, so an SI import using any of those other column aliases is recognized here too.
+  for (const bib of getSIAccountedBibs()) finishedOrRetiredBibs.add(bib);
   return state.entries.filter(e => {
     if (!ciEq(e.course, course)) return false;
     const bib = +e.bibNumber;
