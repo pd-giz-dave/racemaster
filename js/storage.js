@@ -147,6 +147,18 @@ export async function apiChangeVisibility(token, owner, fullName, visibility) {
   return res.json();
 }
 
+export async function apiRenameDataset(token, owner, fullName, newName) {
+  const res = await fetch(`/api/datasets/${owner}/${fullName}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ name: newName }),
+  });
+  return res.json();
+}
+
 export async function apiCopyDataset(token, fromOwner, fromFullName, toName, visibility, toOwner) {
   const res = await fetch('/api/datasets/copy', {
     method: 'POST',

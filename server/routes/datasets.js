@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import { readBody, jsonReply, parseDataPath } from '../http-utils.js';
-import { sanitiseName, containsVisibility, dataFilePath, readDataset, writeDataset, emptyDataset, getDatasetsForUser } from '../datasets.js';
+import { sanitiseName, validDatasetName, conflictingDatasetName, dataFilePath, readDataset, writeDataset, emptyDataset, getDatasetsForUser } from '../datasets.js';
 import { getAuthUser, isAdmin, readUsers } from '../auth.js';
 
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
@@ -49,17 +49,17 @@ export async function handleDatasetRoutes(req, res, pathname, force) {
       toOwner = requestedOwner;
     }
 
-    const toName = sanitiseName(body.toName || '');
+    const toName = validDatasetName(body.toName);
     const toVisibility = body.visibility === 'public' ? 'public' : 'private';
-    if (!toName) { jsonReply(res, 400, { error: 'toName required' }); return true; }
-    if (containsVisibility(toName)) {
-      jsonReply(res, 400, { error: 'Dataset name must not contain "public" or "private"' });
-      return true;
-    }
+    if (!toName) { jsonReply(res, 400, { error: 'Invalid dataset name — must be letters, numbers and hyphens only, and not "public" or "private"' }); return true; }
 
     const toFullName = `${toName}-${toVisibility}`;
-    if (fs.existsSync(dataFilePath(toOwner, toFullName))) {
-      jsonReply(res, 409, { error: `"${toOwner}" already has a dataset named "${toName}" (${toVisibility})` });
+    const toConflict = conflictingDatasetName(toOwner, toName, toVisibility);
+    if (toConflict) {
+      const error = toConflict.fullName === toFullName
+        ? `"${toOwner}" already has a dataset named "${toName}" (${toVisibility})`
+        : `"${toOwner}" already has a dataset named "${toName}" (${toConflict.visibility}) — a dataset can't exist as both private and public under the same name`;
+      jsonReply(res, 409, { error });
       return true;
     }
 
@@ -75,18 +75,18 @@ export async function handleDatasetRoutes(req, res, pathname, force) {
     const username = getAuthUser(req);
     if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
     const body = JSON.parse(await readBody(req));
-    const name = sanitiseName(body.name || '');
+    const name = validDatasetName(body.name);
     const visibility = body.visibility === 'public' ? 'public' : 'private';
 
-    if (!name) { jsonReply(res, 400, { error: 'Invalid dataset name' }); return true; }
-    if (containsVisibility(name)) {
-      jsonReply(res, 400, { error: 'Dataset name must not contain "public" or "private"' });
-      return true;
-    }
+    if (!name) { jsonReply(res, 400, { error: 'Invalid dataset name — must be letters, numbers and hyphens only, and not "public" or "private"' }); return true; }
 
     const fullName = `${name}-${visibility}`;
-    if (fs.existsSync(dataFilePath(username, fullName))) {
-      jsonReply(res, 409, { error: `You already have a dataset named "${name}" (${visibility})` });
+    const conflict = conflictingDatasetName(username, name, visibility);
+    if (conflict) {
+      const error = conflict.fullName === fullName
+        ? `You already have a dataset named "${name}" (${visibility})`
+        : `You already have a dataset named "${name}" (${conflict.visibility}) — a dataset can't exist as both private and public under the same name`;
+      jsonReply(res, 409, { error });
       return true;
     }
 
@@ -96,29 +96,46 @@ export async function handleDatasetRoutes(req, res, pathname, force) {
     return true;
   }
 
-  // PATCH /api/datasets/:owner/:fullName  —  change dataset visibility
+  // PATCH /api/datasets/:owner/:fullName  —  rename and/or change visibility
   if (/^\/api\/datasets\/[^/]+\/[^/]+$/.test(pathname) && req.method === 'PATCH') {
     const username = getAuthUser(req);
     if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
     const [, , , owner, fullName] = pathname.split('/');
     if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot modify another user\'s dataset' }); return true; }
     const body = JSON.parse(await readBody(req));
-    const newVisibility = body.visibility === 'public' ? 'public' : 'private';
-    let name;
-    if (fullName.endsWith('-private'))     name = fullName.slice(0, -8);
-    else if (fullName.endsWith('-public')) name = fullName.slice(0, -7);
+
+    let currentName, currentVisibility;
+    if (fullName.endsWith('-private'))     { currentVisibility = 'private'; currentName = fullName.slice(0, -8); }
+    else if (fullName.endsWith('-public')) { currentVisibility = 'public';  currentName = fullName.slice(0, -7); }
     else { jsonReply(res, 400, { error: 'Invalid dataset name format' }); return true; }
-    const newFullName = `${name}-${newVisibility}`;
-    if (newFullName === fullName) { jsonReply(res, 200, { ok: true, name, fullName, owner, visibility: newVisibility }); return true; }
+
+    // Visibility defaults to whatever it already is — not "private" — so a rename-only
+    // request (no visibility field sent) can't silently flip a public dataset to private.
+    const newVisibility = body.visibility === 'public' ? 'public'
+      : body.visibility === 'private' ? 'private'
+      : currentVisibility;
+
+    let newName = currentName;
+    if (body.name !== undefined) {
+      newName = validDatasetName(body.name);
+      if (!newName) { jsonReply(res, 400, { error: 'Invalid dataset name — must be letters, numbers and hyphens only, and not "public" or "private"' }); return true; }
+    }
+
+    const newFullName = `${newName}-${newVisibility}`;
+    if (newFullName === fullName) { jsonReply(res, 200, { ok: true, name: newName, fullName, owner, visibility: newVisibility }); return true; }
     if (!fs.existsSync(dataFilePath(owner, fullName))) { jsonReply(res, 404, { error: 'Dataset not found' }); return true; }
-    if (fs.existsSync(dataFilePath(owner, newFullName))) {
-      jsonReply(res, 409, { error: `A dataset "${name}" (${newVisibility}) already exists` });
+    const conflict = conflictingDatasetName(owner, newName, newVisibility, fullName);
+    if (conflict) {
+      const error = conflict.fullName === newFullName
+        ? `A dataset "${newName}" (${newVisibility}) already exists`
+        : `A dataset "${newName}" (${conflict.visibility}) already exists — a dataset can't exist as both private and public under the same name`;
+      jsonReply(res, 409, { error });
       return true;
     }
     writeDataset(owner, newFullName, readDataset(owner, fullName));
     fs.unlinkSync(dataFilePath(owner, fullName));
-    console.log(`Dataset visibility changed: ${owner}/${fullName} → ${owner}/${newFullName}`);
-    jsonReply(res, 200, { ok: true, name, fullName: newFullName, owner, visibility: newVisibility });
+    console.log(`Dataset updated: ${owner}/${fullName} → ${owner}/${newFullName}`);
+    jsonReply(res, 200, { ok: true, name: newName, fullName: newFullName, owner, visibility: newVisibility });
     return true;
   }
 

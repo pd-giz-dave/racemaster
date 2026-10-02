@@ -437,11 +437,14 @@ export const HELP = {
     <p><strong>Your Datasets</strong> — every dataset you own, plus every <em>public</em> dataset
         anyone has created (private datasets are only visible to their owner and admins). Your own
         rows are shaded differently from other users' public ones so the two are easy to tell apart
-        at a glance. Each row shows:</p>
+        at a glance. Click any column header to sort by it (click again to reverse); it defaults to
+        <strong>Date</strong>, newest event first. Each row shows:</p>
     <ul style="margin:0 0 12px 1.2em">
       <li>a <strong>Private</strong>/<strong>Public</strong> badge, with a <strong>→ public</strong>/
           <strong>→ private</strong> button (owners/admins only) to flip it — public means any other
-          signed-in user can see and Copy it, private means only you (and admins) can;</li>
+          signed-in user can see and Copy it, private means only you (and admins) can. A dataset can't
+          be both at once under the same name, so flipping is blocked if the other visibility is
+          already taken by that name;</li>
       <li><strong>(orphaned)</strong> next to the owner if that account no longer exists;</li>
       <li>a green <strong>Connected ✕</strong> badge instead of a Connect button on whichever dataset
           is currently active — click it to disconnect.</li>
@@ -454,11 +457,17 @@ export const HELP = {
           server — and saves it as a brand-new dataset. Use this to snapshot the current state of
           your work under a new name (e.g. keeping a copy of each year's results).</li>
     </ul>
+    <p>A name can only be used by one visibility at a time per account — you can't have both a
+        private and a public dataset with the same name, so creating, copying, or renaming into a
+        name already taken by the other visibility is rejected.</p>
     <p>Which of the action buttons you want depends on what you're trying to do:</p>
     <ul style="margin:0 0 12px 1.2em">
       <li><strong>Connect</strong> — make an existing dataset the active one, replacing whatever's
           currently loaded. If you have unsaved local changes it asks whether to push them to the
           server first or discard them before connecting.</li>
+      <li><strong>Rename</strong> (owners/admins only) — change a dataset's name in place, keeping its
+          visibility, owner, and all its data. If it's the one currently connected, you stay connected
+          under the new name.</li>
       <li><strong>Copy</strong> — duplicate <em>any</em> dataset you can see (yours or someone else's
           public one) into a new dataset, under a new name, without touching what's currently
           connected. Normally lands in your own account; admins get an extra <strong>as user</strong>
@@ -469,11 +478,12 @@ export const HELP = {
       <li><strong>Delete</strong> (owners/admins only) — permanently removes a dataset and everything
           in it. If it's the one currently connected, you're disconnected first.</li>
     </ul>
-    <p>Connect/Copy each open their confirmation right below the row you clicked, rather than at the
-        bottom of the page, so a long dataset list never needs scrolling to see or act on them. If a
-        Copy is rejected — e.g. the name's already taken — the form stays open with what you typed
-        still in it and the error shown above it, so you can just fix the name and try again rather
-        than starting the whole form over.</p>
+    <p>Connect/Rename/Copy each open their confirmation right below the row you clicked, rather than
+        at the bottom of the page, so a long dataset list never needs scrolling to see or act on them.
+        If a Rename or Copy is rejected — e.g. the name's already taken, or that name already exists
+        as the other visibility — the form stays open with what you typed still in it and the error
+        shown above it, so you can just fix the name and try again rather than starting the whole form
+        over.</p>
     <p>When not signed in you'll see just the login panel: sign in to an existing account, create a
         new one (free, no catches), or select <strong>Continue without signing in</strong> to skip
         accounts entirely and work purely locally via Export/Import.</p>
@@ -732,7 +742,17 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.22-alpha - current version</h3>
+    <h3>v0.0.23-alpha - current version</h3>
+    <ul>
+      <li>The <strong>Datasets</strong> table now matches every other table in the app — click any
+          column header to sort (it defaults to Date, newest event first)</li>
+      <li>Datasets can now be <strong>renamed</strong> in place, without losing their data, visibility,
+          or (if it's the one currently connected) the connection itself</li>
+      <li>A dataset can no longer exist as both private and public under the same name — creating,
+          copying, or renaming into a name already taken by the other visibility is now rejected with
+          a clear error instead of silently allowed</li>
+    </ul>
+    <h3>v0.0.22-alpha</h3>
     <ul>
       <li>SI results import now accepts <strong>BibNumber</strong> as an alternative to <strong>RaceNumber</strong>
           for the bib column, and tolerates the bib value being bracketed by arbitrary text (e.g. <em>"Bib #123"</em>
@@ -1266,5 +1286,13 @@ export const TABLES = {
     { id: 'start',      label: 'Start',  title: 'This bib\'s own raw device time-of-day for an explicit individual start, if any (early/late start) — not an elapsed time' },
     { id: 'finishTime', label: 'Finish', title: 'This bib\'s own raw device time-of-day for its finish, straight off the phone — not an elapsed time (see Results & Prize List for the adjusted race time), or literal "DNF"' },
     { id: 'cp',         label: 'CP',     title: 'This checkpoint\'s own raw device time-of-day for this bib, straight off the phone — not an elapsed time (see Results & Prize List\'s Splits tab for the adjusted elapsed figure), and not authoritative' },
+  ],
+  datasets: [
+    { id: 'name',       label: 'Dataset',    title: 'Dataset name', sticky: true, wrap: true },
+    { id: 'eventDate',  label: 'Date',       title: 'Event date' },
+    { id: 'eventName',  label: 'Event',      title: 'Event name' },
+    { id: 'owner',      label: 'Owner',      title: 'Dataset owner' },
+    { id: 'visibility', label: 'Visibility', title: 'Private or public' },
+    { id: 'actions',    label: 'Actions',    title: 'Connect, rename, copy, change visibility or delete' },
   ],
 };

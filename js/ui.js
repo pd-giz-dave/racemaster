@@ -531,25 +531,31 @@ export function renderThead(tbodyId, columns) {
   }).join('') + '</tr>';
 }
 
+// Builds one row's <tr> markup from column defs — split out of renderTable() so a view that
+// needs to interleave extra, non-data rows (e.g. an inline edit panel between two data rows)
+// can build each data row the same way renderTable() does, without renderTable()'s one-row-
+// per-item assumption.
+export function renderTableRow(columns, row, rowAttrs) {
+  let tr = '<tr';
+  if (rowAttrs) {
+    for (const [k, v] of Object.entries(rowAttrs(row))) {
+      if (v !== '' && v != null) tr += ` ${k}="${v}"`;
+    }
+  }
+  tr += '>' + columns.map(c => {
+    let td = '<td';
+    if (c.align) td += ` style="text-align:${c.align}"`;
+    td += cellAttrs(c);
+    return td + `>${c.render ? c.render(row) : ''}</td>`;
+  }).join('') + '</tr>';
+  return tr;
+}
+
 export function renderTable(tbodyId, columns, rows, { rowAttrs } = {}) {
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
   renderThead(tbodyId, columns);
-  tbody.innerHTML = rows.map(r => {
-    let tr = '<tr';
-    if (rowAttrs) {
-      for (const [k, v] of Object.entries(rowAttrs(r))) {
-        if (v !== '' && v != null) tr += ` ${k}="${v}"`;
-      }
-    }
-    tr += '>' + columns.map(c => {
-      let td = '<td';
-      if (c.align) td += ` style="text-align:${c.align}"`;
-      td += cellAttrs(c);
-      return td + `>${c.render ? c.render(r) : ''}</td>`;
-    }).join('') + '</tr>';
-    return tr;
-  }).join('');
+  tbody.innerHTML = rows.map(r => renderTableRow(columns, r, rowAttrs)).join('');
   applyStickyColumns(tbodyId);
   return tbody;
 }

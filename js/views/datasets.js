@@ -6,14 +6,15 @@ import {
   getUsername, setUsername, getIsAdmin, setIsAdmin,
   setStandalone, isDirty, hasCachedData,
   apiLogin, apiCreateAccount, apiListDatasets, apiCreateDataset, apiCopyDataset, apiChangeVisibility,
-  apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiCreateUser, apiSetUserAdmin, apiDeleteUser,
+  apiRenameDataset, apiDeleteDataset, switchDataset, saveAsDataset, apiListUsers, apiCreateUser, apiSetUserAdmin, apiDeleteUser,
   dumpState, restoreState,
 } from '../storage.js';
-import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise, applyStickyColumns } from '../ui.js';
-import { showBusy, escHtml } from '../utils.js';
+import { showConfirmDialog, showStatus, pickFile, downloadText, sanitise, applyStickyColumns, renderThead, renderTableRow, tableColumns } from '../ui.js';
+import { showBusy, escHtml, toISODate } from '../utils.js';
 import { updateDataFileButton, pingServerNow, isLoginExpired } from '../connect.js';
 import { renderAll, showView } from '../app.js';
 import { isServerHidden, setServerHidden } from '../server-hide.js';
+import { TABLES } from '../strings.js';
 
 let activeToken    = null;
 let activeUsername = null;
@@ -146,6 +147,63 @@ function validateDatasetName(name) {
 
 // ---- Dataset list ----
 
+const MUTED = '<span style="color:var(--muted)">—</span>';
+
+let sortCol = 'eventDate';
+let sortDir = -1;   // 1 = asc, -1 = desc — defaults to newest event date first
+
+const SORT_KEYS = {
+  name:       d => (d.name || '').toLowerCase(),
+  eventDate:  d => toISODate(d.eventDate || '') || '',
+  eventName:  d => (d.eventName || '').toLowerCase(),
+  owner:      d => (d.owner || '').toLowerCase(),
+  visibility: d => d.visibility || '',
+};
+
+// Column render functions take the enriched per-row object built in renderDatasetList() below
+// ({ d, isOwn, canManage, isSelected, newVis }), not the bare dataset — the actions column in
+// particular needs the permission/selection flags alongside the dataset itself.
+const DATASET_COLS = tableColumns(TABLES.datasets, {
+  name:       ({ d }) => escHtml(d.name),
+  eventDate:  ({ d }) => d.eventDate ? escHtml(d.eventDate) : MUTED,
+  eventName:  ({ d }) => d.eventName ? escHtml(d.eventName) : MUTED,
+  owner:      ({ d }) => escHtml(d.owner) + (d.orphaned ? ' <span style="color:var(--muted);font-size:0.8em">(orphaned)</span>' : ''),
+  visibility: ({ d }) => `<span class="df-badge df-badge-${d.visibility}">${d.visibility}</span>`,
+  actions:    ({ d, canManage, isSelected, newVis }) => {
+    const connectBtn = isSelected
+      ? `<button class="btn btn-sm df-ds-disconnect df-badge df-badge-connected" data-owner="${d.owner}" data-fullname="${d.fullName}" title="Disconnect from this dataset">Connected ✕</button>`
+      : canManage
+        ? `<button class="btn btn-sm btn-primary df-ds-connect" data-owner="${d.owner}" data-fullname="${d.fullName}">Connect</button>`
+        : '';
+    const renameBtn = canManage
+      ? `<button class="btn btn-sm btn-secondary df-ds-rename" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Rename</button>`
+      : '';
+    const visBtn = canManage
+      ? `<button class="btn btn-sm btn-secondary df-ds-vis" data-owner="${d.owner}" data-fullname="${d.fullName}" data-newvis="${newVis}">→ ${newVis}</button>`
+      : '';
+    const copyBtn = `<button class="btn btn-sm btn-secondary df-ds-copy" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Copy</button>`;
+    const deleteBtn = canManage
+      ? `<button class="btn btn-sm btn-danger df-ds-delete" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Delete</button>`
+      : '';
+    return `<span style="white-space:nowrap">${connectBtn}${renameBtn}${visBtn}${copyBtn}${deleteBtn}</span>`;
+  },
+});
+
+function wireDatasetsSort() {
+  const ths = [...document.querySelectorAll('#df-dataset-list thead th')];
+  DATASET_COLS.forEach((col, idx) => {
+    const th = ths[idx];
+    if (!th || !SORT_KEYS[col.id]) return;
+    th.classList.add('p-sortable');
+    th.dataset.sortDir = col.id === sortCol ? (sortDir === 1 ? 'asc' : 'desc') : '';
+    th.addEventListener('click', () => {
+      sortDir = sortCol === col.id ? -sortDir : 1;
+      sortCol = col.id;
+      rerenderDatasetList();
+    });
+  });
+}
+
 function loadDatasets() {
   showPanel('datasets', isAdminUser);
   pendingRow = null;
@@ -223,28 +281,29 @@ async function deleteUser(username) {
 // the whole list. colspan matches the 6 columns in the table below.
 function renderInlineRow() {
   const p = pendingRow;
+  const colspan = DATASET_COLS.length;
   if (p.status === 'busy') {
-    const label = p.type === 'connect' ? (p.busyLabel || 'Connecting…') : 'Copying…';
-    return `<tr class="df-inline-row"><td colspan="6">
+    const label = p.type === 'connect' ? (p.busyLabel || 'Connecting…') : p.type === 'rename' ? 'Renaming…' : 'Copying…';
+    return `<tr class="df-inline-row"><td colspan="${colspan}">
       <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
         <p style="margin:0;font-size:0.875rem;color:var(--muted)">${escHtml(label)}</p>
       </div>
     </td></tr>`;
   }
   // Connect has no editable fields to correct — a rejected connect (rare: only the "genuinely
-  // unexpected" catch in doConnectDataset()) just gets a bare error + Cancel. Copy is different:
-  // its error is usually the entered name failing a constraint (taken, or invalid), so that case
-  // falls through to the same form below with the error banner added on top, rather than
-  // discarding what the user typed and making them start the whole form over.
+  // unexpected" catch in doConnectDataset()) just gets a bare error + Cancel. Copy and Rename are
+  // different: their error is usually the entered name failing a constraint (taken, or invalid),
+  // so that case falls through to the same form below with the error banner added on top, rather
+  // than discarding what the user typed and making them start the whole form over.
   if (p.status === 'error' && p.type === 'connect') {
-    return `<tr class="df-inline-row"><td colspan="6">
+    return `<tr class="df-inline-row"><td colspan="${colspan}">
       <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
         <p style="margin:0 0 8px;font-size:0.875rem;color:var(--danger)">${escHtml(p.error)}</p>
         <div class="btn-row"><button class="btn btn-secondary df-inline-cancel">Cancel</button></div>
       </div>
     </td></tr>`;
   }
-  // status === 'confirming' (or 'error' for copy — see above)
+  // status === 'confirming' (or 'error' for copy/rename — see above)
   if (p.type === 'connect') {
     const buttons = p.hasPushOption
       ? `<button class="btn btn-primary df-inline-connect-push">Push &amp; Connect</button>
@@ -253,10 +312,25 @@ function renderInlineRow() {
     const msg = p.hasPushOption
       ? `You have unsaved local data. Push it to "${escHtml(p.name)}" before connecting, or discard it?`
       : `Connecting will replace local data with "${escHtml(p.name)}" from the server.`;
-    return `<tr class="df-inline-row"><td colspan="6">
+    return `<tr class="df-inline-row"><td colspan="${colspan}">
       <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
         <p style="margin:0 0 8px;font-size:0.875rem">${msg}</p>
         <div class="btn-row">${buttons}<button class="btn btn-secondary df-inline-cancel">Cancel</button></div>
+      </div>
+    </td></tr>`;
+  }
+  if (p.type === 'rename') {
+    const errorBanner = p.status === 'error'
+      ? `<p style="margin:0 0 8px;font-size:0.875rem;color:var(--danger)">${escHtml(p.error)}</p>`
+      : '';
+    return `<tr class="df-inline-row"><td colspan="${colspan}">
+      <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
+        ${errorBanner}
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input class="df-inline-rename-name" type="text" aria-label="New dataset name" value="${escHtml(p.nameValue || '')}" style="flex:1;min-width:100px">
+          <button class="btn btn-primary df-inline-rename-submit">Rename</button>
+          <button class="btn btn-secondary df-inline-cancel">Cancel</button>
+        </div>
       </div>
     </td></tr>`;
   }
@@ -276,7 +350,7 @@ function renderInlineRow() {
   const errorBanner = p.status === 'error'
     ? `<p style="margin:0 0 8px;font-size:0.875rem;color:var(--danger)">${escHtml(p.error)}</p>`
     : '';
-  return `<tr class="df-inline-row"><td colspan="6">
+  return `<tr class="df-inline-row"><td colspan="${colspan}">
     <div style="background:var(--panel-alt);padding:10px;border-radius:6px">
       ${errorBanner}
       <p style="margin:0 0 6px;font-size:0.875rem">Copy <strong>${escHtml(p.name)} (${escHtml(p.owner)})</strong> to:</p>
@@ -297,73 +371,59 @@ function renderInlineRow() {
 
 function renderDatasetList(datasets) {
   currentDatasets = datasets;
-  const list = getEl('df-dataset-list');
-  if (!datasets.length) {
-    list.innerHTML = '<p style="color:var(--muted);margin:0 0 4px;font-size:0.875rem">No datasets yet — create one below.</p>';
-    return;
+  if (sortCol && SORT_KEYS[sortCol]) {
+    const key = SORT_KEYS[sortCol];
+    datasets = [...datasets].sort((a, b) => { const av = key(a), bv = key(b); return av < bv ? -sortDir : av > bv ? sortDir : 0; });
   }
+  setStatus('df-dataset-status', datasets.length ? '' : 'No datasets yet — create one below.');
+
   const currentDataset = getSession()?.dataset;
-  const rows = datasets.map(d => {
+  renderThead('df-dataset-tbody', DATASET_COLS);
+  const tbody = getEl('df-dataset-tbody');
+  tbody.innerHTML = datasets.map(d => {
     const isOwn      = d.owner === activeUsername;
     const canManage  = isOwn || isAdminUser;
     const isSelected = currentDataset === `${d.owner}/${d.fullName}`;
     const isPending  = pendingRow && pendingRow.owner === d.owner && pendingRow.fullName === d.fullName;
     const newVis     = d.visibility === 'private' ? 'public' : 'private';
-    const connectBtn = isSelected
-      ? `<button class="btn btn-sm df-ds-disconnect df-badge df-badge-connected" data-owner="${d.owner}" data-fullname="${d.fullName}" title="Disconnect from this dataset">Connected ✕</button>`
-      : canManage
-        ? `<button class="btn btn-sm btn-primary df-ds-connect" data-owner="${d.owner}" data-fullname="${d.fullName}">Connect</button>`
-        : '';
-    const visBtn    = canManage
-      ? `<button class="btn btn-sm btn-secondary df-ds-vis" data-owner="${d.owner}" data-fullname="${d.fullName}" data-newvis="${newVis}">→ ${newVis}</button>`
-      : '';
-    const copyBtn   = `<button class="btn btn-sm btn-secondary df-ds-copy" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Copy</button>`;
-    const deleteBtn = canManage
-      ? `<button class="btn btn-sm btn-danger df-ds-delete" data-owner="${d.owner}" data-fullname="${d.fullName}" data-name="${d.name}">Delete</button>`
-      : '';
-    const muted = '<span style="color:var(--muted)">—</span>';
-    const row = `<tr class="${isOwn ? 'df-row-own' : 'df-row-other'}${isSelected ? ' df-row-selected' : ''}${isPending ? ' row-editing' : ''}">
-      <td class="sticky-col sticky-col-last sticky-col-wrap">${d.name}</td>
-      <td>${d.eventName || muted}</td>
-      <td>${d.eventDate || muted}</td>
-      <td>${d.owner}${d.orphaned ? ' <span style="color:var(--muted);font-size:0.8em">(orphaned)</span>' : ''}</td>
-      <td><span class="df-badge df-badge-${d.visibility}">${d.visibility}</span></td>
-      <td style="white-space:nowrap">${connectBtn}${visBtn}${copyBtn}${deleteBtn}</td>
-    </tr>`;
-    return isPending ? row + renderInlineRow() : row;
+    const row = { d, isOwn, canManage, isSelected, isPending, newVis };
+    const tr = renderTableRow(DATASET_COLS, row, r => ({
+      class: `${r.isOwn ? 'df-row-own' : 'df-row-other'}${r.isSelected ? ' df-row-selected' : ''}${r.isPending ? ' row-editing' : ''}`,
+    }));
+    return isPending ? tr + renderInlineRow() : tr;
   }).join('');
-  list.innerHTML = `<table class="data-table">
-    <thead><tr>
-      <th class="sticky-col sticky-col-last sticky-col-wrap">Dataset</th><th>Event</th><th>Date</th><th>Owner</th><th>Visibility</th><th>Actions</th>
-    </tr></thead>
-    <tbody id="df-dataset-tbody">${rows}</tbody>
-  </table>`;
   applyStickyColumns('df-dataset-tbody');
+  wireDatasetsSort();
 
-  list.querySelectorAll('.df-ds-disconnect').forEach(btn => {
+  tbody.querySelectorAll('.df-ds-disconnect').forEach(btn => {
     btn.onclick = () => disconnectDataset();
   });
-  list.querySelectorAll('.df-ds-connect').forEach(btn => {
+  tbody.querySelectorAll('.df-ds-connect').forEach(btn => {
     btn.onclick = () => connectDataset(btn.dataset.owner, btn.dataset.fullname);
   });
-  list.querySelectorAll('.df-ds-vis').forEach(btn => {
+  tbody.querySelectorAll('.df-ds-rename').forEach(btn => {
+    btn.onclick = () => showRenameForm(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
+  });
+  tbody.querySelectorAll('.df-ds-vis').forEach(btn => {
     btn.onclick = () => changeVisibility(btn.dataset.owner, btn.dataset.fullname, btn.dataset.newvis);
   });
-  list.querySelectorAll('.df-ds-copy').forEach(btn => {
+  tbody.querySelectorAll('.df-ds-copy').forEach(btn => {
     btn.onclick = () => showCopyForm(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
   });
-  list.querySelectorAll('.df-ds-delete').forEach(btn => {
+  tbody.querySelectorAll('.df-ds-delete').forEach(btn => {
     btn.onclick = () => deleteDataset(btn.dataset.owner, btn.dataset.fullname, btn.dataset.name);
   });
 
-  // Inline Connect/Copy row buttons — only one pendingRow at a time, so a plain querySelector
-  // (rather than querySelectorAll) is enough.
-  list.querySelector('.df-inline-connect-push')?.addEventListener('click', () => confirmConnect(true));
-  list.querySelector('.df-inline-connect-discard')?.addEventListener('click', () => confirmConnect(false));
-  list.querySelector('.df-inline-cancel')?.addEventListener('click', () => { pendingRow = null; rerenderDatasetList(); });
-  list.querySelector('.df-inline-copy-submit')?.addEventListener('click', submitInlineCopy);
-  list.querySelector('.df-inline-copy-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
-  list.querySelector('.df-inline-copy-owner')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
+  // Inline Connect/Copy/Rename row buttons — only one pendingRow at a time, so a plain
+  // querySelector (rather than querySelectorAll) is enough.
+  tbody.querySelector('.df-inline-connect-push')?.addEventListener('click', () => confirmConnect(true));
+  tbody.querySelector('.df-inline-connect-discard')?.addEventListener('click', () => confirmConnect(false));
+  tbody.querySelector('.df-inline-cancel')?.addEventListener('click', () => { pendingRow = null; rerenderDatasetList(); });
+  tbody.querySelector('.df-inline-copy-submit')?.addEventListener('click', submitInlineCopy);
+  tbody.querySelector('.df-inline-copy-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
+  tbody.querySelector('.df-inline-copy-owner')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineCopy(); });
+  tbody.querySelector('.df-inline-rename-submit')?.addEventListener('click', submitInlineRename);
+  tbody.querySelector('.df-inline-rename-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitInlineRename(); });
 }
 
 function disconnectDataset() {
@@ -403,6 +463,50 @@ function changeVisibility(owner, fullName, newVisibility) {
     loadDatasets();
   }).catch(() => {
     reportError('df-dataset-status', 'Server unreachable — cannot change visibility right now, try again once back online.');
+  });
+}
+
+// ---- Rename ----
+
+function showRenameForm(owner, fullName, name) {
+  pendingRow = { type: 'rename', owner, fullName, name, status: 'confirming', nameValue: name };
+  rerenderDatasetList();
+}
+
+function submitInlineRename() {
+  const list    = getEl('df-dataset-list');
+  const toName  = list.querySelector('.df-inline-rename-name')?.value.trim() || '';
+  const { owner, fullName, name: currentName } = pendingRow;
+  if (toName === currentName) { pendingRow = null; rerenderDatasetList(); return; }
+  if (!toName) {
+    pendingRow = { ...pendingRow, status: 'error', error: 'Enter a name for the dataset.', nameValue: toName };
+    rerenderDatasetList();
+    return;
+  }
+  const nameError = validateDatasetName(toName);
+  if (nameError) {
+    pendingRow = { ...pendingRow, status: 'error', error: nameError, nameValue: toName };
+    rerenderDatasetList();
+    return;
+  }
+  pendingRow = { ...pendingRow, status: 'busy', nameValue: toName };
+  rerenderDatasetList();
+  apiRenameDataset(activeToken, owner, fullName, toName).then(result => {
+    if (result.error) {
+      pendingRow = { ...pendingRow, status: 'error', error: result.error };
+      rerenderDatasetList();
+      return;
+    }
+    const session = getSession();
+    if (session && session.dataset === `${owner}/${fullName}`) {
+      setSession(activeToken, `${owner}/${result.fullName}`);
+      updateDataFileButton();
+    }
+    pendingRow = null;
+    loadDatasets();
+  }).catch(() => {
+    pendingRow = { ...pendingRow, status: 'error', error: 'Server unreachable — cannot rename right now, try again once back online.' };
+    rerenderDatasetList();
   });
 }
 

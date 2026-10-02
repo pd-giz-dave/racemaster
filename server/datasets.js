@@ -21,6 +21,14 @@ export function containsVisibility(name) {
   return /public|private/i.test(name);
 }
 
+// Sanitises and validates a user-supplied dataset name for create/copy/rename. Returns the
+// valid name, or null if it's empty after sanitising or contains the reserved "public"/
+// "private" substrings used as the visibility suffix.
+export function validDatasetName(rawName) {
+  const name = sanitiseName(rawName || '');
+  return name && !containsVisibility(name) ? name : null;
+}
+
 // data/<owner>/<name>-<visibility>.json
 export function dataFilePath(owner, fullName) {
   return path.join(DATA_DIR, owner, `${fullName}.json`);
@@ -28,6 +36,22 @@ export function dataFilePath(owner, fullName) {
 
 export function ownerDir(owner) {
   return path.join(DATA_DIR, owner);
+}
+
+// A dataset name is never allowed to exist as both private and public under the same owner at
+// once (e.g. example-private.json and example-public.json together) — so any create/copy/
+// rename/visibility-change has to check both slots, not just the exact one it's about to write.
+// Returns the conflicting { fullName, visibility } if either slot for `name` is already taken,
+// or null if both are free. Pass `excludeFullName` (the file actually being renamed) so a
+// rename/visibility-change doesn't flag its own source file as a conflict with itself.
+export function conflictingDatasetName(owner, name, visibility, excludeFullName = null) {
+  const otherVisibility = visibility === 'public' ? 'private' : 'public';
+  for (const v of [visibility, otherVisibility]) {
+    const candidate = `${name}-${v}`;
+    if (candidate === excludeFullName) continue;
+    if (fs.existsSync(dataFilePath(owner, candidate))) return { fullName: candidate, visibility: v };
+  }
+  return null;
 }
 
 // Every published result copies publish.css/publish.js from js/publish/ into results/
