@@ -92,6 +92,16 @@ details.re-section-details[open] > summary::after { content: '▼'; }
 .data-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
 .data-table tr:hover td { background: var(--table-hover); }
 .results-cat-separator td { padding: 0; border-bottom: 2px solid var(--border); }
+.results-dsq-row td { background: rgba(169, 50, 38, 0.12) !important; }
+.results-dsq-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #a93226;
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 700;
+}
 
 /* ---- Sortable column headers ---- */
 .re-sortable thead th { cursor: pointer; user-select: none; }

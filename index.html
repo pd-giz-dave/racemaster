@@ -35,7 +35,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.23-alpha)</button></h1>
+    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.26-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -79,6 +79,9 @@
       <a href="#" data-view="dibbers">Dibbers</a>
       <a href="#" data-view="categories">Categories</a>
       <a href="#" data-view="roles">Roles</a>
+
+      <div class="nav-section">Help</div>
+      <a href="#" data-view="auto-printing">Auto Handicap Printing</a>
     </nav>
   </aside>
   <div id="nav-backdrop"></div>
@@ -161,10 +164,6 @@
             <input type="number" id="ev-first-dibber" min="1" value="1">
           </div>
         </div>
-        <div class="form-field" style="flex-direction:row;align-items:center;gap:8px;margin-top:8px">
-          <input type="checkbox" id="ev-has-pairs">
-          <label for="ev-has-pairs" style="font-size:0.85rem;color:var(--text);cursor:pointer">Has pairs</label>
-        </div>
       </div>
 
       <div class="card">
@@ -172,7 +171,7 @@
         <div class="form-grid">
           <div class="form-field">
             <label for="ev-start-time">Start Time (HH:MM:SS)</label>
-            <input type="text" id="ev-start-time" placeholder="11:00:00" data-normalise="time">
+            <input type="text" id="ev-start-time" placeholder="11:00:00" data-normalise="clock-time">
           </div>
           <div class="form-field">
             <label for="ev-entry-limit">Entry Limit</label>
@@ -206,7 +205,7 @@
           </div>
           <div class="form-field">
             <label for="ev-junior-start-time">Start Time (HH:MM:SS)</label>
-            <input type="text" id="ev-junior-start-time" placeholder="11:00:00" data-normalise="time">
+            <input type="text" id="ev-junior-start-time" placeholder="11:00:00" data-normalise="clock-time">
           </div>
           <div class="form-field">
             <label for="ev-junior-limit-n">Entry Limit</label>
@@ -223,7 +222,32 @@
         </div>
       </div>
 
-      <div class="card">
+        <div class="card">
+          <h3>Race Mode</h3>
+          <div class="form-field" style="flex-direction:row;align-items:center;gap:16px">
+            <label style="font-size:0.85rem;color:var(--text);cursor:pointer">
+              <input type="radio" name="ev-race-mode" id="ev-race-mode-solo" value="solo"> Solo
+            </label>
+            <label style="font-size:0.85rem;color:var(--text);cursor:pointer">
+              <input type="radio" name="ev-race-mode" id="ev-race-mode-pairs" value="pairs"> Pairs
+            </label>
+            <label style="font-size:0.85rem;color:var(--text);cursor:pointer">
+              <input type="radio" name="ev-race-mode" id="ev-race-mode-handicap" value="handicap"> Handicap
+            </label>
+          </div>
+          <div class="form-grid" id="ev-handicap-fields" style="margin-top:8px" hidden>
+            <div class="form-field">
+              <label for="ev-handicap-target">Target Time (HH:MM:SS, elapsed from Start Time)</label>
+              <input type="text" id="ev-handicap-target" placeholder="HH:MM:SS" data-normalise="time">
+            </div>
+            <div class="form-field">
+              <label for="ev-handicap-dsq">DSQ Threshold (%)</label>
+              <input type="number" id="ev-handicap-dsq" min="0" step="1" value="10">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
         <h3>Prizes</h3>
         <div class="form-grid">
           <div class="form-field">
@@ -241,7 +265,7 @@
         </div>
       </div>
 
-      <div class="card">
+        <div class="card">
         <h3>Organisation</h3>
         <div class="form-field">
           <label for="ev-organisation">Organisation Name</label>
@@ -441,10 +465,15 @@
                 </select>
               </div>
             </div>
+            <div class="form-field" id="entry-form-predicted-field" hidden>
+              <label for="entry-form-predicted">Predicted Time (MM:SS)</label>
+              <input type="text" id="entry-form-predicted" placeholder="MM:SS" data-normalise="time" autocomplete="off">
+            </div>
             <div class="btn-row" style="margin-top:8px">
               <button class="btn" id="btn-submit-entry" style="flex:1">Register</button>
               <button class="btn btn-secondary" id="btn-reset-entry" style="flex:1">Reset</button>
             </div>
+            <button class="btn btn-secondary" id="btn-print-start-slip" style="width:100%;margin-top:4px;display:none">Re-print Start Slip</button>
             <button class="btn btn-secondary" id="btn-cancel-edit" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
           </div>
         </div>
@@ -1358,6 +1387,11 @@
     <!-- What's New -->
     <div class="view" id="view-whats-new" hidden>
       <div class="view-header"><h2>What's New</h2></div>
+    </div>
+
+    <!-- Auto Handicap Printing -->
+    <div class="view" id="view-auto-printing" hidden>
+      <div class="view-header"><h2>Auto Handicap Printing</h2></div>
     </div>
 
   </main><!-- end .app-main -->

@@ -38,6 +38,7 @@ describe('schema.js:createEntry', () => {
     const e = createEntry();
     assert.equal(e.partner, null);
     assert.equal(e.bibNumber, 0);
+    assert.equal(e.predictedTime, '');
   });
 
   it('carries a partner object through unchanged', () => {
@@ -81,6 +82,9 @@ describe('schema.js:createEvent', () => {
     assert.equal(e.juniorLimit, 'None');
     assert.equal(e.juniorTimingMethod, 'Stopwatch');
     assert.equal(e.hasPairs, false);
+    assert.equal(e.isHandicap, false);
+    assert.equal(e.handicapTargetTime, '');
+    assert.equal(e.handicapDsqThreshold, 10);
   });
 
   it('applies given overrides without disturbing other defaults', () => {

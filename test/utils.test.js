@@ -34,6 +34,17 @@ describe('utils.js:normaliseTime', () => {
     assert.equal(normaliseTime('abc'), '');
     assert.equal(normaliseTime('1:2:3:4'), '');
   });
+
+  it("in 'clock' mode, treats two parts as H:M and one part as H (not M:S/S)", () => {
+    assert.equal(normaliseTime('11:00', 'clock'), '11:00:00');
+    assert.equal(normaliseTime('11', 'clock'), '11:00:00');
+    assert.equal(normaliseTime('9:5:30', 'clock'), '09:05:30');
+  });
+
+  it("default mode is unaffected by the 'clock' option existing", () => {
+    assert.equal(normaliseTime('11:00'), '00:11:00');
+    assert.equal(normaliseTime('11'), '00:00:11');
+  });
 });
 
 describe('utils.js:normaliseDate', () => {

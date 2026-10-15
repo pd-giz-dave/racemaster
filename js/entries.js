@@ -5,11 +5,15 @@ import { createEntry } from './schema.js';
 import { SI } from './si-schema.js';
 import { saveEntries, savePeople } from './state.js';
 import { COURSE } from './constants.js';
-import { normaliseDate, cleanName, ciEq } from './utils.js';
+import { normaliseDate, normaliseTime, cleanName, ciEq, timeToSeconds, formatElapsedSeconds } from './utils.js';
 import { calculateCategory, calculateCourse, calculatePairCategory } from './categories.js';
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
 import { usingDibbers } from './time-utils.js';
 
+// A predicted time far outside these multiples of the event's target time is almost certainly a
+// typo (e.g. minutes entered as seconds, or vice versa) rather than a genuine predicted pace.
+const MIN_HANDICAP_TARGET_MULTIPLE = 0.5; // fastest allowed: twice as fast as target
+const MAX_HANDICAP_TARGET_MULTIPLE = 3;   // slowest allowed: three times as slow as target
 
 export function isBanned(p) {
   if (!p?.banned) return false;
@@ -97,7 +101,7 @@ function normalisePartner(p, primaryName, primaryDob) {
  */
 export function addEntry({
   bibNumber, dibberNumber, fraNumber, name, club,
-  gender, dob, category, course, preEntry, partner
+  gender, dob, category, course, preEntry, partner, predictedTime,
 }) {
   if (!bibNumber || +bibNumber <= 0) return -1;
   const bib = +bibNumber;
@@ -120,6 +124,7 @@ export function addEntry({
   e.course       = course        !== undefined ? course      : (e.course       || COURSE.SENIORS);
   e.preEntry     = preEntry      !== undefined ? preEntry    : (e.preEntry     || '');
   e.partner      = partner       !== undefined ? (partner || null) : (e.partner ?? null);
+  e.predictedTime = predictedTime !== undefined ? predictedTime : (e.predictedTime || '');
 
   return idx;
 }
@@ -208,10 +213,24 @@ function prepareEntry(formData, existingEntry = null, excludeBib = 0) {
   const club     = cleanName(formData.club     !== undefined ? formData.club     : (ex?.club     || ''));
   const fra      =          (formData.fraNumber!== undefined ? formData.fraNumber: (ex?.fraNumber|| ''));
   const preEntry =          (formData.preEntry !== undefined ? formData.preEntry : (ex?.preEntry || ''));
+  const predictedTime = formData.predictedTime !== undefined
+    ? normaliseTime(formData.predictedTime) : (ex?.predictedTime || '');
 
   if (!name)   return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };
   if (!dob)    return { error: 'Date of birth is required' };
+  if (state.event.isHandicap && !predictedTime) return { error: 'Predicted Time is required for a Handicap Race' };
+  if (state.event.isHandicap && predictedTime && state.event.handicapTargetTime) {
+    const targetSecs    = timeToSeconds(state.event.handicapTargetTime);
+    const predictedSecs = timeToSeconds(predictedTime);
+    const fastestSecs   = targetSecs * MIN_HANDICAP_TARGET_MULTIPLE;
+    const slowestSecs   = targetSecs * MAX_HANDICAP_TARGET_MULTIPLE;
+    if (predictedSecs < fastestSecs || predictedSecs > slowestSecs) {
+      const fastest = formatElapsedSeconds(fastestSecs);
+      const slowest = formatElapsedSeconds(slowestSecs);
+      return { error: `Predicted Time must be between ${fastest} and ${slowest} for a target of ${state.event.handicapTargetTime}` };
+    }
+  }
 
   // Partner
   let partner = ex?.partner ?? null;
@@ -247,7 +266,7 @@ function prepareEntry(formData, existingEntry = null, excludeBib = 0) {
   const duplicate = findDuplicate(name, dob, excludeBib);
   if (duplicate) return { error: `${name} is already entered as bib ${duplicate.bibNumber}` };
 
-  return { name, gender, dob, club, fra, preEntry, partner, category, course };
+  return { name, gender, dob, club, fra, preEntry, partner, category, course, predictedTime };
 }
 
 function savePeople2(name, gender, dob, club, fra, category, partner) {
@@ -258,7 +277,7 @@ function savePeople2(name, gender, dob, club, fra, category, partner) {
 export async function submitEntry(formData) {
   const prep = prepareEntry(formData);
   if (prep.error || prep.bannedWarning) return prep;
-  const { name, gender, dob, club, fra, preEntry, partner, category, course } = prep;
+  const { name, gender, dob, club, fra, preEntry, partner, category, course, predictedTime } = prep;
 
   if (courseFull(course)) return { error: `${course} is full (limit ${getEntryLimit(course)})` };
 
@@ -283,7 +302,7 @@ export async function submitEntry(formData) {
     }
   }
 
-  addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry, partner });
+  addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry, partner, predictedTime });
   savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
   await saveEntries();
@@ -298,7 +317,7 @@ export async function updateEntry(bibNumber, formData) {
 
   const prep = prepareEntry(formData, e, bibNumber);
   if (prep.error || prep.bannedWarning) return prep;
-  const { name, gender, dob, club, fra, preEntry, partner, category, course: prepCourse } = prep;
+  const { name, gender, dob, club, fra, preEntry, partner, category, course: prepCourse, predictedTime } = prep;
 
   // Bib change
   if (formData.bibOverride && +formData.bibOverride > 0 && +formData.bibOverride !== +bibNumber) {
@@ -341,7 +360,7 @@ export async function updateEntry(bibNumber, formData) {
 
   e.name = name; e.gender = gender; e.dob = dob; e.club = club;
   e.fraNumber = fra; e.preEntry = preEntry; e.partner = partner;
-  e.category = category; e.course = newCourse;
+  e.category = category; e.course = newCourse; e.predictedTime = predictedTime;
 
   await saveEntries();
   return { error: '', lostWarning };

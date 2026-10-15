@@ -21,6 +21,7 @@ import {
 } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { renderHome } from './home.js';
+import { openStartSlipPreview } from '../forms/handicap-start-slip.js';
 
 const ENTRY_COLS = tableColumns(TABLES.entries, {
   bib:     e => e.bibNumber,
@@ -44,6 +45,7 @@ const ENTRY_COLS = tableColumns(TABLES.entries, {
   course:  e => e.course || '',
   dibber:  e => e.dibberNumber || '',
   pre_no:  e => e.preEntry || '',
+  predicted: e => e.predictedTime || '',
   actions: () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
       <button class="btn-sm btn-insert-above-entry" data-action="ins">Ins ↑</button>
@@ -55,6 +57,7 @@ const ENTRY_COLS = tableColumns(TABLES.entries, {
 export let editingBib  = 0;
 let insertingAtBib = 0;
 let overrideBan    = false;
+let lastSubmittedBib = 0;  // handicap start-slip reprint target, right after a fresh Register
 
 // ---- Pair mode helpers ----
 
@@ -110,6 +113,35 @@ export function renderEntries() {
   if (activeBib) {
     document.querySelector(`#entries-tbody tr[data-bib="${activeBib}"]`)?.classList.add('row-editing');
   }
+
+  const predictedField = document.getElementById('entry-form-predicted-field');
+  if (predictedField) predictedField.hidden = !state.event.isHandicap;
+  // Keep the submit button's label in sync with race mode even on a plain navigation into this
+  // view (fillFormForEdit()/fillFormForInsert() already set their own label when active, and
+  // resetEntryForm() does too, but a bare renderEntries() call — e.g. right after toggling
+  // Handicap on in Event Settings — wouldn't otherwise refresh it).
+  if (!editingBib && !insertingAtBib) {
+    document.getElementById('btn-submit-entry').textContent =
+      state.event.isHandicap ? 'Register and Print Start Slip' : 'Register';
+  }
+  updateStartSlipButton();
+}
+
+// A fresh Register/Insert always prints via the submit button itself (see its label, set in
+// resetEntryForm()/fillFormForInsert()) — this separate button is only for a manual *reprint*:
+// either of the entry currently being edited (needs a save first — see its click handler) or,
+// right after a fresh Register, the one just created, before the form resets for the next
+// entrant. Shown whenever it's a handicap race and there's a relevant entry in context, even
+// with no predicted time yet (the organiser may be about to type one in while editing).
+function updateStartSlipButton() {
+  const btn = document.getElementById('btn-print-start-slip');
+  if (!btn) return;
+  const isEditing = !!editingBib;
+  const bib = editingBib || lastSubmittedBib;
+  const show = !!state.event.isHandicap && !!bib;
+  btn.style.display = show ? '' : 'none';
+  btn.textContent = isEditing ? 'Update and Re-print Start Slip' : 'Re-print Start Slip';
+  btn.dataset.bib = bib || '';
 }
 
 // ---- Entry form helpers ----
@@ -171,6 +203,7 @@ export function fillFormForEdit(bib) {
     'entry-form-fra':      e.fraNumber || '',
     'entry-form-category': e.category  || '',
     'entry-form-course':   e.course    || '',
+    'entry-form-predicted': e.predictedTime || '',
   });
   if (e.partner) {
     fillForm('', {
@@ -185,6 +218,7 @@ export function fillFormForEdit(bib) {
   document.getElementById('entry-form-dibber')?.removeAttribute('tabindex');
   document.getElementById('btn-submit-entry').textContent = 'Update';
   document.getElementById('btn-cancel-edit').style.display = '';
+  updateStartSlipButton();
   focusFirstEntryField();
   const editRow = document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`);
   editRow?.classList.add('row-editing');
@@ -194,6 +228,7 @@ export function fillFormForEdit(bib) {
 export function resetEntryForm() {
   editingBib = 0;
   insertingAtBib = 0;
+  lastSubmittedBib = 0;
   clearRowEditing('entries-tbody');
   clearForm('entry-form-fields');
   const typeEl = document.getElementById('entry-form-type');
@@ -208,9 +243,11 @@ export function resetEntryForm() {
   const dibEl = document.getElementById('entry-form-dibber');
   if (dibEl) dibEl.setAttribute('tabindex', '-1');
   updateDibberField();
-  document.getElementById('btn-submit-entry').textContent = 'Register';
+  document.getElementById('btn-submit-entry').textContent =
+    state.event.isHandicap ? 'Register and Print Start Slip' : 'Register';
   const cancelBtn = document.getElementById('btn-cancel-edit');
   if (cancelBtn) { cancelBtn.style.display = 'none'; cancelBtn.textContent = 'Cancel Edit'; }
+  updateStartSlipButton();
   focusFirstEntryField();
 }
 
@@ -233,7 +270,8 @@ function fillFormForInsert(bib) {
   if (bibEl) { bibEl.value = bib; bibEl.setAttribute('tabindex', '-1'); }
   const dibEl = document.getElementById('entry-form-dibber');
   if (dibEl) { dibEl.value = freeDibber; dibEl.setAttribute('tabindex', '-1'); }
-  document.getElementById('btn-submit-entry').textContent = 'Insert';
+  document.getElementById('btn-submit-entry').textContent =
+    state.event.isHandicap ? 'Insert and Print Start Slip' : 'Insert';
   const cancelBtn = document.getElementById('btn-cancel-edit');
   if (cancelBtn) { cancelBtn.style.display = ''; cancelBtn.textContent = 'Cancel Insert'; }
   focusFirstEntryField();
@@ -319,6 +357,7 @@ export async function submitEntryForm() {
     category:    val('entry-form-category'),
     course:      val('entry-form-course'),
     preEntry:    val('entry-form-peno'),
+    predictedTime: val('entry-form-predicted'),
     bibOverride:    +val('entry-form-bib')    || 0,
     dibberOverride: +val('entry-form-dibber') || 0,
     overrideBan,
@@ -359,6 +398,15 @@ export async function submitEntryForm() {
     const baseMsg = isEdit ? `Bib ${bib} updated.` : isInsert ? `Bib ${bib} inserted; subsequent entries renumbered.` : `Bib ${bib} registered.`;
     showStatus(result.lostWarning ? `${baseMsg} ${result.lostWarning}` : baseMsg, !!result.lostWarning);
     resetEntryForm();
+    lastSubmittedBib = bib;
+    // Fully automatic on a fresh Register or Insert — the submit button's own label says so
+    // (see resetEntryForm()/fillFormForInsert()), and this fires regardless of how the form was
+    // committed (click or Enter — see wireFormFocusTrap below), so the label is never a lie.
+    // Not re-fired on an edit/reprint; the "Re-print Start Slip" button stays available for that.
+    if (!isEdit && state.event.isHandicap) {
+      const newEntry = getEntry(bib);
+      if (newEntry) openStartSlipPreview(newEntry);
+    }
     renderEntries();
     document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.scrollIntoView({ block: 'nearest' });
     renderHome();
@@ -389,6 +437,7 @@ function focusEntryErrorField(error) {
   else if (/partner/i.test(error))               id = 'entry-form-name2';
   else if (/gender/i.test(error))                id = 'entry-form-gender';
   else if (/birth|dob/i.test(error))             id = 'entry-form-dob';
+  else if (/predicted time/i.test(error))        id = 'entry-form-predicted';
   else if (/\bbib\b/i.test(error))               id = 'entry-form-bib';
   else if (/dibber/i.test(error))                id = 'entry-form-dibber';
   document.getElementById(id)?.focus();
@@ -405,6 +454,25 @@ export function wireEntries() {
 
   on('btn-reset-entry', 'click', () => {
     resetEntryForm();
+  });
+
+  on('btn-print-start-slip', 'click', async () => {
+    if (editingBib) {
+      // "Update and Re-print Start Slip" — save via the same path as the plain Update button,
+      // then print the freshly saved entry so an in-progress edit (e.g. a just-typed predicted
+      // time) is never printed stale. A validation error leaves editingBib unchanged — skip
+      // printing in that case.
+      const bib = editingBib;
+      await submitEntryForm();
+      if (editingBib === bib) return;
+      const entry = getEntry(bib);
+      if (entry) openStartSlipPreview(entry);
+      return;
+    }
+    const bib = +document.getElementById('btn-print-start-slip')?.dataset.bib || 0;
+    const entry = bib ? getEntry(bib) : null;
+    if (!entry) return;
+    openStartSlipPreview(entry);
   });
 
   // SI Timing export

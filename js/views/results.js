@@ -58,9 +58,14 @@ export async function renderResults() {
 
   const summary = document.getElementById('results-senior-summary');
   if (summary) {
-    const avg = computeAvgTop10(seniors);
-    const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
-    const avgPart = avg ? `Top ${n} average: ${avg} = 100% — %Ldrs shows each finisher's time relative to this average` : '';
+    // %Ldrs/Behind (and this note about them) aren't shown for a Handicap race — see
+    // TABLES['results-senior-standard'] in strings.js for why.
+    let avgPart = '';
+    if (!state.event.isHandicap) {
+      const avg = computeAvgTop10(seniors);
+      const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
+      avgPart = avg ? `Top ${n} average: ${avg} = 100% — %Ldrs shows each finisher's time relative to this average` : '';
+    }
     const recordPart = seniors.some(r => r.recordBreaker) ? 'R = course record' : '';
     summary.innerHTML = [avgPart, recordPart].filter(Boolean).join('<br>');
   }
@@ -99,7 +104,10 @@ function renderProgressTable() {
 }
 
 export function renderResultsTable(tbodyId, results) {
-  renderThead(tbodyId, TABLES['results-senior']);
+  const cols = state.event.isHandicap
+    ? [...TABLES['results-senior'], ...TABLES['results-senior-handicap']]
+    : [...TABLES['results-senior'], ...TABLES['results-senior-standard']];
+  renderThead(tbodyId, cols);
   const tbody = document.getElementById(tbodyId);
   if (tbody) tbody.innerHTML = buildSeniorsBodyHTML(results);
 }

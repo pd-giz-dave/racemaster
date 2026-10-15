@@ -167,6 +167,61 @@ describe('entries.js:submitEntry', () => {
     assert.equal(state.entries[0].category, 'U12B');
     assert.ok(state.people.some(p => p.name === 'Junior Partner'));
   });
+
+  it('normalises and stores a handicap predicted time', async () => {
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990', predictedTime: '24:5' });
+    assert.equal(r.error, '');
+    assert.equal(state.entries[0].predictedTime, '00:24:05');
+  });
+
+  it('defaults predictedTime to empty when not given', async () => {
+    await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
+    assert.equal(state.entries[0].predictedTime, '');
+  });
+
+  it('requires predictedTime for a handicap race', async () => {
+    state.event.isHandicap = true;
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
+    assert.equal(r.error, 'Predicted Time is required for a Handicap Race');
+    assert.equal(state.entries.length, 0);
+  });
+
+  it('accepts a handicap entry when predictedTime is given', async () => {
+    state.event.isHandicap = true;
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990', predictedTime: '24:30' });
+    assert.equal(r.error, '');
+    assert.equal(state.entries[0].predictedTime, '00:24:30');
+  });
+
+  it('rejects a predictedTime faster than 0.5x the target time, reporting the fastest/slowest allowed times', async () => {
+    state.event.isHandicap = true;
+    state.event.handicapTargetTime = '00:25:00'; // allowed range is 0.5x-3x = 00:12:30-01:15:00
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990', predictedTime: '10:00' });
+    assert.equal(r.error, 'Predicted Time must be between 00:12:30 and 01:15:00 for a target of 00:25:00');
+    assert.equal(state.entries.length, 0);
+  });
+
+  it('rejects a predictedTime slower than 3x the target time, reporting the fastest/slowest allowed times', async () => {
+    state.event.isHandicap = true;
+    state.event.handicapTargetTime = '00:25:00'; // allowed range is 0.5x-3x = 00:12:30-01:15:00
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990', predictedTime: '1:20:00' });
+    assert.equal(r.error, 'Predicted Time must be between 00:12:30 and 01:15:00 for a target of 00:25:00');
+    assert.equal(state.entries.length, 0);
+  });
+
+  it('accepts a predictedTime within the target-time multiple range', async () => {
+    state.event.isHandicap = true;
+    state.event.handicapTargetTime = '00:25:00';
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990', predictedTime: '20:00' });
+    assert.equal(r.error, '');
+  });
+
+  it('skips the multiple check when the target time is blank', async () => {
+    state.event.isHandicap = true;
+    state.event.handicapTargetTime = '';
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990', predictedTime: '1:00' });
+    assert.equal(r.error, '');
+  });
 });
 
 describe('entries.js:updateEntry', () => {
@@ -204,6 +259,22 @@ describe('entries.js:updateEntry', () => {
     const r = await updateEntry(1, { course: 'Juniors' });
     assert.equal(r.error, '');
     assert.equal(+state.entries[0].dibberNumber, 1);
+  });
+
+  it('updates predictedTime, and leaves it unchanged when not given', async () => {
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990', predictedTime: '25:00' });
+    await updateEntry(1, { predictedTime: '22:30' });
+    assert.equal(state.entries[0].predictedTime, '00:22:30');
+    await updateEntry(1, { name: 'A' }); // no predictedTime field in this update
+    assert.equal(state.entries[0].predictedTime, '00:22:30');
+  });
+
+  it('requires predictedTime when updating in a handicap race', async () => {
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990', predictedTime: '25:00' });
+    state.event.isHandicap = true;
+    const r = await updateEntry(1, { predictedTime: '' });
+    assert.equal(r.error, 'Predicted Time is required for a Handicap Race');
+    assert.equal(state.entries[0].predictedTime, '00:25:00'); // unchanged on rejection
   });
 });
 

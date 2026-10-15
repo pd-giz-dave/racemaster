@@ -347,7 +347,7 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .published-url-field { font-size: 0.8rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel-alt); color: var(--text); cursor: pointer; width: 100%; }
 
 /* ---- Forms ---- */
-.form-grid {
+.form-grid:not([hidden]) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px 16px;
@@ -465,6 +465,16 @@ input:focus, select:focus, textarea:focus {
 .row-outstanding td   { background: var(--row-error-bg) !important; }
 .row-incorporated td  { background: var(--row-success-bg) !important; }
 .results-cat-separator td { padding: 0; border-bottom: 2px solid var(--border); }
+.results-dsq-row td { background: var(--row-error-bg) !important; }
+.results-dsq-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--row-banned-fg);
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 700;
+}
 .col-sep { border-left: 2px solid var(--border) !important; }
 .data-table th[colspan] { text-align: center; }
 .prizes-cat-sep td, .prize-cat-sep td { padding: 1px 0; background: var(--row-sep) !important; border-bottom: none; }

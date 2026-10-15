@@ -294,8 +294,9 @@ document.addEventListener('focusout', e => {
   if (!type || el.tagName !== 'INPUT') return;
   const raw = el.value.trim();
   if (!raw) return;
-  if (type === 'date') { const n = normaliseDate(raw); if (n) el.value = n; }
-  if (type === 'time') { const n = normaliseTime(raw); if (n) el.value = n; }
+  if (type === 'date')       { const n = normaliseDate(raw);          if (n) el.value = n; }
+  if (type === 'time')       { const n = normaliseTime(raw);          if (n) el.value = n; }
+  if (type === 'clock-time') { const n = normaliseTime(raw, 'clock'); if (n) el.value = n; }
 });
 
 export function populateCategoryDropdown(selectId, currentVal) {

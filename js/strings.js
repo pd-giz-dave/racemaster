@@ -32,7 +32,11 @@ export const TOOLTIPS = {
   'ev-categories':               'Age category scheme — FRA uses 5-year bands, WFRA uses 10-year bands',
   'ev-first-bib':                'Bib numbers are assigned sequentially starting from this number',
   'ev-first-dibber':             'Dibber (SI card) short codes are allocated starting from this number',
-  'ev-has-pairs':                'Tick if the race includes pairs (two competitors sharing a single bib and/or dibber)',
+  'ev-race-mode-solo':           'Standard race — one entrant per bib',
+  'ev-race-mode-pairs':          'The race includes pairs (two competitors sharing a single bib and/or dibber)',
+  'ev-race-mode-handicap':       'Handicap race — staggered starts from predicted finish times, DSQ on deviation',
+  'ev-handicap-target':          'Target elapsed time for the race (gun to finish) — predicted times are staggered against this so everyone who runs to prediction finishes together',
+  'ev-handicap-dsq':             'Maximum % deviation between predicted and actual time before a runner is disqualified',
   'ev-start-time':               'Expected mass start time for seniors (info only, the actual time is recorded in the finishers list)',
   'ev-entry-limit':              'Maximum number of senior entries allowed (0 = no limit)',
   'ev-timing-method':            'How senior finish times are recorded — Stopwatch (manual entry), Dibbers (SportIdent), or None',
@@ -80,6 +84,7 @@ export const TOOLTIPS = {
   'entry-form-fra':              'FRA (Fell Runners Association) registration number',
   'entry-form-category':         'Age category — leave as auto to determine from date of birth and gender',
   'entry-form-course':           'Race course — leave as auto to determine from age category',
+  'entry-form-predicted':        'Predicted elapsed finish time — required for a Handicap Race; rejected if it is faster than half, or slower than 3x, the Target Time',
   'btn-submit-entry':            'Register this competitor and add them to the entry list',
   'btn-reset-entry':             'Clear the form ready to register the next competitor (auto on register)',
   'btn-cancel-edit':             'Cancel editing and return to the entry list',
@@ -219,9 +224,19 @@ export const HELP = {
     <p>All fields can be updated at any point. However, be wary of the <strong>Clear previous event</strong> checkbox, 
         which will reset all data and settings ready for a new event. 
         Use this once as you setup for a new race to clear all previous event specific data.</p>
-   <p>The <strong>Has pairs</strong> option when checked enables pairs races.
-        A pair in this context is two people racing together under the same bib (and dibber) number. 
+   <p>The <strong>Race Mode</strong> card picks exactly one of three mutually exclusive modes:</p>
+   <p><strong>Solo</strong> is the standard one-entrant-per-bib race.</p>
+   <p><strong>Pairs</strong> is two people racing together under the same bib (and dibber) number.
         In Shropshire an example pairs race is the <strong>Time Trial</strong> held each year in November.</p>
+   <p><strong>Handicap</strong> turns this event into a staggered-start handicap:
+        each runner predicts their own finish time, and starts are staggered — based on the
+        <strong>Target Time</strong> you set here, an elapsed duration measured from the normal
+        <strong>Start Time</strong> above — so that a perfectly accurate field would all finish
+        together. The winner is simply whoever crosses the line first. A runner is disqualified
+        (kept in the results, but excluded from prizes) if their actual time deviates from their
+        prediction by more than the <strong>DSQ Threshold</strong> percentage. See the Entries and
+        Results &amp; Prize List pages' own help for how predictions, start slips and the DSQ
+        column work.</p>
   `,
   'view-pre-entries': `
     <p>Import a pre-entry list from a CSV file. Pre-entered competitors can have their details pre-printed on entry forms from the <strong>Paperwork</strong> page.</p>
@@ -237,7 +252,12 @@ export const HELP = {
         They are generated two per A4 page in alphabetical order of surname in such a way that guillotining the whole 
         printed stack into A5 sheets maintains the order when the two half stacks are combined.
         These are for solo races. Use <strong>Print Pre-Entry Pairs Entry Forms</strong> for pairs races.</p>
-    <p>The blank entry forms and the pre-filled ones have identical format and comply with FRA guidelines for both senior and junior races.</p>    
+    <p>The blank entry forms and the pre-filled ones have identical format and comply with FRA guidelines for both senior and junior races.</p>
+    <p>Every entry form (solo, pairs or handicap) has a <strong>Predicted Time</strong> box next
+        to the Full Name line — always blank, even on a pre-filled pre-entry form. It's only
+        relevant for a <strong>Handicap Race</strong> (Event Settings), where the runner writes
+        their own predicted finish time there by hand at registration; it can simply be ignored
+        for any other race mode, so there's no need to stock separate forms per mode.</p>
     <p>Use <strong>Print Helpers List</strong> to print a form intended to be given to the RO to record the names and roles of helpers. 
         They can be later registered as helpers for the race and thereby acknowledged in the results.</p>    
     <p>The <strong>Finish Sheets</strong> report is intended to be given to finish funnel marshals to record bib numbers as entrants cross the finish line.
@@ -260,6 +280,23 @@ export const HELP = {
     <p>If you have enabled pairs in the event settings, this form will show a <strong>Type</strong> field that is either <strong>- Solo</strong> or <strong>= Pair</strong>.
         Typing '-' or '=' will change the selection.</p>
     <p>In all cases, when starting a new entry, typing a number or a name will do the appropriate thing, no need to tab to a specific field.</p>
+    <p>For a <strong>Handicap Race</strong> (enabled in Event Settings), a <strong>Predicted Time</strong>
+        field appears and is required — the runner's own predicted elapsed finish time, which they write
+        on their paper entry form (a blank box next to the Full Name line) and you type in here; the entry
+        is rejected without it. It's also sanity-checked against the event's <strong>Target
+        Time</strong> (Event Settings) — faster than half, or slower than three times, the target
+        is rejected as a likely mistyped time, e.g. minutes entered where seconds were meant.
+        The main button changes to <strong>Register and Print Start Slip</strong>
+        (or <strong>Insert and Print Start Slip</strong> when inserting a missed entry) — always, as a
+        visual reminder to the entry clerk that it's about to happen — and committing the form, by
+        clicking it or just pressing Enter, registers the entry and immediately prints that runner's
+        start slip, sized for an 8cm thermal receipt printer, with no extra click. While editing an
+        existing entry, two buttons are shown: <strong>Update</strong> (saves only) and <strong>Update
+        and Re-print Start Slip</strong> (saves, then prints), e.g. for a reprint after a misfeed or a
+        corrected prediction.</p>
+    <p>The one remaining click is the browser's own print-confirmation dialog — see the
+        <a href="#" data-view="auto-printing">Auto Printing</a> help page (sidebar, under Help)
+        for how to set up silent, dialog-free printing on the race-day laptop.</p>
   `,
   'view-helpers': `
     <p>Record officials, marshals and volunteers. Helpers can appear in the results report as an acknowledgement of their contribution to the event.</p>
@@ -355,9 +392,18 @@ export const HELP = {
         how many entrants in that category have <strong>Finished</strong> (retirees excluded)
         and how many are still <strong>Outstanding</strong> (neither finished nor retired). Use
         it to judge when it's safe to do the prize presentation.</p>
-    <p>On the <strong>Seniors</strong> tab, <strong>%Ldrs</strong> shows each finisher's time as a
-        percentage of the top 10 finishers' average (that average = 100%); <strong>R</strong>
-        next to a time marks a course record, shown only when one's actually been broken.</p>
+    <p>On the <strong>Seniors</strong> tab (outside a Handicap Race), <strong>%Ldrs</strong> shows
+        each finisher's time as a percentage of the top 10 finishers' average (that average =
+        100%); <strong>R</strong> next to a time marks a course record, shown only when one's
+        actually been broken.</p>
+    <p>For a <strong>Handicap Race</strong> (Event Settings), the Seniors tab places finishers by
+        literal order of crossing the line rather than elapsed time — staggered starts mean elapsed
+        time no longer reflects who actually arrived first — so the <strong>%Ldrs</strong> and
+        <strong>Behind</strong> columns (and the "Top N average" note above the table) are hidden,
+        since both rank by raw elapsed time, and adds <strong>Predicted</strong>, <strong>Dev
+        %</strong> (deviation between actual and predicted time) and <strong>DSQ</strong> columns
+        instead. A disqualified runner (deviation beyond the event's DSQ threshold) keeps their
+        finishing position, highlighted on the row, but is excluded from the Prizes tab.</p>
     <p>A bib can be recorded by more than one source — SI Results, the stopwatch/manual Finishers
         list, and Mobile Files' Update Progress — and those sources can disagree, either about the
         time (two say Finish, with different times) or about whether the bib finished at all (one
@@ -741,8 +787,132 @@ export const PAGES = {
        a debug build is available from the <em>Download APK</em> link in this app's own sidebar.</p>
   `,
 
+  'auto-printing': `
+    <p>Registering a Handicap Race entry (or editing one, via <strong>Update and Re-print Start
+        Slip</strong>) prints that runner's start slip immediately — but the browser's own
+        print-confirmation dialog is still one click the app can't remove on its own. The fix is a
+        dedicated browser profile for the race-day laptop, launched with a silent-printing flag.
+        Set it up once, well before race day.</p>
+
+    <h3>One-time setup: a dedicated race-day profile</h3>
+    <p>A silent-printing flag only takes effect if it starts a genuinely new browser instance — if
+        that browser is already running at all (even a different window, or one left open from
+        earlier), Chrome/Brave/Edge hand the request off to that existing session and silently
+        ignore every flag on the new one, including <code>--kiosk-printing</code>. A separate
+        profile folder (<code>--user-data-dir</code>) forces a new instance every time, and that
+        profile also remembers its own default printer between launches — set it up once:</p>
+    <ol>
+      <li>Pick a folder for the profile, e.g. <code>~/.racemaster-kiosk</code> (macOS/Linux) or
+          <code>C:\\racemaster-kiosk</code> (Windows) — anywhere different from your normal
+          profile.</li>
+      <li>Launch the browser once pointed at that folder, <strong>without</strong> the
+          <code>--kiosk-printing</code> flag, e.g.
+          <code>chrome --user-data-dir=~/.racemaster-kiosk --no-first-run</code>.</li>
+      <li>In that window, print anything and choose the thermal printer — this sets it as that
+          profile's remembered default printer. Also check the <strong>operating system's</strong>
+          own default printer is the thermal one too, as a fallback for if the profile ever starts
+          fresh.</li>
+      <li>Close the window. The profile is now ready to reuse every race day — repeat the launch
+          command below instead of using the installed RaceMaster icon (the installed shortcut
+          can't be given extra flags).</li>
+    </ol>
+
+    <h3>Race day: launch with silent printing</h3>
+    <p>Reuse the same profile folder, now adding <code>--kiosk-printing</code> and
+        <code>--app=</code> (which opens RaceMaster in its own app-like window, no browser
+        chrome):</p>
+    <ul>
+      <li><strong>Windows:</strong> <code>chrome.exe --user-data-dir="C:\\racemaster-kiosk" --no-first-run --kiosk-printing --app=https://&lt;your-racemaster-url&gt;</code></li>
+      <li><strong>macOS:</strong> <code>open -na "Google Chrome" --args --user-data-dir="$HOME/.racemaster-kiosk" --no-first-run --kiosk-printing --app=https://&lt;your-racemaster-url&gt;</code>
+          — the <code>-n</code> flag is required to force a new instance; a plain
+          <code>open -a</code> (or double-clicking the app) reuses whatever's already running,
+          same problem as on the other platforms.</li>
+      <li><strong>Linux:</strong> <code>google-chrome --user-data-dir=~/.racemaster-kiosk --no-first-run --kiosk-printing --app=https://&lt;your-racemaster-url&gt;</code></li>
+    </ul>
+    <p>The same flags work for Brave, Microsoft Edge and Chromium — swap in <code>brave</code>,
+        <code>msedge</code> or <code>chromium</code> for the binary name.</p>
+
+    <h3>Firefox</h3>
+    <p>Possible, but with different flags and no exact equivalent of <code>--app</code>'s
+        chromeless window:</p>
+    <ul>
+      <li>Create the profile once:
+          <code>firefox -CreateProfile "racemaster-kiosk ~/.racemaster-kiosk"</code></li>
+      <li>Launch it:
+          <code>firefox --new-instance --profile ~/.racemaster-kiosk --kiosk https://&lt;your-racemaster-url&gt;</code>
+          — <code>--kiosk</code> gives a fullscreen window rather than an app-style one.</li>
+      <li>There's no command-line flag for silent printing. In that profile, open
+          <code>about:config</code> and set <code>print.always_print_silent</code> to
+          <code>true</code> — it will then print to the profile's default printer with no
+          dialog.</li>
+    </ul>
+    <p>On Windows use <code>firefox.exe</code>; on macOS use
+        <code>/Applications/Firefox.app/Contents/MacOS/firefox</code> — same flags either way.</p>
+
+    <h3>Safari</h3>
+    <p>Not supported — Safari has no command-line flags for a separate profile, an app-style
+        window, or silent printing. If you're on a Mac, use Chrome, Brave, Edge or Firefox
+        instead.</p>
+  `,
+
   'whats-new': `
-    <h3>v0.0.23-alpha - current version</h3>
+    <h3>v0.0.26-alpha - current version</h3>
+    <ul>
+      <li><strong>Predicted Time</strong> is now a required field for a <strong>Handicap
+          Race</strong> — and is rejected if it's faster than half, or slower than three times,
+          the event's <strong>Target Time</strong>, catching a likely mistyped time — so the
+          submit button can reliably relabel to <strong>Register and Print Start Slip</strong>
+          (or <strong>Insert and Print Start Slip</strong>) as a visual reminder to the entry
+          clerk that it's about to happen — registering or inserting always prints that runner's
+          start slip immediately, whether by clicking the button or just pressing Enter</li>
+      <li>Editing an existing entry now shows two buttons — a plain <strong>Update</strong> and
+          <strong>Update and Re-print Start Slip</strong> — so saving an edit and reprinting the
+          slip are separate, explicit actions</li>
+      <li>The start slip no longer shows a "check this entry" late warning</li>
+      <li>The Entries list now has a <strong>Predicted</strong> column, blank outside handicap races</li>
+      <li><strong>Target Time</strong>'s label now reads HH:MM:SS, matching the male/female record
+          fields — it already accepted both <code>M:S</code> and <code>H:M:S</code></li>
+      <li><strong>Clear previous event</strong> now also resets any dirty, unsubmitted Entries/Helpers/
+          Finishers forms</li>
+      <li>The Home page now echoes <strong>Target Time</strong> and <strong>DSQ Threshold</strong> under
+          Race Mode for a handicap event</li>
+      <li>Silent (<strong>--kiosk-printing</strong>) printing setup now has its own
+          <strong>Auto Printing</strong> page, under a new <strong>Help</strong> section in the
+          sidebar — the Entries page help now just links to it</li>
+      <li>The Results page no longer shows the <strong>Top N average</strong> note or the
+          <strong>%Ldrs</strong>/<strong>Behind</strong> columns for a handicap race — they rank by
+          raw elapsed time, which no longer reflects arrival order once starts are staggered</li>
+    </ul>
+    <h3>v0.0.25-alpha</h3>
+    <ul>
+      <li>Event Settings now has a single <strong>Race Mode</strong> card (Solo / Pairs / Handicap)
+          instead of two separate checkboxes — the two are mutually exclusive, so this makes an
+          event's mode unambiguous</li>
+      <li>The <strong>Predicted Time</strong> box on printed entry forms now appears on every entry
+          form regardless of race mode (previously only on a Handicap Race), so there's no need to
+          stock separate forms per race — it's simply left blank/unused outside a handicap race.
+          It now also shows a dim "hh:mm:ss" format hint</li>
+      <li>Registering a <strong>Handicap Race</strong> entry now prints that runner's start slip
+          immediately and automatically — no button to click, no preview window. The
+          <strong>Print Start Slip</strong> button remains for a manual reprint, e.g. after editing
+          an entry or a paper misfeed. The slip itself no longer shows the target-time/offset row,
+          just the predicted time and the start clock-time</li>
+    </ul>
+    <h3>v0.0.24-alpha</h3>
+    <ul>
+      <li>New <strong>Handicap Race</strong> mode (Event Settings → Handicap Race) — each runner
+          predicts their own finish time and starts are staggered so that, if every prediction were
+          perfect, everyone would cross the line together; the winner is simply whoever actually
+          crosses first. Enter a runner's prediction on the Entries page (also added to the printed
+          entry forms, as a blank box the runner fills in themselves at registration) and print their
+          own start-offset slip straight away — no need to wait for the rest of the field — sized
+          for an 8cm thermal receipt printer</li>
+      <li>Results &amp; Prize List now places a handicap race by literal order of crossing the line
+          rather than elapsed time, shows each finisher's predicted time and deviation %, and flags
+          (without removing) anyone who deviated beyond the event's DSQ threshold — disqualified
+          runners keep their finishing position but are excluded from the prize list</li>
+    </ul>
+    <h3>v0.0.23-alpha</h3>
     <ul>
       <li>The <strong>Datasets</strong> table now matches every other table in the app — click any
           column header to sort (it defaults to Date, newest event first)</li>
@@ -1077,6 +1247,7 @@ export const TABLES = {
     { id: 'course',  label: 'Course',  title: 'Senior or junior course' },
     { id: 'dibber',  label: 'Dibber',  title: 'SportIdent card short number' },
     { id: 'pre_no',  label: 'Pre-No',  title: 'Pre-entry reference number' },
+    { id: 'predicted', label: 'Predicted', title: 'Predicted finish time (handicap races only; blank otherwise)' },
     { id: 'actions', label: 'Actions', title: 'Edit or delete this entry' },
   ],
   helpers: [
@@ -1175,8 +1346,17 @@ export const TABLES = {
     { id: 'club',     label: 'Club',    title: 'Running club' },
     { id: 'cat',      label: 'Cat',     title: 'Age category' },
     { id: 'time',     label: 'Time',    title: 'Finish time (R = course record)' },
+  ],
+  // Not shown for a Handicap race — %Ldrs/Behind rank by raw elapsed time, which is meaningless
+  // once starts are staggered (see results-senior-handicap below, shown instead).
+  'results-senior-standard': [
     { id: 'pct_ldrs', label: '%Ldrs',   title: 'Finish time relative to the top 10 finishers’ average (that average = 100%)', align: 'right' },
     { id: 'behind',   label: 'Behind',  title: 'Time behind the leader' },
+  ],
+  'results-senior-handicap': [
+    { id: 'predicted', label: 'Predicted', title: "Runner's own predicted finish time" },
+    { id: 'deviation', label: 'Dev %',     title: 'Deviation between actual and predicted time, as a percentage of predicted', align: 'right' },
+    { id: 'dsq',       label: 'DSQ',       title: "Disqualified — deviation exceeded the event's DSQ threshold" },
   ],
   'results-junior': [
     { id: 'bib',    label: 'Bib',    title: 'Race number' },

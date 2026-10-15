@@ -112,6 +112,22 @@ export function resolveFinishSources(course) {
   return { siFinishers, swFinishers, mobileFinishers, winners, warnings, conflictedBibs };
 }
 
+// Handicap-race placing is by the raw moment a bib physically crossed the line, not by elapsed
+// race time (which is relative to that bib's own staggered start and useless for arrival order).
+// For SI-sourced finishers that's the punch's own FinishTime (a time-of-day) — NOT RaceTime, which
+// resolveFinishSources()/siFinishers above already carries instead, since that's relative to this
+// bib's own start. For stopwatch/mobile-sourced finishers, the raw recorded f.time already is the
+// moment of crossing, off the one shared stopwatch running continuously since event.startTime.
+function rawCrossingSeconds(f, siBibSet) {
+  const bib = +f.number;
+  if (siBibSet.has(bib)) {
+    const siRow = state.siResults.find(r => getSIBib(r) === bib);
+    const t = siRow ? getSIFinishTime(siRow) : '';
+    return t ? timeToSeconds(t) : 0;
+  }
+  return f.time ? timeToSeconds(f.time) : 0;
+}
+
 /** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, helpersReport }. */
 export function formatResults() {
   const results = [];
@@ -129,8 +145,13 @@ export function formatResults() {
     // SI entries use their time. SW/mobile entries use adjusted time if available; untimed
     // entries get a fractional key interpolated between their nearest timed neighbours so they
     // stay in list order, interleaved with timed entries at the right point.
+    //
+    // Handicap races are placed by literal order of crossing the line, not by elapsed race time
+    // (staggered starts mean elapsed time no longer reflects arrival order) — see
+    // rawCrossingSeconds() below.
     const rawList = [...swFinishers, ...mobileFinishers, ...siFinishers];
     const keys = rawList.map(f => {
+      if (state.event.isHandicap) return rawCrossingSeconds(f, siBibSet);
       const e = +f.number > 0 ? getEntry(+f.number) : null;
       const t = !siBibSet.has(+f.number) && e && f.time ? adjustedFinishTime(e, f.time, f) : f.time;
       return timeToSeconds(t);   // 0 means no time
@@ -195,6 +216,19 @@ export function formatResults() {
         const isPair     = !!(entry?.partner);
         const pairGender = isPair ? derivePairGender(entry.gender, entry.partner.gender) : '';
 
+        // Handicap deviation + DSQ — actual (elapsed) vs predicted time, as a % of predicted.
+        // DSQ'd runners keep their crossing position (that's the whole point of the format) but
+        // are excluded from prize contention in buildPrizes() below.
+        let predictedTime = '', deviationPct = '', dsq = false;
+        if (state.event.isHandicap && entry?.predictedTime) {
+          const predictedSecs = timeToSeconds(entry.predictedTime);
+          predictedTime = entry.predictedTime;
+          if (predictedSecs > 0 && secs > 0) {
+            deviationPct = Math.round(Math.abs(secs - predictedSecs) / predictedSecs * 100);
+            dsq = deviationPct > (+state.event.handicapDsqThreshold || 0);
+          }
+        }
+
         courseResults.push({
           course,
           bibNumber:    bib || '',
@@ -211,6 +245,9 @@ export function formatResults() {
           isPair,
           partner:      entry?.partner  ?? null,
           pairGender,
+          predictedTime,
+          deviationPct,
+          dsq,
         });
       }
     }
@@ -245,6 +282,9 @@ export function formatResults() {
         isPair:        !!(e.partner),
         partner:       e.partner ?? null,
         pairGender:    e.partner ? derivePairGender(e.gender, e.partner.gender) : '',
+        predictedTime: e.predictedTime || '',
+        deviationPct:  '',
+        dsq:           false,
       });
     }
 
@@ -296,7 +336,7 @@ function buildPrizes(results) {
   const catDepth        = +state.event.prizeDepthPerCategory       || 3;
   const juniorCatDepth  = +state.event.juniorPrizeDepthPerCategory || 3;
 
-  const isFinisher = r => r.position < 9999 && !r.isPair;
+  const isFinisher = r => r.position < 9999 && !r.isPair && !r.dsq;
   const byPos      = (a, b) => a.position - b.position;
   const isFemale   = r => genderFromCategory(r.category) === GENDER.FEMALE;
 
@@ -385,7 +425,7 @@ function buildPrizes(results) {
 
 function buildPairsPrizes(pairsResults, depth) {
   const byPos      = (a, b) => a.position - b.position;
-  const isFinisher = r => r.position < 9999;
+  const isFinisher = r => r.position < 9999 && !r.dsq;
   const isJuniorCat = r => /^U\d/i.test(r.category || '');
   const finishers  = pairsResults.filter(isFinisher);
   if (!finishers.length) return [];

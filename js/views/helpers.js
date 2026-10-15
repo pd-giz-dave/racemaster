@@ -97,7 +97,7 @@ function fillFormForEdit(num) {
   editRow?.scrollIntoView({ block: 'nearest' });
 }
 
-function resetHelperForm() {
+export function resetHelperForm() {
   editingNumber = 0;
   selectedRoles = [];
   renderRoleTags();

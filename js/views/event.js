@@ -5,8 +5,11 @@ import { applyFRAPreset, applyWFRAPreset, builtinFRARows, builtinWFRARows, categ
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
 import { val, fillForm, showConfirmDialog, showStatus, updateBannerEventName, on } from '../ui.js';
-import { showBusy, normaliseDate } from '../utils.js';
+import { showBusy, normaliseDate, normaliseTime } from '../utils.js';
 import { renderHome } from './home.js';
+import { resetEntryForm } from './entries.js';
+import { resetHelperForm } from './helpers.js';
+import { resetFinisherForm } from './finishers.js';
 
 function populateJuniorLimitDropdown() {
   const el = document.getElementById('ev-junior-limit');
@@ -51,9 +54,23 @@ export function renderEvent() {
     'ev-male-record':        ev.maleRecord,
     'ev-female-record':      ev.femaleRecord,
     'ev-organisation':       ev.organisation,
-    'ev-has-pairs':          ev.hasPairs,
+    'ev-handicap-target':    ev.handicapTargetTime,
+    'ev-handicap-dsq':       ev.handicapDsqThreshold,
     'ev-clear-previous':     false,
   });
+  const raceMode = ev.hasPairs ? 'pairs' : ev.isHandicap ? 'handicap' : 'solo';
+  const modeEl = document.querySelector(`input[name="ev-race-mode"][value="${raceMode}"]`);
+  if (modeEl) modeEl.checked = true;
+  updateHandicapFieldsVisibility();
+}
+
+function getRaceMode() {
+  return document.querySelector('input[name="ev-race-mode"]:checked')?.value || 'solo';
+}
+
+function updateHandicapFieldsVisibility() {
+  const fields = document.getElementById('ev-handicap-fields');
+  if (fields) fields.hidden = getRaceMode() !== 'handicap';
 }
 
 export async function saveEventForm() {
@@ -72,6 +89,22 @@ export async function saveEventForm() {
                   : seniorDibbers ? 'Senior timing is set to Dibbers'
                   : 'Junior timing is set to Dibbers';
       showStatus(`${which} but no dibber list has been imported. Either change the timing method or import a dibber list via the Dibbers page.`, true);
+      return;
+    }
+  }
+
+  // Validate: a handicap race needs a real elapsed target time and a positive DSQ threshold
+  const raceMode   = getRaceMode();
+  const isHandicap = raceMode === 'handicap';
+  if (isHandicap) {
+    if (!normaliseTime(val('ev-handicap-target'))) {
+      showStatus('Handicap race: enter a valid target time (HH:MM:SS).', true);
+      document.getElementById('ev-handicap-target')?.focus();
+      return;
+    }
+    if (!(+val('ev-handicap-dsq') > 0)) {
+      showStatus('Handicap race: DSQ threshold must be a positive percentage.', true);
+      document.getElementById('ev-handicap-dsq')?.focus();
       return;
     }
   }
@@ -140,7 +173,10 @@ export async function saveEventForm() {
   ev.maleRecord                 = val('ev-male-record');
   ev.femaleRecord               = val('ev-female-record');
   ev.organisation               = val('ev-organisation');
-  ev.hasPairs                   = !!(document.getElementById('ev-has-pairs')?.checked);
+  ev.hasPairs                   = raceMode === 'pairs';
+  ev.isHandicap                 = isHandicap;
+  ev.handicapTargetTime         = isHandicap ? normaliseTime(val('ev-handicap-target')) : '';
+  ev.handicapDsqThreshold       = isHandicap ? +val('ev-handicap-dsq') : ev.handicapDsqThreshold;
 
   showBusy('Saving…');
 
@@ -165,6 +201,11 @@ export async function saveEventForm() {
       saveMobileProgress(), saveMobileCheckpoints(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
+    // Also drop any dirty, not-yet-submitted text sitting in the race-day "add a record"
+    // forms — the data behind them is now gone, so stale typed-but-unsaved text shouldn't survive.
+    resetEntryForm();
+    resetHelperForm();
+    resetFinisherForm();
   }
 
   await saveEvent();
@@ -178,6 +219,9 @@ export async function saveEventForm() {
 export function wireEvent() {
   on('btn-save-event',  'click', saveEventForm);
   on('ev-categories',   'change', populateJuniorLimitDropdown);
+  document.querySelectorAll('input[name="ev-race-mode"]').forEach(el => {
+    el.addEventListener('change', updateHandicapFieldsVisibility);
+  });
 
   const distEl = document.getElementById('ev-distance');
   if (distEl) {

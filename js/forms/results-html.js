@@ -41,15 +41,23 @@ ${body}
 // ---- Shared tbody row builders (used by screen rendering and publish HTML) ----
 
 export function buildSeniorsBodyHTML(results) {
+  const handicap = !!state.event.isHandicap;
   return results.map(r => {
     const pos  = r.position < 9999 ? r.position : 'DNF';
     const time = r.position < 9999 ? escHtml(r.time || '') + (r.recordBreaker ? ' R' : '') : '';
-    return `<tr>
+    // %Ldrs/Behind rank by raw elapsed time, meaningless once starts are staggered — shown
+    // instead of (not alongside) the handicap-only Predicted/Dev%/DSQ cells below.
+    const standardCells = !handicap
+      ? `<td>${r.pctLdrs ? r.pctLdrs + '%' : ''}</td><td>${escHtml(r.behindTime||'')}</td>` : '';
+    const handicapCells = handicap ? `
+      <td>${escHtml(r.predictedTime || '')}</td>
+      <td>${r.deviationPct !== '' && r.deviationPct !== undefined ? r.deviationPct + '%' : ''}</td>
+      <td>${r.dsq ? '<span class="results-dsq-badge">DSQ</span>' : ''}</td>` : '';
+    return `<tr${r.dsq ? ' class="results-dsq-row"' : ''}>
       <td>${pos}</td><td>${escHtml(r.bibNumber||'')}</td>
       <td>${escHtml(r.inCatPos||'')}</td>
       <td>${escHtml(getEntryName(r))}</td><td>${escHtml(r.club||'')}</td>
-      <td>${escHtml(r.category||'')}</td><td>${time}</td>
-      <td>${r.pctLdrs ? r.pctLdrs + '%' : ''}</td><td>${escHtml(r.behindTime||'')}</td></tr>`;
+      <td>${escHtml(r.category||'')}</td><td>${time}</td>${standardCells}${handicapCells}</tr>`;
   }).join('');
 }
 
@@ -175,14 +183,22 @@ function juniorsSection(juniors) {
 
 function seniorsSection(seniors) {
   if (!seniors.length) return '';
-  const avg = computeAvgTop10(seniors);
-  const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
-  const avgPart = avg ? `Top ${n} average: ${avg} = 100% — %Ldrs shows each finisher's time relative to this average` : '';
+  const handicap = !!state.event.isHandicap;
+  // %Ldrs/Behind (and the note explaining them) aren't shown for a Handicap race — they rank by
+  // raw elapsed time, meaningless once starts are staggered.
+  let avgPart = '';
+  if (!handicap) {
+    const avg = computeAvgTop10(seniors);
+    const n   = Math.min(seniors.filter(r => r.position < 9999).length, 10);
+    avgPart = avg ? `Top ${n} average: ${avg} = 100% — %Ldrs shows each finisher's time relative to this average` : '';
+  }
   const recordPart = seniors.some(r => r.recordBreaker) ? 'R = course record' : '';
   const note = [avgPart, recordPart].filter(Boolean).join('<br>');
   const summary = note ? `<p class="re-summary">${note}</p>` : '';
+  const standardHead = !handicap ? '<th>%Ldrs</th><th>Behind</th>' : '';
+  const handicapHead = handicap ? '<th>Predicted</th><th>Dev %</th><th>DSQ</th>' : '';
   return section('Senior Results', seniors.length, `${summary}<table class="data-table re-sortable">
-  <thead><tr><th>Pos</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th><th>%Ldrs</th><th>Behind</th></tr></thead>
+  <thead><tr><th>Pos</th><th>Bib</th><th>In Cat</th><th>Name</th><th>Club</th><th>Cat</th><th>Time</th>${standardHead}${handicapHead}</tr></thead>
   <tbody>${buildSeniorsBodyHTML(seniors)}</tbody>
 </table>`);
 }

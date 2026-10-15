@@ -314,7 +314,7 @@ function startInsertTime(sidx) {
   editRow?.scrollIntoView({ block: 'nearest' });
 }
 
-function resetFinisherForm() {
+export function resetFinisherForm() {
   editIsInsert = false;
   editingIdx = -1;
   insertTimeIdx = -1;

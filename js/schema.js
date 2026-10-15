@@ -23,8 +23,9 @@ export function createEntry({
   bibNumber = 0, dibberNumber = 0, fraNumber = '', name = '', club = '',
   gender = '', dob = '', category = '', course = '', preEntry = '',
   partner = null,  // { name, gender, dob, club, fraNumber } — null for solo entries
+  predictedTime = '',  // handicap races only — entrant's own predicted elapsed finish time
 } = {}) {
-  return { bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, partner };
+  return { bibNumber, dibberNumber, fraNumber, name, club, gender, dob, category, course, preEntry, partner, predictedTime };
 }
 
 export function createHelper({
@@ -58,6 +59,7 @@ export function createEvent({
   prizeDepthOverall = 3, prizeDepthPerCategory = 1, juniorPrizeDepthPerCategory = 6,
   juniorLimit = 'None', juniorStartTime = '18:50:00', juniorEntryLimit = 100,
   juniorTimingMethod = 'Stopwatch', hasPairs = false, notes = '',
+  isHandicap = false, handicapTargetTime = '', handicapDsqThreshold = 10,
 } = {}) {
   return {
     name, distance, date, startTime,
@@ -65,5 +67,6 @@ export function createEvent({
     timingMethod, maleRecord, femaleRecord,
     prizeDepthOverall, prizeDepthPerCategory, juniorPrizeDepthPerCategory,
     juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod, hasPairs, notes,
+    isHandicap, handicapTargetTime, handicapDsqThreshold,
   };
 }

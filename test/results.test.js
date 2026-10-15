@@ -192,6 +192,58 @@ describe('results.js:formatResults', () => {
   });
 });
 
+describe('results.js:formatResults — handicap mode', () => {
+  it('places finishers by raw crossing time, not elapsed race time, once isHandicap is set', () => {
+    state.event.isHandicap = true;
+    state.entries = [entry(1), entry(2)];
+    state.finishers = [
+      { action: 'Start',  number: '1', time: '00:05:00' },
+      { action: 'Start',  number: '2', time: '00:00:00' },
+      { action: 'Finish', number: '1', time: '00:30:00' }, // elapsed 00:25:00 — faster, but crosses later
+      { action: 'Finish', number: '2', time: '00:28:00' }, // elapsed 00:28:00 — slower, but crosses first
+    ];
+    const { seniors } = formatResults();
+    assert.deepEqual(seniors.map(r => r.bibNumber), [2, 1]); // raw crossing order, not elapsed-time order
+    assert.equal(seniors[0].time, '00:28:00');
+    assert.equal(seniors[1].time, '00:25:00');
+  });
+
+  it('flags a DSQ once deviation exceeds the threshold, keeping their crossing position but dropping them from prizes', () => {
+    state.event.isHandicap = true;
+    state.event.handicapDsqThreshold = 10;
+    state.entries = [
+      entry(1, { predictedTime: '00:25:00' }),
+      entry(2, { predictedTime: '00:10:00' }),
+    ];
+    state.finishers = [
+      { action: 'Start',  number: '1', time: '00:00:00' },
+      { action: 'Start',  number: '2', time: '00:00:00' },
+      { action: 'Finish', number: '2', time: '00:24:00' }, // predicted 10:00, actual 24:00 — 140% over, DSQ, but crosses first
+      { action: 'Finish', number: '1', time: '00:26:00' }, // predicted 25:00, actual 26:00 — 4% over, fine
+    ];
+    const { seniors, prizes } = formatResults();
+    const bib2 = seniors.find(r => r.bibNumber === 2);
+    const bib1 = seniors.find(r => r.bibNumber === 1);
+    assert.equal(bib2.position, 1);     // still placed first — crossed the line first
+    assert.equal(bib2.dsq, true);
+    assert.equal(bib2.deviationPct, 140);
+    assert.equal(bib1.dsq, false);
+    assert.equal(bib1.deviationPct, 4);
+    assert.ok(!prizes.some(p => p.bibNumber === 2)); // excluded from prizes despite 1st place
+  });
+
+  it('uses the SI punch\'s own FinishTime (time-of-day), not RaceTime, to order SI-timed handicap finishers', () => {
+    state.event.isHandicap = true;
+    state.entries = [entry(1), entry(2)];
+    state.siResults = [
+      { RaceNumber: '1', RaceTime: '00:20:00', FinishTime: '19:30:00', CourseClass: 'Seniors' }, // slow elapsed, crosses first
+      { RaceNumber: '2', RaceTime: '00:05:00', FinishTime: '19:35:00', CourseClass: 'Seniors' }, // fast elapsed, crosses later
+    ];
+    const { seniors } = formatResults();
+    assert.deepEqual(seniors.map(r => r.bibNumber), [1, 2]);
+  });
+});
+
 describe('results.js:getResultsForCourse', () => {
   it('filters by course and sorts by position', () => {
     const results = [

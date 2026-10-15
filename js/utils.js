@@ -6,7 +6,7 @@ import { GENDER } from './constants.js';
 // stay DOM-free themselves (e.g. js/mobile-files-devices.js) can import it without dragging in
 // ui.js's own module-level `document` access.
 export function escHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // HH:MM:SS.mmm — pulled out of js/views/mobile-files-ble.js's own former duplicate (see that
@@ -21,9 +21,12 @@ export function ts() {
 
 /** Normalise a time string to HH:MM:SS. Returns '' on failure.
  *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.
- *  Two parts → M:S (h=0); one part → S (h=m=0).
+ *  mode 'duration' (default, for elapsed times like predicted/record times):
+ *    two parts → M:S (h=0); one part → S (h=m=0).
+ *  mode 'clock' (for a time-of-day like a race start time):
+ *    two parts → H:M (s=0); one part → H (m=s=0).
  */
-export function normaliseTime(t) {
+export function normaliseTime(t, mode = 'duration') {
   if (!t || typeof t !== 'string') return '';
   t = t.trim();
   if (!t) return '';
@@ -31,8 +34,8 @@ export function normaliseTime(t) {
   if (parts.some(isNaN)) return '';
   let h = 0, m = 0, s = 0;
   if      (parts.length === 3) { [h, m, s] = parts; }
-  else if (parts.length === 2) { [m, s]    = parts; }
-  else if (parts.length === 1) { [s]        = parts; }
+  else if (parts.length === 2) { if (mode === 'clock') [h, m] = parts; else [m, s] = parts; }
+  else if (parts.length === 1) { if (mode === 'clock') [h]    = parts; else [s]    = parts; }
   else return '';
   if (h < 0 || h > 24 || m < 0 || m > 59 || s < 0 || s > 59) return '';
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;

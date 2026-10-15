@@ -58,6 +58,8 @@ function entryFormHalf(org, entry = {}) {
     <div class="bef-row bef-row-key">
       <span class="bef-lbl bef-lbl-req bef-lbl-key">Full Name (block capitals):</span>
       <span class="bef-line bef-flex bef-line-key bef-name-field">${field(entry.name)}</span>
+      <span class="bef-lbl bef-lbl-req bef-lbl-key bef-predicted-lbl">Predicted Time:</span>
+      <span class="bef-line bef-line-key bef-predicted-field"><span class="bef-hint-fill">hh:mm:ss</span></span>
     </div>
     <div class="bef-dob-gender bef-row-key">
       <div class="bef-half-cell">
