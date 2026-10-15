@@ -132,6 +132,46 @@ handicap-only `results-senior-handicap` (Predicted/Dev%/DSQ), shown instead, not
 `npm test` — 772/772 passing throughout; manually verified via a standalone script exercising
 `buildSeniorsBodyHTML()` in both modes.
 
+### Start slip print overflow (found after real-world kiosk-printing use)
+
+- [x] the start slip layout overflows the right paper edge and gets truncated (a genuine ~3mm
+      forced margin on the physical print, not a browser-rendering/overflow issue) — fix it the
+      way the prize list print already gets right
+
+Two attempts so far, both real-world-tested by the user and insufficient:
+
+1. CSS only — `.hss-row`'s flex layout let a long value force the row wider than the label,
+   since flex items default to `min-width: auto`. Fixed to mirror `prize-list.css`'s own
+   narrow-print cells (label `flex-shrink: 0`, value `min-width: 0` +
+   `overflow:hidden;white-space:nowrap;text-overflow:ellipsis`) — this is still in place as a
+   content-overflow safety net (`js/forms/handicap-start-slip.css`), but did NOT fix the real
+   margin problem: it's a forced print-time margin, not a content-overflow/rendering issue.
+2. Switched the print mechanism from a hidden `<iframe>` + `iframe.contentWindow.print()` to
+   `preview.js`'s `openPopup()` (a real popup window + `win.print()`), on the theory that Chrome's
+   print pipeline doesn't honour `@page{margin:0}` the same way for an iframe under
+   `--kiosk-printing`, since the prize list (which uses `openPopup()`) never showed the problem.
+   **Reverted** — real-world tested and made things worse: the margin bug was NOT fixed, and it
+   introduced a regression, a popup window left on screen needing a manual close (`win.print()`
+   via a real window does not auto-close the window afterwards) — unacceptable during live,
+   back-to-back registration. `js/forms/handicap-start-slip.js` is back to the hidden-iframe
+   approach.
+
+A byte-for-byte comparison against `prize-list.css` found the actual difference: the prize list's
+narrow table sets no `text-align` on its cells (browser default: left), so a typical value's text
+never reaches anywhere near the physical right edge even though the table box itself spans the
+full content width — any clipping there is invisible blank space. The start slip's `.hss-val {
+text-align: right; }` does the opposite on purpose (values line up on the right) — every value,
+especially the big START TIME figure, sits with its rightmost character exactly at the edge of
+the padded content box. That box's padding (`3mm 3mm 3mm 1mm`) was sized to exactly match the
+user's own measured ~3mm unprintable margin, i.e. zero buffer — any overshoot at all would clip.
+
+3. **Fixed (v0.0.27-alpha), confirmed on the real printer.** `js/forms/handicap-start-slip.js`
+   adds a named `RIGHT_EDGE_MM = 6` (was a bare `3mm`) used for `.hss-slip`'s right padding only —
+   doubles the margin so right-aligned text clears the known ~3mm unprintable zone with an actual
+   buffer, rather than landing exactly on its boundary. Left/top/bottom padding unchanged. If a
+   future printer needs more clearance, raise `RIGHT_EDGE_MM` rather than re-trying attempts 1 or 2
+   above (both real-world-tested and ruled out).
+
 ## Add test suite
 
 - [x] JS logic

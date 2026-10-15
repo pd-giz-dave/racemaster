@@ -27,8 +27,20 @@
   padding: 1mm 0;
 }
 
-.hss-lbl { font-size: 8pt; }
-.hss-val { font-size: 10pt; text-align: right; }
+/* Flex items default to min-width:auto, so a long value (a long name, or the big start-time
+   figure) could force the row wider than the slip instead of yielding to the label — exactly
+   what was overflowing the printed page's right edge. Mirror prize-list.css's own narrow-print
+   cells: the label never shrinks, the value does, with ellipsis if it still doesn't fit. */
+.hss-lbl { font-size: 8pt; flex-shrink: 0; }
+.hss-val {
+  font-size: 10pt;
+  text-align: right;
+  min-width: 0;
+  margin-left: 2mm;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .hss-bib { font-size: 14pt; }
 
 .hss-row-big {

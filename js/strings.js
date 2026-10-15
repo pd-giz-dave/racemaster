@@ -856,7 +856,14 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.26-alpha - current version</h3>
+    <h3>v0.0.27-alpha - current version</h3>
+    <ul>
+      <li>The printed <strong>Handicap start slip</strong> no longer gets its right-aligned
+          values (Bib, Predicted, and the big START TIME) cut off by the thermal printer's
+          unprintable right-edge margin — the slip's right padding now gives them a real buffer
+          clear of it</li>
+    </ul>
+    <h3>v0.0.26-alpha</h3>
     <ul>
       <li><strong>Predicted Time</strong> is now a required field for a <strong>Handicap
           Race</strong> — and is rejected if it's faster than half, or slower than three times,
