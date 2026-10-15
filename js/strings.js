@@ -831,6 +831,13 @@ export const PAGES = {
     </ul>
     <p>The same flags work for Brave, Microsoft Edge and Chromium — swap in <code>brave</code>,
         <code>msedge</code> or <code>chromium</code> for the binary name.</p>
+    <p><strong>Caveat:</strong> even with <code>--kiosk-printing</code>, Chrome (and Brave/Edge/
+        Chromium) still briefly flashes its print-preview pane on screen before auto-confirming
+        it — no click is needed either way, so registration itself is never blocked, but it is a
+        visible flash each time. There used to be a way to suppress even that (combining
+        <code>--kiosk-printing</code> with <code>--disable-print-preview</code>), but current
+        Chrome versions no longer allow that combination. Firefox's silent printing (below) works
+        differently and may not flash at all, but that hasn't been confirmed on real hardware.</p>
 
     <h3>Firefox</h3>
     <p>Possible, but with different flags and no exact equivalent of <code>--app</code>'s
