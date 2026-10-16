@@ -12,6 +12,7 @@ function esc(s) {
 const OVERALL_SECTIONS = new Set(['Senior Overall', 'Senior Female Overall', 'Senior Male Overall']);
 
 export function buildPrizeRowsHTML(prizes) {
+  const handicap = !!state.event.isHandicap;
   const rows = [];
   let currentSection = null, currentCategory = null;
   for (const p of prizes) {
@@ -23,13 +24,16 @@ export function buildPrizeRowsHTML(prizes) {
     }
     currentCategory = p.category;
     const suffix   = p.isJunior ? ' J' : (p.recordBreaker ? ' R' : '');
+    const col4     = handicap
+      ? (p.deviationPct !== '' && p.deviationPct !== undefined ? `${p.deviationPct}%` : '') + suffix
+      : esc(p.time || '') + suffix;
     const showStar = p.multiWinner && !OVERALL_SECTIONS.has(p.section);
     const name     = (showStar ? '* ' : '') + esc(p.name || '');
     rows.push(`<tr>
       <td>${p.position || ''}</td>
       <td>${esc(p.entryCategory || '')}</td>
       <td>${p.inCatPos || ''}</td>
-      <td>${esc(p.time || '') + suffix}</td>
+      <td>${col4}</td>
       <td class="prize-name-cell">${name}</td>
     </tr>`);
   }
@@ -40,8 +44,10 @@ function buildPrizeListHTML(isNarrow) {
   const c         = isNarrow ? 'pln' : 'pl';
   const pageClass = isNarrow ? 'prize-list-narrow' : 'prize-list-page';
   const tblClass  = isNarrow ? 'pln-table' : 'prize-table';
-  const { prizes: allPrizes } = formatResults();
+  const { prizes, dsqPrizeRows } = formatResults();
+  const allPrizes = [...prizes, ...dsqPrizeRows];
   const event      = state.event;
+  const handicap   = !!event.isHandicap;
 
   let html = `<div class="${isNarrow ? pageClass : `print-page ${pageClass}`}">`;
   html += `<div class="${c}-header">
@@ -52,9 +58,9 @@ function buildPrizeListHTML(isNarrow) {
   if (!allPrizes.length) {
     html += `<p>No prizes generated yet.</p>`;
   } else {
-    html += `<p class="${c}-hint">Time suffix: R = course record &nbsp; J = junior &nbsp; </br> Name prefix: * = multi cat winner</p>`;
+    html += `<p class="${c}-hint">${handicap ? 'Dev %' : 'Time'} suffix: R = course record &nbsp; J = junior &nbsp; </br> Name prefix: * = multi cat winner</p>`;
     html += `<table class="${tblClass}"><thead><tr>
-      <th>Pos</th><th>Cat</th><th>IC</th><th>Time</th><th>Name</th>
+      <th>Pos</th><th>Cat</th><th>IC</th><th>${handicap ? 'Dev %' : 'Time'}</th><th>Name</th>
     </tr></thead><tbody>`;
     html += buildPrizeRowsHTML(allPrizes);
     html += `</tbody></table>`;

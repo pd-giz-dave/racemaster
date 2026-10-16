@@ -28,7 +28,7 @@ export async function renderResults() {
   // case (nothing new), so this doesn't turn opening this page into a background stall.
   await autoUpdateProgress();
 
-  const { warnings, seniors, juniors, prizes, pairsResults, helpersReport } = formatResults();
+  const { warnings, seniors, juniors, prizes, dsqPrizeRows, pairsResults, helpersReport } = formatResults();
   _seniors      = seniors;
   _juniors      = juniors;
   _prizes       = prizes;
@@ -54,7 +54,7 @@ export async function renderResults() {
   renderSplitsTable(splitsRows, maxSplits, cpNumbers);
 
   const printBtn = document.getElementById('btn-print-prize-list');
-  if (printBtn) printBtn.disabled = prizes.length === 0;
+  if (printBtn) printBtn.disabled = prizes.length === 0 && dsqPrizeRows.length === 0;
 
   const summary = document.getElementById('results-senior-summary');
   if (summary) {
@@ -69,7 +69,7 @@ export async function renderResults() {
     const recordPart = seniors.some(r => r.recordBreaker) ? 'R = course record' : '';
     summary.innerHTML = [avgPart, recordPart].filter(Boolean).join('<br>');
   }
-  renderPrizes(prizes);
+  renderPrizes(prizes, dsqPrizeRows);
   renderHelpersReport(helpersReport);
   updateResultsButtons();
   return warnings;
@@ -128,15 +128,16 @@ function renderSplitsTable(rows, maxSplits, cpNumbers = []) {
   if (tbody) tbody.innerHTML = buildSplitsBodyHTML(rows, maxSplits, cpNumbers);
 }
 
-export function renderPrizes(prizes, tbodyId = 'prizes-tbody') {
-  renderThead(tbodyId, TABLES.prizes);
+export function renderPrizes(prizes, dsqPrizeRows = [], tbodyId = 'prizes-tbody') {
+  renderThead(tbodyId, state.event.isHandicap ? TABLES['prizes-handicap'] : TABLES.prizes);
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
+  const allPrizes = [...prizes, ...dsqPrizeRows];
   const hint = document.getElementById('prizes-hint');
-  if (hint) hint.innerHTML = prizes.length
+  if (hint) hint.innerHTML = allPrizes.length
     ? `R = course record<span style="margin-left:2em">J = junior</span><span style="margin-left:2em">* = multi winner</span>`
     : '';
-  tbody.innerHTML = buildPrizeRowsHTML(prizes);
+  tbody.innerHTML = buildPrizeRowsHTML(allPrizes);
 }
 
 export function renderHelpersReport(helpersReport) {

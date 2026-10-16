@@ -233,8 +233,9 @@ export const HELP = {
         <strong>Target Time</strong> you set here, an elapsed duration measured from the normal
         <strong>Start Time</strong> above — so that a perfectly accurate field would all finish
         together. The winner is simply whoever crosses the line first. A runner is disqualified
-        (kept in the results, but excluded from prizes) if their actual time deviates from their
-        prediction by more than the <strong>DSQ Threshold</strong> percentage. See the Entries and
+        (kept in the results and listed in their own Disqualified section of the prize list, but
+        excluded from winning a prize) if their actual time deviates from their prediction by
+        more than the <strong>DSQ Threshold</strong> percentage. See the Entries and
         Results &amp; Prize List pages' own help for how predictions, start slips and the DSQ
         column work.</p>
   `,
@@ -403,7 +404,10 @@ export const HELP = {
         since both rank by raw elapsed time, and adds <strong>Predicted</strong>, <strong>Dev
         %</strong> (deviation between actual and predicted time) and <strong>DSQ</strong> columns
         instead. A disqualified runner (deviation beyond the event's DSQ threshold) keeps their
-        finishing position, highlighted on the row, but is excluded from the Prizes tab.</p>
+        finishing position, highlighted on the row; on the Prizes tab (and the printed Prize
+        List) they're excluded from winning a prize but listed in a trailing
+        <strong>Disqualified</strong> section, and both show each runner's <strong>Dev %</strong>
+        in place of a time.</p>
     <p>A bib can be recorded by more than one source — SI Results, the stopwatch/manual Finishers
         list, and Mobile Files' Update Progress — and those sources can disagree, either about the
         time (two say Finish, with different times) or about whether the bib finished at all (one
@@ -863,7 +867,14 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.27-alpha - current version</h3>
+    <h3>v0.0.28-alpha - current version</h3>
+    <ul>
+      <li>In a <strong>Handicap Race</strong>, the Prizes tab and printed Prize List now show each
+          winner's <strong>Dev %</strong> instead of their finish time, and add a trailing
+          <strong>Disqualified</strong> section listing every runner excluded from prize
+          contention, in the same format (their own Dev % in place of a time)</li>
+    </ul>
+    <h3>v0.0.27-alpha</h3>
     <ul>
       <li>The printed <strong>Handicap start slip</strong> no longer gets its right-aligned
           values (Bib, Predicted, and the big START TIME) cut off by the thermal printer's
@@ -1386,6 +1397,13 @@ export const TABLES = {
     { id: 'in_cat', label: 'In Cat', title: 'Position within age category' },
     { id: 'time',   label: 'Time',   title: 'Finish time (R = course record, J = junior)' },
     { id: 'name',   label: 'Name',   title: 'Competitor\'s name (* = winner in multiple categories)' },
+  ],
+  'prizes-handicap': [
+    { id: 'pos',       label: 'Pos',    title: 'Overall finishing position' },
+    { id: 'cat',       label: 'Cat',    title: 'Age category' },
+    { id: 'in_cat',    label: 'In Cat', title: 'Position within age category' },
+    { id: 'deviation', label: 'Dev %',  title: 'Deviation between actual and predicted time, as a percentage of predicted', align: 'right' },
+    { id: 'name',      label: 'Name',   title: 'Competitor\'s name (* = winner in multiple categories)' },
   ],
   'results-helpers': [
     { id: 'role',       label: 'Role',       title: "Helper's role" },

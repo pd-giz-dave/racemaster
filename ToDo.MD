@@ -77,7 +77,7 @@ and the big START TIME. `npm test` — 763/763 passing throughout; manually veri
 browser against a scratch dataset (Race Mode toggle, predicted-time field + hint on a
 non-handicap form, automatic start-slip print on Register, reprint button on Edit).
 
-## More testing tweaks required
+### More testing tweaks required
 
 - [x] need instructions somewhere discoverable that describes how to get the browser into kiosk mode for auto printing
 - [x] print start slip when editing an entry should read update and print start slip and do that
@@ -88,6 +88,11 @@ non-handicap form, automatic start-slip print on Register, reprint button on Edi
 - [x] all dirty forms (entries, helpers, et al) should be reset when a new race is setup and clear previous event is checked
 - [x] echo target time and DSQ threshold on hone page when in handicap mode, just under the race mode line
 - [x] when in handicap mode do not show the top n average, nor the %ldrs and behind columns in the results
+
+### Yet more test tweaks
+
+- [x] in a handicap race replace the time column in the prize list with their % deviation from predicted
+- [x] in a handicap race, include a trailing section in the prize list that shows the DSQ's
 
 Implemented (v0.0.26-alpha): the actual `--kiosk-printing` launch commands for Windows/macOS/Linux
 (including how to still get the app-like window via `--app=`, since the installed PWA shortcut
@@ -131,6 +136,20 @@ split into a standard-only `results-senior-standard` (%Ldrs/Behind) alongside th
 handicap-only `results-senior-handicap` (Predicted/Dev%/DSQ), shown instead, not alongside.
 `npm test` — 772/772 passing throughout; manually verified via a standalone script exercising
 `buildSeniorsBodyHTML()` in both modes.
+
+Implemented (v0.0.28-alpha): for a handicap race, the Prize List (both the in-app Prizes tab and
+the printed/published page) now shows each row's **Dev %** in its 4th column instead of a finish
+time (`buildPrizes()`'s `makeRow()` now carries `deviationPct` through onto every prize row;
+`js/forms/prize-list.js`'s `buildPrizeRowsHTML`/`buildPrizeListHTML` and a new
+`TABLES['prizes-handicap']` in `js/strings.js` swap the column/header when `isHandicap`). A new
+`buildDsqPrizeRows()` in `js/results.js` collects every DSQ'd finisher (juniors before seniors,
+matching the main prize list's own section order, then by crossing position) into a trailing
+**Disqualified** section — returned as a new, separate `dsqPrizeRows` key from `formatResults()`
+so `buildPrizes()`'s existing "DSQ'd runners don't win prizes" behaviour (and the test asserting
+it) is untouched; both Prize List surfaces append it after the normal prize sections and gate
+their "nothing to show" checks on the combined length. `npm test` — 775/775 passing throughout
+(3 new tests in `test/results.test.js` covering `deviationPct` on ordinary prize rows, an empty
+`dsqPrizeRows` when nobody's disqualified, and junior-before-senior DSQ ordering).
 
 ### Start slip print overflow (found after real-world kiosk-printing use)
 

@@ -128,7 +128,7 @@ function rawCrossingSeconds(f, siBibSet) {
   return f.time ? timeToSeconds(f.time) : 0;
 }
 
-/** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, helpersReport }. */
+/** Generate full results from finishers and entries. Returns { warnings, seniors, juniors, pairsResults, prizes, dsqPrizeRows, helpersReport }. */
 export function formatResults() {
   const results = [];
 
@@ -248,6 +248,7 @@ export function formatResults() {
           predictedTime,
           deviationPct,
           dsq,
+          isHandicap: !!state.event.isHandicap,
         });
       }
     }
@@ -325,10 +326,11 @@ export function formatResults() {
     ...buildPrizes(results),
     ...(pairsResults.length ? buildPairsPrizes(pairsResults, depth) : []),
   ];
+  const dsqPrizeRows  = buildDsqPrizeRows(results);
   const seniors       = getResultsForCourse(COURSE.SENIORS, results);
   const juniors       = getResultsForCourse(COURSE.JUNIORS, results);
   const helpersReport = buildHelpersReport();
-  return { warnings: clashWarnings, seniors, juniors, pairsResults, prizes, helpersReport };
+  return { warnings: clashWarnings, seniors, juniors, pairsResults, prizes, dsqPrizeRows, helpersReport };
 }
 
 function buildPrizes(results) {
@@ -384,7 +386,7 @@ function buildPrizes(results) {
   const prizes = [];
 
   function makeRow(section, category, isJunior, r, catPos) {
-    return { section, category, entryCategory: r.category, isJunior, inCatPos: catPos, position: r.position, time: r.time, name: r.name, bibNumber: r.bibNumber, recordBreaker: !!r.recordBreaker, multiWinner: multiWinners.has(r.name) };
+    return { section, category, entryCategory: r.category, isJunior, inCatPos: catPos, position: r.position, time: r.time, name: r.name, bibNumber: r.bibNumber, deviationPct: r.deviationPct, recordBreaker: !!r.recordBreaker, multiWinner: multiWinners.has(r.name) };
   }
 
   function addFixed(section, results, category, depth, isJunior) {
@@ -421,6 +423,35 @@ function buildPrizes(results) {
   addExpandedByCat('Senior Male Categories',   seniors.filter(r => !isFemale(r)), false);
 
   return prizes;
+}
+
+// Trailing "Disqualified" section for the Prize List / Prizes tab — a handicap race's DSQ'd
+// runners are excluded from prize contention by buildPrizes() above, but still worth showing
+// somewhere rather than silently vanishing. Kept as a SEPARATE return value from buildPrizes()'s
+// own `prizes` array (not merged into it) so that array's own "DSQ'd runners aren't prize
+// winners" contract stays intact for existing callers/tests. Covers both seniors and juniors
+// (dsq is computed per-course, not senior-only) — sorted juniors-before-seniors (matching
+// buildPrizes()'s own section order above) then by crossing position within each course.
+function buildDsqPrizeRows(results) {
+  return results
+    .filter(r => r.dsq && r.isHandicap)
+    .sort((a, b) => (a.course === b.course
+      ? a.position - b.position
+      : (a.course === COURSE.JUNIORS ? -1 : 1)))
+    .map(r => ({
+      section:       'Disqualified',
+      category:      'Disqualified',
+      entryCategory: r.category,
+      isJunior:      ciEq(r.course, COURSE.JUNIORS),
+      inCatPos:      '',
+      position:      r.position,
+      time:          r.time,
+      name:          r.name,
+      bibNumber:     r.bibNumber,
+      deviationPct:  r.deviationPct,
+      recordBreaker: false,
+      multiWinner:   false,
+    }));
 }
 
 function buildPairsPrizes(pairsResults, depth) {
