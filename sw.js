@@ -15,7 +15,23 @@ self.addEventListener('install', e => {
 
 self.addEventListener('message', e => {
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data?.type === 'VERIFY_PRECACHE') e.waitUntil(verifyPrecache(e.source));
 });
+
+// Paranoia check, run once per page load (see js/connect.js's startPrecacheCheck): cache.addAll
+// in 'install' above is meant to be all-or-nothing, but field evidence (print forms losing all
+// their styling offline, with the right file present on the server and the update installed)
+// shows some entries can end up missing from the cache despite that. Checking at print time is
+// too late — the user is already offline and stuck — so this reports back to the page whenever
+// asked, while there's still a connection to do something about it (e.g. reload, redeploy).
+async function verifyPrecache(client) {
+  const cache = await caches.open(CACHE);
+  const missing = [];
+  for (const url of PRECACHE) {
+    if (!(await cache.match(url))) missing.push(url);
+  }
+  client?.postMessage({ type: 'PRECACHE_CHECK_RESULT', missing });
+}
 
 self.addEventListener('activate', e => {
   e.waitUntil(

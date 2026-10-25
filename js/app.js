@@ -2,7 +2,7 @@
 
 import { state, loadAll } from './state.js';
 import { restoreDirectory, getSession, isStandalone } from './storage.js';
-import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch } from './connect.js';
+import { updateDataFileButton, startServerPing, startUpdateCheck, startConflictWatch, startPrecacheCheck } from './connect.js';
 import { startPresenceWatch } from './presence.js';
 import { startProgressSync } from './progress-sync.js';
 import { wireDatasets, renderDatasets, hasUnconfirmedLogin } from './views/datasets.js';
@@ -79,6 +79,7 @@ export async function init() {
   wireStaticPages();
   startServerPing();
   startUpdateCheck();
+  startPrecacheCheck();
   startConflictWatch();
   window.addEventListener('racemaster-dirty-change', updateDataFileButton);
   // Progress can change in the background — the new server poll, a Bluetooth auto-pull,

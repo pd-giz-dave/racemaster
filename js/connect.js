@@ -27,6 +27,30 @@ export function startUpdateCheck() {
   });
 }
 
+// One-off paranoia check, run once per page load (covers both a normal load and the reload
+// that follows applying an update) — see sw.js's verifyPrecache for why this can't just be
+// trusted to always have worked. Deliberately noisy (a blocking dialog, not a console warning)
+// because the alternative is discovering it silently at the registration desk, already offline,
+// when it's too late to do anything but hand out an unstyled printout.
+export function startPrecacheCheck() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type !== 'PRECACHE_CHECK_RESULT') return;
+    const { missing } = e.data;
+    if (!missing?.length) return;
+    showConfirmDialog(
+      `OFFLINE CACHE INCOMPLETE: ${missing.length} file(s) failed to cache for offline use:\n\n` +
+      missing.join('\n') +
+      `\n\nOffline printing and other offline features may silently fail until this is fixed. ` +
+      `Reload now while you still have a connection, and if it recurs, report it.`,
+      'OK', true
+    );
+  });
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'VERIFY_PRECACHE' });
+  }
+}
+
 export function startConflictWatch() {
   window.addEventListener('racemaster-conflict', async () => {
     updateDataFileButton();
