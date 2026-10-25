@@ -214,7 +214,7 @@ function prepareEntry(formData, existingEntry = null, excludeBib = 0) {
   const fra      =          (formData.fraNumber!== undefined ? formData.fraNumber: (ex?.fraNumber|| ''));
   const preEntry =          (formData.preEntry !== undefined ? formData.preEntry : (ex?.preEntry || ''));
   const predictedTime = formData.predictedTime !== undefined
-    ? normaliseTime(formData.predictedTime) : (ex?.predictedTime || '');
+    ? normaliseTime(formData.predictedTime, 'minutes') : (ex?.predictedTime || '');
 
   if (!name)   return { error: 'Name is required' };
   if (!gender) return { error: 'Gender is required' };

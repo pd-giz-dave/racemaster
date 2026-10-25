@@ -21,10 +21,13 @@ export function ts() {
 
 /** Normalise a time string to HH:MM:SS. Returns '' on failure.
  *  Accepts any separator and no leading zeros, e.g. 1.5.3, 5-30, 1 05 30.
- *  mode 'duration' (default, for elapsed times like predicted/record times):
+ *  mode 'duration' (default, for elapsed times like record times):
  *    two parts → M:S (h=0); one part → S (h=m=0).
  *  mode 'clock' (for a time-of-day like a race start time):
  *    two parts → H:M (s=0); one part → H (m=s=0).
+ *  mode 'minutes' (for predicted times, where a quick bare number is more useful read as
+ *  minutes than seconds, and is commonly ≥ 60):
+ *    two/three parts → same as 'duration'; one part → M (h=s=0), with M ≥ 60 carried into H.
  */
 export function normaliseTime(t, mode = 'duration') {
   if (!t || typeof t !== 'string') return '';
@@ -35,8 +38,9 @@ export function normaliseTime(t, mode = 'duration') {
   let h = 0, m = 0, s = 0;
   if      (parts.length === 3) { [h, m, s] = parts; }
   else if (parts.length === 2) { if (mode === 'clock') [h, m] = parts; else [m, s] = parts; }
-  else if (parts.length === 1) { if (mode === 'clock') [h]    = parts; else [s]    = parts; }
+  else if (parts.length === 1) { if (mode === 'clock') [h] = parts; else if (mode === 'minutes') [m] = parts; else [s] = parts; }
   else return '';
+  if (mode === 'minutes') { h += Math.floor(m / 60); m = m % 60; }
   if (h < 0 || h > 24 || m < 0 || m > 59 || s < 0 || s > 59) return '';
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }

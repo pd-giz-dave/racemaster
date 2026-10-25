@@ -21,7 +21,7 @@ import {
 } from '../ui.js';
 import { TABLES } from '../strings.js';
 import { renderHome } from './home.js';
-import { openStartSlipPreview } from '../forms/handicap-start-slip.js';
+import { openStartSlipPreview, computeHandicapStart } from '../forms/handicap-start-slip.js';
 
 const ENTRY_COLS = tableColumns(TABLES.entries, {
   bib:     e => e.bibNumber,
@@ -46,6 +46,7 @@ const ENTRY_COLS = tableColumns(TABLES.entries, {
   dibber:  e => e.dibberNumber || '',
   pre_no:  e => e.preEntry || '',
   predicted: e => e.predictedTime || '',
+  start:     e => e.predictedTime ? computeHandicapStart(e) : '',
   actions: () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
       <button class="btn-sm btn-insert-above-entry" data-action="ins">Ins ↑</button>

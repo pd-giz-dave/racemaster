@@ -44,7 +44,9 @@
   --bef-club-width:       70mm;
   --bef-fra-width:        24mm;
   --bef-predicted-width:  28mm;
-  --bef-predicted-gap:    4mm;     /* gap between Full Name field and the Predicted Time label */
+  --bef-predicted-gap:    1mm;     /* gap between Full Name field and the Predicted Time label —
+                                       shifted left vs other label gaps to leave room for the
+                                       longer "(mins)" label without shrinking the field itself */
 
   /* Gaps and spacing */
   --bef-dob-gender-gap:   20mm;    /* space between DOB cell and Gender cell */
@@ -215,7 +217,6 @@
 .bef-name-field { font-size: var(--bef-name-size); font-weight: bold; line-height: 1; }
 .bef-predicted-lbl   { margin-left: var(--bef-predicted-gap); }
 .bef-predicted-field { width: var(--bef-predicted-width); flex-shrink: 0; }
-.bef-hint-fill  { color: #999; font-size: 0.85em; font-weight: normal; }
 .bef-check-key { font-size: var(--bef-key-size); }
 
 /* Labels that wrap across two lines — font sized so 2 lines fit within field height */

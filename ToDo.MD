@@ -277,3 +277,11 @@ Needs re-structuring so people will actually read it and understand it.
 - [x] the date in the race label used above should be the race date as set in event settings, not todays date
 - [x] rename _adoptions.meta.json to adoptions.json and add it to the exclusion list alongside progress.json
 - [x] remove the bib_allocations.json exclusion, it is no longer generated
+
+## Tweaks noted when doing a handicap race
+
+- [x] The hh:mm:ss prompt hint on the entry forms is far too dark, it is almost the same as normal text
+- [x] Some print formatting, e.g. type size on the handicap start ticket, gets lost when there is no internet connection
+- [x] Add a start time column to the entries list after the predicted time column, that reflects the start time on their start ticket
+- [x] When entering a predicted time in the entry form if a single number is entered assume it is minutes and allow for >60, adjust the hint text to mm or mm:ss
+- [ ] server/service-worker.js should be caching everything, so working offline is identical to working online, check this is so, their evidence some files are being missed
