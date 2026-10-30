@@ -318,6 +318,11 @@ describe('mobile-files-devices.js:resolveLocationKey', () => {
     assert.deepEqual(resolveLocationKey('finish'), { kind: 'finish' });
   });
 
+  it('recognises "Start" case-insensitively', () => {
+    assert.deepEqual(resolveLocationKey('Start'), { kind: 'start' });
+    assert.deepEqual(resolveLocationKey('start'), { kind: 'start' });
+  });
+
   it('extracts the checkpoint number from any location containing a digit', () => {
     assert.deepEqual(resolveLocationKey('CP3'), { kind: 'cp', number: 3 });
     assert.deepEqual(resolveLocationKey('1 - Polebank'), { kind: 'cp', number: 1 });

@@ -270,7 +270,7 @@ export async function clearProgressData() {
 // state mutation, so this same logic can be shared between the button handler
 // (js/views/mobile-files-progress.js's updateProgress) and the silent auto-update path
 // (autoUpdateProgress, below). Returns either { error } or the computed
-// { finishRows, cpBuckets, expected, cpTimesByCp }.
+// { finishRows, startRows, cpBuckets, expected, cpTimesByCp }.
 //
 // Selected files are bucketed by their own resolved location (see resolveLocationKey) rather
 // than requiring every selected file to be "Finish" — Finish drives the (unchanged, accurate)
@@ -318,6 +318,7 @@ export async function validateAndCompute(selected) {
   }
 
   const finishRows = []; // segments ({ r, location, lines }), not raw selected rows — see locationSegmentsOf
+  const startRows = []; // same shape, for the 'start' location kind — see this function's own doc below
   const cpBuckets = new Map(); // cp number -> segment
   for (const r of selected) {
     for (const seg of locationSegmentsOf(r)) {
@@ -337,10 +338,12 @@ export async function validateAndCompute(selected) {
       }
       const key = resolveLocationKey(raw);
       if (!key) {
-        return { error: `Cannot compute results — location "${raw}" isn't recognised as Finish or a checkpoint.` };
+        return { error: `Cannot compute results — location "${raw}" isn't recognised as Start, Finish or a checkpoint.` };
       }
       if (key.kind === 'finish') {
         finishRows.push(seg);
+      } else if (key.kind === 'start') {
+        startRows.push(seg);
       } else if (cpBuckets.has(key.number)) {
         return { error: `Cannot compute results — more than one file selected for CP${key.number}.` };
       } else {
@@ -371,6 +374,32 @@ export async function validateAndCompute(selected) {
   const dupTimeSplits = findDuplicateSplitNumbers(times);
   if (dupTimeSplits.length) {
     return { error: `Cannot compute results — more than one time-recording phone selected at Finish (duplicate split number(s) ${dupTimeSplits.join(', ')}).` };
+  }
+
+  // Start-bucket bibs (a Bibs-mode phone used at the start line, e.g. to catch early/late
+  // starters before relocating to Finish for the main event — see resolveLocationKey's own doc)
+  // feed their own, deliberately isolated, expectedFinisherEntries() call below rather than
+  // joining `bibs`/`times` above: each location's own splitNumber sequence restarts
+  // independently (see mobile-files-devices.js's Location/ModeStart doc), so two unrelated
+  // Start-bucket (or Start- and Finish-bucket) devices can legitimately reuse the same small
+  // splitNumbers — merging the pools, or dup-checking across them, would risk pairing an early
+  // starter's own 'Start' row with a stranger's Finish split purely by splitNumber coincidence,
+  // or flagging two genuinely independent Start-bucket devices as a conflict. No Start-bucket
+  // time rows are collected at all for the same reason (and because nothing here needs them — a
+  // Start record's own elapsed-since-official-start is never shown; only its timeOfDay is,
+  // consumed downstream by the Start/Finish timeOfDay diff described in strings.js's
+  // 'view-mobile-bibs' help), so `expectedFinisherEntries` is always called with an empty
+  // `times` for this bucket — no splitNumber of its own is ever actually paired against
+  // anything, so unlike the Finish bucket's own dupBibSplits/dupTimeSplits checks, a duplicate
+  // splitNumber here carries no ambiguity worth rejecting over.
+  //
+  // Deliberately NOT subject to the same "selected but empty" rejection the Finish bucket gets
+  // above: most race days have zero early/late starters, so a Start file selected and
+  // contributing nothing is the ordinary case, not a sign of a wrong file.
+  const startBibs = [];
+  for (const seg of startRows) {
+    const { bibsSegment } = buildSegmentView(seg.lines);
+    startBibs.push(...bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action)));
   }
 
   // The Finish bucket's own Time-mode Start row is the universal t=0 reference for every
@@ -406,6 +435,11 @@ export async function validateAndCompute(selected) {
   }
 
   const expected = expectedFinisherEntries(bibs, times, startMs);
+  // Start-bucket entries (see the dupStartBibSplits doc above for why they're never paired with
+  // a `times` array of their own) join the same `expected` list Finish's own 'Start' rows already
+  // land in — an early/late starter is an early/late starter regardless of which location's phone
+  // actually caught it.
+  expected.push(...expectedFinisherEntries(startBibs, [], startMs));
 
   // A bib retired at a checkpoint (CP_RETIRE, see computeCpTimes' own doc) may never reach the
   // Finish location at all — exactly the safety-relevant case buildProgressRows() already
@@ -430,7 +464,7 @@ export async function validateAndCompute(selected) {
     expected.push(entry);
   }
 
-  return { finishRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp };
+  return { finishRows, startRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp };
 }
 
 // The actual mutation, shared by both the button handler and the silent auto-update path —

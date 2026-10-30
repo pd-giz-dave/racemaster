@@ -358,14 +358,19 @@ export function distinctLocationsOf(visibleRows) {
 }
 
 // Every location is free text set by the phone operator (RaceMaster Mobile's own
-// RaceEntity.location — e.g. "Finish", "1 - Polebank", "Hadden 2", "CP3", "cp 3"). The phone
-// app itself enforces that a non-Finish location contains exactly one number, so any location
-// with a digit in it is a checkpoint identified by that number — there's no other convention
-// to key off since location is otherwise arbitrary free text. Used both by locationSortKey()
-// below and by mobile-files-progress.js's own validateAndCompute().
+// RaceEntity.location — e.g. "Finish", "Start", "1 - Polebank", "Hadden 2", "CP3", "cp 3"). The
+// phone app itself enforces that a non-Finish, non-Start location contains exactly one number,
+// so any location with a digit in it is a checkpoint identified by that number — there's no
+// other convention to key off since location is otherwise arbitrary free text. "Start" is its
+// own recognised kind (not a checkpoint) — a marshal pairs a Bibs-mode phone with a Time-mode
+// phone at the start line, same as the Finish pairing, to catch early/late starters before both
+// phones relocate to Finish for the main event — see mobile-files-progress.js's own
+// validateAndCompute() for how a 'start' bucket is used. Used both by locationSortKey() below
+// and by mobile-files-progress.js's own validateAndCompute().
 export function resolveLocationKey(location) {
   const loc = (location || '').trim();
   if (/^finish$/i.test(loc)) return { kind: 'finish' };
+  if (/^start$/i.test(loc)) return { kind: 'start' };
   const m = loc.match(/(\d+)/);
   return m ? { kind: 'cp', number: +m[1] } : null; // null = unrecognised
 }

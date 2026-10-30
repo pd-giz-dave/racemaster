@@ -228,6 +228,70 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     assert.deepEqual(result.expected[0], { action: 'Finish', number: 1, time: '00:20:00', timeOfDay: '09:20:00' });
   });
 
+  it('still rejects a genuinely unrecognised, non-numbered location', () => {
+    const bad = finishRow();
+    for (const l of bad.device.lines) l.location = 'Somewhere';
+    return validateAndCompute([bad]).then(result => {
+      assert.match(result.error, /isn't recognised as Start, Finish or a checkpoint/);
+    });
+  });
+
+  // Field report: a marshal's Bibs-mode phone parked at the start line to catch early/late
+  // starters (checking "This is a start event" on the phone — strings.js's own 'view-mobile-bibs'
+  // help) before relocating to Finish for the main event. "Start" used to fall through
+  // resolveLocationKey() as unrecognised, aborting the whole computation outright.
+  describe('a "Start"-location bucket', () => {
+    it('recognises a Start-location device and carries its early-starter bib into `expected` with only a timeOfDay', () => {
+      const startPhone = finishRow({ device: { name: 'Start Phone', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Start' },
+        { lineNumber: 2, action: 'Start', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 08:55:00.00', location: 'Start' },
+      ] } });
+      return validateAndCompute([finishRow(), startPhone]).then(result => {
+        assert.equal(result.error, undefined);
+        assert.equal(result.startRows.length, 1);
+        const startEntry = result.expected.find(e => e.action === 'Start' && e.number === 2);
+        assert.deepEqual(startEntry, { action: 'Start', number: 2, time: '', timeOfDay: '08:55:00' });
+      });
+    });
+
+    it('is not rejected as "empty" just because nobody actually started early/late that day', () => {
+      const startPhone = finishRow({ device: { name: 'Start Phone', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Start' },
+      ] } });
+      return validateAndCompute([finishRow(), startPhone]).then(result => {
+        assert.equal(result.error, undefined);
+        assert.equal(result.startRows.length, 1);
+      });
+    });
+
+    it('does not let an unrelated Start-bucket splitNumber get paired with a Finish-bucket split', () => {
+      // Both buckets happen to use splitNumber 1 for their own first real entry — independent
+      // devices/locations, each restarting its own counter — this must never pair across buckets.
+      const startPhone = finishRow({ device: { name: 'Start Phone', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Start' },
+        { lineNumber: 2, action: 'Start', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 08:55:00.00', location: 'Start' },
+      ] } });
+      return validateAndCompute([finishRow(), startPhone]).then(result => {
+        assert.equal(result.error, undefined);
+        const startEntry = result.expected.find(e => e.action === 'Start' && e.number === 2);
+        assert.equal(startEntry.time, ''); // not the Finish bucket's own 00:20:00 split
+      });
+    });
+
+    it('does not reject two independent Start-location devices reusing the same small splitNumbers', () => {
+      const startA = finishRow({ device: { name: 'Start A', lines: [
+        { lineNumber: 1, action: 'Start', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 08:55:00.00', location: 'Start' },
+      ] } });
+      const startB = finishRow({ device: { name: 'Start B', lines: [
+        { lineNumber: 1, action: 'Start', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 08:56:00.00', location: 'Start' },
+      ] } });
+      return validateAndCompute([startA, startB]).then(result => {
+        assert.equal(result.error, undefined);
+        assert.equal(result.expected.filter(e => e.action === 'Start').length, 2);
+      });
+    });
+  });
+
   it('computes an approximate checkpoint time relative to the Finish file\'s own Start row', async () => {
     const cp = finishRow({ device: { name: 'CP1 Phone', lines: [
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },

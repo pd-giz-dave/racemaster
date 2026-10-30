@@ -140,7 +140,7 @@ export async function updateProgress() {
     syncAutoProgressCheckbox();
     return;
   }
-  const { finishRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp } = result;
+  const { finishRows, startRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp } = result;
 
   const existingCount = state.mobileProgress.length;
   // Built from parts, not a fixed "N Finish file(s)[ and checkpoint times from M CP file(s)]"
@@ -149,8 +149,9 @@ export async function updateProgress() {
   // ("Add 3 progress record(s) from checkpoint times from 2 CP file(s)?") rather than saying
   // "from 0 Finish file(s)".
   const finishPart = finishRows.length ? `${finishRows.length} Finish file(s)` : null;
+  const startPart = startRows.length ? `${startRows.length} Start file(s)` : null;
   const cpPart = cpBuckets.size ? `checkpoint times from ${cpBuckets.size} CP file(s)` : null;
-  const sourceSummary = [finishPart, cpPart].filter(Boolean).join(' and ');
+  const sourceSummary = [finishPart, startPart, cpPart].filter(Boolean).join(' and ');
   const confirmMsg = existingCount
     ? `This replaces ${existingCount} existing progress record(s) with ${expected.length} from ${sourceSummary}. Continue?`
     : `Add ${expected.length} progress record(s) from ${sourceSummary}?`;
