@@ -47,7 +47,7 @@ function entryFormHalf(org, entry = {}) {
       <div class="bef-refs">
         <div class="bef-ref"><div class="bef-ref-label">Entry Num</div><div class="bef-ref-box">${field(entry.entryNo)}</div></div>
         <div class="bef-ref"><div class="bef-ref-label">Race/Bib Num</div><div class="bef-ref-box"></div></div>
-        <div class="bef-ref"><div class="bef-ref-label">Dibber Num</div><div class="bef-ref-box"></div></div>
+        <div class="bef-ref"><div class="bef-ref-label">Fob Num</div><div class="bef-ref-box"></div></div>
       </div>
       <div class="bef-junior-cats">
         <div class="bef-junior-label">Juniors category (age on 31st Dec)</div>

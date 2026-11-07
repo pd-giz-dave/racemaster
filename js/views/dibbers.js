@@ -4,8 +4,8 @@ import { state, saveDibbers } from '../state.js';
 import { createDibber } from '../schema.js';
 import { CSV } from '../csv-schema.js';
 import { normaliseDibberRows } from '../data.js';
-import { on, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns } from '../ui.js';
-import { escHtml } from '../utils.js';
+import { on, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns, wireFormFocusTrap } from '../ui.js';
+import { escHtml, normaliseDate } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
@@ -14,7 +14,11 @@ const DIBBER_COLS = tableColumns(TABLES.dibbers, {
   short_code: ({ d }) => d.shortCode || '',
   long_code:  ({ d }) => d.longCode  || '',
   owner:      ({ d }) => d.owner || '',
-  lost:       ({ d }) => d.lost ? `<span style="color:var(--danger)">${escHtml(d.lost)}</span>` : '',
+  // normaliseDate() here (not just on save) covers a dibber whose "lost" date is still stored
+  // from before this field took free-typed DD/MM/YY entry, when it was a native type="date"
+  // input and so stored as a raw ISO date — || d.lost falls back to the raw value for anything
+  // normaliseDate can't parse.
+  lost:       ({ d }) => d.lost ? `<span style="color:var(--danger)">${escHtml(normaliseDate(d.lost) || d.lost)}</span>` : '',
   notes:      ({ d }) => escHtml(d.notes || ''),
   actions:    () => `
       <button class="btn-sm btn-edit" data-action="edit">Edit</button>
@@ -34,18 +38,20 @@ export function editDibberRow(idx) {
   if (!d) return;
   const row = document.getElementById(`dibber-row-${idx}`);
   if (!row) return;
+  row.classList.add('row-edit-wrap');
   row.innerHTML = `
-    <td>${d.shortCode || ''}</td>
-    <td><input id="dib-long-${idx}"  type="text" value="${escHtml(String(d.longCode || ''))}" style="width:90px"></td>
-    <td><input id="dib-avail-${idx}" type="text" value="${escHtml(d.owner || '')}"            style="width:80px"></td>
-    <td><input id="dib-lost-${idx}"  type="date" value="${escHtml(d.lost  || '')}"            style="width:130px"></td>
-    <td><input id="dib-notes-${idx}" type="text" value="${escHtml(d.notes || '')}"            style="width:100%;min-width:120px"></td>
-    <td>
+    <td data-label="Num">${d.shortCode || ''}</td>
+    <td data-label="Long Code"><input id="dib-long-${idx}"  type="text" value="${escHtml(String(d.longCode || ''))}" style="width:90px"></td>
+    <td data-label="Owner"><input id="dib-avail-${idx}" type="text" value="${escHtml(d.owner || '')}"            style="width:80px"></td>
+    <td data-label="Lost"><input id="dib-lost-${idx}"  type="text" value="${escHtml(normaliseDate(d.lost) || d.lost || '')}" data-normalise="date" placeholder="DD/MM/YY" style="width:100px"></td>
+    <td data-label="Notes"><input id="dib-notes-${idx}" type="text" value="${escHtml(d.notes || '')}"            style="width:100%;min-width:120px"></td>
+    <td data-label="Actions">
       <button class="btn-sm btn-save"      data-idx="${idx}">Save</button>
       <button class="btn-sm btn-secondary" data-idx="${idx}">Cancel</button>
     </td>`;
   row.querySelector('.btn-save').addEventListener('click', () => saveDibberRow(idx));
   row.querySelector('.btn-secondary').addEventListener('click', () => renderDibbers());
+  wireFormFocusTrap(`dibber-row-${idx}`, () => saveDibberRow(idx)); // Tab stays within this row, Enter saves
   document.getElementById(`dib-long-${idx}`)?.focus();
 }
 
@@ -62,7 +68,7 @@ export async function saveDibberRow(idx) {
     d.longCode = +longVal;
   }
   d.owner = document.getElementById(`dib-avail-${idx}`)?.value.trim() || '';
-  d.lost  = document.getElementById(`dib-lost-${idx}`)?.value.trim()  || '';
+  d.lost  = normaliseDate(document.getElementById(`dib-lost-${idx}`)?.value.trim());
   d.notes = document.getElementById(`dib-notes-${idx}`)?.value.trim() || '';
   await saveDibbers();
   showStatus(`Dibber ${d.shortCode} updated.`);
@@ -78,12 +84,13 @@ export function showAddDibberRow() {
     : 1;
   const tr = document.createElement('tr');
   tr.id = 'dibber-row-new';
+  tr.className = 'row-edit-wrap';
   tr.innerHTML = `
-    <td><input id="dib-new-short" type="text" value="${nextShort}" style="width:60px"></td>
-    <td><input id="dib-new-long"  type="text" value=""             style="width:90px"></td>
-    <td><input id="dib-new-avail" type="text" value=""             style="width:80px"></td>
-    <td><input id="dib-new-notes" type="text" value=""             style="width:160px"></td>
-    <td>
+    <td data-label="Num"><input id="dib-new-short" type="text" value="${nextShort}" style="width:60px"></td>
+    <td data-label="Long Code"><input id="dib-new-long"  type="text" value=""             style="width:90px"></td>
+    <td data-label="Owner"><input id="dib-new-avail" type="text" value=""             style="width:80px"></td>
+    <td data-label="Notes"><input id="dib-new-notes" type="text" value=""             style="width:160px"></td>
+    <td data-label="Actions">
       <button class="btn-sm btn-save">Save</button>
       <button class="btn-sm btn-secondary">Cancel</button>
     </td>`;
@@ -175,7 +182,7 @@ async function applyDibbersMerge(rows) {
       const merged = {
         longCode: row.longCode ? +row.longCode : existing.longCode,
         owner:    row.owner || existing.owner,
-        lost:     row.lost  || existing.lost,
+        lost:     normaliseDate(row.lost) || existing.lost,
         notes:    row.notes || existing.notes,
       };
       const changed = Object.keys(merged).some(k => {
@@ -188,7 +195,7 @@ async function applyDibbersMerge(rows) {
       const long = +row.longCode;
       if (!long || isNaN(long)) continue; // long code required for a new dibber
       if (state.dibbers.find(d => +d.longCode === long)) continue; // long code already in use elsewhere
-      state.dibbers.push(createDibber({ shortCode: short, longCode: long, owner: row.owner || '', lost: row.lost || '', notes: row.notes || '' }));
+      state.dibbers.push(createDibber({ shortCode: short, longCode: long, owner: row.owner || '', lost: normaliseDate(row.lost), notes: row.notes || '' }));
       added++;
     }
   }

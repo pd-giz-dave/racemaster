@@ -47,7 +47,7 @@ export function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
 }
 
 // progress.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course, category,
-// startTime, finishTime, cpTimes}]} file the web app pushes (see POST .../progress) — the Mobile
+// startTime, finishTime, cpTimes, beaconNumber}]} file the web app pushes (see POST .../progress) — the Mobile
 // Files page's own Progress tab contents, covering every entry regardless of mobile activity
 // (see js/mobile-files-progress.js's buildProgressRows()), so this is also what a phone in Bibs
 // or Checkpoint mode reads to know which bib is on which course. Not a per-device sync file, so
@@ -157,9 +157,33 @@ export function classifyPush(stored, records, authoritative = false) {
 
 // Every *.json in a race dir is a device's own history file EXCEPT these.
 export const ADOPTIONS_FILE = 'adoptions.json';
-const RESERVED_MOBILE_FILES = new Set(['progress.json', ADOPTIONS_FILE]);
+export const BEACONS_FILE = 'beacons.json';
+const RESERVED_MOBILE_FILES = new Set(['progress.json', ADOPTIONS_FILE, BEACONS_FILE]);
 export function isReservedMobileFile(file) {
   return RESERVED_MOBILE_FILES.has(file);
+}
+
+// beacons.json — a race-wide post-race housekeeping report the mobile app puts in the same
+// mobile/<owner>/<raceLabel>/ folder as the per-device history files (see ToDo.MD "Add a new
+// timing method"): {raceLabel, generatedAt, powerOffBatch: [{beaconNumber, batteryLevel,
+// poweredOffAt}]} — the FULL current snapshot of beacons processed so far this race (grows as
+// late returns are housekept), not a delta, so this is a plain replace-on-write; idempotency and
+// incremental pickup of late returns is handled by the web app's own apply step
+// (js/mobile-beacons.js), not here.
+export function beaconsFilePath(username, raceLabel) {
+  return path.join(mobileRaceDir(username, raceLabel), BEACONS_FILE);
+}
+
+export function readBeacons(username, raceLabel) {
+  const fp = beaconsFilePath(username, raceLabel);
+  if (!fs.existsSync(fp)) return null;
+  try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch { return null; }
+}
+
+export function writeBeacons(username, raceLabel, payload) {
+  const dir = mobileRaceDir(username, raceLabel);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(beaconsFilePath(username, raceLabel), JSON.stringify(payload, null, 2), 'utf8');
 }
 
 // Adoption markers for devices pushing under [raceLabel] (typically a phone's arbitrary initial

@@ -240,6 +240,36 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 }
 .btn-help.active { background: var(--accent); color: #fff; }
 
+.date-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+}
+.date-input-wrap input { min-width: 0; }
+
+.btn-date-pick {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-dim, #666);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.btn-date-pick svg { width: 15px; height: 15px; }
+.btn-date-pick:hover { color: var(--accent); }
+
+.date-picker-popup {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+}
+
 .view-help {
   background: var(--accent-light);
   border-left: 3px solid var(--accent);
@@ -618,6 +648,39 @@ button.df-badge-connected:hover { background: var(--danger); }
    so a capped column has to be able to wrap, or the cap can't actually apply. */
 .sticky-col.sticky-col-wrap { overflow-wrap: break-word; }
 
+/* Unconditional counterpart to .data-table-wrap below (same opt-in tables: Beacons/Dibbers):
+   editing a row always adds several extra inputs — sometimes with a calendar-icon button too
+   (js/ui.js's wireDateInputs()) — and that's routinely wider than even a desktop table-scroll
+   area, not just a narrow phone one. Applied by JS (js/views/beacons.js, js/views/dibbers.js)
+   to the <tr> the moment it switches into its edit/add template, at every screen width, so
+   Save/Cancel (or Notes) never end up behind a horizontal scroll just because editing made the
+   row longer. Same flex-wrap-and-label technique as .data-table-wrap tbody tr below. */
+.row-edit-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 4px;
+}
+.row-edit-wrap > td {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border-bottom: none;
+}
+.row-edit-wrap > td[data-label]::before {
+  content: attr(data-label) ":";
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.75em;
+  flex-shrink: 0;
+}
+.row-edit-wrap > td.sticky-col {
+  position: static;
+  left: auto !important;
+}
+
 #header-dataset-name { color: var(--header-fg-dim); font-size: 0.875rem; }
 
 /* ---- Status bar ---- */
@@ -892,6 +955,46 @@ button.df-badge-connected:hover { background: var(--danger); }
 
   /* Let view headers wrap rather than overflow horizontally */
   .view-header { flex-wrap: wrap; }
+
+  /* Opt-in per table (see index.html's Beacons/Dibbers tables): on a narrow screen a row of
+     several fixed-width inputs plus Edit/Del or Save/Cancel buttons needs more room than the
+     viewport has, and .table-scroll's horizontal scroll leaves the far columns (Notes,
+     Actions) out of view. Switch to a wrapping row instead — a <tr> can't wrap its own <td>s
+     while staying display:table-row, so this breaks each row out into a flex container whose
+     cells wrap like any other inline content, and labels each one from its own data-label
+     (set in js/ui.js's cellAttrs()) since the header row no longer lines up with anything.
+     See .row-edit-wrap above for the same treatment applied unconditionally to a row that's
+     currently being edited, regardless of screen width. */
+  .data-table-wrap { width: 100%; }
+  .data-table-wrap thead { display: none; }
+  .data-table-wrap tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 6px 4px;
+  }
+  .data-table-wrap tbody td {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border-bottom: none;
+  }
+  .data-table-wrap tbody td[data-label]::before {
+    content: attr(data-label) ":";
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.75em;
+    flex-shrink: 0;
+  }
+  /* Sticky columns assume the old horizontal-scroll layout (a JS-computed `left` offset) —
+     meaningless once rows wrap, and left unset it would misposition the cell. */
+  .data-table-wrap td.sticky-col,
+  .data-table-wrap th.sticky-col {
+    position: static;
+    left: auto !important;
+  }
 }
 
 @media print { .app-shell { display: block; } .app-sidebar, .app-header, #status-bar { display: none; } }

@@ -17,12 +17,17 @@ function dibbers(codes) {
   return codes.map(shortCode => ({ shortCode, longCode: shortCode + 1000, owner: '', lost: '', notes: '' }));
 }
 
+function beacons(numbers) {
+  return numbers.map(number => ({ number, owner: '', dateAcquired: '', totalHours: 0, batteryLevel: 100, lastUsed: '', lost: '', notes: '' }));
+}
+
 beforeEach(() => {
   installLocalStorageMock();
   installWindowMock();
   state.entries    = [];
   state.people     = [];
   state.dibbers    = [];
+  state.beacons    = [];
   state.preEntries = [];
   state.categories = builtinFRARows();
   state.event = {
@@ -76,11 +81,12 @@ describe('entries.js:getEntriesOnCourse / getEntryLimit / courseFull', () => {
 });
 
 describe('entries.js:findEntryByBib / findEntryByDibber / getEntry', () => {
-  it('finds by bib or dibber number, returns -1/null when absent', () => {
+  it('finds by bib or dibber/beacon number (one shared field), returns -1/null when absent', () => {
     state.entries = [{ bibNumber: '5', dibberNumber: '20' }];
     assert.equal(findEntryByBib(5), 0);
     assert.equal(findEntryByBib(999), -1);
     assert.equal(findEntryByDibber(20), 0);
+    assert.equal(findEntryByDibber(999), -1);
     assert.equal(getEntry(5).bibNumber, '5');
     assert.equal(getEntry(999), null);
   });
@@ -156,6 +162,51 @@ describe('entries.js:submitEntry', () => {
     state.event.timingMethod = 'Dibbers';
     const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
     assert.match(r.error, /No dibbers loaded/);
+  });
+
+  it('allocates the next beacon number under Beacons timing, skipping any marked lost', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2, 3]);
+    state.beacons[1].lost = '01/01/2026'; // beacon 2 lost
+    const r1 = await submitEntry({ name: 'Dave',  gender: 'Male', dob: '01/01/1990' });
+    assert.equal(r1.dibberNumber, 1); // the shared fob field — a beacon number in this case
+    const r2 = await submitEntry({ name: 'Alice', gender: 'Female', dob: '01/01/1990' });
+    assert.equal(r2.dibberNumber, 3); // beacon 2 skipped
+    assert.match(r2.lostWarning, /Beacon 2 skipped/);
+  });
+
+  it('marks a beacon used (lastUsed = event date) the moment it\'s allocated to an entry, before any beacons report is read', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2]);
+    await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
+    assert.equal(state.beacons[0].lastUsed, state.event.date);
+    assert.equal(state.beacons[1].lastUsed, ''); // not yet allocated to anyone
+  });
+
+  // Both pools allocate into the same entry.dibberNumber field (see createEntry()'s own doc) —
+  // with Seniors on Dibbers and Juniors on Beacons simultaneously, interleaved registration must
+  // not let one course's own allocator mistake the other course's entries for members of its own
+  // sequence (predecessorDibber/predecessorBeacon, getLastDibberNumber/getLastBeaconNumber all
+  // guard on the entry's own course for exactly this reason).
+  it('keeps the dibber and beacon sequences independent when Seniors uses Dibbers and Juniors uses Beacons at once', async () => {
+    state.event.timingMethod = 'Dibbers';
+    state.event.juniorTimingMethod = 'Beacons';
+    state.dibbers = dibbers([1, 2, 3]);
+    state.beacons = beacons([101, 102, 103]);
+    const rSeniorA = await submitEntry({ name: 'SeniorA', gender: 'Male', dob: '01/01/1990', course: 'Seniors' });
+    const rJuniorA = await submitEntry({ name: 'JuniorA', gender: 'Male', dob: '01/01/2015', course: 'Juniors' });
+    const rSeniorB = await submitEntry({ name: 'SeniorB', gender: 'Male', dob: '01/01/1990', course: 'Seniors' });
+    const rJuniorB = await submitEntry({ name: 'JuniorB', gender: 'Male', dob: '01/01/2015', course: 'Juniors' });
+    assert.equal(rSeniorA.dibberNumber, 1);
+    assert.equal(rJuniorA.dibberNumber, 101);
+    assert.equal(rSeniorB.dibberNumber, 2);   // not thrown off by JuniorA's 101 sitting in between
+    assert.equal(rJuniorB.dibberNumber, 102); // not thrown off by SeniorB's 2 sitting in between
+  });
+
+  it('errors when no beacons are loaded at all under Beacons timing', async () => {
+    state.event.timingMethod = 'Beacons';
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
+    assert.match(r.error, /No beacons loaded/);
   });
 
   it('computes a pair category/course from the younger competitor when a partner is given', async () => {
@@ -261,6 +312,37 @@ describe('entries.js:updateEntry', () => {
     assert.equal(+state.entries[0].dibberNumber, 1);
   });
 
+  it('drops the beacon and shifts later beacon holders backward when switching off a beacon course', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2, 3]);
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990' }); // beacon 1
+    await submitEntry({ name: 'B', gender: 'Male', dob: '01/01/1990' }); // beacon 2
+    const r = await updateEntry(1, { course: 'Juniors' });
+    assert.equal(r.error, '');
+    assert.equal(+state.entries[0].dibberNumber, 0);
+    assert.equal(+state.entries[1].dibberNumber, 1); // B shifted back into A's freed slot
+  });
+
+  it('allocates a new beacon and shifts later holders forward when switching a course onto beacons', async () => {
+    state.event.timingMethod       = 'Stopwatch'; // Seniors
+    state.event.juniorTimingMethod = 'Beacons';   // Juniors
+    state.beacons = beacons([1, 2]);
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990', course: 'Seniors' });
+    const r = await updateEntry(1, { course: 'Juniors' });
+    assert.equal(r.error, '');
+    assert.equal(+state.entries[0].dibberNumber, 1);
+    assert.equal(state.beacons[0].lastUsed, state.event.date); // marked used on allocation
+  });
+
+  it('rejects a manual beacon override already assigned to another bib', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2, 3]);
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990' }); // beacon 1
+    await submitEntry({ name: 'B', gender: 'Male', dob: '01/01/1990' }); // beacon 2
+    const r = await updateEntry(2, { dibberOverride: 1 });
+    assert.match(r.error, /already assigned to bib 1/);
+  });
+
   it('updates predictedTime, and leaves it unchanged when not given', async () => {
     await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990', predictedTime: '25:00' });
     await updateEntry(1, { predictedTime: '22:30' });
@@ -298,6 +380,21 @@ describe('entries.js:insertEntryAndRenumber', () => {
     const r = await insertEntryAndRenumber(5, { name: 'X', gender: 'Male', dob: '01/01/1990' });
     assert.match(r.error, /not found/);
   });
+
+  it('inserts at the given bib, shifting existing bibs (and their beacons) up by one', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2, 3]);
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990' }); // bib 1, beacon 1
+    await submitEntry({ name: 'B', gender: 'Male', dob: '01/01/1990' }); // bib 2, beacon 2
+
+    const r = await insertEntryAndRenumber(1, { name: 'New', gender: 'Male', dob: '01/01/1990' });
+    assert.equal(r.error, '');
+    assert.equal(r.bibNumber, 1);
+    assert.equal(state.entries.length, 3);
+    assert.equal(state.entries[0].name, 'New');
+    assert.equal(state.entries[1].bibNumber, 2); // A pushed to bib 2
+    assert.equal(state.entries[2].bibNumber, 3); // B pushed to bib 3
+  });
 });
 
 describe('entries.js:deleteEntryAndRenumber', () => {
@@ -321,6 +418,23 @@ describe('entries.js:deleteEntryAndRenumber', () => {
   it('errors for an unknown bib', async () => {
     const r = await deleteEntryAndRenumber(999);
     assert.match(r.error, /not found/);
+  });
+
+  it('removes the entry and decrements all later bibs, filling the freed beacon slot', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2, 3]);
+    await submitEntry({ name: 'A', gender: 'Male', dob: '01/01/1990' }); // bib 1, beacon 1
+    await submitEntry({ name: 'B', gender: 'Male', dob: '01/01/1990' }); // bib 2, beacon 2
+    await submitEntry({ name: 'C', gender: 'Male', dob: '01/01/1990' }); // bib 3, beacon 3
+
+    const r = await deleteEntryAndRenumber(1);
+    assert.equal(r.error, '');
+    assert.equal(state.entries.length, 2);
+    assert.equal(state.entries[0].name, 'B');
+    assert.equal(state.entries[0].bibNumber, 1);
+    assert.equal(+state.entries[0].dibberNumber, 1); // shifted into freed slot
+    assert.equal(state.entries[1].bibNumber, 2);
+    assert.equal(+state.entries[1].dibberNumber, 2);
   });
 });
 
@@ -363,6 +477,7 @@ describe('entries.js:getEntryName', () => {
 
 describe('entries.js:exportSITimingCSV', () => {
   it('exports dibber-bearing entries using the dibber\'s long code', () => {
+    state.event.timingMethod = 'Dibbers';
     state.dibbers = [{ shortCode: 1, longCode: 12345, lost: '' }];
     const rows = exportSITimingCSV([{ bibNumber: '1', dibberNumber: '1', name: 'Dave', gender: 'Male', category: 'MSEN', course: 'Seniors' }]);
     assert.equal(rows.length, 1);
@@ -371,15 +486,28 @@ describe('entries.js:exportSITimingCSV', () => {
   });
 
   it('skips entries without a bib or dibber number', () => {
-    const rows = exportSITimingCSV([{ bibNumber: '', dibberNumber: '1' }, { bibNumber: '1', dibberNumber: '' }]);
+    state.event.timingMethod = 'Dibbers';
+    const rows = exportSITimingCSV([{ bibNumber: '', dibberNumber: '1', course: 'Seniors' }, { bibNumber: '1', dibberNumber: '', course: 'Seniors' }]);
     assert.deepEqual(rows, []);
   });
 
   it('throws a clear error when the dibber is not found in the dibbers list', () => {
+    state.event.timingMethod = 'Dibbers';
     state.dibbers = [];
     assert.throws(
-      () => exportSITimingCSV([{ bibNumber: '1', dibberNumber: '99', name: 'Dave' }]),
+      () => exportSITimingCSV([{ bibNumber: '1', dibberNumber: '99', name: 'Dave', course: 'Seniors' }]),
       /dibber 99 not found/,
     );
+  });
+
+  // The shared entry.dibberNumber field (see createEntry()'s own doc) holds a beacon number for
+  // a Beacons-timed course — exportSITimingCSV must tell the two apart by the course's own timing
+  // method, not just "is this field nonzero", or it would wrongly try to look a beacon number up
+  // in state.dibbers (and either throw, or coincidentally match an unrelated dibber).
+  it('skips Beacon-timed entries, since SI export is dibber-only', () => {
+    state.event.timingMethod = 'Beacons';
+    state.dibbers = [];
+    const rows = exportSITimingCSV([{ bibNumber: '1', dibberNumber: '7', name: 'Dave', gender: 'Male', category: 'MSEN', course: 'Seniors' }]);
+    assert.deepEqual(rows, []);
   });
 });

@@ -92,13 +92,14 @@ function buildPayloadForCourse(course, inUse) {
   return {
     raceName: state.event.name,
     raceDate: state.event.date,
-    // `invalid` and `conflict` (buildProgressRows()'s own doc in mobile-files-progress.js) are
-    // Progress-tab/Safety-Check display metadata, dropped here rather than sent on: a phone's own
-    // bib-allocation logic has no use for either, and neither is part of the wire format
-    // racemaster-mobile already expects.
+    // `invalid`/`conflict`/`fobNumber`/`fobReturned` (buildProgressRows()'s own doc in
+    // mobile-files-progress.js) are Progress-tab display metadata, dropped here rather than sent
+    // on: a phone's own bib-allocation logic has no use for any of them, and none is part of the
+    // wire format racemaster-mobile already expects (which still gets `beaconNumber` itself,
+    // unaffected by this).
     entries: buildProgressRows()
       .filter(r => inUse.length === 1 || r.course === course)
-      .map(({ invalid, conflict, ...entry }) => entry),
+      .map(({ invalid, conflict, fobNumber, fobReturned, ...entry }) => entry),
   };
 }
 

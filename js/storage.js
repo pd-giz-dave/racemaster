@@ -236,6 +236,31 @@ export async function apiPushProgress(token, owner, raceLabel, payload) {
   return res.json();
 }
 
+// Reads a race's post-race beacon housekeeping report — server/routes/mobile.js's
+// GET /api/mobile/:owner/:raceLabel/beacons (see js/views/mobile-files-beacons.js's "Read beacons
+// report" server-read fallback). Returns null on a 404 (nothing reported yet) or any other
+// non-2xx, rather than throwing — the caller treats "nothing yet" as a normal, expected state.
+export async function apiReadBeaconsReport(token, owner, raceLabel) {
+  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/beacons`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+// Pushes a beacons.json report to server/routes/mobile.js's
+// POST /api/mobile/:owner/:raceLabel/beacons — used by a hand-built fixture today (the mobile
+// app's own producer isn't built yet, see ToDo.MD), and by a future BT-pulled report once
+// js/mule-ble.js's pullBeaconsReportFromConnectedPhone() has a real characteristic to pull from.
+export async function apiPushBeaconsReport(token, owner, raceLabel, payload) {
+  const res = await fetch(`/api/mobile/${owner}/${encodeURIComponent(raceLabel)}/beacons`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 // Writes (or, with a null target, clears) a device's adoption marker — server/routes/mobile.js's
 // POST /api/mobile/:owner/:raceLabel/adoptions. [owner]/[raceLabel] are the folder the device's
 // own file lives in (its Devices-tab row), not the dataset. Throws on a non-2xx.

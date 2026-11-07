@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { getMaleCategories, getFemaleCategories } from './categories.js';
-import { normaliseDate, normaliseTime, escHtml } from './utils.js';
+import { normaliseDate, normaliseTime, escHtml, toISODate, fromISODate } from './utils.js';
 
 // ---- DOM helpers ----
 
@@ -512,11 +512,17 @@ export function tableColumns(defs, renders) {
 // whatever's currently longest, one row at a time, and swallow the rest of a narrow
 // phone screen) at applyStickyColumns()'s default, in ui.js — override with `cap: N`
 // (px) for a column that should get a narrower one, e.g. a short location code.
+//
+// data-label carries the column's own header text onto each <td> — unused by default, but
+// read by .data-table-wrap's ::before (app.css) to label a cell once a narrow screen makes
+// that table wrap its rows instead of relying on horizontal scroll (opt-in per table; see
+// index.html's Beacons/Dibbers tables).
 function cellAttrs(c) {
   const cls = [c.class, c.sticky && 'sticky-col', c.wrap && 'sticky-col-wrap'].filter(Boolean).join(' ');
   let a = '';
   if (cls) a += ` class="${cls}"`;
   if (c.wrap && c.cap) a += ` data-sticky-cap="${c.cap}"`;
+  if (c.label) a += ` data-label="${c.label}"`;
   return a;
 }
 
@@ -690,6 +696,100 @@ export function wireFormFocusTrap(containerId, onEnter) {
       }
     }
   });
+}
+
+// ---- Date-field calendar picker ----
+//
+// Every text input marked data-normalise="date" (the app's free-typed DD/MM/YY(YY) convention)
+// gets a small calendar-icon button beside it. It stays in the row's normal flow (no absolute
+// overlay, no second native date control sized to fit the cell) so it never overlaps a
+// neighbouring column, and opens one shared, singleton native <input type="date"> popup
+// positioned under whichever field was clicked (position:fixed — outside any table layout, so
+// it can't be clipped by a cell either). Picking a date there writes the result back into the
+// text field as DD/MM/YYYY. The same data-normalise="date" marker also gets its value normalised
+// to DD/MM/YYYY on blur.
+
+let datePickerEl = null;
+let datePickerTarget = null;
+
+function ensureDatePicker() {
+  if (datePickerEl) return datePickerEl;
+  datePickerEl = document.createElement('input');
+  datePickerEl.type = 'date';
+  datePickerEl.className = 'date-picker-popup';
+  document.body.appendChild(datePickerEl);
+  const commit = () => {
+    if (datePickerTarget && datePickerEl.value) {
+      const value = fromISODate(datePickerEl.value);
+      if (value) {
+        datePickerTarget.value = value;
+        datePickerTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        datePickerTarget.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+    datePickerEl.style.display = 'none';
+    datePickerTarget = null;
+  };
+  datePickerEl.addEventListener('change', commit);
+  datePickerEl.addEventListener('blur', () => { datePickerEl.style.display = 'none'; datePickerTarget = null; });
+  return datePickerEl;
+}
+
+function openDatePicker(input) {
+  const picker = ensureDatePicker();
+  datePickerTarget = input;
+  picker.value = toISODate(normaliseDate(input.value)) || '';
+  const rect = input.getBoundingClientRect();
+  picker.style.left = `${rect.left}px`;
+  picker.style.top = `${rect.bottom + 2}px`;
+  picker.style.display = 'block';
+  picker.focus();
+  if (typeof picker.showPicker === 'function') {
+    try { picker.showPicker(); } catch { /* unsupported in this browser; focus is enough */ }
+  }
+}
+
+const CALENDAR_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+
+function wrapDateInput(input) {
+  if (input.closest('.date-input-wrap')) return; // already wired
+  const wrap = document.createElement('span');
+  wrap.className = 'date-input-wrap';
+  input.replaceWith(wrap);
+  wrap.appendChild(input);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-date-pick';
+  btn.innerHTML = CALENDAR_ICON_SVG;
+  btn.setAttribute('aria-label', 'Pick a date');
+  btn.addEventListener('click', () => openDatePicker(input));
+  wrap.appendChild(btn);
+}
+
+export function wireDateInputs() {
+  const wireAll = root => root.querySelectorAll('input[data-normalise="date"]').forEach(wrapDateInput);
+  wireAll(document);
+
+  new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.matches?.('input[data-normalise="date"]')) wrapDateInput(node);
+        else node.querySelectorAll?.('input[data-normalise="date"]').forEach(wrapDateInput);
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // blur doesn't bubble, so this delegated listener must run in the capture phase to see it.
+  document.addEventListener('blur', e => {
+    const input = e.target;
+    if (!input?.matches?.('input[data-normalise="date"]')) return;
+    const normalised = normaliseDate(input.value);
+    if (normalised && normalised !== input.value) {
+      input.value = normalised;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }, true);
 }
 
 export function wireTabBar(tabBarId, panelIdPrefix, dataAttr) {

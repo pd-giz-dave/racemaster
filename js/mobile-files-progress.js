@@ -10,7 +10,8 @@ import { entryInfo, getConflictedBibs } from './safety.js';
 import { getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime, formatElapsedSeconds } from './utils.js';
 import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
-import { byLineNumber, setLastSyncedLineNumber } from './mobile-files-shared.js';
+import { byLineNumber, setLastSyncedLineNumber, deriveRaceLabel } from './mobile-files-shared.js';
+import { usingBeacons } from './time-utils.js';
 import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
 
 // Maps a mobile Bibs-mode action onto the equivalent finishers.js action — "Pass" (Checkpoint
@@ -581,6 +582,29 @@ export function buildProgressColumns(baseColumns, cpNumbers) {
 // Safety Check both already resolve and warn about (resolveFinishSources() in results.js: SI
 // wins, then stopwatch, then mobile). This tab shows whichever value actually won (same as those
 // two pages), flagged, so the race director doesn't mistake it for settled, undisputed data.
+// `fobNumber`/`fobReturned` are Progress-tab display metadata, same footing as `invalid`/
+// `conflict` just above — buildPayloadForCourse() (progress-sync.js) strips both before sending.
+// fobNumber is simply this entry's own entry.dibberNumber — the one field both an SI dibber and a
+// beacon number are allocated into (which pool it's actually drawn from is dictated by the
+// course's own timing method, see createEntry()'s own doc in schema.js) — "Fob" being the
+// universal on-screen label for either (see js/views/entries.js's own entry-form field).
+// fobReturned is only ever meaningful for a beacon (a dibber has no equivalent housekeeping
+// report to check against): '' until a beacons.json report has actually been read for this
+// entry's own course (state.beaconReports, keyed by raceLabel — see js/mobile-beacons.js), then
+// 'returned' or 'missing' once validateAndComputeBeaconReport() has sorted every issued beacon
+// into exactly one of those two lists.
+function fobReturnedStatus(e) {
+  if (!usingBeacons(e.course)) return '';
+  const beaconNumber = +e.dibberNumber || 0;
+  if (!beaconNumber) return '';
+  const raceLabel = deriveRaceLabel(state.event, e.course);
+  const report = raceLabel ? state.beaconReports.find(r => r.raceLabel === raceLabel) : null;
+  if (!report) return '';
+  if (report.missing.includes(beaconNumber)) return 'missing';
+  if (report.returned.includes(beaconNumber)) return 'returned';
+  return '';
+}
+
 export function buildProgressRows() {
   const rowsByBib = new Map();
   // Computed once per call, not per row — getConflictedBibs() itself re-resolves both courses'
@@ -593,7 +617,7 @@ export function buildProgressRows() {
       rowsByBib.set(bib, {
         bibNumber: bib, name: info.name, category: info.category, course: info.course,
         startTime: '', finishTime: '', startTimeOfDay: '', finishTimeOfDay: '',
-        cpTimes: {}, cpTimesOfDay: {},
+        cpTimes: {}, cpTimesOfDay: {}, beaconNumber: 0, fobNumber: 0, fobReturned: '',
         invalid: info.invalid, conflict: conflictedBibs.has(bib),
       });
     }
@@ -601,7 +625,14 @@ export function buildProgressRows() {
   };
   for (const e of getSortedEntries()) {
     const bib = +e.bibNumber;
-    if (bib > 0) ensure(bib);
+    if (bib <= 0) continue;
+    const row = ensure(bib);
+    // beaconNumber (the progress.json wire field, unlike fobNumber below) is 0 unless this
+    // entry's own course is actually Beacons-timed — racemaster-mobile's own ProgressEntry data
+    // class expects a real beacon number here, not an SI dibber's.
+    row.beaconNumber = usingBeacons(e.course) ? (+e.dibberNumber || 0) : 0;
+    row.fobNumber = +e.dibberNumber || 0;
+    row.fobReturned = fobReturnedStatus(e);
   }
   // startTime/finishTime (elapsed) are kept for other consumers (finishers.js/results.js/
   // safety.js all read a mobileProgress 'Finish' entry's own `.time` as a genuine elapsed finish

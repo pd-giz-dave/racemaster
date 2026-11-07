@@ -3,12 +3,12 @@
 import { state } from './state.js';
 import { createEntry } from './schema.js';
 import { SI } from './si-schema.js';
-import { saveEntries, savePeople } from './state.js';
+import { saveEntries, savePeople, saveBeacons } from './state.js';
 import { COURSE } from './constants.js';
 import { normaliseDate, normaliseTime, cleanName, ciEq, timeToSeconds, formatElapsedSeconds } from './utils.js';
 import { calculateCategory, calculateCourse, calculatePairCategory } from './categories.js';
-import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber } from './data.js';
-import { usingDibbers } from './time-utils.js';
+import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber, getNextBeaconNumber } from './data.js';
+import { usingDibbers, usingBeacons } from './time-utils.js';
 
 // A predicted time far outside these multiples of the event's target time is almost certainly a
 // typo (e.g. minutes entered as seconds, or vice versa) rather than a genuine predicted pace.
@@ -55,7 +55,8 @@ export function findEntryByBib(bibNumber) {
   return state.entries.findIndex(e => +e.bibNumber === +bibNumber);
 }
 
-/** Find an entry row by dibber short code. Returns index or -1. */
+/** Find an entry row by dibber short code or beacon number — one shared field, see
+ *  createEntry()'s own doc on why there's no separate beaconNumber. Returns index or -1. */
 export function findEntryByDibber(dibberShortCode) {
   if (!dibberShortCode || +dibberShortCode <= 0) return -1;
   return state.entries.findIndex(e => +e.dibberNumber === +dibberShortCode);
@@ -135,8 +136,12 @@ function dibberListIdx(dibber) {
   return state.dibbers.findIndex(d => +d.shortCode === dibber);
 }
 
+// Scoped to dibber-timed entries only (usingDibbers(e.course)) — entry.dibberNumber is the one
+// shared field both pools allocate into (see createEntry()'s own doc), so without this guard a
+// beacon-timed entry's own number, sitting in the same field, would be mistaken for a dibber.
 function predecessorDibber(entryIdx) {
   for (let i = entryIdx - 1; i >= 0; i--) {
+    if (!usingDibbers(state.entries[i].course)) continue;
     const d = +state.entries[i].dibberNumber;
     if (d > 0) return d;
   }
@@ -164,28 +169,118 @@ function nextDibberListIdx(entryIdx) {
   return { idx: idx < state.dibbers.length ? idx : -1, skipped };
 }
 
-// Shift every dibber-using entry from fromEntryIdx onward one slot forward in the list.
+// Shift every dibber-using entry from fromEntryIdx onward one slot forward in the list. Guarded
+// by usingDibbers(e.course) — see predecessorDibber()'s own doc on why.
 function shiftDibbersForward(fromEntryIdx, insertedListIdx) {
   let listIdx = insertedListIdx;
   for (let i = fromEntryIdx; i < state.entries.length; i++) {
-    if (+state.entries[i].dibberNumber > 0) {
+    const e = state.entries[i];
+    if (usingDibbers(e.course) && +e.dibberNumber > 0) {
       listIdx++;
       while (listIdx < state.dibbers.length && state.dibbers[listIdx].lost) listIdx++;
-      state.entries[i].dibberNumber = listIdx < state.dibbers.length ? +state.dibbers[listIdx].shortCode : 0;
+      e.dibberNumber = listIdx < state.dibbers.length ? +state.dibbers[listIdx].shortCode : 0;
     }
   }
 }
 
 // Shift every dibber-using entry from fromEntryIdx onward one slot backward,
-// filling the gap left by releasedDibber.
+// filling the gap left by releasedDibber. Guarded by usingDibbers(e.course) — see
+// predecessorDibber()'s own doc on why.
 function shiftDibbersBackward(fromEntryIdx, releasedDibber) {
   const relIdx = dibberListIdx(releasedDibber);
   if (relIdx < 0) return;
   let targetIdx = relIdx;
   for (let i = fromEntryIdx; i < state.entries.length; i++) {
-    if (+state.entries[i].dibberNumber > 0) {
+    const e = state.entries[i];
+    if (usingDibbers(e.course) && +e.dibberNumber > 0) {
       while (targetIdx < state.dibbers.length && state.dibbers[targetIdx].lost) targetIdx++;
-      state.entries[i].dibberNumber = targetIdx < state.dibbers.length ? +state.dibbers[targetIdx].shortCode : 0;
+      e.dibberNumber = targetIdx < state.dibbers.length ? +state.dibbers[targetIdx].shortCode : 0;
+      targetIdx++;
+    }
+  }
+}
+
+// ---- Beacon sequence helpers (mirror the dibber ones above, operating on state.beacons — the
+// entry-side field is the same shared entry.dibberNumber the Dibbers branch uses, see
+// createEntry()'s own doc; a course has one timing method at a time, so the two pools' own
+// sequence helpers never actually collide on the same entry) ----
+
+function beaconListIdx(beacon) {
+  return state.beacons.findIndex(b => +b.number === beacon);
+}
+
+// A beacon counts as in-use for this race the moment it's actually allocated to an entry — not
+// only once the post-race beacons.json housekeeping report comes back (that report just confirms
+// what already happened, see js/mobile-beacons.js) — so the Beacons data page's own "Last Used"
+// column reflects reality straight away rather than sitting blank until housekeeping. No-op if
+// there's no event date yet to record, or the number isn't actually in the catalogue.
+function markBeaconUsed(beaconNumber) {
+  if (!beaconNumber || !state.event.date) return;
+  const beacon = state.beacons.find(b => +b.number === +beaconNumber);
+  if (beacon) beacon.lastUsed = state.event.date;
+}
+
+// Scoped to beacon-timed entries only — see predecessorDibber()'s own doc on why this guard is
+// needed now that both pools allocate into the same entry.dibberNumber field.
+function predecessorBeacon(entryIdx) {
+  for (let i = entryIdx - 1; i >= 0; i--) {
+    if (!usingBeacons(state.entries[i].course)) continue;
+    const b = +state.entries[i].dibberNumber;
+    if (b > 0) return b;
+  }
+  return 0;
+}
+
+// Returns { idx, skipped } — the list index the entry at entryIdx should occupy, skipping lost beacons.
+function nextBeaconListIdx(entryIdx) {
+  const pred = predecessorBeacon(entryIdx);
+  let idx;
+  if (pred > 0) {
+    const pIdx = beaconListIdx(pred);
+    if (pIdx < 0) return { idx: -1, skipped: [] };
+    idx = pIdx + 1;
+  } else {
+    const first = +state.event.firstDibberNumber || 1;
+    idx = state.beacons.findIndex(b => +b.number >= first);
+    if (idx < 0) return { idx: -1, skipped: [] };
+  }
+  const skipped = [];
+  while (idx < state.beacons.length && state.beacons[idx].lost) {
+    skipped.push(state.beacons[idx].number);
+    idx++;
+  }
+  return { idx: idx < state.beacons.length ? idx : -1, skipped };
+}
+
+// Shift every beacon-using entry from fromEntryIdx onward one slot forward in the list. Guarded
+// by usingBeacons(e.course) — see predecessorDibber()'s own doc on why. A forward shift can hand
+// an entry a beacon number genuinely never used before this race (the sequence extending by
+// one) — markBeaconUsed() covers that same as a fresh allocation would.
+function shiftBeaconsForward(fromEntryIdx, insertedListIdx) {
+  let listIdx = insertedListIdx;
+  for (let i = fromEntryIdx; i < state.entries.length; i++) {
+    const e = state.entries[i];
+    if (usingBeacons(e.course) && +e.dibberNumber > 0) {
+      listIdx++;
+      while (listIdx < state.beacons.length && state.beacons[listIdx].lost) listIdx++;
+      e.dibberNumber = listIdx < state.beacons.length ? +state.beacons[listIdx].number : 0;
+      markBeaconUsed(e.dibberNumber);
+    }
+  }
+}
+
+// Shift every beacon-using entry from fromEntryIdx onward one slot backward,
+// filling the gap left by releasedBeacon. Guarded by usingBeacons(e.course) — see
+// predecessorDibber()'s own doc on why.
+function shiftBeaconsBackward(fromEntryIdx, releasedBeacon) {
+  const relIdx = beaconListIdx(releasedBeacon);
+  if (relIdx < 0) return;
+  let targetIdx = relIdx;
+  for (let i = fromEntryIdx; i < state.entries.length; i++) {
+    const e = state.entries[i];
+    if (usingBeacons(e.course) && +e.dibberNumber > 0) {
+      while (targetIdx < state.beacons.length && state.beacons[targetIdx].lost) targetIdx++;
+      e.dibberNumber = targetIdx < state.beacons.length ? +state.beacons[targetIdx].number : 0;
       targetIdx++;
     }
   }
@@ -286,6 +381,7 @@ export async function submitEntry(formData) {
 
   let dibberNumber = 0;
   let lostWarning  = '';
+  let usedBeacon   = 0;
   if (usingDibbers(course)) {
     if (formData.dibberOverride && +formData.dibberOverride > 0) {
       const lostDibber = state.dibbers.find(d => +d.shortCode === +formData.dibberOverride);
@@ -300,12 +396,29 @@ export async function submitEntry(formData) {
       if (next.skipped.length)
         lostWarning = `Dibber${next.skipped.length > 1 ? 's' : ''} ${next.skipped.join(', ')} skipped (marked lost)`;
     }
+  } else if (usingBeacons(course)) {
+    if (formData.dibberOverride && +formData.dibberOverride > 0) {
+      const lostBeacon = state.beacons.find(b => +b.number === +formData.dibberOverride);
+      if (lostBeacon?.lost) return { error: `Beacon ${formData.dibberOverride} is marked lost (since ${lostBeacon.lost})` };
+      dibberNumber = +formData.dibberOverride;
+    } else {
+      const next = getNextBeaconNumber();
+      if (next === null) return { error: state.beacons.length === 0
+        ? 'No beacons loaded — load beacon numbers before registering this entry'
+        : 'No more beacon numbers available — load more beacon numbers' };
+      dibberNumber = next.number;
+      if (next.skipped.length)
+        lostWarning = `Beacon${next.skipped.length > 1 ? 's' : ''} ${next.skipped.join(', ')} skipped (marked lost)`;
+    }
+    usedBeacon = dibberNumber;
   }
 
   addEntry({ bibNumber, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry, partner, predictedTime });
   savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
+  markBeaconUsed(usedBeacon);
   await saveEntries();
+  if (usedBeacon) await saveBeacons();
   await savePeople();
   return { bibNumber, dibberNumber, error: '', lostWarning };
 }
@@ -326,11 +439,13 @@ export async function updateEntry(bibNumber, formData) {
     e.bibNumber = newBib;
   }
 
-  // Dibber resequencing when course type changes
+  // Dibber/beacon resequencing when course type changes
   let lostWarning = '';
   const newCourse = formData.course !== undefined ? formData.course : prepCourse;
   const wasUsingDibbers = usingDibbers(e.course);
   const nowUsingDibbers = usingDibbers(newCourse);
+  const wasUsingBeacons = usingBeacons(e.course);
+  const nowUsingBeacons = usingBeacons(newCourse);
 
   if (wasUsingDibbers && !nowUsingDibbers) {
     const oldDibber = +e.dibberNumber || 0;
@@ -346,7 +461,12 @@ export async function updateEntry(bibNumber, formData) {
     shiftDibbersForward(idx + 1, newListIdx);
     if (skipped.length)
       lostWarning = `Dibber${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')} skipped (marked lost)`;
-  } else if (formData.dibberOverride !== undefined) {
+  } else if (nowUsingDibbers && formData.dibberOverride !== undefined) {
+    // Guarded by nowUsingDibbers (not just "formData.dibberOverride !== undefined") — the
+    // entries form sends this one shared "Fob" field's value as formData.dibberOverride
+    // regardless of which pool the course actually uses (see js/views/entries.js), so without
+    // this guard a Beacons-timed entry's own override would also fall through to this branch and
+    // clash-check itself against the wrong pool.
     const newDibber = +formData.dibberOverride || 0;
     if (newDibber > 0 && newDibber !== +e.dibberNumber) {
       const lostDibber = state.dibbers.find(d => +d.shortCode === newDibber);
@@ -358,11 +478,42 @@ export async function updateEntry(bibNumber, formData) {
     e.dibberNumber = newDibber;
   }
 
+  if (wasUsingBeacons && !nowUsingBeacons) {
+    const oldBeacon = +e.dibberNumber || 0;
+    e.dibberNumber = 0;
+    if (oldBeacon > 0) shiftBeaconsBackward(idx + 1, oldBeacon);
+  } else if (!wasUsingBeacons && nowUsingBeacons) {
+    if (state.beacons.length === 0)
+      return { error: 'No beacons loaded — load beacon numbers before changing this entry to a beacon course' };
+    const { idx: newListIdx, skipped } = nextBeaconListIdx(idx);
+    if (newListIdx < 0 || newListIdx >= state.beacons.length)
+      return { error: 'No more beacon numbers available — load more beacon numbers' };
+    e.dibberNumber = +state.beacons[newListIdx].number;
+    markBeaconUsed(e.dibberNumber);
+    shiftBeaconsForward(idx + 1, newListIdx);
+    if (skipped.length)
+      lostWarning = `Beacon${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')} skipped (marked lost)`;
+  } else if (nowUsingBeacons && formData.dibberOverride !== undefined) {
+    // See the dibberOverride branch's own doc above — same reasoning, guarded by
+    // nowUsingBeacons instead.
+    const newBeacon = +formData.dibberOverride || 0;
+    if (newBeacon > 0 && newBeacon !== +e.dibberNumber) {
+      const lostBeacon = state.beacons.find(b => +b.number === newBeacon);
+      if (lostBeacon?.lost) return { error: `Beacon ${newBeacon} is marked lost (since ${lostBeacon.lost})` };
+      const clashIdx = findEntryByDibber(newBeacon);
+      if (clashIdx >= 0 && clashIdx !== idx)
+        return { error: `Beacon ${newBeacon} is already assigned to bib ${state.entries[clashIdx].bibNumber}` };
+    }
+    if (newBeacon > 0) markBeaconUsed(newBeacon);
+    e.dibberNumber = newBeacon;
+  }
+
   e.name = name; e.gender = gender; e.dob = dob; e.club = club;
   e.fraNumber = fra; e.preEntry = preEntry; e.partner = partner;
   e.category = category; e.course = newCourse; e.predictedTime = predictedTime;
 
   await saveEntries();
+  if (nowUsingBeacons) await saveBeacons();
   return { error: '', lostWarning };
 }
 
@@ -377,6 +528,8 @@ export async function insertEntryAndRenumber(atBib, formData) {
 
   if (usingDibbers(course) && state.dibbers.length === 0)
     return { error: 'No dibbers loaded — load dibber numbers before registering this entry' };
+  if (usingBeacons(course) && state.beacons.length === 0)
+    return { error: 'No beacons loaded — load beacon numbers before registering this entry' };
 
   const idx = findEntryByBib(atBib);
   if (idx < 0) return { error: `Bib ${atBib} not found` };
@@ -396,21 +549,48 @@ export async function insertEntryAndRenumber(atBib, formData) {
     dibberNumber = +formData.dibberOverride;
   }
 
-  // Shift all entries from atBib upward
+  const useManualBeacon = !!(formData.dibberOverride && +formData.dibberOverride > 0);
+  let shiftBeaconListIdx = -1;
+  let usedBeacon = 0;
+
+  if (usingBeacons(course) && !useManualBeacon) {
+    const freeBeacon = +state.entries[idx].dibberNumber || 0;
+    const newListIdx = freeBeacon > 0 ? beaconListIdx(freeBeacon) : nextBeaconListIdx(idx);
+    if (newListIdx < 0 || newListIdx >= state.beacons.length)
+      return { error: 'No more beacon numbers available — load more beacon numbers' };
+    dibberNumber = +state.beacons[newListIdx].number;
+    shiftBeaconListIdx = newListIdx;
+    usedBeacon = dibberNumber;
+  } else if (useManualBeacon) {
+    dibberNumber = +formData.dibberOverride;
+    usedBeacon = dibberNumber;
+  }
+
+  // Shift all entries from atBib upward — guarded by usingDibbers(e.course)/usingBeacons(e.course)
+  // since both pools share the one entry.dibberNumber field (see createEntry()'s own doc); without
+  // that guard, a beacon-timed entry sitting between dibber-timed ones (or vice versa) would be
+  // mistaken for a member of the wrong sequence.
   let listIdx = shiftListIdx;
+  let beaconListIdxCursor = shiftBeaconListIdx;
   for (let i = idx; i < state.entries.length; i++) {
     const e = state.entries[i];
     e.bibNumber = +e.bibNumber + 1;
-    if (listIdx >= 0 && +e.dibberNumber > 0) {
+    if (listIdx >= 0 && usingDibbers(e.course) && +e.dibberNumber > 0) {
       listIdx++;
       e.dibberNumber = listIdx < state.dibbers.length ? +state.dibbers[listIdx].shortCode : 0;
+    } else if (beaconListIdxCursor >= 0 && usingBeacons(e.course) && +e.dibberNumber > 0) {
+      beaconListIdxCursor++;
+      e.dibberNumber = beaconListIdxCursor < state.beacons.length ? +state.beacons[beaconListIdxCursor].number : 0;
+      markBeaconUsed(e.dibberNumber);
     }
   }
 
   state.entries.splice(idx, 0, { bibNumber: atBib, dibberNumber, fraNumber: fra, name, club, gender, dob, category, course, preEntry, partner: partner || null });
   savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
+  markBeaconUsed(usedBeacon);
   await saveEntries();
+  if (usedBeacon || beaconListIdxCursor >= 0) await saveBeacons();
   await savePeople();
   return { bibNumber: atBib, dibberNumber, error: '' };
 }
@@ -427,21 +607,34 @@ export async function deleteEntryAndRenumber(bibNumber) {
 
   const deleted = state.entries[idx];
 
-  // Track where to resume dibber allocation (the slot freed by the deleted entry)
+  // Track where to resume dibber/beacon allocation (the slot freed by the deleted entry) — which
+  // pool the deleted entry's own dibberNumber belonged to is dictated by its course's timing
+  // method (see createEntry()'s own doc on the shared field), not by a separate field.
   let nextDibberIdx = -1;
-  if (+deleted.dibberNumber > 0) {
+  if (usingDibbers(deleted.course) && +deleted.dibberNumber > 0) {
     nextDibberIdx = state.dibbers.findIndex(d => +d.shortCode === +deleted.dibberNumber);
+  }
+  let nextBeaconIdx = -1;
+  if (usingBeacons(deleted.course) && +deleted.dibberNumber > 0) {
+    nextBeaconIdx = state.beacons.findIndex(b => +b.number === +deleted.dibberNumber);
   }
 
   state.entries.splice(idx, 1);
 
+  // Guarded by usingDibbers(e.course)/usingBeacons(e.course) — see insertEntryAndRenumber()'s own
+  // doc on why, now that both pools share entry.dibberNumber.
   for (let i = idx; i < state.entries.length; i++) {
     const e = state.entries[i];
     e.bibNumber = +e.bibNumber - 1;
-    if (nextDibberIdx >= 0 && +e.dibberNumber > 0) {
+    if (nextDibberIdx >= 0 && usingDibbers(e.course) && +e.dibberNumber > 0) {
       if (nextDibberIdx < state.dibbers.length) {
         e.dibberNumber = +state.dibbers[nextDibberIdx].shortCode;
         nextDibberIdx++;
+      }
+    } else if (nextBeaconIdx >= 0 && usingBeacons(e.course) && +e.dibberNumber > 0) {
+      if (nextBeaconIdx < state.beacons.length) {
+        e.dibberNumber = +state.beacons[nextBeaconIdx].number;
+        nextBeaconIdx++;
       }
     }
   }
@@ -485,7 +678,10 @@ export function getEntryName(entry) {
 export function exportSITimingCSV(entries) {
   const rows = [];
   for (const e of entries) {
-    if (!e.bibNumber || !e.dibberNumber) continue;
+    // usingDibbers(e.course) — not just "has a dibberNumber" — since a beacon-timed entry's own
+    // fob number lives in this same shared field (see createEntry()'s own doc) and would
+    // otherwise be looked up against state.dibbers and wrongly rejected/thrown on below.
+    if (!e.bibNumber || !e.dibberNumber || !usingDibbers(e.course)) continue;
     const dibberEntry = state.dibbers.find(d => +d.shortCode === +e.dibberNumber);
     if (!dibberEntry) throw new Error(`Bib ${e.bibNumber}: dibber ${e.dibberNumber} not found in dibbers list — reload dibbers and retry`);
     const dibberLong = dibberEntry.longCode;

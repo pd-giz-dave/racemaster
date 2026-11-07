@@ -576,6 +576,59 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
     assert.deepEqual(rows.map(r => r.bibNumber), [1, 2]);
   });
 
+  it('carries an entry\'s dibberNumber onto its row as both fobNumber and (only when Beacons-timed) beaconNumber', () => {
+    state.event.timingMethod = 'Beacons';
+    state.entries[0].dibberNumber = 7; // a beacon number, since this course is Beacons-timed
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).fobNumber, 7);
+    assert.equal(rows.find(r => r.bibNumber === 1).beaconNumber, 7);
+    assert.equal(rows.find(r => r.bibNumber === 2).fobNumber, 0);
+    assert.equal(rows.find(r => r.bibNumber === 2).beaconNumber, 0);
+  });
+
+  it('exposes fobNumber from entry.dibberNumber regardless of timing method, but only surfaces it as beaconNumber when Beacons-timed', () => {
+    state.event.timingMethod = 'Dibbers'; // Seniors — both test entries are on this course
+    state.entries[0].dibberNumber = 42;
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).fobNumber, 42);
+    assert.equal(rows.find(r => r.bibNumber === 1).beaconNumber, 0); // Dibbers-timed — not a beacon
+  });
+
+  it('leaves fobReturned empty when no fob is allocated, or this entry\'s course has had no beacons report read yet', () => {
+    state.event.timingMethod = 'Beacons';
+    state.entries[0].dibberNumber = 42;
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).fobReturned, '');
+    assert.equal(rows.find(r => r.bibNumber === 2).fobReturned, '');
+  });
+
+  it('flags fobReturned from the beacons report matching this entry\'s own course', () => {
+    state.event = { name: 'Test Race', date: '23/08/2026', timingMethod: 'Beacons' };
+    state.entries[0].dibberNumber = 7;
+    state.entries[1].dibberNumber = 9;
+    state.beaconReports = [{
+      raceLabel: 'testrace-seniors-26-08-23', generatedAt: '', processedAt: '',
+      returned: [7], missing: [9],
+    }];
+    const rows = buildProgressRows();
+    assert.equal(rows.find(r => r.bibNumber === 1).fobReturned, 'returned');
+    assert.equal(rows.find(r => r.bibNumber === 2).fobReturned, 'missing');
+  });
+
+  // ToDo.MD line 320: "the CP and finish records received from the mobile app, or read from the
+  // server, is unaffected" by the timing method — matching is bib-number-only regardless of
+  // whether a course uses Stopwatch, Dibbers or Beacons.
+  it('matches a mobile CP/finish record to an entry by bib number alone, regardless of its course\'s timing method', () => {
+    for (const timingMethod of ['Stopwatch', 'Dibbers', 'Beacons']) {
+      state.event = { timingMethod, juniorTimingMethod: timingMethod };
+      state.mobileProgress = [{ action: 'Finish', number: 1, time: '00:30:00' }];
+      const rows = buildProgressRows();
+      const row1 = rows.find(r => r.bibNumber === 1);
+      assert.equal(row1.finishTime, '00:30:00');
+      assert.equal(row1.name, 'Alice');
+    }
+  });
+
   it('passes a CP_RETIRE cpTimes value straight through to the row, alongside the DNF finishTime', () => {
     state.mobileProgress = [{ action: 'DNF', number: 2, time: '' }];
     state.mobileCheckpoints = [{ bibNumber: 2, cpTimes: { 1: CP_RETIRE } }];

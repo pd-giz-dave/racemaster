@@ -8,11 +8,11 @@ import {
 } from '../entries.js';
 import { SI } from '../si-schema.js';
 
-import { getNextBibNumber, getNextDibberNumber } from '../data.js';
+import { getNextBibNumber, getNextDibberNumber, getNextBeaconNumber } from '../data.js';
 import { calculateCategory, calculateCourse, calculatePairCategory, derivePairGender } from '../categories.js';
 import { COURSE } from '../constants.js';
 import { cleanName, capitalise, showBusy, normaliseClub, normaliseGender, escHtml } from '../utils.js';
-import { usingDibbers } from '../time-utils.js';
+import { usingDibbers, usingBeacons } from '../time-utils.js';
 import {
   val, fillForm, clearForm, on, setHTML, showStatus, showConfirmDialog,
   populateCategoryDropdown, updateDatalistNames, updateDatalistClubs,
@@ -181,7 +181,9 @@ export function updateDibberField() {
   const dibEl = document.getElementById('entry-form-dibber');
   if (!dibEl || document.activeElement === dibEl || editingBib) return;
   const course = val('entry-form-course') || COURSE.SENIORS;
-  dibEl.value = usingDibbers(course) ? (getNextDibberNumber()?.number ?? '') : '';
+  dibEl.value = usingDibbers(course) ? (getNextDibberNumber()?.number ?? '')
+              : usingBeacons(course) ? (getNextBeaconNumber()?.number ?? '')
+              : '';
 }
 
 export function fillFormForEdit(bib) {
@@ -261,7 +263,8 @@ function focusFirstEntryField() {
 // ---- Insert before row ----
 
 function fillFormForInsert(bib) {
-  const freeDibber = state.entries.find(e => +e.bibNumber === bib)?.dibberNumber || '';
+  const insertedAtEntry = state.entries.find(e => +e.bibNumber === bib);
+  const freeDibber = insertedAtEntry?.dibberNumber || '';
   insertingAtBib = bib;
   clearForm('entry-form-fields');
   const typeEl = document.getElementById('entry-form-type');
@@ -322,12 +325,24 @@ export async function submitEntryForm() {
       }
       return;
     }
-    const typedDibber = +val('entry-form-dibber') || 0;
-    if (typedDibber > 0) {
-      const dibberEntryIdx = findEntryByDibber(typedDibber);
+    const typedFob = +val('entry-form-dibber') || 0;
+    const formCourse = val('entry-form-course') || COURSE.SENIORS;
+    if (typedFob > 0 && usingBeacons(formCourse)) {
+      const beaconEntryIdx = findEntryByDibber(typedFob);
+      if (beaconEntryIdx >= 0) {
+        const clashBib = state.entries[beaconEntryIdx].bibNumber;
+        if (await showConfirmDialog(`Beacon ${typedFob} is already assigned to bib ${clashBib}. Edit that entry?`, 'Edit')) {
+          fillFormForEdit(clashBib);
+        } else {
+          document.getElementById('entry-form-dibber').value = getNextBeaconNumber()?.number ?? '';
+        }
+        return;
+      }
+    } else if (typedFob > 0) {
+      const dibberEntryIdx = findEntryByDibber(typedFob);
       if (dibberEntryIdx >= 0) {
         const clashBib = state.entries[dibberEntryIdx].bibNumber;
-        if (await showConfirmDialog(`Dibber ${typedDibber} is already assigned to bib ${clashBib}. Edit that entry?`, 'Edit')) {
+        if (await showConfirmDialog(`Dibber ${typedFob} is already assigned to bib ${clashBib}. Edit that entry?`, 'Edit')) {
           fillFormForEdit(clashBib);
         } else {
           document.getElementById('entry-form-dibber').value = getNextDibberNumber()?.number ?? '';
@@ -360,6 +375,8 @@ export async function submitEntryForm() {
     preEntry:    val('entry-form-peno'),
     predictedTime: val('entry-form-predicted'),
     bibOverride:    +val('entry-form-bib')    || 0,
+    // One shared value for either pool — js/entries.js disambiguates by the course's own timing
+    // method (usingDibbers/usingBeacons), see its own doc on why there's no separate key here.
     dibberOverride: +val('entry-form-dibber') || 0,
     overrideBan,
     partner: isPairMode() ? {
@@ -440,7 +457,7 @@ function focusEntryErrorField(error) {
   else if (/birth|dob/i.test(error))             id = 'entry-form-dob';
   else if (/predicted time/i.test(error))        id = 'entry-form-predicted';
   else if (/\bbib\b/i.test(error))               id = 'entry-form-bib';
-  else if (/dibber/i.test(error))                id = 'entry-form-dibber';
+  else if (/dibber|beacon/i.test(error))         id = 'entry-form-dibber';
   document.getElementById(id)?.focus();
 }
 

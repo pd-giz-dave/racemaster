@@ -1250,6 +1250,20 @@ export async function reconnectToKnownDevice(device, onProgress) {
 // cached for the raceLabel it was adopted into (built by the caller, mobile-files-ble.js's own
 // currentRaceProgressContext(), the same way currentRaceCandidates already is — see that
 // function's own doc for why this file stays free of any direct state.js dependency).
+// Placeholder for pulling a beacons.json post-race housekeeping report over Bluetooth (ToDo.MD
+// "Add a new timing method" — Beacons) — racemaster-mobile has no beacon-report GATT
+// characteristic yet (its own "Close Beacons" screen is still a UI placeholder), so there is
+// nothing to actually pull. Returns {supported: false} rather than throwing, so a caller (see
+// js/views/mobile-files-beacons.js's "Read beacons report" button) can fall back to the
+// server-read path (apiReadBeaconsReport) without treating this as an error. Once the mobile side
+// adds a real characteristic (presumably alongside PROGRESS_CHARACTERISTIC_UUID — see the UUID
+// list at the top of this file), only this function's body needs to change to a real
+// pullChunkedArray()-style pull; nothing calling it needs to change.
+export async function pullBeaconsReportFromConnectedPhone() {
+  if (!isConnected()) return { supported: false, report: null };
+  return { supported: false, report: null };
+}
+
 export async function pullFromConnectedPhone({ currentRaceCandidates = [], adoptedTargets = [] } = {}) {
   if (!isConnected()) throw new Error('Not connected to a phone.');
   // Captured now, before anything else in here awaits — same reasoning as pullChunkedArray's own

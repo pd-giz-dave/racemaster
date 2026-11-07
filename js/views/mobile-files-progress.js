@@ -258,6 +258,19 @@ export function renderMobileProgressTable() {
     name:       r => escHtml(r.invalid ? '--entry missing--' : r.name),
     category:   r => escHtml(r.category),
     course:     r => escHtml(r.course),
+    // fobNumber/fobReturned (buildProgressRows()'s own doc) — a dibber-timed entry (or one with
+    // no fob allocated yet) has fobReturned === '' and shows the bare number with no suffix; a
+    // beacon-timed one shows "returned"/"not returned" once a beacons.json report has actually
+    // been read for its course, highlighted red while still outstanding — same
+    // color:var(--danger) convention the Beacons/Dibbers data pages already use for their own
+    // "needs attention" cells.
+    fobNumber:  r => {
+      if (!r.fobNumber) return '';
+      const suffix = r.fobReturned === 'missing' ? ' — not returned'
+        : r.fobReturned === 'returned' ? ' — returned' : '';
+      const text = escHtml(`${r.fobNumber}${suffix}`);
+      return r.fobReturned === 'missing' ? `<span style="color:var(--danger)">${text}</span>` : text;
+    },
     // Time-of-day, not elapsed — the raw device reading, straight out of the file (this tab's own
     // job, per buildProgressRows()'s doc; adjusted elapsed times are the Results & Prize List
     // Splits tab's job, not this one), same reasoning the CP columns just below already apply.

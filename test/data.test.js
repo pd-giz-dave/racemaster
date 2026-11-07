@@ -17,7 +17,11 @@ beforeEach(() => {
   state.entries    = [];
   state.dibbers    = [];
   state.preEntries = [];
-  state.event      = { date: '15/06/2026', firstBibNumber: 1, firstDibberNumber: 1 };
+  // timingMethod: 'Dibbers' — getLastDibberNumber()/getNextDibberNumber() below are now scoped to
+  // usingDibbers(e.course) (entry.dibberNumber is shared with the beacon pool, see
+  // createEntry()'s own doc in schema.js), so test entries (none of which set their own course)
+  // need the event's default timing method to actually be Dibbers.
+  state.event      = { date: '15/06/2026', firstBibNumber: 1, firstDibberNumber: 1, timingMethod: 'Dibbers' };
 });
 
 describe('data.js:addPerson', () => {

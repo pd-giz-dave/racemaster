@@ -7,7 +7,7 @@ import { startPresenceWatch } from './presence.js';
 import { startProgressSync } from './progress-sync.js';
 import { wireDatasets, renderDatasets, hasUnconfirmedLogin } from './views/datasets.js';
 import { showBusy } from './utils.js';
-import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog } from './ui.js';
+import { showStatus, updateBannerEventName, updateDatalistNames, updateDatalistClubs, updateDatalistRoles, showConfirmDialog, wireDateInputs } from './ui.js';
 
 import { renderHome }       from './views/home.js';
 import { renderEvent, wireEvent }           from './views/event.js';
@@ -21,6 +21,7 @@ import { renderPeople, wirePeople }         from './views/people.js';
 import { renderClubs, wireClubs }         from './views/clubs.js';
 import { renderRoles, wireRoles }           from './views/roles.js';
 import { renderDibbers, wireDibbers }       from './views/dibbers.js';
+import { renderBeacons, wireBeacons }       from './views/beacons.js';
 import { renderCategories, wireCategories } from './views/categories.js';
 import { renderForms, wireForms }           from './views/forms.js';
 import { renderSIResults, wireSIResults }   from './views/si-results.js';
@@ -265,6 +266,7 @@ function renderView(v) {
     case 'clubs':        renderClubs();        break;
     case 'roles':        renderRoles();        break;
     case 'dibbers':      renderDibbers();      break;
+    case 'beacons':      renderBeacons();      break;
     case 'categories':   renderCategories();   break;
     case 'forms':        renderForms();        break;
     case 'si-results':   renderSIResults();    break;
@@ -288,10 +290,12 @@ function wireEvents() {
   wireClubs();
   wireRoles();
   wireDibbers();
+  wireBeacons();
   wireCategories();
   wireForms();
   wireSIResults();
   wireMobileFiles();
+  wireDateInputs();
 }
 
 // Boot

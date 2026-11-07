@@ -2,10 +2,11 @@
 
 import { state } from './state.js';
 import { savePeople } from './state.js';
-import { createPerson, createDibber } from './schema.js';
+import { createPerson, createDibber, createBeacon } from './schema.js';
 import { CSV } from './csv-schema.js';
 import { GENDER } from './constants.js';
 import { normaliseDate, cleanName, sortBy, today, normaliseGender, toISODate } from './utils.js';
+import { usingDibbers, usingBeacons } from './time-utils.js';
 
 // ====================================
 // People, clubs and dibbers management
@@ -66,9 +67,13 @@ export function sortPeople() {
   state.people = sortBy(state.people, 'name', 'dob');
 }
 
-/** Get last dibber short code number used in entries */
+/** Get last dibber short code number used in entries. Scoped to usingDibbers(e.course) — the
+ *  beacon pool shares this same entry.dibberNumber field (see createEntry()'s own doc), so a
+ *  mixed-timing-method event (e.g. Seniors on Dibbers, Juniors on Beacons) must not let a
+ *  beacon-timed entry's own number be mistaken for "the last dibber used". */
 export function getLastDibberNumber() {
   for (let i = state.entries.length - 1; i >= 0; i--) {
+    if (!usingDibbers(state.entries[i].course)) continue;
     const n = +state.entries[i].dibberNumber;
     if (n > 0) return n;
   }
@@ -112,6 +117,42 @@ export function getNextDibberNumber() {
   }
   if (idx >= state.dibbers.length) return null;
   return { number: +state.dibbers[idx].shortCode, skipped };
+}
+
+/** Get last beacon number used in entries. Scoped to usingBeacons(e.course) — see
+ *  getLastDibberNumber()'s own doc on why, now that both pools share entry.dibberNumber. */
+export function getLastBeaconNumber() {
+  for (let i = state.entries.length - 1; i >= 0; i--) {
+    if (!usingBeacons(state.entries[i].course)) continue;
+    const n = +state.entries[i].dibberNumber;
+    if (n > 0) return n;
+  }
+  return 0;
+}
+
+/** Get next beacon number to use, skipping lost ones. Mirrors getNextDibberNumber() —
+ *  anchored on the same state.event.firstDibberNumber ("First Fob Number") setting the dibber
+ *  allocator uses, since it's one shared starting-number anchor for both pools.
+ *  Returns { number, skipped } or null if list exhausted. */
+export function getNextBeaconNumber() {
+  if (state.beacons.length === 0) return null;
+  const last = getLastBeaconNumber();
+  let idx;
+  if (last > 0) {
+    const i = state.beacons.findIndex(b => +b.number === last);
+    idx = i >= 0 ? i + 1 : state.beacons.length;
+  } else {
+    const first = +state.event.firstDibberNumber || 1;
+    idx = state.beacons.findIndex(b => +b.number >= first);
+    if (idx < 0) return null;
+  }
+  const skipped = [];
+  while (idx < state.beacons.length && state.beacons[idx].lost) {
+    skipped.push(state.beacons[idx].number);
+    idx++;
+  }
+  if (idx >= state.beacons.length) return null;
+  return { number: +state.beacons[idx].number, skipped };
 }
 
 /** Merge pre-entries into people list */
@@ -187,8 +228,36 @@ export function normaliseDibberRows(rows) {
     shortCode: r[shortKey],
     longCode:  r[longKey],
     owner:     ownerKey ? r[ownerKey] : '',
-    lost:      lostKey  ? r[lostKey]  : '',
+    lost:      lostKey  ? normaliseDate(r[lostKey]) : '',
     notes:     notesKey ? r[notesKey] : '',
+  }));
+}
+
+function findBeaconAlias(keys, field) {
+  return (CSV.beacons.aliases[field] ?? [field]).find(a => keys.includes(a));
+}
+
+export function normaliseBeaconRows(rows) {
+  if (!rows.length) return rows;
+  const keys       = Object.keys(rows[0]);
+  const numberKey  = findBeaconAlias(keys, 'number');
+  if (!numberKey) return null;
+  const ownerKey    = findBeaconAlias(keys, 'owner');
+  const acquiredKey = findBeaconAlias(keys, 'dateAcquired');
+  const hoursKey     = findBeaconAlias(keys, 'totalHours');
+  const batteryKey   = findBeaconAlias(keys, 'batteryLevel');
+  const lastUsedKey  = findBeaconAlias(keys, 'lastUsed');
+  const lostKey      = findBeaconAlias(keys, 'lost');
+  const notesKey     = findBeaconAlias(keys, 'notes');
+  return rows.map(r => createBeacon({
+    number:       r[numberKey],
+    owner:        ownerKey    ? r[ownerKey]    : '',
+    dateAcquired: acquiredKey ? normaliseDate(r[acquiredKey]) : '',
+    totalHours:   hoursKey    ? r[hoursKey]    : 0,
+    batteryLevel: batteryKey  ? r[batteryKey]  : 100,
+    lastUsed:     lastUsedKey ? normaliseDate(r[lastUsedKey]) : '',
+    lost:         lostKey     ? normaliseDate(r[lostKey])     : '',
+    notes:        notesKey    ? r[notesKey]    : '',
   }));
 }
 

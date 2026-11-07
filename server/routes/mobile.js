@@ -9,6 +9,7 @@ import {
   mergeProgress, touchProgress, readProgress, progressIsUnchanged,
   getMobileRacesForUser, getMobileRacesStatusForUser, getAvailableRacesForUser,
   isReservedMobileFile, readAdoptions, setAdoption, classifyPush, latestNewRace,
+  readBeacons, writeBeacons,
 } from '../mobile.js';
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
@@ -20,7 +21,9 @@ import path from 'path';
 export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) {
   // POST /api/mobile/:owner/:raceLabel/progress — the web app pushes changes to the Mobile Files
   // page's own Progress tab contents, race-wide: {raceName, raceDate, entries: [{bibNumber, name,
-  // category, course, startTime, finishTime, cpTimes}], removed: [bibNumber, ...]} — only the
+  // category, course, startTime, finishTime, cpTimes, beaconNumber}], removed: [bibNumber, ...]} —
+  // beaconNumber (0 when unset) matches racemaster-mobile's own ProgressEntry.beaconNumber field,
+  // sent so a phone's own beacon-detection logic can resolve a scanned beacon number to a bib. Only the
   // entries that actually changed since the web app's own last successful push for this race
   // label (see js/progress-sync.js), not its full recomputed set every time; `removed` names any
   // bib no longer present at all (e.g. an Entries deletion), the one thing a pure upsert can't
@@ -69,6 +72,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
         startTime: typeof e?.startTime === 'string' ? e.startTime : '',
         finishTime: typeof e?.finishTime === 'string' ? e.finishTime : '',
         cpTimes: sanitiseCpTimes(e?.cpTimes),
+        beaconNumber: Number(e?.beaconNumber) || 0,
       }))
       .filter(e => e.bibNumber > 0);
     const removed = Array.isArray(body?.removed) ? body.removed.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
@@ -103,6 +107,53 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
     const touched = touchProgress(owner, raceLabel);
     console.log(`[progress] ${username} -> ${owner}/${raceLabel}: activated (generatedAt=${touched.generatedAt})`);
     jsonReply(res, 200, { ok: true, generatedAt: touched.generatedAt });
+    return true;
+  }
+
+  // POST /api/mobile/:owner/:raceLabel/beacons — the mobile app's post-race beacon housekeeping
+  // report lands here, same owner-or-admin rule and path shape as POST .../progress above: the
+  // FULL current snapshot of beacons processed so far this race (not a delta), replacing whatever
+  // was stored — see writeBeacons's own doc in server/mobile.js for why a plain replace is
+  // correct here (idempotency/late-return handling is the web app's own job, not the server's).
+  if (/^\/api\/mobile\/[^/]+\/[^/]+\/beacons$/.test(pathname) && req.method === 'POST') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const [owner, raceLabel] = pathname.slice('/api/mobile/'.length, -'/beacons'.length)
+      .split('/').map(decodeURIComponent).map(sanitiseName);
+    if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
+    if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot write to another user\'s dataset' }); return true; }
+    let body;
+    try { body = JSON.parse(await readBody(req)); }
+    catch { jsonReply(res, 400, { error: 'Invalid JSON' }); return true; }
+    const powerOffBatch = Array.isArray(body?.powerOffBatch)
+      ? body.powerOffBatch
+          .map(r => ({
+            beaconNumber: Number(r?.beaconNumber) || 0,
+            batteryLevel: Number.isFinite(Number(r?.batteryLevel)) ? Number(r.batteryLevel) : 0,
+            poweredOffAt: typeof r?.poweredOffAt === 'string' ? r.poweredOffAt : '',
+          }))
+          .filter(r => r.beaconNumber > 0)
+      : [];
+    const payload = { raceLabel, generatedAt: new Date().toISOString(), powerOffBatch };
+    writeBeacons(owner, raceLabel, payload);
+    console.log(`[beacons] ${username} -> ${owner}/${raceLabel}: ${powerOffBatch.length} beacon(s) reported`);
+    jsonReply(res, 200, { ok: true, generatedAt: payload.generatedAt });
+    return true;
+  }
+
+  // GET /api/mobile/:owner/:raceLabel/beacons — the web app's "Read beacons report" action
+  // (server-read leg, see js/views/mobile-files-beacons.js) — same owner-or-admin rule as the
+  // POST above.
+  if (/^\/api\/mobile\/[^/]+\/[^/]+\/beacons$/.test(pathname) && req.method === 'GET') {
+    const username = getAuthUser(req);
+    if (!username) { jsonReply(res, 401, { error: 'Unauthorised' }); return true; }
+    const [owner, raceLabel] = pathname.slice('/api/mobile/'.length, -'/beacons'.length)
+      .split('/').map(decodeURIComponent).map(sanitiseName);
+    if (!owner || !raceLabel) { jsonReply(res, 400, { error: 'Invalid path' }); return true; }
+    if (owner !== username && !isAdmin(username)) { jsonReply(res, 403, { error: 'Cannot read another user\'s dataset' }); return true; }
+    const report = readBeacons(owner, raceLabel);
+    if (!report) { jsonReply(res, 404, { error: 'No beacons report recorded for this race yet' }); return true; }
+    jsonReply(res, 200, report);
     return true;
   }
 

@@ -13,13 +13,28 @@ export function createPerson({
   return { name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal, banned };
 }
 
+// lost is a plain date, DD/MM/YYYY — the same convention every other date field in the app
+// uses (state.event.date, a person's dob, etc.) — never an ISO instant.
 export function createDibber({
   shortCode = 0, longCode = 0, owner = '', lost = '', notes = '',
 } = {}) {
   return { shortCode, longCode, owner, lost, notes };
 }
 
+// dateAcquired/lastUsed/lost are plain dates, DD/MM/YYYY — the same convention every other date
+// field in the app uses (state.event.date, a person's dob, etc.) — never an ISO instant.
+export function createBeacon({
+  number = 0, owner = '', dateAcquired = '', totalHours = 0, batteryLevel = 100,
+  lastUsed = '', lost = '', notes = '',
+} = {}) {
+  return { number, owner, dateAcquired, totalHours, batteryLevel, lastUsed, lost, notes };
+}
+
 export function createEntry({
+  // dibberNumber holds whichever fob number this entry has been allocated — an SI dibber or a
+  // beacon, mutually exclusive per entry (a course has exactly one timing method at a time, see
+  // js/time-utils.js's usingDibbers()/usingBeacons()) — which pool it's drawn from, and what it
+  // means, is dictated entirely by the event's own timing-method setting, not by a separate field.
   bibNumber = 0, dibberNumber = 0, fraNumber = '', name = '', club = '',
   gender = '', dob = '', category = '', course = '', preEntry = '',
   partner = null,  // { name, gender, dob, club, fraNumber } — null for solo entries
@@ -60,6 +75,7 @@ export function createEvent({
   juniorLimit = 'None', juniorStartTime = '18:50:00', juniorEntryLimit = 100,
   juniorTimingMethod = 'Stopwatch', hasPairs = false, notes = '',
   isHandicap = false, handicapTargetTime = '', handicapDsqThreshold = 10,
+  beaconLowBatteryThreshold = 20,
 } = {}) {
   return {
     name, distance, date, startTime,
@@ -68,5 +84,6 @@ export function createEvent({
     prizeDepthOverall, prizeDepthPerCategory, juniorPrizeDepthPerCategory,
     juniorLimit, juniorStartTime, juniorEntryLimit, juniorTimingMethod, hasPairs, notes,
     isHandicap, handicapTargetTime, handicapDsqThreshold,
+    beaconLowBatteryThreshold,
   };
 }

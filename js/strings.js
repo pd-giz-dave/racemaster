@@ -31,7 +31,7 @@ export const TOOLTIPS = {
   'ev-distance':                 'Race distance in kilometres',
   'ev-categories':               'Age category scheme — FRA uses 5-year bands, WFRA uses 10-year bands',
   'ev-first-bib':                'Bib numbers are assigned sequentially starting from this number',
-  'ev-first-dibber':             'Dibber (SI card) short codes are allocated starting from this number',
+  'ev-first-dibber':             'Fob numbers (SI dibber short codes, or beacon numbers) are allocated starting from this number',
   'ev-race-mode-solo':           'Standard race — one entrant per bib',
   'ev-race-mode-pairs':          'The race includes pairs (two competitors sharing a single bib and/or dibber)',
   'ev-race-mode-handicap':       'Handicap race — staggered starts from predicted finish times, DSQ on deviation',
@@ -39,7 +39,8 @@ export const TOOLTIPS = {
   'ev-handicap-dsq':             'Maximum % deviation between predicted and actual time before a runner is disqualified',
   'ev-start-time':               'Expected mass start time for seniors (info only, the actual time is recorded in the finishers list)',
   'ev-entry-limit':              'Maximum number of senior entries allowed (0 = no limit)',
-  'ev-timing-method':            'How senior finish times are recorded — Stopwatch (manual entry), Dibbers (SportIdent), or None',
+  'ev-timing-method':            'How senior finish times are recorded — Stopwatch (manual entry), Dibbers (SportIdent), Beacons (Bluetooth, recorded via the mobile app like Stopwatch), or None',
+  'ev-beacon-threshold':         'Battery level (%) below which a beacon is highlighted as needing attention — applies whenever either timing method is set to Beacons',
   'ev-male-record':              'Current male course record — used to highlight new records in the results',
   'ev-female-record':            'Current female course record — used to highlight new records in the results',
   'ev-junior-start-time':        'Expected mass start time for juniors (info only, the actual time is recorded in the finishers list)',
@@ -76,7 +77,7 @@ export const TOOLTIPS = {
   'entry-form-type':             'Solo entry or pair (two competitors sharing one bib and dibber)',
   'entry-form-peno':             'Pre-entry reference number — auto-fills details from the pre-entries list; or just type a name',
   'entry-form-bib':              'Bib number — assigned automatically in sequence; edit to override',
-  'entry-form-dibber':           'SI card (dibber) short code — assigned automatically in sequence; edit to override',
+  'entry-form-dibber':           'Fob number — SI card (dibber) short code or beacon number, whichever this course uses — assigned automatically in sequence; edit to override',
   'entry-form-name':             "Competitor's full name — type to search the people database",
   'entry-form-dob':              'Date of birth (DD/MM/YY) — used to determine age category',
   'entry-form-gender':           'Gender — used to determine age category',
@@ -165,6 +166,16 @@ export const TOOLTIPS = {
   'btn-cancel-merge-dibbers':    'Cancel the merge operation',
   'btn-clear-dibbers':           'Delete all dibber records - cannot be undone',
 
+  // Beacons
+  'btn-add-beacon':              'Add a beacon record manually',
+  'btn-import-beacons':          'Import beacon records from a CSV file',
+  'btn-export-beacons':          'Export beacon records as a CSV file',
+  'btn-merge-beacons':           'Merge beacon records from another dataset or JSON backup file',
+  'btn-do-merge-ds-beacons':     'Merge beacons from the selected dataset into this one',
+  'btn-merge-from-file-beacons': 'Merge beacons from a JSON file exported from another dataset',
+  'btn-cancel-merge-beacons':    'Cancel the merge operation',
+  'btn-clear-beacons':           'Delete all beacon records - cannot be undone',
+
   // Categories
   'btn-add-category':            'Add a new row to the custom categories',
   'btn-load-fra-preset':         'Copy the built-in FRA categories into the custom list (replaces any existing custom categories)',
@@ -179,6 +190,7 @@ export const TOOLTIPS = {
   'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Offers a direct reconnect for a phone connected to before; otherwise confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
   'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s), if any, (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — a Finish file is not required, checkpoint files alone still populate what they can; requires valid bib numbers, the same race, no empty files, and no more than one file per location',
   'btn-clear-progress':          'Delete the finishers list and all checkpoint data computed by Update Progress — also clears their effects elsewhere, e.g. Safety Check',
+  'btn-read-beacons-report':     'Read this race\'s post-race beacons housekeeping report (battery levels and power-off times) — tries a connected phone over Bluetooth first, then falls back to the server. Safe to re-read a growing report: already-processed power-offs aren\'t double-counted, and late returns update the missing list',
   'btn-ble-logging':             'Log routine Bluetooth connect/pull activity to the browser console — off by default; a genuine connect/pull failure is always logged regardless',
 
   // Data file / auth
@@ -448,9 +460,28 @@ export const HELP = {
   'view-dibbers': `
     <p>Records the dibbers available for allocation during race-day registration.
         The short-code is used during registration and mapped to its corresponding long code when exporting entries to SI Timing.</p>
-    <p>If the <strong>Lost</strong> column has a date, it indicates the dibber is no longer available and will not be allocated.</p>
-    <p>Use <strong>Import CSV</strong> to import a dibber list, new short codes are added, existing ones are updated. 
+    <p>If the <strong>Lost</strong> column has a date, it indicates the dibber is no longer available and will not be allocated.
+        Type it as <strong>DD/MM/YY</strong>, like any other date field in the app, or pick one with the calendar button.</p>
+    <p>Use <strong>Import CSV</strong> to import a dibber list, new short codes are added, existing ones are updated.
         The CSV must include at least columns of "Short Code" and "Long Code".</p>
+  `,
+  'view-beacons': `
+    <p>Records the Bluetooth beacons available for allocation during race-day registration, when a course's
+        Timing Method (Event Settings) is set to <strong>Beacons</strong>. Allocated the same way as dibbers —
+        numbers are assigned in sequence starting from the event's First Fob Number.</p>
+    <p>If the <strong>Lost</strong> column has a date, it indicates the beacon is no longer available and will
+        not be allocated. <strong>Date Acquired</strong>, <strong>Last Used</strong> and <strong>Lost</strong>
+        can all be typed as <strong>DD/MM/YY</strong>, like any other date field in the app, or picked with the
+        calendar button.</p>
+    <p><strong>Last Used</strong> is set the moment a beacon is allocated to an entry, before any housekeeping
+        report is read. <strong>Battery Level</strong> and <strong>Total Hours</strong> (and a refreshed
+        <strong>Last Used</strong>) are then updated automatically from the Mobile Files page's Beacons tab once
+        a race's post-race housekeeping report is read — a battery level below the event's Low Battery Threshold
+        (Event Settings) is highlighted.</p>
+    <p><strong>Add Beacons</strong> defaults Owner, Date Acquired and Notes from the previous beacon and, after
+        each Save, immediately opens the next number — keep pressing Enter to add a whole batch, Cancel to stop.</p>
+    <p>Use <strong>Import CSV</strong> to import a beacon list, new numbers are added, existing ones are updated.
+        The CSV must include at least a "Number" column.</p>
   `,
   'view-categories': `
     <p>The <strong>FRA</strong> (5-year age groups) and <strong>WFRA</strong> (10-year age groups)
@@ -867,7 +898,28 @@ export const PAGES = {
   `,
 
   'whats-new': `
-    <h3>v0.0.28-alpha - current version</h3>
+    <h3>v0.0.29-alpha - current version</h3>
+    <ul>
+      <li>Added a new <strong>Beacons</strong> timing method, alongside Dibbers and Stopwatch — a
+          <strong>Beacons</strong> catalogue page tracks each beacon's owner, dates acquired/last
+          used/lost, accumulated hours and battery level, with a configurable low-battery
+          highlight threshold in Event Settings; entries allocate from whichever pool (Dibbers or
+          Beacons) the course's timing method uses through a single, shared <strong>Fob
+          Num</strong> field (renamed from <strong>Dibber Num</strong> on every entry form); a
+          post-race beacons housekeeping report can be read from the Mobile Files page's new
+          <strong>Beacons</strong> tab, flagging any beacon that was issued but never returned</li>
+      <li>The Mobile Files <strong>Progress</strong> tab now shows each entrant's allocated fob
+          number, highlighting any that hasn't been returned yet</li>
+      <li><strong>Date Acquired</strong>, <strong>Last Used</strong> and <strong>Lost</strong> on
+          the Beacons and Dibbers pages can now be typed as <strong>DD/MM/YY</strong>, like every
+          other date field in the app, and have a calendar button to pick one instead — editing a
+          row on either page now wraps onto multiple lines rather than needing a horizontal
+          scroll to reach Notes or the Save/Cancel buttons</li>
+      <li><strong>Add Beacons</strong> now keeps adding — Owner, Date Acquired and Notes default
+          from the previous entry, and after each Save it immediately opens the next one, so a
+          whole batch can be entered by just pressing Enter repeatedly until Cancel is clicked</li>
+    </ul>
+    <h3>v0.0.28-alpha</h3>
     <ul>
       <li>In a <strong>Handicap Race</strong>, the Prizes tab and printed Prize List now show each
           winner's <strong>Dev %</strong> instead of their finish time, and add a trailing
@@ -1270,7 +1322,7 @@ export const TABLES = {
     { id: 'dob',       label: 'DoB',       title: 'Date of birth' },
     { id: 'cat',       label: 'Cat',       title: 'Age category' },
     { id: 'course',    label: 'Course',    title: 'Senior or junior course' },
-    { id: 'dibber',    label: 'Dibber',    title: 'SportIdent card short number' },
+    { id: 'dibber',    label: 'Fob',       title: 'SportIdent card short number, or beacon number, whichever this course uses' },
     { id: 'pre_no',    label: 'Pre-No',    title: 'Pre-entry reference number' },
     { id: 'predicted', label: 'Predicted', title: 'Predicted finish time (handicap races only; blank otherwise)' },
     { id: 'start',     label: 'Start',     title: 'Scheduled handicap start time (handicap races only; blank otherwise)' },
@@ -1476,6 +1528,17 @@ export const TABLES = {
     { id: 'notes',      label: 'Notes',      title: 'Additional notes' },
     { id: 'actions',    label: 'Actions',    title: 'Edit or delete' },
   ],
+  beacons: [
+    { id: 'number',       label: 'Number',       title: 'Beacon number', sticky: true },
+    { id: 'owner',        label: 'Owner',        title: 'Who owns this beacon' },
+    { id: 'dateAcquired', label: 'Date Acquired', title: 'Date this beacon was acquired' },
+    { id: 'totalHours',   label: 'Total Hours',  title: 'Accumulated hours in use across every race (2h before start to power-off)' },
+    { id: 'batteryLevel', label: 'Battery Level', title: 'Battery level (%) as of its last housekeeping report — highlighted below the event\'s Low Battery Threshold' },
+    { id: 'lastUsed',     label: 'Last Used',    title: 'Date this beacon was last used — set as soon as it\'s allocated to an entry, updated once a beacons housekeeping report confirms its power-off' },
+    { id: 'lost',         label: 'Lost',         title: 'Date this beacon was lost — lost beacons are excluded from allocation' },
+    { id: 'notes',        label: 'Notes',        title: 'Additional notes' },
+    { id: 'actions',      label: 'Actions',      title: 'Edit or delete' },
+  ],
   'mobile-files': [
     { id: 'select',    label: '',          title: 'Tick to include in Update Progress — ticking a phone whose race isn\'t this event\'s own also adopts it into this race (see Help)', sticky: true },
     { id: 'raceLabel', label: 'Race',      title: 'Race name (date suffix dropped — see Race Date; hover for the full race label as recorded on the phone)', sticky: true, wrap: true },
@@ -1496,9 +1559,17 @@ export const TABLES = {
     { id: 'name',       label: 'Name',   title: "Competitor's name" },
     { id: 'course',     label: 'Course', title: 'Senior or junior course' },
     { id: 'category',   label: 'Cat',    title: 'Age category' },
+    { id: 'fobNumber',  label: 'Fob',    title: 'Allocated dibber/beacon number — for a beacon, highlighted once a beacons housekeeping report has been read and this one hasn\'t come back yet' },
     { id: 'start',      label: 'Start',  title: 'This bib\'s own raw device time-of-day for an explicit individual start, if any (early/late start) — not an elapsed time' },
     { id: 'finishTime', label: 'Finish', title: 'This bib\'s own raw device time-of-day for its finish, straight off the phone — not an elapsed time (see Results & Prize List for the adjusted race time), or literal "DNF"' },
     { id: 'cp',         label: 'CP',     title: 'This checkpoint\'s own raw device time-of-day for this bib, straight off the phone — not an elapsed time (see Results & Prize List\'s Splits tab for the adjusted elapsed figure), and not authoritative' },
+  ],
+  'mobile-beacons': [
+    { id: 'number',       label: 'Beacon',  title: 'Beacon number', sticky: true },
+    { id: 'status',       label: 'Status',  title: 'Returned (seen in the latest report) or still missing' },
+    { id: 'batteryLevel', label: 'Battery', title: 'Battery level (%) as of this report — highlighted below the event\'s Low Battery Threshold' },
+    { id: 'lastUsed',     label: 'Last Used', title: 'Date this beacon was last used, from the Beacons catalogue' },
+    { id: 'owner',        label: 'Owner',   title: 'Who owns this beacon, from the Beacons catalogue' },
   ],
   datasets: [
     { id: 'name',       label: 'Dataset',    title: 'Dataset name', sticky: true, wrap: true },

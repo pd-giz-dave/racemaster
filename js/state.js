@@ -14,6 +14,7 @@ export const state = {
   people:           [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal, banned}
   // clubs derived from people — not persisted
   dibbers:          [],  // {shortCode, longCode, owner, lost, notes}
+  beacons:          [],  // {number, owner, dateAcquired, totalHours, batteryLevel, lastUsed, lost, notes}
   categories:       [],  // {minAge, maleCat, femaleCat, ref, maxDist} — active set (derived from event setting)
   customCategories: [],  // user-defined custom categories (edited on the Custom tab)
   roles:            [],  // {role, description}
@@ -26,6 +27,9 @@ export const state = {
   mobileProgress:   [],  // {action, number, time} — Start/Finish/DNF/Clock/etc from Mobile Files'
                           // Update Progress, kept genuinely separate from finishers (manual entry
                           // only) so a mobile pull can never overwrite/clobber it — see js/mobile-progress.js
+  beaconReports:    [],  // {raceLabel, generatedAt, processedAt, returned, missing} — one entry
+                          // per race, replaced wholesale each time a beacons.json report is
+                          // (re-)processed, see js/mobile-beacons.js
 
   // Runtime-only (not persisted)
   finishNumbersMap: {},  // 'S101' -> ['5','7'] (course-prefix + bib -> array of finisher indices)
@@ -39,6 +43,7 @@ export async function loadAll() {
     loadEvent(),
     loadList('people'),
     loadList('dibbers'),
+    loadList('beacons'),
     loadList('categories'),
     loadList('customCategories'),
     loadList('preEntries'),
@@ -48,6 +53,7 @@ export async function loadAll() {
     loadList('siResults'),
     loadList('mobileCheckpoints'),
     loadList('mobileProgress'),
+    loadList('beaconReports'),
     loadPreset('roles', BUILTIN_ROLES, r => ({ ...r })),
   ]);
   if (state.categories.length === 0) {
@@ -91,6 +97,7 @@ async function loadList(key) {
 export async function saveEvent()            { await writeTable('event',           [state.event]); }
 export async function savePeople()           { await writeTable('people',          state.people); }
 export async function saveDibbers()          { await writeTable('dibbers',         state.dibbers); }
+export async function saveBeacons()          { await writeTable('beacons',         state.beacons); }
 export async function saveCategories()       { await writeTable('categories',      state.categories); }
 export async function saveCustomCategories() { await writeTable('customCategories', state.customCategories); }
 export async function saveRoles()            { await writeTable('roles',           state.roles); }
@@ -101,6 +108,7 @@ export async function saveFinishers()        { await writeTable('finishers',    
 export async function saveSIResults()        { await writeTable('siResults',       state.siResults); }
 export async function saveMobileCheckpoints() { await writeTable('mobileCheckpoints', state.mobileCheckpoints); }
 export async function saveMobileProgress()    { await writeTable('mobileProgress',    state.mobileProgress); }
+export async function saveBeaconReports()     { await writeTable('beaconReports',     state.beaconReports); }
 
 export function applyFRACategories() {
   _applyPreset(FRA_CATEGORIES);

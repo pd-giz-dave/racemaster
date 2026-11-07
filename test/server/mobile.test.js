@@ -12,6 +12,7 @@ import {
   progressFilePath, readProgress, writeProgress, mergeProgress, touchProgress,
   progressIsUnchanged, parseRaceLabelDate,
   getMobileRacesForUser, getMobileRacesStatusForUser, getAvailableRacesForUser,
+  beaconsFilePath, readBeacons, writeBeacons,
 } from '../../server/mobile.js';
 
 beforeEach(() => {
@@ -67,6 +68,27 @@ describe('server/mobile.js:readProgress / writeProgress', () => {
 
   it('returns null when there is no progress file yet', () => {
     assert.equal(readProgress('alice', 'no-such-race'), null);
+  });
+});
+
+describe('server/mobile.js:readBeacons / writeBeacons', () => {
+  it('round-trips a beacons report payload', () => {
+    const payload = {
+      raceLabel: 'race1', generatedAt: '2026-08-23T10:00:00.000Z',
+      powerOffBatch: [{ beaconNumber: 1, batteryLevel: 72, poweredOffAt: '2026-08-23T09:50:00.000Z' }],
+    };
+    writeBeacons('alice', 'race1', payload);
+    assert.deepEqual(readBeacons('alice', 'race1'), payload);
+  });
+
+  it('returns null when there is no beacons report yet', () => {
+    assert.equal(readBeacons('alice', 'no-such-race'), null);
+  });
+
+  it('is excluded from device enumeration, under its own file name', () => {
+    writeBeacons('alice', 'race-26-08-23', { raceLabel: 'race-26-08-23', generatedAt: '', powerOffBatch: [] });
+    const race = getMobileRacesForUser('alice').find(r => r.raceLabel === 'race-26-08-23');
+    assert.equal(race.devices.some(d => d.name === 'beacons'), false);
   });
 });
 

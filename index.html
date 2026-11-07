@@ -35,7 +35,7 @@
     <button id="btn-nav-toggle" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <img src="favicon.ico" class="app-icon" alt="">
     <button id="btn-app-about" class="btn-help-header" data-view="about">?</button>
-    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.28-alpha)</button></h1>
+    <h1><span id="app-title-text">RaceMaster</span> <button id="btn-app-whats-new" class="btn-header-version" data-view="whats-new">(v0.0.29-alpha)</button></h1>
     <span class="event-name" id="home-event-name-header"></span>
     <span id="header-dataset-name"></span>
     <span id="header-multitab-warning" hidden title="This dataset is open in another tab or window on this device — edits made in both may overwrite each other"></span>
@@ -77,6 +77,7 @@
       <a href="#" data-view="people">People</a>
       <a href="#" data-view="clubs">Clubs</a>
       <a href="#" data-view="dibbers">Dibbers</a>
+      <a href="#" data-view="beacons">Beacons</a>
       <a href="#" data-view="categories">Categories</a>
       <a href="#" data-view="roles">Roles</a>
 
@@ -160,7 +161,7 @@
             <input type="number" id="ev-first-bib" min="1" value="1">
           </div>
           <div class="form-field">
-            <label for="ev-first-dibber">First Dibber Number</label>
+            <label for="ev-first-dibber">First Fob Number</label>
             <input type="number" id="ev-first-dibber" min="1" value="1">
           </div>
         </div>
@@ -182,8 +183,13 @@
             <select id="ev-timing-method">
               <option value="Stopwatch">Stopwatch</option>
               <option value="Dibbers">Dibbers</option>
+              <option value="Beacons">Beacons</option>
               <option value="None">None</option>
             </select>
+          </div>
+          <div class="form-field" id="ev-beacon-threshold-field" hidden>
+            <label for="ev-beacon-threshold">Low Battery Threshold (%)</label>
+            <input type="number" id="ev-beacon-threshold" min="0" max="100" value="20">
           </div>
           <div class="form-field">
             <label for="ev-male-record">Male Record (HH:MM:SS)</label>
@@ -216,6 +222,7 @@
             <select id="ev-junior-timing">
               <option value="Stopwatch">Stopwatch</option>
               <option value="Dibbers">Dibbers</option>
+              <option value="Beacons">Beacons</option>
               <option value="None">None</option>
             </select>
           </div>
@@ -387,7 +394,7 @@
                 <input type="text" id="entry-form-bib" tabindex="-1" inputmode="numeric" style="font-weight:700">
               </div>
               <div class="form-field">
-                <label for="entry-form-dibber">Dibber <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
+                <label for="entry-form-dibber">Fob <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
                 <input type="text" id="entry-form-dibber" tabindex="-1" inputmode="numeric" style="font-weight:700">
               </div>
             </div>
@@ -1097,9 +1104,47 @@
       </div>
 
       <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table data-table-wrap">
           <thead></thead>
           <tbody id="dibbers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ======================================================
+         BEACONS
+         ====================================================== -->
+    <div class="view view-list" id="view-beacons" hidden>
+      <div class="view-header">
+        <h2>Beacons</h2>
+        <span class="count-badge" id="beacons-count">0</span>
+        <span class="entry-status view-status-msg" hidden></span>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-add-beacon">Add Beacons</button>
+        <button class="btn btn-secondary" id="btn-import-beacons">Import CSV</button>
+        <button class="btn btn-secondary" id="btn-export-beacons">Export CSV</button>
+        <button class="btn btn-secondary" id="btn-merge-beacons">Merge…</button>
+        <button class="btn btn-delete" id="btn-clear-beacons">Clear All</button>
+      </div>
+
+      <div id="beacons-merge-panel" hidden style="flex-shrink:0;padding:4px 0 2px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <strong style="font-size:0.875rem;white-space:nowrap">Merge beacons from:</strong>
+          <div id="beacons-merge-ds-row" hidden style="display:flex;gap:6px;align-items:center;flex:1;min-width:200px">
+            <select id="beacons-merge-ds-select" aria-label="Dataset to merge from" style="flex:1;padding:4px 6px;min-width:140px"></select>
+            <button class="btn" id="btn-do-merge-ds-beacons">Merge</button>
+          </div>
+          <button class="btn btn-secondary" id="btn-merge-from-file-beacons">From File (JSON)…</button>
+          <button class="btn btn-secondary" id="btn-cancel-merge-beacons">Cancel</button>
+          <span id="beacons-merge-status" style="font-size:0.875rem;min-height:1.2em"></span>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="data-table data-table-wrap">
+          <thead></thead>
+          <tbody id="beacons-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -1348,6 +1393,7 @@
       <div class="tab-bar" id="mobile-files-tab-bar">
         <button class="active" data-mf-tab="devices">Devices</button>
         <button data-mf-tab="progress">Progress</button>
+        <button data-mf-tab="beacons">Beacons</button>
         <button data-mf-tab="all-files">All Files</button>
       </div>
 
@@ -1374,6 +1420,19 @@
           <table class="data-table">
             <thead></thead>
             <tbody id="mobile-files-all-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="mobile-files-tab-beacons">
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-read-beacons-report">Read Beacons Report</button>
+        </div>
+        <p id="mobile-beacons-status" class="entry-status" hidden></p>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead></thead>
+            <tbody id="mobile-beacons-tbody"></tbody>
           </table>
         </div>
       </div>

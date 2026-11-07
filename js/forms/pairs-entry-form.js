@@ -73,7 +73,7 @@ function pairsEntryFormHalf(org, entry = {}) {
       <div class="pef-refs">
         <div class="pef-ref"><div class="pef-ref-label">Entry Num</div><div class="pef-ref-box">${escHtml(entry.entryNo || '')}</div></div>
         <div class="pef-ref"><div class="pef-ref-label">Race/Bib Num</div><div class="pef-ref-box"></div></div>
-        <div class="pef-ref"><div class="pef-ref-label">Dibber Num</div><div class="pef-ref-box"></div></div>
+        <div class="pef-ref"><div class="pef-ref-label">Fob Num</div><div class="pef-ref-box"></div></div>
       </div>
       <div class="pef-junior-cats">
         <div class="pef-junior-label">Junior pair category (age on 31st Dec)</div>

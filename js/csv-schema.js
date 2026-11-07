@@ -8,7 +8,7 @@
 // Excludes SI Timing formats — those are in si-schema.js.
 // ----------------------------------------------------------------
 
-import { createDibber, createPerson, createRole, createCategory } from './schema.js';
+import { createDibber, createBeacon, createPerson, createRole, createCategory } from './schema.js';
 
 export const CSV = {
   dibbers: {
@@ -19,6 +19,20 @@ export const CSV = {
       owner:     ['owner',     'Owner'],
       lost:      ['lost',      'Lost'],
       notes:     ['notes',     'Notes'],
+    },
+  },
+
+  beacons: {
+    fields:  Object.keys(createBeacon()),
+    aliases: {
+      number:       ['number',       'Number'],
+      owner:        ['owner',        'Owner'],
+      dateAcquired: ['dateAcquired', 'Date Acquired'],
+      totalHours:   ['totalHours',   'Total Hours'],
+      batteryLevel: ['batteryLevel', 'Battery Level'],
+      lastUsed:     ['lastUsed',     'Last Used'],
+      lost:         ['lost',         'Lost'],
+      notes:        ['notes',        'Notes'],
     },
   },
 

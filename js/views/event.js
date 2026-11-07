@@ -1,6 +1,6 @@
 'use strict';
 
-import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults, saveMobileProgress, saveMobileCheckpoints, applyCustomCategories } from '../state.js';
+import { state, saveEvent, saveEntries, saveHelpers, saveFinishers, saveCategories, saveSIResults, saveMobileProgress, saveMobileCheckpoints, saveBeaconReports, applyCustomCategories } from '../state.js';
 import { applyFRAPreset, applyWFRAPreset, builtinFRARows, builtinWFRARows, categoryFromDistance } from '../categories.js';
 import { reapplyEntryCategories } from '../entries.js';
 import { clearSIEntries } from '../si-entries.js';
@@ -56,12 +56,14 @@ export function renderEvent() {
     'ev-organisation':       ev.organisation,
     'ev-handicap-target':    ev.handicapTargetTime,
     'ev-handicap-dsq':       ev.handicapDsqThreshold,
+    'ev-beacon-threshold':   ev.beaconLowBatteryThreshold,
     'ev-clear-previous':     false,
   });
   const raceMode = ev.hasPairs ? 'pairs' : ev.isHandicap ? 'handicap' : 'solo';
   const modeEl = document.querySelector(`input[name="ev-race-mode"][value="${raceMode}"]`);
   if (modeEl) modeEl.checked = true;
   updateHandicapFieldsVisibility();
+  updateBeaconThresholdVisibility();
 }
 
 function getRaceMode() {
@@ -71,6 +73,14 @@ function getRaceMode() {
 function updateHandicapFieldsVisibility() {
   const fields = document.getElementById('ev-handicap-fields');
   if (fields) fields.hidden = getRaceMode() !== 'handicap';
+}
+
+// Shown whenever either Seniors or Juniors timing is set to Beacons — the threshold applies to
+// the whole beacon fleet, not per-course, so one field covers both.
+function updateBeaconThresholdVisibility() {
+  const field = document.getElementById('ev-beacon-threshold-field');
+  if (!field) return;
+  field.hidden = val('ev-timing-method') !== 'Beacons' && val('ev-junior-timing') !== 'Beacons';
 }
 
 export async function saveEventForm() {
@@ -89,6 +99,19 @@ export async function saveEventForm() {
                   : seniorDibbers ? 'Senior timing is set to Dibbers'
                   : 'Junior timing is set to Dibbers';
       showStatus(`${which} but no dibber list has been imported. Either change the timing method or import a dibber list via the Dibbers page.`, true);
+      return;
+    }
+  }
+
+  // Validate: beacons requires a non-empty beacon list
+  if (state.beacons.length === 0) {
+    const seniorBeacons = val('ev-timing-method') === 'Beacons';
+    const juniorBeacons = val('ev-junior-timing') === 'Beacons';
+    if (seniorBeacons || juniorBeacons) {
+      const which = seniorBeacons && juniorBeacons ? 'Senior and Junior timing are both set to Beacons'
+                  : seniorBeacons ? 'Senior timing is set to Beacons'
+                  : 'Junior timing is set to Beacons';
+      showStatus(`${which} but no beacon list has been imported. Either change the timing method or import a beacon list via the Beacons page.`, true);
       return;
     }
   }
@@ -177,6 +200,7 @@ export async function saveEventForm() {
   ev.isHandicap                 = isHandicap;
   ev.handicapTargetTime         = isHandicap ? normaliseTime(val('ev-handicap-target')) : '';
   ev.handicapDsqThreshold       = isHandicap ? +val('ev-handicap-dsq') : ev.handicapDsqThreshold;
+  ev.beaconLowBatteryThreshold  = +val('ev-beacon-threshold') || 20;
 
   showBusy('Saving…');
 
@@ -195,10 +219,11 @@ export async function saveEventForm() {
     state.helpers   = [];  state.finishNumbersMap = {};
     state.siResults = [];
     state.mobileProgress = [];  state.mobileCheckpoints = [];
+    state.beaconReports = [];
     await Promise.all([
       saveEntries(), saveHelpers(), saveFinishers(),
       clearSIEntries(), saveSIResults(), saveCategories(),
-      saveMobileProgress(), saveMobileCheckpoints(),
+      saveMobileProgress(), saveMobileCheckpoints(), saveBeaconReports(),
     ]);
     document.getElementById('ev-clear-previous').checked = false;
     // Also drop any dirty, not-yet-submitted text sitting in the race-day "add a record"
@@ -222,6 +247,8 @@ export function wireEvent() {
   document.querySelectorAll('input[name="ev-race-mode"]').forEach(el => {
     el.addEventListener('change', updateHandicapFieldsVisibility);
   });
+  on('ev-timing-method', 'change', updateBeaconThresholdVisibility);
+  on('ev-junior-timing', 'change', updateBeaconThresholdVisibility);
 
   const distEl = document.getElementById('ev-distance');
   if (distEl) {

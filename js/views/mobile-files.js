@@ -44,6 +44,7 @@ import {
   renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
 } from './mobile-files-progress.js';
 import { initBle, wireBleControls, updateConnectButtonLabel } from './mobile-files-ble.js';
+import { initBeaconsTab, wireBeaconsTab, renderMobileBeaconsTab } from './mobile-files-beacons.js';
 
 export { autoUpdateProgress };
 
@@ -322,8 +323,10 @@ async function viewDeviceRow(r) {
 export function wireMobileFiles() {
   initBle({ renderAll: renderMobileFiles, getLastKnownRaces: progressRaces });
   initProgressActions({ renderAll: renderMobileFiles });
+  initBeaconsTab({ renderAll: renderMobileFiles });
   wireBleControls();
   wireProgressTab();
+  wireBeaconsTab();
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
   document.getElementById('btn-activate-race')?.addEventListener('click', activateRace);
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
@@ -478,6 +481,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
     renderRaceList([], false);
     renderAllFilesList([], false);
     renderMobileProgressTable();
+    renderMobileBeaconsTab();
     if (count) count.textContent = '0';
     lastFetchOk = true; // not signed in isn't "offline" — don't leave a stale "pending" reading
     updateActivateStatus();
@@ -501,6 +505,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
     // filterStaleRaces() and mergePendingIntoRaces() on purpose, see its own module doc.
     renderAllFilesList(lastKnownRaces, isAdminUser);
     renderMobileProgressTable();
+    renderMobileBeaconsTab();
     lastFetchOk = true;
     updateActivateStatus();
     if (!silent) showStatus(merged.length ? '' : 'No mobile files uploaded yet.');
@@ -519,6 +524,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
     renderRaceList(merged, isAdminUser);
     renderAllFilesList(races, isAdminUser);
     renderMobileProgressTable();
+    renderMobileBeaconsTab();
     lastFetchOk = false;
     updateActivateStatus();
     if (!silent) {

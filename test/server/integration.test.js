@@ -470,6 +470,24 @@ describe('server integration: progress', () => {
     assert.equal(race.progress.entries[0].cpTimes[1], '00:10:00');
   });
 
+  it('passes an entry\'s beaconNumber through the push (previously dropped by field-by-field sanitisation)', async () => {
+    const token = await createAndLogin('prog-beacon-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'prog-beacon-race-26-08-23';
+
+    await fetch(`${base}/api/mobile/prog-beacon-owner/${raceLabel}/progress`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        raceName: 'X', raceDate: '23/08/2026',
+        entries: [{ bibNumber: 1, name: 'A', category: 'MSEN', course: 'Seniors', startTime: '', finishTime: '', cpTimes: {}, beaconNumber: 7 }],
+      }),
+    });
+
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === raceLabel);
+    assert.equal(race.progress.entries[0].beaconNumber, 7);
+  });
+
   it('rejects pushing progress under a dataset owned by a different, non-admin user', async () => {
     const victimToken = await createAndLogin('prog-victim');
     await fetch(`${base}/api/mobile/prog-victim/some-race/progress`, {
@@ -498,6 +516,56 @@ describe('server integration: progress', () => {
       body: JSON.stringify({ entries: [{ bibNumber: 3, name: 'C', finishTime: '00:30:00' }] }),
     });
     assert.equal(r.status, 200);
+  });
+});
+
+describe('server integration: beacons', () => {
+  it('an owner posting a beacons report can read it back', async () => {
+    const token = await createAndLogin('beacon-report-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'beacon-race-26-08-23';
+
+    const push = await fetch(`${base}/api/mobile/beacon-report-owner/${raceLabel}/beacons`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        powerOffBatch: [{ beaconNumber: 7, batteryLevel: 55, poweredOffAt: '2026-08-23T16:00:00.000Z' }],
+      }),
+    });
+    assert.equal(push.status, 200);
+
+    const got = await (await fetch(`${base}/api/mobile/beacon-report-owner/${raceLabel}/beacons`, { headers: auth })).json();
+    assert.equal(got.powerOffBatch[0].beaconNumber, 7);
+    assert.equal(got.powerOffBatch[0].batteryLevel, 55);
+  });
+
+  it('does not surface beacons.json as a device in the mobile files listing', async () => {
+    const token = await createAndLogin('beacon-report-owner2');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'beacon-race2-26-08-23';
+
+    await fetch(`${base}/api/mobile/beacon-report-owner2/${raceLabel}/beacons`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ powerOffBatch: [{ beaconNumber: 1, batteryLevel: 90, poweredOffAt: '2026-08-23T16:00:00.000Z' }] }),
+    });
+
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === raceLabel);
+    assert.equal(race.devices.some(d => d.name === 'beacons'), false);
+  });
+
+  it('rejects posting a beacons report under a dataset owned by a different, non-admin user', async () => {
+    const victimToken = await createAndLogin('beacon-victim');
+    await fetch(`${base}/api/mobile/beacon-victim/some-race/beacons`, {
+      method: 'POST', headers: { Authorization: `Bearer ${victimToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ powerOffBatch: [] }),
+    });
+
+    const attackerToken = await createAndLogin('beacon-attacker');
+    const r = await fetch(`${base}/api/mobile/beacon-victim/some-race/beacons`, {
+      method: 'POST', headers: { Authorization: `Bearer ${attackerToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ powerOffBatch: [] }),
+    });
+    assert.equal(r.status, 403);
   });
 });
 

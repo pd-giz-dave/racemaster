@@ -26,6 +26,15 @@ export function usingDibbers(course) {
   return ciEq(getTimingMethod(course), 'Dibbers');
 }
 
+/** Return true if the given course uses beacons. Only used for fob allocation (js/entries.js,
+ *  js/data.js) and Event Settings validation/threshold UI — deliberately NOT referenced by
+ *  adjustedFinishTime() below: a beacon detection reaches this app as an ordinary
+ *  mobile-recorded time (like Stopwatch/Bibs mode), not a direct instant-elapsed punch the way a
+ *  Dibbers read is, so it must fall through that function's default path, not short-circuit. */
+export function usingBeacons(course) {
+  return ciEq(getTimingMethod(course), 'Beacons');
+}
+
 // state.mobileProgress (mobile-recorded Clock/Start/category/etc markers — see js/mobile-progress.js)
 // has no position relative to state.finishers, so it can't be searched "nearest above" a given
 // index — instead this takes the last matching record in the mobile file's own chronological
