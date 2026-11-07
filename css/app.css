@@ -145,6 +145,20 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .page-content h3 { margin: 14px 0 6px; font-size: 1rem; }
 .page-content ul { margin: 0 0 10px; padding-left: 1.4em; line-height: 1.8; }
 .page-content p  { margin: 0 0 8px; }
+
+/* What's New — each version's <h3>/<ul> is wrapped in a <details> at render time (see
+   makeWhatsNewCollapsible() in help.js), so older versions collapse out of the way; the summary
+   reuses the h3's own margin/size rather than getting its own, so a version reads the same whether
+   it's open or collapsed. */
+.page-content details { margin: 14px 0 6px; }
+.page-content details > ul { margin-top: 6px; }
+.page-content summary {
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.page-content summary:hover { color: var(--accent); }
 #header-username    { font-size: 0.8rem; color: var(--header-fg-mid); }
 #header-server-status {
   font-size: 0.875rem;

@@ -43,4 +43,28 @@ export function wireStaticPages() {
     card.innerHTML = html;
     view.appendChild(card);
   }
+  makeWhatsNewCollapsible();
+}
+
+// PAGES['whats-new'] (strings.js) is a flat run of "<h3>version</h3><ul>...</ul>" pairs, newest
+// first. Wraps each pair in a <details> so older versions collapse out of the way — only the
+// first (newest) one starts open, since that's the "what changed since you last looked" entry
+// most people actually want.
+function makeWhatsNewCollapsible() {
+  const container = document.querySelector('#view-whats-new .page-content');
+  if (!container) return;
+  [...container.querySelectorAll(':scope > h3')].forEach((h3, i) => {
+    const details = document.createElement('details');
+    if (i === 0) details.open = true;
+    const summary = document.createElement('summary');
+    summary.innerHTML = h3.innerHTML;
+    details.appendChild(summary);
+    h3.replaceWith(details);
+    let sib = details.nextSibling;
+    while (sib && !(sib.nodeType === 1 && sib.tagName === 'H3')) {
+      const next = sib.nextSibling;
+      details.appendChild(sib);
+      sib = next;
+    }
+  });
 }

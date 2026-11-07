@@ -795,14 +795,9 @@ export const PAGES = {
           (not just elapsed race time), a no-show pre-entry list, and a "Last CP" hint sourced from mobile
           checkpoint data</li>
       <li><strong>RaceMaster Mobile companion app</strong> — a separate Android app records Time, Bibs, or
-          Checkpoint splits on phones out on the course, with no network needed: any phone can act as a Bluetooth
-          "Mule", relaying every other nearby phone's data on to the server (or directly to this web app,
-          whichever it can reach) with no pairing step. The <em>Mobile Files</em> page is where that data lands —
-          browse and manage every device's file, turn selected files into the Progress tab in one click (with
-          live safety feedback on outstanding runners), and see everything actually stored on the server
-          regardless of age. Bib/name/course/category and live progress data flow back out to phones too, over
-          that same Bluetooth connection or straight from the server, so a Bibs or Checkpoint phone can validate
-          bib numbers before registration has even closed</li>
+          Checkpoint splits on phones out on the course. The <em>Mobile Files</em> page is where that data lands.</li>
+      <li><strong>Beacons</strong> — Bluetooth beacons carried by runners let the RaceMaster Mobile companion app
+          detect checkpoint and finish passes automatically; the <em>Beacons</em> page tracks each beacon's status.</li>
       <li><strong>Reference data</strong> — a persistent People database of runner history across events, plus
           Clubs, Categories, and SI Dibbers management, all reused dataset to dataset</li>
       <li><strong>Helpers</strong> — record volunteer names, roles, and contribution history</li>
@@ -824,7 +819,7 @@ export const PAGES = {
        <a href="https://github.com/pd-giz-dave/racemaster" target="_blank" rel="noopener">github.com/pd-giz-dave/racemaster</a>,
        and the RaceMaster Mobile companion app (also open source) at
        <a href="https://github.com/pd-giz-dave/racemaster-mobile" target="_blank" rel="noopener">github.com/pd-giz-dave/racemaster-mobile</a> —
-       a debug build is available from the <em>Download APK</em> link in this app's own sidebar.</p>
+       a debug build is available from the <em>Download APK</em> link in this app's own sidebar (this will need to be side-loaded).</p>
   `,
 
   'auto-printing': `
@@ -1303,7 +1298,7 @@ export const PAGES = {
       <li>Add multi-role assignment to helpers</li>
       <li>Add sort capability and management facilities on the people page</li>
     </ul>
-    <h3>v0.0.3-alpha/h3>
+    <h3>v0.0.3-alpha</h3>
     <ul>
       <li>Add consolidated results publishing with search and sort capabilities</li>
     </ul>
