@@ -685,7 +685,7 @@ export function wireFormFocusTrap(containerId, onEnter) {
       await onEnter();
     } else if (e.key === 'Tab') {
       const focusable = [...container.querySelectorAll(
-        'input:not([disabled]), select:not([disabled]), button:not([disabled])'
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
       )].filter(el => el.offsetParent !== null && el.tabIndex !== -1);
       if (!focusable.length) return;
       const first = focusable[0], last = focusable[focusable.length - 1];

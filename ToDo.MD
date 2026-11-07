@@ -294,27 +294,27 @@ To that end:
 
 - [x] Add a new timing method - Beacons
 - [x] Add a new data page - Beacons - this is to be persisted in the same manner as the Dibbers page
-- [ ] Add a field to the progress.json - beaconNum - populated from the entries Beacon field (see below)
-- [ ] When timing is 'Beacon' the Dibber field in the entries form becomes "Beacon"
-- [ ] The beacon number is allocated to entries in an analogous manner to dibber numbers:
-  - [ ] The Beacon data page defines the beacons available and their status
-    - [ ] The columns on that page will be: Number, Owner, Date Acquired, Total Hours, Battery Level, Last Used, Lost, Notes, Actions
-    - [ ] Actions will be Edit, Del from here
-    - [ ] Page header will be as Dibbers - (?), Beacons, count
-    - [ ] Page actions will be as Dibbers - Add, import, export, merge, clear
+- [x] Add a field to the progress.json - beaconNum - populated from the entries Beacon field (see below)
+- [x] When timing is 'Beacon' the Dibber field in the entries form becomes "Beacon" - no becomes "Fob" always
+- [x] The beacon number is allocated to entries in an analogous manner to dibber numbers:
+  - [x] The Beacon data page defines the beacons available and their status
+    - [x] The columns on that page will be: Number, Owner, Date Acquired, Total Hours, Battery Level, Last Used, Lost, Notes, Actions
+    - [x] Actions will be Edit, Del from here
+    - [x] Page header will be as Dibbers - (?), Beacons, count
+    - [x] Page actions will be as Dibbers - Add, import, export, merge, clear
 - [ ] The racemaster-mobile app will provide a facility to read the battery status and power off the beacons as part
       of its post race housekeeping. This will produce a report of a list of beacons so processed that records the
       beacon number and its battery staus and the date/time the beacon was powered off
-  - [ ] This app must be able to read that report, either from the server, or via the bluetooth link, or both
-    - [ ] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
+  - [x] This app must be able to read that report, either from the server, or via the bluetooth link, or both
+    - [x] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
     - [ ] The mobile app will be put the file on the server in the mobile/owner/race folder as beacons.json in a
           similar manner to the device.json files
-  - [ ] The report must be processed such that:
-    - [ ] this app can verify every beacon issued has been returned and highlight missing ones
-    - [ ] update the battery level, last used date, and total hours in the beacons data page
-    - [ ] total hours to be an accumulation of each race usage which is to be calculated as the time between 2 hours 
+  - [x] The report must be processed such that:
+    - [x] this app can verify every beacon issued has been returned and highlight missing ones
+    - [x] update the battery level, last used date, and total hours in the beacons data page
+    - [x] total hours to be an accumulation of each race usage which is to be calculated as the time between 2 hours 
           before the race started and the power-off time reported from the mobile app
-    - [ ] battery level will be a % (0-100), a battery below a certain threshold must be highlighted
-  - [ ] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
+    - [x] battery level will be a % (0-100), a battery below a certain threshold must be highlighted
+  - [x] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
         persisted as part of the dataset
-- [ ] the CP and finish records received from the mobile app, or read from the server, is unaffected
+- [x] the CP and finish records received from the mobile app, or read from the server, is unaffected

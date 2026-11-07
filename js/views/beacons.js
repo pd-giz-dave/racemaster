@@ -4,7 +4,7 @@ import { state, saveBeacons } from '../state.js';
 import { createBeacon } from '../schema.js';
 import { CSV } from '../csv-schema.js';
 import { normaliseBeaconRows } from '../data.js';
-import { on, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns, wireFormFocusTrap } from '../ui.js';
+import { on, val, fillForm, clearForm, clearRowEditing, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns, wireFormFocusTrap } from '../ui.js';
 import { escHtml, normaliseDate } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
@@ -14,6 +14,7 @@ const BEACON_COLS = tableColumns(TABLES.beacons, {
   number:       ({ b }) => b.number || '',
   owner:        ({ b }) => escHtml(b.owner || ''),
   dateAcquired: ({ b }) => escHtml(b.dateAcquired || ''),
+  usageCount:   ({ b }) => +b.usageCount || 0,
   totalHours:   ({ b }) => (+b.totalHours || 0).toFixed(1),
   batteryLevel: ({ b }) => {
     const threshold = +state.event.beaconLowBatteryThreshold || 20;
@@ -32,111 +33,139 @@ const BEACON_COLS = tableColumns(TABLES.beacons, {
       <button class="btn-sm btn-delete-entry" data-action="del">Del from here</button>`,
 });
 
+// Set while the Add Beacon form is editing an existing beacon rather than adding a new one —
+// holds that beacon's own number (its stable identity; array index can shift under sort/import).
+let editingNumber = 0;
+
 export function renderBeacons() {
   const rows = state.beacons.map((b, i) => ({ b, i }));
   renderTable('beacons-tbody', BEACON_COLS, rows, {
     rowAttrs: ({ i }) => ({ id: `beacon-row-${i}`, 'data-idx': i }),
   });
   setHTML('beacons-count', `${state.beacons.length} beacons`);
+  if (editingNumber) {
+    // Re-apply the highlight the fresh table markup just wiped out, without disturbing
+    // whatever the user has mid-typed in the form.
+    const idx = state.beacons.findIndex(b => +b.number === editingNumber);
+    document.getElementById(`beacon-row-${idx}`)?.classList.add('row-editing');
+  } else {
+    // Keeps the Add Beacon form's suggested number/defaults current with the catalogue —
+    // without this, wireBeacons()'s own one-off call (at app bootstrap, before state.beacons
+    // has loaded from the dataset) would be the only time it's ever set, leaving it stuck on
+    // "Number: 1, blank" the first time this view is actually shown.
+    fillBeaconFormDefaults();
+  }
 }
 
-export function editBeaconRow(idx) {
-  const b = state.beacons[idx];
+// Populates the Add Beacon form with an existing beacon's values and switches it into Update
+// mode — same pattern as editing an entry on the Entries page (see fillFormForEdit() there),
+// but without a confirm prompt first, since editing a beacon record is low-stakes and reversible.
+function fillBeaconFormForEdit(number) {
+  const b = state.beacons.find(x => +x.number === +number);
   if (!b) return;
+  editingNumber = +number;
+  fillForm('', {
+    'beacon-form-number':   b.number,
+    'beacon-form-owner':    b.owner || '',
+    'beacon-form-acquired': b.dateAcquired || '',
+    'beacon-form-uses':     b.usageCount || 0,
+    'beacon-form-hours':    b.totalHours || 0,
+    'beacon-form-battery':  b.batteryLevel ?? '',
+    'beacon-form-lastused': normaliseDate(b.lastUsed) || b.lastUsed || '',
+    'beacon-form-lost':     normaliseDate(b.lost) || b.lost || '',
+    'beacon-form-notes':    b.notes || '',
+  });
+  const numberEl = document.getElementById('beacon-form-number');
+  if (numberEl) numberEl.readOnly = true; // renumbering risks orphaning entries already allocated this beacon
+  const editFields = document.getElementById('beacon-form-edit-fields');
+  if (editFields) editFields.hidden = false;
+  const addBtn = document.getElementById('btn-add-beacon');
+  if (addBtn) addBtn.textContent = 'Update';
+  const cancelBtn = document.getElementById('btn-cancel-edit-beacon');
+  if (cancelBtn) cancelBtn.style.display = '';
+  clearRowEditing('beacons-tbody');
+  const idx = state.beacons.indexOf(b);
   const row = document.getElementById(`beacon-row-${idx}`);
-  if (!row) return;
-  row.classList.add('row-edit-wrap');
-  row.innerHTML = `
-    <td data-label="Number">${b.number || ''}</td>
-    <td data-label="Owner"><input id="bcn-owner-${idx}"    type="text"   value="${escHtml(b.owner || '')}"               style="width:80px"></td>
-    <td data-label="Date Acquired"><input id="bcn-acq-${idx}"      type="text"   value="${escHtml(b.dateAcquired || '')}"        data-normalise="date" placeholder="DD/MM/YY" style="width:100px"></td>
-    <td data-label="Total Hours"><input id="bcn-hours-${idx}"    type="number" value="${escHtml(String(b.totalHours || 0))}"   style="width:80px" step="0.1" min="0"></td>
-    <td data-label="Battery Level"><input id="bcn-battery-${idx}"  type="number" value="${escHtml(String(b.batteryLevel ?? ''))}" style="width:70px" min="0" max="100"></td>
-    <td data-label="Last Used"><input id="bcn-lastused-${idx}" type="text"   value="${escHtml(b.lastUsed || '')}"             data-normalise="date" placeholder="DD/MM/YY" style="width:100px"></td>
-    <td data-label="Lost"><input id="bcn-lost-${idx}"     type="text"   value="${escHtml(normaliseDate(b.lost) || b.lost || '')}" data-normalise="date" placeholder="DD/MM/YY" style="width:100px"></td>
-    <td data-label="Notes"><input id="bcn-notes-${idx}"    type="text"   value="${escHtml(b.notes || '')}"                style="width:100%;min-width:120px"></td>
-    <td data-label="Actions">
-      <button class="btn-sm btn-save"      data-idx="${idx}">Save</button>
-      <button class="btn-sm btn-secondary" data-idx="${idx}">Cancel</button>
-    </td>`;
-  row.querySelector('.btn-save').addEventListener('click', () => saveBeaconRow(idx));
-  row.querySelector('.btn-secondary').addEventListener('click', () => renderBeacons());
-  wireFormFocusTrap(`beacon-row-${idx}`, () => saveBeaconRow(idx)); // Tab stays within this row, Enter saves
-  document.getElementById(`bcn-owner-${idx}`)?.focus();
+  row?.classList.add('row-editing');
+  row?.scrollIntoView({ block: 'nearest' });
+  document.getElementById('beacon-form-owner')?.focus();
 }
 
-export async function saveBeaconRow(idx) {
-  const b = state.beacons[idx];
-  if (!b) return;
-  b.owner        = document.getElementById(`bcn-owner-${idx}`)?.value.trim()    || '';
-  b.dateAcquired = normaliseDate(document.getElementById(`bcn-acq-${idx}`)?.value.trim());
-  b.totalHours   = +document.getElementById(`bcn-hours-${idx}`)?.value          || 0;
-  const batteryVal = document.getElementById(`bcn-battery-${idx}`)?.value.trim();
-  b.batteryLevel = batteryVal === '' ? '' : +batteryVal;
-  b.lastUsed     = normaliseDate(document.getElementById(`bcn-lastused-${idx}`)?.value.trim());
-  b.lost         = normaliseDate(document.getElementById(`bcn-lost-${idx}`)?.value.trim());
-  b.notes        = document.getElementById(`bcn-notes-${idx}`)?.value.trim()    || '';
-  await saveBeacons();
-  showStatus(`Beacon ${b.number} updated.`);
-  renderBeacons();
-}
-
-export function showAddBeaconRow() {
-  const tbody = document.getElementById('beacons-tbody');
-  if (!tbody) return;
-  if (document.getElementById('beacon-row-new')) return; // already open
+// Suggests the next free number and carries Owner/Date Acquired/Notes forward from the last
+// beacon added — most beacons are bought and registered in batches by the same owner on the
+// same date, so repeating those values saves re-typing them for every beacon in the batch.
+function fillBeaconFormDefaults() {
   const nextNumber = state.beacons.length
     ? Math.max(...state.beacons.map(b => +b.number)) + 1
     : 1;
-  // Defaults from the previous entry (the last row, by number) — most beacons are bought and
-  // registered in batches by the same owner on the same date, so repeating the prior row's own
-  // Owner/Date Acquired/Notes saves re-typing the same value for every beacon in a batch.
   const prev = state.beacons[state.beacons.length - 1] || null;
-  const tr = document.createElement('tr');
-  tr.id = 'beacon-row-new';
-  tr.className = 'row-edit-wrap';
-  tr.innerHTML = `
-    <td data-label="Number"><input id="bcn-new-number" type="text" value="${nextNumber}" style="width:60px"></td>
-    <td data-label="Owner"><input id="bcn-new-owner"  type="text" value="${escHtml(prev?.owner || '')}"              style="width:80px"></td>
-    <td data-label="Date Acquired"><input id="bcn-new-acq"    type="text" value="${escHtml(prev?.dateAcquired || '')}" data-normalise="date" placeholder="DD/MM/YY" style="width:100px"></td>
-    <td colspan="3"></td>
-    <td colspan="2" data-label="Notes"><input id="bcn-new-notes" type="text" value="${escHtml(prev?.notes || '')}" style="width:160px"></td>
-    <td data-label="Actions">
-      <button class="btn-sm btn-save">Save</button>
-      <button class="btn-sm btn-secondary">Cancel</button>
-    </td>`;
-  tbody.appendChild(tr);
-  tr.querySelector('.btn-save').addEventListener('click', saveNewBeaconRow);
-  tr.querySelector('.btn-secondary').addEventListener('click', () => tr.remove());
-  tr.addEventListener('keydown', e => { if (e.key === 'Escape') tr.remove(); });
-  wireFormFocusTrap('beacon-row-new', saveNewBeaconRow); // Tab cycles the row's fields, Enter saves
-  setTimeout(() => {
-    const numberInput = tr.querySelector('input');
-    if (numberInput) {
-      numberInput.scrollIntoView({ block: 'center' });
-      numberInput.focus();
-      numberInput.select();
-    }
-  }, 50);
+  fillForm('', {
+    'beacon-form-number':   nextNumber,
+    'beacon-form-owner':    prev?.owner || '',
+    'beacon-form-acquired': prev?.dateAcquired || '',
+    'beacon-form-notes':    prev?.notes || '',
+  });
 }
 
-export async function saveNewBeaconRow() {
-  const number = document.getElementById('bcn-new-number')?.value.trim();
+// Used by both the always-visible Reset button and the edit-only Cancel Edit button — exiting
+// an edit in progress and resetting to a blank Add Beacon form are the same operation (mirrors
+// resetEntryForm() on the Entries page, which both its own Reset and Cancel Edit buttons share).
+export function resetBeaconForm() {
+  editingNumber = 0;
+  clearRowEditing('beacons-tbody');
+  const numberEl = document.getElementById('beacon-form-number');
+  if (numberEl) numberEl.readOnly = false;
+  const editFields = document.getElementById('beacon-form-edit-fields');
+  if (editFields) editFields.hidden = true;
+  const addBtn = document.getElementById('btn-add-beacon');
+  if (addBtn) addBtn.textContent = 'Add Beacon';
+  const cancelBtn = document.getElementById('btn-cancel-edit-beacon');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  clearForm('beacon-form-fields');
+  fillBeaconFormDefaults();
+  document.getElementById('beacon-form-acquired')?.focus();
+}
+
+export async function submitBeaconForm() {
+  if (editingNumber) {
+    const b = state.beacons.find(x => +x.number === editingNumber);
+    if (!b) { resetBeaconForm(); return; }
+    const owner = val('beacon-form-owner').trim();
+    if (!owner) { showStatus('Owner is required.', true); return; }
+    const dateAcquired = normaliseDate(val('beacon-form-acquired').trim());
+    if (!dateAcquired) { showStatus('A valid date acquired is required.', true); return; }
+    b.owner        = owner;
+    b.dateAcquired = dateAcquired;
+    b.usageCount   = +val('beacon-form-uses') || 0;
+    b.totalHours   = +val('beacon-form-hours') || 0;
+    const batteryVal = val('beacon-form-battery').trim();
+    b.batteryLevel = batteryVal === '' ? '' : +batteryVal;
+    b.lastUsed     = normaliseDate(val('beacon-form-lastused').trim());
+    b.lost         = normaliseDate(val('beacon-form-lost').trim());
+    b.notes        = val('beacon-form-notes').trim();
+    await saveBeacons();
+    showStatus(`Beacon ${b.number} updated.`);
+    resetBeaconForm();
+    renderBeacons();
+    return;
+  }
+
+  const number = val('beacon-form-number').trim();
   if (!number || isNaN(+number)) { showStatus('Number is required.', true); return; }
   if (state.beacons.find(b => +b.number === +number)) {
     showStatus(`Beacon ${number} already exists.`, true); return;
   }
-  const owner = document.getElementById('bcn-new-owner')?.value.trim() || '';
+  const owner = val('beacon-form-owner').trim();
   if (!owner) { showStatus('Owner is required.', true); return; }
-  const dateAcquired = normaliseDate(document.getElementById('bcn-new-acq')?.value.trim());
+  const dateAcquired = normaliseDate(val('beacon-form-acquired').trim());
   if (!dateAcquired) { showStatus('A valid date acquired is required.', true); return; }
-  const notes = document.getElementById('bcn-new-notes')?.value.trim() || '';
+  const notes = val('beacon-form-notes').trim();
   state.beacons.push(createBeacon({ number: +number, owner, dateAcquired, notes }));
   state.beacons.sort((a, b) => +a.number - +b.number);
   await saveBeacons();
   showStatus(`Beacon ${number} added.`);
-  renderBeacons();
-  showAddBeaconRow(); // keep adding — the user explicitly closes the row (Cancel/Escape) to stop
+  renderBeacons(); // also refreshes the form's defaults, ready for the next one
+  document.getElementById('beacon-form-acquired')?.focus();
 }
 
 export async function deleteBeaconsFrom(idx) {
@@ -145,6 +174,7 @@ export async function deleteBeaconsFrom(idx) {
   const count = state.beacons.length - idx;
   if (!await showConfirmDialog(`Delete ${count} beacon${count === 1 ? '' : 's'} from number ${from.number} onwards?`, 'Delete', true)) return;
   state.beacons.splice(idx);
+  if (editingNumber && !state.beacons.find(b => +b.number === editingNumber)) resetBeaconForm();
   await saveBeacons();
   showStatus(`${count} beacon${count === 1 ? '' : 's'} deleted.`);
   renderBeacons();
@@ -168,6 +198,7 @@ export async function importBeaconsFromFile() {
       const b = state.beacons[existing];
       b.owner        = row.owner        || b.owner;
       b.dateAcquired = row.dateAcquired || b.dateAcquired;
+      b.usageCount   = row.usageCount   || b.usageCount;
       b.totalHours   = row.totalHours   || b.totalHours;
       b.batteryLevel = row.batteryLevel !== '' && row.batteryLevel !== undefined ? row.batteryLevel : b.batteryLevel;
       b.lastUsed     = row.lastUsed     || b.lastUsed;
@@ -198,6 +229,7 @@ async function applyBeaconsMerge(rows) {
       const merged = {
         owner:        row.owner        || existing.owner,
         dateAcquired: normaliseDate(row.dateAcquired) || existing.dateAcquired,
+        usageCount:   row.usageCount   || existing.usageCount,
         totalHours:   row.totalHours   || existing.totalHours,
         batteryLevel: row.batteryLevel !== '' && row.batteryLevel !== undefined ? row.batteryLevel : existing.batteryLevel,
         lastUsed:     normaliseDate(row.lastUsed) || existing.lastUsed,
@@ -289,13 +321,14 @@ function openMergePanel() {
 
 function exportBeacons() {
   const lines = [CSV.beacons.fields.join(','),
-    ...state.beacons.map(b => `${b.number},${b.owner || ''},${b.dateAcquired || ''},${b.totalHours || 0},${b.batteryLevel ?? ''},${b.lastUsed || ''},${b.lost || ''},${b.notes || ''}`)];
+    ...state.beacons.map(b => `${b.number},${b.owner || ''},${b.dateAcquired || ''},${b.usageCount || 0},${b.totalHours || 0},${b.batteryLevel ?? ''},${b.lastUsed || ''},${b.lost || ''},${b.notes || ''}`)];
   downloadText(lines.join('\n'), `${sanitise(state.event?.name || 'beacons')}_beacons.csv`);
 }
 
 async function clearBeacons() {
   if (!await showConfirmDialog(`Clear all ${state.beacons.length} beacons?`, 'Clear All', true)) return;
   state.beacons.length = 0;
+  resetBeaconForm();
   await saveBeacons();
   showStatus('Beacons list cleared.');
   renderBeacons();
@@ -304,8 +337,12 @@ async function clearBeacons() {
 export function wireBeacons() {
   on('btn-import-beacons', 'click', importBeaconsFromFile);
   on('btn-export-beacons', 'click', exportBeacons);
-  on('btn-add-beacon',     'click', showAddBeaconRow);
+  on('btn-add-beacon',     'click', submitBeaconForm);
+  on('btn-reset-beacon-form', 'click', resetBeaconForm);
+  on('btn-cancel-edit-beacon', 'click', resetBeaconForm);
   on('btn-clear-beacons',  'click', clearBeacons);
+  wireFormFocusTrap('beacon-form-fields', submitBeaconForm); // Tab cycles the form, Enter adds
+  fillBeaconFormDefaults();
 
   on('btn-merge-beacons',       'click', openMergePanel);
   on('btn-cancel-merge-beacons', 'click', () => { document.getElementById('beacons-merge-panel').hidden = true; });
@@ -320,7 +357,7 @@ export function wireBeacons() {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const idx = +btn.closest('[data-idx]')?.dataset.idx;
-    if (btn.dataset.action === 'edit') editBeaconRow(idx);
+    if (btn.dataset.action === 'edit') fillBeaconFormForEdit(state.beacons[idx]?.number);
     else if (btn.dataset.action === 'del') deleteBeaconsFrom(idx);
   });
 }

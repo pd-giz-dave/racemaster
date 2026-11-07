@@ -4,7 +4,7 @@ import { state, saveDibbers } from '../state.js';
 import { createDibber } from '../schema.js';
 import { CSV } from '../csv-schema.js';
 import { normaliseDibberRows } from '../data.js';
-import { on, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns, wireFormFocusTrap } from '../ui.js';
+import { on, val, fillForm, clearForm, clearRowEditing, setHTML, showStatus, showConfirmDialog, pickFile, downloadText, sanitise, renderTable, tableColumns, wireFormFocusTrap } from '../ui.js';
 import { escHtml, normaliseDate } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
@@ -25,106 +25,137 @@ const DIBBER_COLS = tableColumns(TABLES.dibbers, {
       <button class="btn-sm btn-delete-entry" data-action="del">Del from here</button>`,
 });
 
+// Set while the Add Dibber form is editing an existing dibber rather than adding a new one —
+// holds that dibber's own short code (its stable identity; array index can shift under sort/import).
+let editingShortCode = 0;
+
 export function renderDibbers() {
   const rows = state.dibbers.map((d, i) => ({ d, i }));
   renderTable('dibbers-tbody', DIBBER_COLS, rows, {
     rowAttrs: ({ i }) => ({ id: `dibber-row-${i}`, 'data-idx': i }),
   });
   setHTML('dibbers-count', `${state.dibbers.length} dibbers`);
-}
-
-export function editDibberRow(idx) {
-  const d = state.dibbers[idx];
-  if (!d) return;
-  const row = document.getElementById(`dibber-row-${idx}`);
-  if (!row) return;
-  row.classList.add('row-edit-wrap');
-  row.innerHTML = `
-    <td data-label="Num">${d.shortCode || ''}</td>
-    <td data-label="Long Code"><input id="dib-long-${idx}"  type="text" value="${escHtml(String(d.longCode || ''))}" style="width:90px"></td>
-    <td data-label="Owner"><input id="dib-avail-${idx}" type="text" value="${escHtml(d.owner || '')}"            style="width:80px"></td>
-    <td data-label="Lost"><input id="dib-lost-${idx}"  type="text" value="${escHtml(normaliseDate(d.lost) || d.lost || '')}" data-normalise="date" placeholder="DD/MM/YY" style="width:100px"></td>
-    <td data-label="Notes"><input id="dib-notes-${idx}" type="text" value="${escHtml(d.notes || '')}"            style="width:100%;min-width:120px"></td>
-    <td data-label="Actions">
-      <button class="btn-sm btn-save"      data-idx="${idx}">Save</button>
-      <button class="btn-sm btn-secondary" data-idx="${idx}">Cancel</button>
-    </td>`;
-  row.querySelector('.btn-save').addEventListener('click', () => saveDibberRow(idx));
-  row.querySelector('.btn-secondary').addEventListener('click', () => renderDibbers());
-  wireFormFocusTrap(`dibber-row-${idx}`, () => saveDibberRow(idx)); // Tab stays within this row, Enter saves
-  document.getElementById(`dib-long-${idx}`)?.focus();
-}
-
-export async function saveDibberRow(idx) {
-  const d = state.dibbers[idx];
-  if (!d) return;
-  const longVal = document.getElementById(`dib-long-${idx}`)?.value.trim();
-  if (longVal !== '' && !isNaN(+longVal)) {
-    const clash = state.dibbers.findIndex(x => +x.longCode === +longVal);
-    if (clash >= 0 && clash !== idx) {
-      showStatus(`Long code ${longVal} already used by dibber ${state.dibbers[clash].shortCode}.`, true);
-      return;
-    }
-    d.longCode = +longVal;
+  if (editingShortCode) {
+    // Re-apply the highlight the fresh table markup just wiped out, without disturbing
+    // whatever the user has mid-typed in the form.
+    const idx = state.dibbers.findIndex(d => +d.shortCode === editingShortCode);
+    document.getElementById(`dibber-row-${idx}`)?.classList.add('row-editing');
+  } else {
+    // Keeps the Add Dibber form's suggested number current with the catalogue — without this,
+    // wireDibbers()'s own one-off call (at app bootstrap, before state.dibbers has loaded from
+    // the dataset) would be the only time it's ever set, leaving it stuck on "Number: 1" the
+    // first time this view is actually shown.
+    fillDibberFormDefaults();
   }
-  d.owner = document.getElementById(`dib-avail-${idx}`)?.value.trim() || '';
-  d.lost  = normaliseDate(document.getElementById(`dib-lost-${idx}`)?.value.trim());
-  d.notes = document.getElementById(`dib-notes-${idx}`)?.value.trim() || '';
-  await saveDibbers();
-  showStatus(`Dibber ${d.shortCode} updated.`);
-  renderDibbers();
 }
 
-export function showAddDibberRow() {
-  const tbody = document.getElementById('dibbers-tbody');
-  if (!tbody) return;
-  if (document.getElementById('dibber-row-new')) return; // already open
+// Populates the Add Dibber form with an existing dibber's values and switches it into Update
+// mode — same pattern as editing an entry on the Entries page (see fillFormForEdit() there) and
+// the Beacons page's own Edit, but without a confirm prompt first.
+function fillDibberFormForEdit(shortCode) {
+  const d = state.dibbers.find(x => +x.shortCode === +shortCode);
+  if (!d) return;
+  editingShortCode = +shortCode;
+  fillForm('', {
+    'dibber-form-short': d.shortCode,
+    'dibber-form-long':  d.longCode || '',
+    'dibber-form-owner': d.owner || '',
+    'dibber-form-lost':  normaliseDate(d.lost) || d.lost || '',
+    'dibber-form-notes': d.notes || '',
+  });
+  const shortEl = document.getElementById('dibber-form-short');
+  if (shortEl) shortEl.readOnly = true; // renumbering risks orphaning entries already allocated this dibber
+  const editFields = document.getElementById('dibber-form-edit-fields');
+  if (editFields) editFields.hidden = false;
+  const addBtn = document.getElementById('btn-add-dibber');
+  if (addBtn) addBtn.textContent = 'Update';
+  const cancelBtn = document.getElementById('btn-cancel-edit-dibber');
+  if (cancelBtn) cancelBtn.style.display = '';
+  clearRowEditing('dibbers-tbody');
+  const idx = state.dibbers.indexOf(d);
+  const row = document.getElementById(`dibber-row-${idx}`);
+  row?.classList.add('row-editing');
+  row?.scrollIntoView({ block: 'nearest' });
+  document.getElementById('dibber-form-long')?.focus();
+}
+
+// Suggests the next free short code and long code, and carries Owner/Notes forward from the
+// last dibber added — most dibbers are bought and registered in batches with consecutive long
+// codes by the same owner, so repeating those values saves re-typing them for every dibber in
+// the batch.
+function fillDibberFormDefaults() {
   const nextShort = state.dibbers.length
     ? Math.max(...state.dibbers.map(d => +d.shortCode)) + 1
     : 1;
-  const tr = document.createElement('tr');
-  tr.id = 'dibber-row-new';
-  tr.className = 'row-edit-wrap';
-  tr.innerHTML = `
-    <td data-label="Num"><input id="dib-new-short" type="text" value="${nextShort}" style="width:60px"></td>
-    <td data-label="Long Code"><input id="dib-new-long"  type="text" value=""             style="width:90px"></td>
-    <td data-label="Owner"><input id="dib-new-avail" type="text" value=""             style="width:80px"></td>
-    <td data-label="Notes"><input id="dib-new-notes" type="text" value=""             style="width:160px"></td>
-    <td data-label="Actions">
-      <button class="btn-sm btn-save">Save</button>
-      <button class="btn-sm btn-secondary">Cancel</button>
-    </td>`;
-  tbody.appendChild(tr);
-  tr.querySelector('.btn-save').addEventListener('click', saveNewDibberRow);
-  tr.querySelector('.btn-secondary').addEventListener('click', () => tr.remove());
-  setTimeout(() => {
-    const shortInput = tr.querySelector('input');
-    if (shortInput) {
-      shortInput.scrollIntoView({ block: 'center' });
-      shortInput.focus();
-      shortInput.select();
-    }
-  }, 50);
+  const prev = state.dibbers[state.dibbers.length - 1] || null;
+  fillForm('', {
+    'dibber-form-short': nextShort,
+    'dibber-form-long':  prev ? +prev.longCode + 1 : '',
+    'dibber-form-owner': prev?.owner || '',
+    'dibber-form-notes': prev?.notes || '',
+  });
 }
 
-export async function saveNewDibberRow() {
-  const short = document.getElementById('dib-new-short')?.value.trim();
-  const long  = document.getElementById('dib-new-long')?.value.trim();
-  if (!short || isNaN(+short)) { showStatus('Short code is required.', true); return; }
-  if (!long  || isNaN(+long))  { showStatus('Long code is required.',  true); return; }
+// Used by both the always-visible Reset button and the edit-only Cancel Edit button — exiting
+// an edit in progress and resetting to a blank Add Dibber form are the same operation (mirrors
+// resetEntryForm() on the Entries page, and resetBeaconForm() on the Beacons page).
+export function resetDibberForm() {
+  editingShortCode = 0;
+  clearRowEditing('dibbers-tbody');
+  const shortEl = document.getElementById('dibber-form-short');
+  if (shortEl) shortEl.readOnly = false;
+  const editFields = document.getElementById('dibber-form-edit-fields');
+  if (editFields) editFields.hidden = true;
+  const addBtn = document.getElementById('btn-add-dibber');
+  if (addBtn) addBtn.textContent = 'Add Dibber';
+  const cancelBtn = document.getElementById('btn-cancel-edit-dibber');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  clearForm('dibber-form-fields');
+  fillDibberFormDefaults();
+  document.getElementById('dibber-form-long')?.focus();
+}
+
+export async function submitDibberForm() {
+  if (editingShortCode) {
+    const d = state.dibbers.find(x => +x.shortCode === editingShortCode);
+    if (!d) { resetDibberForm(); return; }
+    const longVal = val('dibber-form-long').trim();
+    if (longVal !== '' && !isNaN(+longVal)) {
+      const clash = state.dibbers.find(x => +x.longCode === +longVal && x !== d);
+      if (clash) {
+        showStatus(`Long code ${longVal} already used by dibber ${clash.shortCode}.`, true);
+        return;
+      }
+      d.longCode = +longVal;
+    }
+    d.owner = val('dibber-form-owner').trim();
+    d.lost  = normaliseDate(val('dibber-form-lost').trim());
+    d.notes = val('dibber-form-notes').trim();
+    await saveDibbers();
+    showStatus(`Dibber ${d.shortCode} updated.`);
+    resetDibberForm();
+    renderDibbers();
+    return;
+  }
+
+  const short = val('dibber-form-short').trim();
+  const long  = val('dibber-form-long').trim();
+  if (!short || isNaN(+short)) { showStatus('Number is required.', true); return; }
+  if (!long  || isNaN(+long))  { showStatus('Long code is required.', true); return; }
   if (state.dibbers.find(d => +d.shortCode === +short)) {
     showStatus(`Short code ${short} already exists.`, true); return;
   }
   if (state.dibbers.find(d => +d.longCode === +long)) {
     showStatus(`Long code ${long} already exists.`, true); return;
   }
-  const avail = document.getElementById('dib-new-avail')?.value.trim() || '';
-  const notes = document.getElementById('dib-new-notes')?.value.trim() || '';
-  state.dibbers.push(createDibber({ shortCode: +short, longCode: +long, owner: avail, notes }));
+  const owner = val('dibber-form-owner').trim();
+  const notes = val('dibber-form-notes').trim();
+  state.dibbers.push(createDibber({ shortCode: +short, longCode: +long, owner, notes }));
   state.dibbers.sort((a, b) => +a.shortCode - +b.shortCode);
   await saveDibbers();
   showStatus(`Dibber ${short} added.`);
-  renderDibbers();
+  renderDibbers(); // also refreshes the form's suggested next number
+  document.getElementById('dibber-form-long')?.focus();
 }
 
 export async function deleteDibbersFrom(idx) {
@@ -133,6 +164,7 @@ export async function deleteDibbersFrom(idx) {
   const count = state.dibbers.length - idx;
   if (!await showConfirmDialog(`Delete ${count} dibber${count === 1 ? '' : 's'} from short code ${from.shortCode} onwards?`, 'Delete', true)) return;
   state.dibbers.splice(idx);
+  if (editingShortCode && !state.dibbers.find(d => +d.shortCode === editingShortCode)) resetDibberForm();
   await saveDibbers();
   showStatus(`${count} dibber${count === 1 ? '' : 's'} deleted.`);
   renderDibbers();
@@ -280,6 +312,7 @@ function exportDibbers() {
 async function clearDibbers() {
   if (!await showConfirmDialog(`Clear all ${state.dibbers.length} dibbers?`, 'Clear All', true)) return;
   state.dibbers.length = 0;
+  resetDibberForm();
   await saveDibbers();
   showStatus('Dibbers list cleared.');
   renderDibbers();
@@ -288,8 +321,12 @@ async function clearDibbers() {
 export function wireDibbers() {
   on('btn-import-dibbers', 'click', importDibbersFromFile);
   on('btn-export-dibbers', 'click', exportDibbers);
-  on('btn-add-dibber',     'click', showAddDibberRow);
+  on('btn-add-dibber',     'click', submitDibberForm);
+  on('btn-reset-dibber-form', 'click', resetDibberForm);
+  on('btn-cancel-edit-dibber', 'click', resetDibberForm);
   on('btn-clear-dibbers',  'click', clearDibbers);
+  wireFormFocusTrap('dibber-form-fields', submitDibberForm); // Tab cycles the form, Enter adds
+  fillDibberFormDefaults();
 
   on('btn-merge-dibbers',       'click', openMergePanel);
   on('btn-cancel-merge-dibbers', 'click', () => { document.getElementById('dibbers-merge-panel').hidden = true; });
@@ -304,7 +341,7 @@ export function wireDibbers() {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const idx = +btn.closest('[data-idx]')?.dataset.idx;
-    if (btn.dataset.action === 'edit') editDibberRow(idx);
+    if (btn.dataset.action === 'edit') fillDibberFormForEdit(state.dibbers[idx]?.shortCode);
     else if (btn.dataset.action === 'del') deleteDibbersFrom(idx);
   });
 }

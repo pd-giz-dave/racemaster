@@ -1076,18 +1076,15 @@
     <!-- ======================================================
          DIBBERS
          ====================================================== -->
-    <div class="view view-list" id="view-dibbers" hidden>
+    <div class="view view-split" id="view-dibbers" hidden>
       <div class="view-header">
         <h2>Dibbers</h2>
         <span class="count-badge" id="dibbers-count">0</span>
-        <span class="entry-status view-status-msg" hidden></span>
-      </div>
-      <div class="btn-row">
-        <button class="btn" id="btn-add-dibber">Add Dibber</button>
         <button class="btn btn-secondary" id="btn-import-dibbers">Import CSV</button>
         <button class="btn btn-secondary" id="btn-export-dibbers">Export CSV</button>
         <button class="btn btn-secondary" id="btn-merge-dibbers">Merge…</button>
         <button class="btn btn-delete" id="btn-clear-dibbers">Clear All</button>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div id="dibbers-merge-panel" hidden style="flex-shrink:0;padding:4px 0 2px">
@@ -1103,29 +1100,65 @@
         </div>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table data-table-wrap">
-          <thead></thead>
-          <tbody id="dibbers-tbody"></tbody>
-        </table>
+      <div class="split-layout">
+        <!-- Add Dibber form -->
+        <div class="card">
+          <h3>Add Dibber</h3>
+          <div id="dibber-form-fields">
+            <div class="form-grid mb-8" style="grid-template-columns:1fr 1fr">
+              <div class="form-field">
+                <label for="dibber-form-short">Number</label>
+                <input type="text" id="dibber-form-short" inputmode="numeric">
+              </div>
+              <div class="form-field">
+                <label for="dibber-form-long">Long Code</label>
+                <input type="text" id="dibber-form-long" inputmode="numeric">
+              </div>
+            </div>
+            <div class="form-field mb-8">
+              <label for="dibber-form-owner">Owner</label>
+              <input type="text" id="dibber-form-owner" autocomplete="off">
+            </div>
+            <div class="form-field mb-8" id="dibber-form-edit-fields" hidden>
+              <label for="dibber-form-lost">Lost (DD/MM/YY)</label>
+              <input type="text" id="dibber-form-lost" placeholder="DD/MM/YY" data-normalise="date">
+            </div>
+            <div class="form-field">
+              <label for="dibber-form-notes">Notes</label>
+              <textarea id="dibber-form-notes" rows="2"></textarea>
+            </div>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn" id="btn-add-dibber" style="flex:1">Add Dibber</button>
+              <button class="btn btn-secondary" id="btn-reset-dibber-form" style="flex:1">Reset</button>
+            </div>
+            <button class="btn btn-secondary" id="btn-cancel-edit-dibber" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
+          </div>
+        </div>
+
+        <!-- Dibbers table -->
+        <div class="table-panel">
+          <div class="table-scroll">
+            <table class="data-table data-table-wrap">
+              <thead></thead>
+              <tbody id="dibbers-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- ======================================================
          BEACONS
          ====================================================== -->
-    <div class="view view-list" id="view-beacons" hidden>
+    <div class="view view-split" id="view-beacons" hidden>
       <div class="view-header">
         <h2>Beacons</h2>
         <span class="count-badge" id="beacons-count">0</span>
-        <span class="entry-status view-status-msg" hidden></span>
-      </div>
-      <div class="btn-row">
-        <button class="btn" id="btn-add-beacon">Add Beacons</button>
         <button class="btn btn-secondary" id="btn-import-beacons">Import CSV</button>
         <button class="btn btn-secondary" id="btn-export-beacons">Export CSV</button>
         <button class="btn btn-secondary" id="btn-merge-beacons">Merge…</button>
         <button class="btn btn-delete" id="btn-clear-beacons">Clear All</button>
+        <span class="entry-status view-status-msg" hidden></span>
       </div>
 
       <div id="beacons-merge-panel" hidden style="flex-shrink:0;padding:4px 0 2px">
@@ -1141,11 +1174,72 @@
         </div>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table data-table-wrap">
-          <thead></thead>
-          <tbody id="beacons-tbody"></tbody>
-        </table>
+      <div class="split-layout">
+        <!-- Add Beacon form -->
+        <div class="card">
+          <h3>Add Beacon</h3>
+          <div id="beacon-form-fields">
+            <div class="form-grid mb-8" style="grid-template-columns:1fr 1fr">
+              <div class="form-field">
+                <label for="beacon-form-number">Number</label>
+                <input type="text" id="beacon-form-number" inputmode="numeric">
+              </div>
+              <div class="form-field">
+                <label for="beacon-form-owner">Owner</label>
+                <input type="text" id="beacon-form-owner" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-field mb-8">
+              <label for="beacon-form-acquired">Date Acquired (DD/MM/YY)</label>
+              <input type="text" id="beacon-form-acquired" placeholder="DD/MM/YY" data-normalise="date">
+            </div>
+            <div id="beacon-form-edit-fields" hidden>
+              <div class="form-grid mb-8" style="grid-template-columns:1fr 1fr 1fr">
+                <div class="form-field">
+                  <label for="beacon-form-uses">Uses</label>
+                  <input type="number" id="beacon-form-uses" min="0" step="1">
+                </div>
+                <div class="form-field">
+                  <label for="beacon-form-hours">Total Hours</label>
+                  <input type="number" id="beacon-form-hours" min="0" step="0.1">
+                </div>
+                <div class="form-field">
+                  <label for="beacon-form-battery">Battery%</label>
+                  <input type="number" id="beacon-form-battery" min="0" max="100">
+                </div>
+              </div>
+              <div class="form-grid mb-8" style="grid-template-columns:1fr 1fr">
+                <div class="form-field">
+                  <label for="beacon-form-lastused">Last Used (DD/MM/YY)</label>
+                  <input type="text" id="beacon-form-lastused" placeholder="DD/MM/YY" data-normalise="date">
+                </div>
+                <div class="form-field">
+                  <label for="beacon-form-lost">Lost (DD/MM/YY)</label>
+                  <input type="text" id="beacon-form-lost" placeholder="DD/MM/YY" data-normalise="date">
+                </div>
+              </div>
+            </div>
+            <div class="form-field">
+              <label for="beacon-form-notes">Notes</label>
+              <textarea id="beacon-form-notes" rows="2"></textarea>
+            </div>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn" id="btn-add-beacon" style="flex:1">Add Beacon</button>
+              <button class="btn btn-secondary" id="btn-reset-beacon-form" style="flex:1">Reset</button>
+            </div>
+            <button class="btn btn-secondary" id="btn-cancel-edit-beacon" style="width:100%;margin-top:4px;display:none">Cancel Edit</button>
+          </div>
+        </div>
+
+        <!-- Beacons table -->
+        <div class="table-panel">
+          <div class="table-scroll">
+            <table class="data-table data-table-wrap">
+              <thead></thead>
+              <tbody id="beacons-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 

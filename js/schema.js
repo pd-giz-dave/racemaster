@@ -24,10 +24,10 @@ export function createDibber({
 // dateAcquired/lastUsed/lost are plain dates, DD/MM/YYYY — the same convention every other date
 // field in the app uses (state.event.date, a person's dob, etc.) — never an ISO instant.
 export function createBeacon({
-  number = 0, owner = '', dateAcquired = '', totalHours = 0, batteryLevel = 100,
+  number = 0, owner = '', dateAcquired = '', usageCount = 0, totalHours = 0, batteryLevel = 100,
   lastUsed = '', lost = '', notes = '',
 } = {}) {
-  return { number, owner, dateAcquired, totalHours, batteryLevel, lastUsed, lost, notes };
+  return { number, owner, dateAcquired, usageCount, totalHours, batteryLevel, lastUsed, lost, notes };
 }
 
 export function createEntry({

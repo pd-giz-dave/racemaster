@@ -264,10 +264,16 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size:
 .btn-date-pick svg { width: 15px; height: 15px; }
 .btn-date-pick:hover { color: var(--accent); }
 
-.date-picker-popup {
+/* The generic input[type="date"] rule below (width:100%) has the same specificity as a plain
+   class selector and comes later in the file, so it would win a tie and stretch this
+   fixed-position popup across the full viewport. Repeating the [type="date"] attribute here
+   raises the specificity above that rule so width:auto actually applies regardless of source
+   order. */
+input[type="date"].date-picker-popup {
   display: none;
   position: fixed;
   z-index: 2000;
+  width: auto;
 }
 
 .view-help {
@@ -648,39 +654,6 @@ button.df-badge-connected:hover { background: var(--danger); }
    so a capped column has to be able to wrap, or the cap can't actually apply. */
 .sticky-col.sticky-col-wrap { overflow-wrap: break-word; }
 
-/* Unconditional counterpart to .data-table-wrap below (same opt-in tables: Beacons/Dibbers):
-   editing a row always adds several extra inputs — sometimes with a calendar-icon button too
-   (js/ui.js's wireDateInputs()) — and that's routinely wider than even a desktop table-scroll
-   area, not just a narrow phone one. Applied by JS (js/views/beacons.js, js/views/dibbers.js)
-   to the <tr> the moment it switches into its edit/add template, at every screen width, so
-   Save/Cancel (or Notes) never end up behind a horizontal scroll just because editing made the
-   row longer. Same flex-wrap-and-label technique as .data-table-wrap tbody tr below. */
-.row-edit-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  padding: 6px 4px;
-}
-.row-edit-wrap > td {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border-bottom: none;
-}
-.row-edit-wrap > td[data-label]::before {
-  content: attr(data-label) ":";
-  font-weight: 600;
-  color: var(--muted);
-  font-size: 0.75em;
-  flex-shrink: 0;
-}
-.row-edit-wrap > td.sticky-col {
-  position: static;
-  left: auto !important;
-}
-
 #header-dataset-name { color: var(--header-fg-dim); font-size: 0.875rem; }
 
 /* ---- Status bar ---- */
@@ -962,9 +935,7 @@ button.df-badge-connected:hover { background: var(--danger); }
      Actions) out of view. Switch to a wrapping row instead — a <tr> can't wrap its own <td>s
      while staying display:table-row, so this breaks each row out into a flex container whose
      cells wrap like any other inline content, and labels each one from its own data-label
-     (set in js/ui.js's cellAttrs()) since the header row no longer lines up with anything.
-     See .row-edit-wrap above for the same treatment applied unconditionally to a row that's
-     currently being edited, regardless of screen width. */
+     (set in js/ui.js's cellAttrs()) since the header row no longer lines up with anything. */
   .data-table-wrap { width: 100%; }
   .data-table-wrap thead { display: none; }
   .data-table-wrap tbody tr {

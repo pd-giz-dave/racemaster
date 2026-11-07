@@ -220,6 +220,15 @@ function markBeaconUsed(beaconNumber) {
   if (beacon) beacon.lastUsed = state.event.date;
 }
 
+// Counts a genuinely new pairing of this beacon with a race registration — called once per
+// allocation (a fresh entry, a course switch, a manual override change, or a resequencing shift
+// onto a different entry), never on a plain re-save of an entry that keeps its existing beacon.
+function incrementBeaconUsage(beaconNumber) {
+  if (!beaconNumber) return;
+  const beacon = state.beacons.find(b => +b.number === +beaconNumber);
+  if (beacon) beacon.usageCount = (+beacon.usageCount || 0) + 1;
+}
+
 // Scoped to beacon-timed entries only — see predecessorDibber()'s own doc on why this guard is
 // needed now that both pools allocate into the same entry.dibberNumber field.
 function predecessorBeacon(entryIdx) {
@@ -265,6 +274,7 @@ function shiftBeaconsForward(fromEntryIdx, insertedListIdx) {
       while (listIdx < state.beacons.length && state.beacons[listIdx].lost) listIdx++;
       e.dibberNumber = listIdx < state.beacons.length ? +state.beacons[listIdx].number : 0;
       markBeaconUsed(e.dibberNumber);
+      incrementBeaconUsage(e.dibberNumber);
     }
   }
 }
@@ -417,6 +427,7 @@ export async function submitEntry(formData) {
   savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
   markBeaconUsed(usedBeacon);
+  incrementBeaconUsage(usedBeacon);
   await saveEntries();
   if (usedBeacon) await saveBeacons();
   await savePeople();
@@ -490,6 +501,7 @@ export async function updateEntry(bibNumber, formData) {
       return { error: 'No more beacon numbers available — load more beacon numbers' };
     e.dibberNumber = +state.beacons[newListIdx].number;
     markBeaconUsed(e.dibberNumber);
+    incrementBeaconUsage(e.dibberNumber);
     shiftBeaconsForward(idx + 1, newListIdx);
     if (skipped.length)
       lostWarning = `Beacon${skipped.length > 1 ? 's' : ''} ${skipped.join(', ')} skipped (marked lost)`;
@@ -497,7 +509,8 @@ export async function updateEntry(bibNumber, formData) {
     // See the dibberOverride branch's own doc above — same reasoning, guarded by
     // nowUsingBeacons instead.
     const newBeacon = +formData.dibberOverride || 0;
-    if (newBeacon > 0 && newBeacon !== +e.dibberNumber) {
+    const beaconChanged = newBeacon > 0 && newBeacon !== +e.dibberNumber;
+    if (beaconChanged) {
       const lostBeacon = state.beacons.find(b => +b.number === newBeacon);
       if (lostBeacon?.lost) return { error: `Beacon ${newBeacon} is marked lost (since ${lostBeacon.lost})` };
       const clashIdx = findEntryByDibber(newBeacon);
@@ -505,6 +518,7 @@ export async function updateEntry(bibNumber, formData) {
         return { error: `Beacon ${newBeacon} is already assigned to bib ${state.entries[clashIdx].bibNumber}` };
     }
     if (newBeacon > 0) markBeaconUsed(newBeacon);
+    if (beaconChanged) incrementBeaconUsage(newBeacon);
     e.dibberNumber = newBeacon;
   }
 
@@ -582,6 +596,7 @@ export async function insertEntryAndRenumber(atBib, formData) {
       beaconListIdxCursor++;
       e.dibberNumber = beaconListIdxCursor < state.beacons.length ? +state.beacons[beaconListIdxCursor].number : 0;
       markBeaconUsed(e.dibberNumber);
+      incrementBeaconUsage(e.dibberNumber);
     }
   }
 
@@ -589,6 +604,7 @@ export async function insertEntryAndRenumber(atBib, formData) {
   savePeople2(name, gender, dob, club, fra, category, partner);
   sortPeople();
   markBeaconUsed(usedBeacon);
+  incrementBeaconUsage(usedBeacon);
   await saveEntries();
   if (usedBeacon || beaconListIdxCursor >= 0) await saveBeacons();
   await savePeople();

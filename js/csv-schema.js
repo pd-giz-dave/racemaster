@@ -28,6 +28,7 @@ export const CSV = {
       number:       ['number',       'Number'],
       owner:        ['owner',        'Owner'],
       dateAcquired: ['dateAcquired', 'Date Acquired'],
+      usageCount:   ['usageCount',   'Usage Count', 'Uses'],
       totalHours:   ['totalHours',   'Total Hours'],
       batteryLevel: ['batteryLevel', 'Battery Level'],
       lastUsed:     ['lastUsed',     'Last Used'],

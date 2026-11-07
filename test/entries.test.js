@@ -18,7 +18,7 @@ function dibbers(codes) {
 }
 
 function beacons(numbers) {
-  return numbers.map(number => ({ number, owner: '', dateAcquired: '', totalHours: 0, batteryLevel: 100, lastUsed: '', lost: '', notes: '' }));
+  return numbers.map(number => ({ number, owner: '', dateAcquired: '', usageCount: 0, totalHours: 0, batteryLevel: 100, lastUsed: '', lost: '', notes: '' }));
 }
 
 beforeEach(() => {
@@ -181,6 +181,20 @@ describe('entries.js:submitEntry', () => {
     await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
     assert.equal(state.beacons[0].lastUsed, state.event.date);
     assert.equal(state.beacons[1].lastUsed, ''); // not yet allocated to anyone
+  });
+
+  it('increments usageCount each time a beacon is allocated to a new registration, not on re-saves that keep it', async () => {
+    state.event.timingMethod = 'Beacons';
+    state.beacons = beacons([1, 2]);
+    const r = await submitEntry({ name: 'Dave', gender: 'Male', dob: '01/01/1990' });
+    assert.equal(state.beacons[0].usageCount, 1);
+    assert.equal(state.beacons[1].usageCount, 0); // not yet allocated to anyone
+    // Re-saving the same entry without changing its beacon must not double-count.
+    await updateEntry(r.bibNumber, { name: 'Dave', gender: 'Male', dob: '01/01/1990', dibberOverride: '1' });
+    assert.equal(state.beacons[0].usageCount, 1);
+    // Manually reassigning the entry to a different beacon counts as a new allocation for that one.
+    await updateEntry(r.bibNumber, { name: 'Dave', gender: 'Male', dob: '01/01/1990', dibberOverride: '2' });
+    assert.equal(state.beacons[1].usageCount, 1);
   });
 
   // Both pools allocate into the same entry.dibberNumber field (see createEntry()'s own doc) —

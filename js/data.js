@@ -244,6 +244,7 @@ export function normaliseBeaconRows(rows) {
   if (!numberKey) return null;
   const ownerKey    = findBeaconAlias(keys, 'owner');
   const acquiredKey = findBeaconAlias(keys, 'dateAcquired');
+  const usageKey     = findBeaconAlias(keys, 'usageCount');
   const hoursKey     = findBeaconAlias(keys, 'totalHours');
   const batteryKey   = findBeaconAlias(keys, 'batteryLevel');
   const lastUsedKey  = findBeaconAlias(keys, 'lastUsed');
@@ -253,6 +254,7 @@ export function normaliseBeaconRows(rows) {
     number:       r[numberKey],
     owner:        ownerKey    ? r[ownerKey]    : '',
     dateAcquired: acquiredKey ? normaliseDate(r[acquiredKey]) : '',
+    usageCount:   usageKey    ? r[usageKey]    : 0,
     totalHours:   hoursKey    ? r[hoursKey]    : 0,
     batteryLevel: batteryKey  ? r[batteryKey]  : 100,
     lastUsed:     lastUsedKey ? normaliseDate(r[lastUsedKey]) : '',

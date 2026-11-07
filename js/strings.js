@@ -167,7 +167,7 @@ export const TOOLTIPS = {
   'btn-clear-dibbers':           'Delete all dibber records - cannot be undone',
 
   // Beacons
-  'btn-add-beacon':              'Add a beacon record manually',
+  'btn-add-beacon':              'Add this beacon to the catalogue',
   'btn-import-beacons':          'Import beacon records from a CSV file',
   'btn-export-beacons':          'Export beacon records as a CSV file',
   'btn-merge-beacons':           'Merge beacon records from another dataset or JSON backup file',
@@ -462,6 +462,9 @@ export const HELP = {
         The short-code is used during registration and mapped to its corresponding long code when exporting entries to SI Timing.</p>
     <p>If the <strong>Lost</strong> column has a date, it indicates the dibber is no longer available and will not be allocated.
         Type it as <strong>DD/MM/YY</strong>, like any other date field in the app, or pick one with the calendar button.</p>
+    <p>Use the <strong>Add Dibber</strong> form to register a new dibber — it defaults Owner and Notes from the
+        last one added, and suggests the next short code and long code, so pressing Enter (or Add Dibber)
+        repeatedly adds a whole batch quickly.</p>
     <p>Use <strong>Import CSV</strong> to import a dibber list, new short codes are added, existing ones are updated.
         The CSV must include at least columns of "Short Code" and "Long Code".</p>
   `,
@@ -473,13 +476,15 @@ export const HELP = {
         not be allocated. <strong>Date Acquired</strong>, <strong>Last Used</strong> and <strong>Lost</strong>
         can all be typed as <strong>DD/MM/YY</strong>, like any other date field in the app, or picked with the
         calendar button.</p>
-    <p><strong>Last Used</strong> is set the moment a beacon is allocated to an entry, before any housekeeping
+    <p><strong>Uses</strong> counts how many race registrations this beacon has been allocated to.
+        <strong>Last Used</strong> is set the moment a beacon is allocated to an entry, before any housekeeping
         report is read. <strong>Battery Level</strong> and <strong>Total Hours</strong> (and a refreshed
         <strong>Last Used</strong>) are then updated automatically from the Mobile Files page's Beacons tab once
         a race's post-race housekeeping report is read — a battery level below the event's Low Battery Threshold
         (Event Settings) is highlighted.</p>
-    <p><strong>Add Beacons</strong> defaults Owner, Date Acquired and Notes from the previous beacon and, after
-        each Save, immediately opens the next number — keep pressing Enter to add a whole batch, Cancel to stop.</p>
+    <p>Use the <strong>Add Beacon</strong> form to register a new beacon — it defaults Owner, Date Acquired and
+        Notes from the last one added and suggests the next number, so pressing Enter (or Add Beacon) repeatedly
+        adds a whole batch quickly.</p>
     <p>Use <strong>Import CSV</strong> to import a beacon list, new numbers are added, existing ones are updated.
         The CSV must include at least a "Number" column.</p>
   `,
@@ -912,12 +917,20 @@ export const PAGES = {
           number, highlighting any that hasn't been returned yet</li>
       <li><strong>Date Acquired</strong>, <strong>Last Used</strong> and <strong>Lost</strong> on
           the Beacons and Dibbers pages can now be typed as <strong>DD/MM/YY</strong>, like every
-          other date field in the app, and have a calendar button to pick one instead — editing a
-          row on either page now wraps onto multiple lines rather than needing a horizontal
-          scroll to reach Notes or the Save/Cancel buttons</li>
-      <li><strong>Add Beacons</strong> now keeps adding — Owner, Date Acquired and Notes default
-          from the previous entry, and after each Save it immediately opens the next one, so a
-          whole batch can be entered by just pressing Enter repeatedly until Cancel is clicked</li>
+          other date field in the app, and have a calendar button to pick one instead — the
+          calendar popup itself no longer stretches to the full width of the page</li>
+      <li>The Beacons page has a new <strong>Uses</strong> column, incremented each time a beacon
+          is newly allocated to a race registration (not on a re-save of the same allocation)</li>
+      <li>Beacons and Dibbers are now added and edited through the same form instead of editing a
+          row in place — clicking <strong>Edit</strong> fills the form straight in (with no
+          confirmation prompt), while the <strong>Add Beacon</strong> form keeps adding, defaulting
+          Owner, Date Acquired and Notes from the last one added, and the <strong>Add Dibber</strong>
+          form does the same for Long Code, Owner and Notes — so a whole batch can be entered by
+          just pressing Enter repeatedly. Selecting either page, and after every successful Add,
+          now puts the cursor straight into the next field to fill in (Date Acquired for Beacons,
+          Long Code for Dibbers)</li>
+      <li>The Notes field on the Beacons and Dibbers forms is now a multi-line box, so a long
+          pasted note wraps instead of scrolling off the side</li>
     </ul>
     <h3>v0.0.28-alpha</h3>
     <ul>
@@ -1529,11 +1542,12 @@ export const TABLES = {
     { id: 'actions',    label: 'Actions',    title: 'Edit or delete' },
   ],
   beacons: [
-    { id: 'number',       label: 'Number',       title: 'Beacon number', sticky: true },
+    { id: 'number',       label: 'Num',          title: 'Beacon number', sticky: true },
     { id: 'owner',        label: 'Owner',        title: 'Who owns this beacon' },
-    { id: 'dateAcquired', label: 'Date Acquired', title: 'Date this beacon was acquired' },
-    { id: 'totalHours',   label: 'Total Hours',  title: 'Accumulated hours in use across every race (2h before start to power-off)' },
-    { id: 'batteryLevel', label: 'Battery Level', title: 'Battery level (%) as of its last housekeeping report — highlighted below the event\'s Low Battery Threshold' },
+    { id: 'dateAcquired', label: 'Acquired',     title: 'Date this beacon was acquired' },
+    { id: 'usageCount',   label: 'Uses',         title: 'Number of race registrations this beacon has been allocated to' },
+    { id: 'totalHours',   label: 'Tot Hrs',      title: 'Accumulated hours in use across every race (2h before start to power-off)' },
+    { id: 'batteryLevel', label: 'Battery%',     title: 'Battery level (%) as of its last housekeeping report — highlighted below the event\'s Low Battery Threshold' },
     { id: 'lastUsed',     label: 'Last Used',    title: 'Date this beacon was last used — set as soon as it\'s allocated to an entry, updated once a beacons housekeeping report confirms its power-off' },
     { id: 'lost',         label: 'Lost',         title: 'Date this beacon was lost — lost beacons are excluded from allocation' },
     { id: 'notes',        label: 'Notes',        title: 'Additional notes' },

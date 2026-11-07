@@ -265,8 +265,20 @@ function renderView(v) {
       break;
     case 'clubs':        renderClubs();        break;
     case 'roles':        renderRoles();        break;
-    case 'dibbers':      renderDibbers();      break;
-    case 'beacons':      renderBeacons();      break;
+    case 'dibbers':
+      renderDibbers();
+      setTimeout(() => {
+        document.querySelector('#dibbers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
+        document.getElementById('dibber-form-long')?.focus();
+      }, 0);
+      break;
+    case 'beacons':
+      renderBeacons();
+      setTimeout(() => {
+        document.querySelector('#beacons-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
+        document.getElementById('beacon-form-acquired')?.focus();
+      }, 0);
+      break;
     case 'categories':   renderCategories();   break;
     case 'forms':        renderForms();        break;
     case 'si-results':   renderSIResults();    break;
