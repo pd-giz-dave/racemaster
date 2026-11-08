@@ -40,7 +40,6 @@ export const TOOLTIPS = {
   'ev-start-time':               'Expected mass start time for seniors (info only, the actual time is recorded in the finishers list)',
   'ev-entry-limit':              'Maximum number of senior entries allowed (0 = no limit)',
   'ev-timing-method':            'How senior finish times are recorded — Stopwatch (manual entry), Dibbers (SportIdent), Beacons (Bluetooth, recorded via the mobile app like Stopwatch), or None',
-  'ev-beacon-threshold':         'Battery level (%) below which a beacon is highlighted as needing attention — applies whenever either timing method is set to Beacons',
   'ev-male-record':              'Current male course record — used to highlight new records in the results',
   'ev-female-record':            'Current female course record — used to highlight new records in the results',
   'ev-junior-start-time':        'Expected mass start time for juniors (info only, the actual time is recorded in the finishers list)',
@@ -191,6 +190,7 @@ export const TOOLTIPS = {
   'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s), if any, (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — a Finish file is not required, checkpoint files alone still populate what they can; requires valid bib numbers, the same race, no empty files, and no more than one file per location',
   'btn-clear-progress':          'Delete the finishers list and all checkpoint data computed by Update Progress — also clears their effects elsewhere, e.g. Safety Check',
   'btn-read-beacons-report':     'Read this race\'s post-race beacons housekeeping report (battery levels and power-off times) — tries a connected phone over Bluetooth first, then falls back to the server. Safe to re-read a growing report: already-processed power-offs aren\'t double-counted, and late returns update the missing list',
+  'mobile-beacon-threshold':     'Battery level (%) below which a beacon is highlighted as needing attention',
   'btn-ble-logging':             'Log routine Bluetooth connect/pull activity to the browser console — off by default; a genuine connect/pull failure is always logged regardless',
 
   // Data file / auth
@@ -480,8 +480,8 @@ export const HELP = {
         <strong>Last Used</strong> is set the moment a beacon is allocated to an entry, before any housekeeping
         report is read. <strong>Battery Level</strong> and <strong>Total Hours</strong> (and a refreshed
         <strong>Last Used</strong>) are then updated automatically from the Mobile Files page's Beacons tab once
-        a race's post-race housekeeping report is read — a battery level below the event's Low Battery Threshold
-        (Event Settings) is highlighted.</p>
+        a race's post-race housekeeping report is read — a battery level below the low battery
+        threshold, set on the Mobile Files page's Beacons tab, is highlighted.</p>
     <p>Use the <strong>Add Beacon</strong> form to register a new beacon — it defaults Owner, Date Acquired and
         Notes from the last one added and suggests the next number, so pressing Enter (or Add Beacon) repeatedly
         adds a whole batch quickly.</p>
@@ -903,7 +903,8 @@ export const PAGES = {
       <li>Added a new <strong>Beacons</strong> timing method, alongside Dibbers and Stopwatch — a
           <strong>Beacons</strong> catalogue page tracks each beacon's owner, dates acquired/last
           used/lost, accumulated hours and battery level, with a configurable low-battery
-          highlight threshold in Event Settings; entries allocate from whichever pool (Dibbers or
+          highlight threshold on the Mobile Files page's Beacons tab; entries allocate from
+          whichever pool (Dibbers or
           Beacons) the course's timing method uses through a single, shared <strong>Fob
           Num</strong> field (renamed from <strong>Dibber Num</strong> on every entry form); a
           post-race beacons housekeeping report can be read from the Mobile Files page's new
@@ -926,6 +927,13 @@ export const PAGES = {
           Long Code for Dibbers)</li>
       <li>The Notes field on the Beacons and Dibbers forms is now a multi-line box, so a long
           pasted note wraps instead of scrolling off the side</li>
+      <li><strong>Usability tweaks</strong> — editing an entry or helper, and inserting an entry,
+          no longer need a confirmation step; the Mobile Files <strong>All Files</strong> tab's
+          progress file view now shows each entrant's Fob number too; a tooltip now also shows
+          when hovering a field's label, not just the control itself; and in any pop-up, Escape
+          now only closes the pop-up (it no longer also tries to leave for Home), its Close button
+          sits on the title line, and its title and column headers stay visible while scrolling a
+          long list</li>
     </ul>
     <h3>v0.0.28-alpha</h3>
     <ul>
@@ -1542,7 +1550,7 @@ export const TABLES = {
     { id: 'dateAcquired', label: 'Acquired',     title: 'Date this beacon was acquired' },
     { id: 'usageCount',   label: 'Uses',         title: 'Number of race registrations this beacon has been allocated to' },
     { id: 'totalHours',   label: 'Tot Hrs',      title: 'Accumulated hours in use across every race (2h before start to power-off)' },
-    { id: 'batteryLevel', label: 'Battery%',     title: 'Battery level (%) as of its last housekeeping report — highlighted below the event\'s Low Battery Threshold' },
+    { id: 'batteryLevel', label: 'Battery%',     title: 'Battery level (%) as of its last housekeeping report — highlighted below the low battery threshold set on the Mobile Files page\'s Beacons tab' },
     { id: 'lastUsed',     label: 'Last Used',    title: 'Date this beacon was last used — set as soon as it\'s allocated to an entry, updated once a beacons housekeeping report confirms its power-off' },
     { id: 'lost',         label: 'Lost',         title: 'Date this beacon was lost — lost beacons are excluded from allocation' },
     { id: 'notes',        label: 'Notes',        title: 'Additional notes' },
@@ -1576,7 +1584,7 @@ export const TABLES = {
   'mobile-beacons': [
     { id: 'number',       label: 'Beacon',  title: 'Beacon number', sticky: true },
     { id: 'status',       label: 'Status',  title: 'Returned (seen in the latest report) or still missing' },
-    { id: 'batteryLevel', label: 'Battery', title: 'Battery level (%) as of this report — highlighted below the event\'s Low Battery Threshold' },
+    { id: 'batteryLevel', label: 'Battery', title: 'Battery level (%) as of this report — highlighted below the low battery threshold set here, next to Read Beacons Report' },
     { id: 'lastUsed',     label: 'Last Used', title: 'Date this beacon was last used, from the Beacons catalogue' },
     { id: 'owner',        label: 'Owner',   title: 'Who owns this beacon, from the Beacons catalogue' },
   ],

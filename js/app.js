@@ -192,6 +192,12 @@ function wireNav() {
   document.addEventListener('keydown', async e => {
     if (e.key !== 'Escape') return;
     if (document.querySelector('.name-typeahead:not([hidden])')) return;
+    // A modal/dialog overlay (choice/input dialogs in ui.js, the device/raw/progress-file
+    // modals in mobile-files-devices.js/mobile-files-all.js) has its own Escape handler that
+    // just closes itself — this listener predates any of those (registered once at app init),
+    // so without this check it would also fire on the same keypress and navigate Home right
+    // underneath the modal that's only meant to be closing.
+    if (document.querySelector('.modal-backdrop, .choice-dialog-overlay')) return;
     e.preventDefault();
     if (shouldWarnBeforeLeavingDatafile('home')) {
       if (!await confirmLeaveDatafile()) return;

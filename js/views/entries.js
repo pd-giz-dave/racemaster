@@ -282,11 +282,7 @@ function fillFormForInsert(bib) {
   document.querySelector(`#entries-tbody tr[data-bib="${bib}"]`)?.classList.add('row-editing');
 }
 
-async function confirmInsertBefore(bib) {
-  const count = getSortedEntries().filter(e => +e.bibNumber >= bib).length;
-  if (!await showConfirmDialog(
-    `Insert a new entry before bib ${bib}?\n${count} entr${count === 1 ? 'y' : 'ies'} will be renumbered.`,
-    'Insert & Renumber')) return;
+function insertBefore(bib) {
   renderEntries();
   fillFormForInsert(bib);
   showStatus(`Fill in the form for bib ${bib} and submit to confirm.`);
@@ -650,14 +646,11 @@ export function wireEntries() {
     if (!btn) return;
     const bib = +btn.closest('[data-bib]')?.dataset.bib;
     switch (btn.dataset.action) {
-      case 'edit': {
-        const entry = getEntry(bib);
-        if (!entry || !await showConfirmDialog(`Edit bib ${bib} (${entry.name})?`, 'Edit')) return;
+      case 'edit':
         fillFormForEdit(bib);
         break;
-      }
       case 'ins':
-        confirmInsertBefore(bib);
+        insertBefore(bib);
         break;
       case 'del':
         deleteEntryAndRenumberHandler(bib);

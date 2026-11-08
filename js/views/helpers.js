@@ -273,12 +273,11 @@ export function wireHelpers() {
   // ---- Enter submits, Tab wraps within the form ----
   wireFormFocusTrap('helper-form-fields', submitHelperForm);
 
-  document.getElementById('helpers-tbody')?.addEventListener('click', async e => {
+  document.getElementById('helpers-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const num = +btn.closest('[data-num]')?.dataset.num;
     if (btn.dataset.action === 'edit') {
-      if (!await showConfirmDialog(`Edit helper ${num}?`, 'Edit')) return;
       fillFormForEdit(num);
     } else if (btn.dataset.action === 'del') {
       confirmDeleteHelper(num);

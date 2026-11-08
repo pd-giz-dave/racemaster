@@ -11,6 +11,7 @@
 // in mobile-files-devices.js) — that order is what a stale row's own "Delete from here" button
 // (js/views/mobile-files.js's deleteFromHere()) means by "below it".
 
+import { state } from '../state.js';
 import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
@@ -19,6 +20,22 @@ import {
   formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, isDeviceStale, isProgressStale,
 } from '../mobile-files-shared.js';
 import { formatCount, flattenAllFiles } from '../mobile-files-devices.js';
+
+// Mirrors the Progress tab's own fobNumber cell (js/views/mobile-files-progress.js) — same
+// "N — returned"/"N — not returned" suffix and color:var(--danger) highlight for a beacon still
+// outstanding — but reads straight off this *file's* own beaconNumber (a point-in-time snapshot,
+// unlike the Progress tab's live entry.dibberNumber) against the current state.beaconReports for
+// this file's own raceLabel, which is passed in rather than re-derived per entry since every
+// entry in one progress.json file shares the one race.
+function fobCellHtml(beaconNumber, raceLabel) {
+  if (!beaconNumber) return '';
+  const report = raceLabel ? state.beaconReports.find(r => r.raceLabel === raceLabel) : null;
+  const status = report?.missing.includes(beaconNumber) ? 'missing'
+               : report?.returned.includes(beaconNumber) ? 'returned' : '';
+  const suffix = status === 'missing' ? ' — not returned' : status === 'returned' ? ' — returned' : '';
+  const text = escHtml(`${beaconNumber}${suffix}`);
+  return status === 'missing' ? `<span style="color:var(--danger)">${text}</span>` : text;
+}
 
 // Live-bound (reassigned here, not just mutated) — mobile-files.js's own click-delegation listener
 // reads this directly by index, same convention as mobile-files-devices.js's own currentRows. Each
@@ -39,23 +56,24 @@ export function showProgressFileModal(owner, raceLabel, progress) {
   const rows = sorted.map(e => {
     const cpCells = cpNumbers.map(n => `<td>${escHtml(e.cpTimes?.[n] || '')}</td>`).join('');
     return `<tr><td>${e.bibNumber}</td><td>${escHtml(e.name)}</td><td>${escHtml(e.course)}</td>`
-      + `<td>${escHtml(e.category || '')}</td><td>${escHtml(e.startTime || '')}</td><td>${escHtml(e.finishTime || '')}</td>${cpCells}</tr>`;
+      + `<td>${escHtml(e.category || '')}</td><td>${fobCellHtml(+e.beaconNumber || 0, raceLabel)}</td>`
+      + `<td>${escHtml(e.startTime || '')}</td><td>${escHtml(e.finishTime || '')}</td>${cpCells}</tr>`;
   }).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
     <div class="modal-box" style="width:640px">
-      <h2>Progress — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
+      <div class="modal-header">
+        <h2>Progress — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
+        <button class="modal-close-x" id="mobile-file-modal-close" aria-label="Close" title="Close">&times;</button>
+      </div>
       <p style="margin:0 0 12px;font-size:0.875rem">Generated ${formatDateTime(progress.generatedAt, { seconds: true })}</p>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Start</th><th>Finish</th>${cpHeadCells}</tr></thead>
-          <tbody>${rows || `<tr><td colspan="${6 + cpNumbers.length}" style="color:var(--muted)">No entries.</td></tr>`}</tbody>
+          <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Fob</th><th>Start</th><th>Finish</th>${cpHeadCells}</tr></thead>
+          <tbody>${rows || `<tr><td colspan="${7 + cpNumbers.length}" style="color:var(--muted)">No entries.</td></tr>`}</tbody>
         </table>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="mobile-file-modal-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);

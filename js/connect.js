@@ -1,6 +1,6 @@
 'use strict';
 
-import { getSession, isDirty, getVersion, isConflicted, discardConflict, flushPendingMobileFiles } from './storage.js';
+import { getSession, getUsername, isDirty, getVersion, isConflicted, discardConflict, flushPendingMobileFiles } from './storage.js';
 import { showConfirmDialog } from './ui.js';
 
 export function startUpdateCheck() {
@@ -200,6 +200,13 @@ export function updateDataFileButton() {
   const name    = (fullName || session.dataset).replace(/-(?:private|public)$/, '');
   const version = getVersion();
   const dirty   = isDirty();
+  // `owner` above is who the open *dataset* belongs to, not who's logged in — the two differ
+  // whenever an admin opens someone else's dataset, which otherwise reads as "logged in as
+  // <owner>" (easy to misread, since that's the only account name normally shown anywhere in
+  // the header). Spelling out the real logged-in username only in that admin-on-someone-else's-
+  // dataset case keeps the header unchanged for the common case of viewing your own dataset.
+  const username = getUsername();
+  const viewingOther = username && username !== owner;
   if (isConflicted()) {
     dsSpan.textContent   = ` ⚠ conflict — reload required`;
     dsSpan.style.color      = '#333';
@@ -207,7 +214,8 @@ export function updateDataFileButton() {
     dsSpan.style.padding    = '2px 6px';
     dsSpan.style.borderRadius = '3px';
   } else {
-    dsSpan.textContent      = ` · ${owner} / ${name}  v${version}${dirty ? ' *' : ''}`;
+    dsSpan.textContent      = ` · ${viewingOther ? `${username} viewing ` : ''}${owner} / ${name}  v${version}${dirty ? ' *' : ''}`;
+    dsSpan.title             = viewingOther ? `Logged in as ${username} — viewing ${owner}'s dataset` : '';
     dsSpan.style.color      = dirty ? 'var(--header-warn)' : '';
     dsSpan.style.background = '';
     dsSpan.style.padding    = '';

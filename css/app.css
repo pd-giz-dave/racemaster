@@ -597,12 +597,42 @@ input:focus, select:focus, textarea:focus {
   width: 560px;
   max-width: 95vw;
   max-height: 90vh;
-  overflow-y: auto;
   box-shadow: 0 8px 40px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
 }
 
-.modal-box h2 { font-size: 1rem; margin-bottom: 16px; }
+.modal-box h2 { font-size: 1rem; margin: 0; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* Title + close button on one line, never pushed below a long table — only the table itself
+   (.table-scroll, which already has its own overflow-y:auto) scrolls, flexing to fill whatever
+   height .modal-box has left after its header/intro text, rather than .modal-box as a whole
+   scrolling (which used to carry the title and the Close button off-screen together with the
+   table content on a long file — see js/views/mobile-files-all.js's/mobile-files-devices.js's
+   own modal doc). .data-table th is already position:sticky — that only takes effect against
+   the nearest actual scrolling ancestor, which this makes .table-scroll itself rather than
+   .modal-box, so the column headers now stick too. */
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+.modal-close-x {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.modal-close-x:hover { color: var(--text); background: var(--table-hover); }
+.modal-box .table-scroll { flex: 1 1 auto; min-height: 0; margin-bottom: 0; }
 
 /* ---- Data-file dataset list ---- */
 .df-badge {

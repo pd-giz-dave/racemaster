@@ -42,7 +42,10 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
     <div class="modal-box" style="width:820px">
-      <h2>${escHtml(deviceName)} — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
+      <div class="modal-header">
+        <h2>${escHtml(deviceName)} — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
+        <button class="modal-close-x" id="mobile-file-modal-close" aria-label="Close" title="Close">&times;</button>
+      </div>
       <p style="margin:0 0 12px;font-size:0.875rem">Location: ${locationSummary(visibleRows)} &nbsp; Mode: ${escHtml(mode)}</p>
       <div class="table-scroll">
         <table class="data-table">
@@ -51,9 +54,6 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
           </tr></thead>
           <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">No entries in the current segment.</td></tr>'}</tbody>
         </table>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="mobile-file-modal-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -79,15 +79,15 @@ export function showRawModal(owner, raceLabel, deviceName, lines) {
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
     <div class="modal-box" style="width:90vw;max-width:1100px">
-      <h2>${escHtml(deviceName)} — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''} — raw</h2>
+      <div class="modal-header">
+        <h2>${escHtml(deviceName)} — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''} — raw</h2>
+        <button class="modal-close-x" id="mobile-file-modal-close" aria-label="Close" title="Close">&times;</button>
+      </div>
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>${headerRow}</tr></thead>
           <tbody>${rows || `<tr><td colspan="${fields.length}" style="color:var(--muted)">No lines in this file.</td></tr>`}</tbody>
         </table>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="mobile-file-modal-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);

@@ -12,10 +12,10 @@
 // imported directly) — kept even though this tab doesn't currently need to trigger a full
 // mobile-files re-render itself.
 
-import { on, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
+import { on, val, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
-import { state } from '../state.js';
+import { state, saveEvent } from '../state.js';
 import { coursesInUse } from '../categories.js';
 import { deriveRaceLabel } from '../mobile-files-shared.js';
 import { getSession, getUsername, apiReadBeaconsReport } from '../storage.js';
@@ -54,6 +54,9 @@ export function renderMobileBeaconsTab() {
   const report = raceLabel ? state.beaconReports.find(r => r.raceLabel === raceLabel) : null;
   const threshold = +state.event.beaconLowBatteryThreshold || 20;
   const rows = report ? buildBeaconRows(report) : [];
+
+  const thresholdEl = document.getElementById('mobile-beacon-threshold');
+  if (thresholdEl && document.activeElement !== thresholdEl) thresholdEl.value = threshold;
 
   renderTable('mobile-beacons-tbody', tableColumns(TABLES['mobile-beacons'], {
     number:       r => String(r.number),
@@ -103,6 +106,15 @@ export async function readBeaconsReport() {
   showStatus(`Beacons report applied: ${summary}.`);
 }
 
+async function saveBeaconThreshold() {
+  const threshold = +val('mobile-beacon-threshold') || 20;
+  if (threshold === +state.event.beaconLowBatteryThreshold) return;
+  state.event.beaconLowBatteryThreshold = threshold;
+  await saveEvent();
+  renderMobileBeaconsTab();
+}
+
 export function wireBeaconsTab() {
   on('btn-read-beacons-report', 'click', readBeaconsReport);
+  on('mobile-beacon-threshold', 'change', saveBeaconThreshold);
 }

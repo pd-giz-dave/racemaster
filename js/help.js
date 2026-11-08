@@ -5,7 +5,16 @@ import { TOOLTIPS, HELP, PAGES } from './strings.js';
 export function wireTooltips() {
   for (const [id, tip] of Object.entries(TOOLTIPS)) {
     const el = document.getElementById(id);
-    if (el) el.title = tip;
+    if (!el) continue;
+    el.title = tip;
+    // A tooltip keyed to a form control should also show over its own label, not just the bare
+    // control itself — easy to miss on a small radio/checkbox hit target. Covers both an
+    // explicit <label for="id"> and the id'd element being nested inside an unlabelled
+    // wrapping <label> (the Mobile Files "mf-option" rows, the Race Mode radios).
+    const explicitLabel = document.querySelector(`label[for="${id}"]`);
+    if (explicitLabel) explicitLabel.title = tip;
+    const wrappingLabel = el.closest('label');
+    if (wrappingLabel) wrappingLabel.title = tip;
   }
 }
 
