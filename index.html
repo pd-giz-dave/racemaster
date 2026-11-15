@@ -1396,6 +1396,16 @@
           <button class="btn btn-secondary" id="btn-toggle-server-hidden" style="width:100%">Hide Server</button>
         </div>
 
+        <!-- Settings for this browser/device only — not saved in the dataset -->
+        <div class="card" style="min-width:240px;max-width:300px;flex-shrink:0">
+          <h3 style="margin:0 0 8px;font-size:1rem">This Device</h3>
+          <label class="mf-option"><input type="checkbox" id="df-lock-zoom"> Lock zoom</label>
+          <p style="margin:6px 0 0;font-size:0.8rem;color:var(--muted)">
+            Stops the page zooming by accident (Ctrl +/−, Ctrl + mouse wheel, touchpad or touchscreen
+            pinch). Ctrl+0 still resets to 100%.
+          </p>
+        </div>
+
         <!-- New dataset / Save As card — name input gets its own full-width row (rather than
              sharing one with the visibility radios + submit button) so a longer dataset name
              can be typed/read without the input scrolling its own contents. -->

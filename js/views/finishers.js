@@ -132,6 +132,10 @@ export function applyMode(mode) {
     }
   } else {
     timeTargetSidx = -1;
+    // The time field is hidden in bibs mode, so any value left over from time mode (e.g. the
+    // last time set just before the auto-switch) would silently be recorded with the next bib.
+    const timeEl = document.getElementById('finisher-time');
+    if (timeEl) timeEl.value = '';
     document.querySelectorAll('#finishers-tbody .row-timing-target')
       .forEach(r => r.classList.remove('row-timing-target'));
     document.querySelector('#finishers-tbody tr:last-child')?.scrollIntoView({ block: 'nearest' });
@@ -629,7 +633,6 @@ export function wireFinishers() {
     const sidx = +btn.closest('[data-sidx]')?.dataset.sidx;
     switch (btn.dataset.action) {
       case 'edit':
-        if (!await showConfirmDialog(`Edit finisher at line ${sidx}?`, 'Edit')) return;
         fillFormForEdit(sidx);
         break;
       case 'ins':

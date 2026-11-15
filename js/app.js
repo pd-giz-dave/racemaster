@@ -28,6 +28,7 @@ import { renderSIResults, wireSIResults }   from './views/si-results.js';
 import { renderMobileFiles, wireMobileFiles } from './views/mobile-files.js';
 import { wireViewHelp, wireTooltips, wireStaticPages } from './help.js';
 import { installServerHideInterceptor } from './server-hide.js';
+import { installZoomLock } from './zoom-lock.js';
 
 // ============================================================
 // Application bootstrap and UI wiring
@@ -37,6 +38,7 @@ let currentView = 'home';
 
 export async function init() {
   installServerHideInterceptor();
+  installZoomLock();
   showBusy('Loading…');
 
   async function connectAndLoad() {

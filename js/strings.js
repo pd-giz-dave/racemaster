@@ -200,6 +200,7 @@ export const TOOLTIPS = {
   'df-btn-login':                'Sign in to your RaceMaster account',
   'df-btn-create-account':       'Create a new RaceMaster account',
   'df-btn-standalone':           'Use RaceMaster without a server — data is stored locally in this browser only',
+  'df-lock-zoom':                'Block accidental zooming on this device (keyboard, mouse wheel, pinch) — saved in this browser only, not in the dataset',
   'df-btn-connect-push':         'Push pending local data changes to the server and connect to this dataset',
   'df-btn-connect-discard':      'Discard local changes and connect to this dataset from the server',
   'df-btn-connect-cancel':       'Cancel',
@@ -941,6 +942,12 @@ export const PAGES = {
           From there choose <strong>Reload</strong> (discard your unsynced changes) or
           <strong>Overwrite server</strong> (replace the server's copy with yours), each with a
           confirmation explaining what will be lost</li>
+      <li><strong>Lock zoom</strong> — a new <strong>This Device</strong> setting on the Datasets
+          page stops the page zooming by accident (Ctrl +/−, Ctrl + mouse wheel, touchpad or
+          touchscreen pinch); Ctrl+0 still resets to 100%. Set per browser, not per dataset</li>
+      <li><strong>Finishers</strong> — fixed the last time entered in Times mode being wrongly
+          recorded against the next bib after the page switched itself back to Bibs mode; and
+          editing a line no longer asks for confirmation</li>
     </ul>
     <h3>v0.0.28-alpha</h3>
     <ul>

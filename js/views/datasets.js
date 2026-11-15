@@ -14,6 +14,7 @@ import { showBusy, escHtml, toISODate } from '../utils.js';
 import { updateDataFileButton, pingServerNow, isLoginExpired } from '../connect.js';
 import { renderAll, showView } from '../app.js';
 import { isServerHidden, setServerHidden } from '../server-hide.js';
+import { isZoomLocked, setZoomLocked } from '../zoom-lock.js';
 import { TABLES } from '../strings.js';
 
 let activeToken    = null;
@@ -627,6 +628,13 @@ export function wireDatasets(onConnect) {
 
   getEl('btn-export-state').onclick = exportState;
   getEl('btn-import-state').onclick = importState;
+
+  const lockZoomEl = getEl('df-lock-zoom');
+  lockZoomEl.checked = isZoomLocked();
+  lockZoomEl.onchange = () => {
+    setZoomLocked(lockZoomEl.checked);
+    showStatus(lockZoomEl.checked ? 'Zoom locked on this device.' : 'Zoom unlocked on this device.');
+  };
 
   getEl('btn-toggle-server-hidden').onclick = () => {
     const hidden = !isServerHidden();
