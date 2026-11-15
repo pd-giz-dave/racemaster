@@ -934,6 +934,13 @@ export const PAGES = {
           now only closes the pop-up (it no longer also tries to leave for Home), its Close button
           sits on the title line, and its title and column headers stay visible while scrolling a
           long list</li>
+      <li><strong>Save conflict details</strong> — when a save is rejected because the server has
+          a newer copy, you can now see the differences before deciding: the conflict dialog (or
+          clicking <strong>⚠ conflict</strong> in the title bar) shows your version number against
+          the server's and, table by table, the rows only in your copy and only on the server.
+          From there choose <strong>Reload</strong> (discard your unsynced changes) or
+          <strong>Overwrite server</strong> (replace the server's copy with yours), each with a
+          confirmation explaining what will be lost</li>
     </ul>
     <h3>v0.0.28-alpha</h3>
     <ul>

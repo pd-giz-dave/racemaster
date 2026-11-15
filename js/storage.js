@@ -560,6 +560,19 @@ export function discardConflict() {
   _conflicted = false;
 }
 
+/** Resolve a conflict the other way: force-push the local cache over the server's newer copy.
+ *  Returns true on success; on failure (e.g. server unreachable) stays conflicted. */
+export async function overwriteServer() {
+  _conflicted = false;
+  localStorage.setItem(DIRTY_KEY, 'true');
+  await syncToServer(true, true);
+  if (localStorage.getItem(DIRTY_KEY) === 'true') {
+    _conflicted = true;
+    return false;
+  }
+  return true;
+}
+
 /**
  * Switch to a different dataset.
  * pushFirst=true: push any dirty local state to the target dataset before fetching.

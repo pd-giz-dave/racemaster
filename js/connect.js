@@ -1,7 +1,9 @@
 'use strict';
 
-import { getSession, getUsername, isDirty, getVersion, isConflicted, discardConflict, flushPendingMobileFiles } from './storage.js';
-import { showConfirmDialog } from './ui.js';
+import { getSession, getUsername, isDirty, getVersion, isConflicted, discardConflict, flushPendingMobileFiles, apiReadDataset, dumpState, overwriteServer } from './storage.js';
+import { showConfirmDialog, showStatus } from './ui.js';
+import { escHtml } from './utils.js';
+import { buildConflictDiff } from './conflict-diff.js';
 
 export function startUpdateCheck() {
   function showUpdateButton() {
@@ -55,15 +57,100 @@ export function startConflictWatch() {
   window.addEventListener('racemaster-conflict', async () => {
     updateDataFileButton();
     if (await showConfirmDialog(
-      'This dataset has been updated by another session — your changes may not have saved. Reload now to get the latest data?',
-      'Reload'
+      'This dataset has been updated by another session — your changes may not have saved. Show the differences between your copy and the server\'s?',
+      'Show differences'
     )) {
-      discardConflict(); // confirmed: discard unsynced local edits, pull the server's copy
-      location.reload();
+      showConflictDetails();
     } else {
       updateDataFileButton();
     }
   });
+}
+
+// Shown from startConflictWatch()'s dialog or by clicking "⚠ conflict" in the header (see
+// updateDataFileButton() below), so the choice between discarding local edits (Reload) and
+// discarding the server's newer copy (Overwrite server) is made with the actual differences in
+// view — a stale version counter (e.g. a second tab) often turns out to hide no real change.
+function renderConflictModal({ localVersion, remoteVersion, tableDiffs }) {
+  const versionLine = `<p style="margin:0 0 12px;font-size:0.875rem">`
+    + `Your local copy is version ${localVersion}; the server is at version ${remoteVersion}.</p>`;
+  const body = tableDiffs.length ? tableDiffs.map(d => `
+      <h3 style="margin:16px 0 4px">${escHtml(d.table)}</h3>
+      ${d.onlyLocal.length ? `
+        <p style="margin:4px 0;font-weight:600;color:var(--accent)">Only in your local copy (unsynced) — ${d.onlyLocal.length} row(s):</p>
+        <pre class="conflict-diff-rows">${escHtml(JSON.stringify(d.onlyLocal, null, 2))}</pre>` : ''}
+      ${d.onlyRemote.length ? `
+        <p style="margin:4px 0;font-weight:600;color:var(--danger)">Only on the server — ${d.onlyRemote.length} row(s):</p>
+        <pre class="conflict-diff-rows">${escHtml(JSON.stringify(d.onlyRemote, null, 2))}</pre>` : ''}
+    `).join('')
+    : `<p style="color:var(--muted)">The version counter moved, but the data itself matches — it's likely safe to reload.</p>`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `
+    <div class="modal-box" style="width:720px">
+      <div class="modal-header">
+        <h2>Conflict details</h2>
+        <button class="modal-close-x" id="conflict-modal-close" aria-label="Close" title="Close">&times;</button>
+      </div>
+      ${versionLine}
+      <div class="table-scroll">${body}</div>
+      <div class="modal-actions">
+        <button class="btn btn-delete" id="conflict-modal-reload" title="Discard your unsynced local changes and load the server's copy">Reload (discard my changes)</button>
+        <button class="btn btn-delete" id="conflict-modal-overwrite" title="Replace the server's copy with your local data">Overwrite server</button>
+        <button class="btn" id="conflict-modal-cancel">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  // A Reload/Overwrite confirm stacked on top handles its own Escape — only that should close.
+  const onKey = e => { if (e.key === 'Escape' && !document.querySelector('.choice-dialog-overlay')) close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('#conflict-modal-close').addEventListener('click', close);
+  overlay.querySelector('#conflict-modal-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#conflict-modal-reload').addEventListener('click', async () => {
+    if (!await showConfirmDialog(
+      'Reload from the server?\n\nYour unsynced local changes (the rows listed as "Only in your local copy") ' +
+      'will be permanently discarded, and the app will reload with the server\'s copy. This cannot be undone.',
+      'Reload', true, true
+    )) return;
+    discardConflict();
+    location.reload();
+  });
+  overlay.querySelector('#conflict-modal-overwrite').addEventListener('click', async () => {
+    if (!await showConfirmDialog(
+      'Overwrite the server with your local copy?\n\nThe server\'s newer changes (the rows listed as "Only on the server") ' +
+      'will be permanently lost, for every session using this dataset. Any other open tab or device will hit a ' +
+      'conflict on its next save. This cannot be undone.',
+      'Overwrite server', true, true
+    )) return;
+    close();
+    if (await overwriteServer()) {
+      showStatus('Server copy overwritten with your local data.');
+    } else {
+      showStatus('Could not overwrite the server copy — check you are online and try again.', true);
+    }
+    updateDataFileButton();
+  });
+}
+
+async function showConflictDetails() {
+  const session = getSession();
+  if (!session) return;
+  const [owner, fullName] = session.dataset.split('/');
+  let remote;
+  try {
+    remote = await apiReadDataset(session.token, owner, fullName);
+  } catch {
+    showStatus('Could not reach the server to compare — try again once back online.', true);
+    return;
+  }
+  renderConflictModal(buildConflictDiff(dumpState(), remote));
 }
 
 // Whether the header status dot currently reads "login expired" — a saved session token that
@@ -213,6 +300,9 @@ export function updateDataFileButton() {
     dsSpan.style.background = 'var(--header-warn)';
     dsSpan.style.padding    = '2px 6px';
     dsSpan.style.borderRadius = '3px';
+    dsSpan.style.cursor      = 'pointer';
+    dsSpan.title             = 'Click to see what differs from the server';
+    dsSpan.onclick           = showConflictDetails;
   } else {
     dsSpan.textContent      = ` · ${viewingOther ? `${username} viewing ` : ''}${owner} / ${name}  v${version}${dirty ? ' *' : ''}`;
     dsSpan.title             = viewingOther ? `Logged in as ${username} — viewing ${owner}'s dataset` : '';
@@ -220,5 +310,7 @@ export function updateDataFileButton() {
     dsSpan.style.background = '';
     dsSpan.style.padding    = '';
     dsSpan.style.borderRadius = '';
+    dsSpan.style.cursor      = '';
+    dsSpan.onclick           = null;
   }
 }
