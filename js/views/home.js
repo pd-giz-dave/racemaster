@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { getEntriesOnCourse } from '../entries.js';
 import { getNumberOfHelpers } from '../helpers.js';
 import { getSortedFinishers, getOutstandingCount } from '../finishers.js';
-import { getLastBibNumber, getLastDibberNumber } from '../data.js';
+import { getLastBibNumber, getLastDibberNumber, getLastBeaconNumber } from '../data.js';
 import { setHTML } from '../ui.js';
 import { COURSE } from '../constants.js';
 
@@ -22,7 +22,7 @@ function eventDetails(ev) {
   if (ev.distance)                    row('Distance',             `${ev.distance} km`);
   if (ev.categories)                  row('Categories',           ev.categories);
   if (ev.firstBibNumber)              row('First bib',            ev.firstBibNumber);
-  if (ev.firstDibberNumber)           row('First dibber',         ev.firstDibberNumber);
+  if (ev.firstDibberNumber)           row('First fob',            ev.firstDibberNumber);
   if (ev.startTime)                   row('Start time',           ev.startTime);
   if (ev.entryLimit)                  row('Entry limit',          ev.entryLimit);
   if (ev.timingMethod)                row('Senior timing',        ev.timingMethod);
@@ -53,7 +53,7 @@ function eventStatistics() {
   const preImported    = state.preEntries.length;
   const preRegistered  = state.entries.filter(e => e.preEntry).length;
   const lastBib        = getLastBibNumber();
-  const lastDibber     = getLastDibberNumber();
+  const lastFob        = Math.max(getLastDibberNumber(), getLastBeaconNumber());
   const siCount        = state.siResults.length;
   const helpers        = getNumberOfHelpers();
   const seniorEntries  = getEntriesOnCourse(COURSE.SENIORS);
@@ -83,7 +83,7 @@ function eventStatistics() {
     row('On-the-day entries',   onTheDay);
   }
   if (lastBib > 0) row('Last bib allocated', lastBib);
-  if (lastDibber > 0) row('Last dibber allocated', lastDibber);
+  if (lastFob > 0) row('Last fob allocated', lastFob);
   if (siCount > 0) row('SI results imported', siCount);
 
   // Category breakdown — sort active categories by maleMinAge ascending
