@@ -6,7 +6,11 @@ import { BUILTIN_ROLES } from './roles.js';
 import { createCategory, createEvent } from './schema.js';
 
 // ============================================================
-// Global in-memory state, loaded from and saved to JSON tables
+// Single in-memory object holding all event data. Callers mutate state.* arrays/fields directly
+// (there are no setters) and then call the matching save*() below to persist; state.dirty tracks
+// which FILE keys still need pushing — see storage.js's debounced sync. Shapes come from
+// schema.js's factory functions; loadAll() below populates everything at startup via
+// storage.js's readTable().
 // ============================================================
 
 export const state = {

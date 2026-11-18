@@ -10,6 +10,11 @@ import { calculateCategory, calculateCourse, calculatePairCategory } from './cat
 import { addPerson, sortPeople, getNextBibNumber, getNextDibberNumber, getNextBeaconNumber } from './data.js';
 import { usingDibbers, usingBeacons } from './time-utils.js';
 
+// Race-entry management: add/find/update entries by bib or dibber, course-fill/ban checks, and
+// pair-entry category derivation (see categories.js's derivePairGender/calculatePairCategory).
+// exportSITimingCSV() is the one place entries become SI Timing's own import format — see
+// si-schema.js for that format's field definitions.
+
 // A predicted time far outside these multiples of the event's target time is almost certainly a
 // typo (e.g. minutes entered as seconds, or vice versa) rather than a genuine predicted pace.
 const MIN_HANDICAP_TARGET_MULTIPLE = 0.5; // fastest allowed: twice as fast as target

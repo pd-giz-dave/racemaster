@@ -5,6 +5,12 @@ import { showConfirmDialog, showStatus } from './ui.js';
 import { escHtml } from './utils.js';
 import { buildConflictDiff } from './conflict-diff.js';
 
+// Server-connectivity UI: the header's online/offline/login-expired status dot (pingServerNow,
+// polled every 30s by startServerPing), the "update available" button for a waiting service
+// worker, the offline-precache completeness check, and the save-conflict modal (built from
+// conflict-diff.js's buildConflictDiff()) offering Reload vs Overwrite server. Several checks here
+// deliberately mirror racemaster-mobile's own ServerStatusRepository/MuleSyncClient logic.
+
 export function startUpdateCheck() {
   function showUpdateButton() {
     const btn = document.getElementById('btn-app-update');

@@ -7,6 +7,11 @@ import { on, setHTML, showStatus, showConfirmDialog, pickFile, renderTable, tabl
 import { TABLES } from '../strings.js';
 import { renderPeople } from './people.js';
 
+// Pre-entries tab — entrants imported from an SI Entries export (si-entries.js), shown alongside
+// any issues importSIEntriesFromFile()'s auto-verify step found, before they're merged into
+// state.people/state.entries. Calls people.js's renderPeople() directly once a merge adds new
+// people, since that's a real same-page side effect rather than navigation.
+
 let sortCol = null;
 let sortDir = 1;   // 1 = asc, -1 = desc
 

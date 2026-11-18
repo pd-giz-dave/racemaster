@@ -7,6 +7,11 @@ import { escapeHtml, syncPublishAssetsIfStale } from '../datasets.js';
 import { getAuthUser } from '../auth.js';
 import { ROOT, RESULTS_DIR, MIME } from '../config.js';
 
+// /api/publish-results (writes a generated results HTML page into results/) and the public,
+// unauthenticated /results listing page that makes published pages discoverable by name/date.
+// Shares results/publish.css and publish.js with every page it serves — see
+// syncPublishAssetsIfStale() in server/datasets.js for how those stay in sync with js/publish/.
+
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleResultsRoutes(req, res, pathname) {
   // POST /api/publish-results — write an HTML results page to the results/ directory

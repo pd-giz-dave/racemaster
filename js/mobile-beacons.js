@@ -1,15 +1,15 @@
 'use strict';
 
+import { state, saveBeacons, saveBeaconReports } from './state.js';
+import { coursesInUse } from './categories.js';
+import { getEventStartTime, usingBeacons } from './time-utils.js';
+import { parseDate, timeToSeconds, normaliseDate } from './utils.js';
+
 // Processes a beacons.json post-race housekeeping report (see server/mobile.js's own doc for the
 // wire shape) against the Beacons catalogue (state.beacons) and the entries currently allocated a
 // beacon number for this race — the pure-logic half, mirroring js/mobile-files-progress.js's own
 // validateAndCompute/applyComputedResults split. The DOM/orchestration half lives in
 // js/views/mobile-files-beacons.js.
-
-import { state, saveBeacons, saveBeaconReports } from './state.js';
-import { coursesInUse } from './categories.js';
-import { getEventStartTime, usingBeacons } from './time-utils.js';
-import { parseDate, timeToSeconds, normaliseDate } from './utils.js';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 

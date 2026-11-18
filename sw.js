@@ -1,7 +1,10 @@
 'use strict';
 
-// Note: This service worker is only installed on remote deployments.
-//       For localhost it is not installed, so all requests are passed to the server.
+// App-shell cache-first service worker, active only on remote deployments — on localhost it is
+// never installed, so every request there goes straight to the server instead. CACHE and
+// PRECACHE below are placeholders: server/service-worker.js's buildSwContent() rewrites both
+// (a fingerprinted cache name, the full discovered asset list) before this file is ever served —
+// see GET /sw.js in server/routes/static.js, which regenerates it dynamically on every request.
 
 // auto updated if anything changes
 const CACHE = 'racemaster-20260625145805';

@@ -2,6 +2,11 @@
 
 import { openPrintPreview } from './preview.js';
 
+// Printable finish-line record sheet: a page of sequentially numbered boxes a helper ticks or
+// writes a time against as runners cross the line, the stopwatch/manual backup to SI-dibber or
+// mobile-recorded finishes. First box is labelled CLOCK for a starting reference time. Printed
+// via preview.js's openPrintPreview.
+
 const BOXES = 15;
 const PAGE_CSS = '@page { size: A4 portrait; margin: 0; }';
 const LABEL1 = 'Bib Number (or clock, juniors, seniors, ignore)';

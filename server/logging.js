@@ -1,11 +1,13 @@
 'use strict';
 
-// Persistent logging — appends timestamped lines to server.log; rotates to server.log.1
-// (through .9) at LOG_MAX bytes.
-
 import fs from 'fs';
 import { format as utilFormat } from 'util';
 import { LOG_FILE, LOG_MAX } from './config.js';
+
+// Persistent logging: writeLog() appends timestamped lines to server.log, rotating to
+// server.log.1 (through .9) at LOG_MAX bytes. installConsoleLogging() (called once at startup
+// in server.js) patches console.log/warn/error to also go through here, so every console call
+// anywhere in the server ends up both on stdout and in the rotated log file.
 
 export function writeLog(level, args) {
   const line = `[${new Date().toISOString()}] [${level}] ${utilFormat(...args)}\n`;

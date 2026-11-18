@@ -5,6 +5,11 @@ import path from 'path';
 import { buildSwContent } from '../service-worker.js';
 import { ROOT, MIME } from '../config.js';
 
+// Catch-all route group, tried last by server/router.js: serves /sw.js dynamically (via
+// server/service-worker.js's buildSwContent(), never the on-disk file as-is) and otherwise
+// serves any other file under the repo root as a plain static file, with no auth check at all —
+// deliberately broad, so this must stay last in server/router.js's dispatch order.
+
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleStaticRoutes(req, res, pathname) {
   // GET /sw.js — generated dynamically so PRECACHE and cache name stay current

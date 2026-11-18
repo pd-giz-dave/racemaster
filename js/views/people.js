@@ -11,6 +11,12 @@ import { isBanned } from '../entries.js';
 import { laterDate, normalisePeopleRows } from '../data.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
+// People tab — the master roster of everyone who's appeared at a race (entrants, helpers, parents
+// etc.), tracking banned status and lastSeen/lastHelped/seenTotal/helpedTotal tallies that live
+// only here, not on any one role record. personEditCells()/readPersonCells() are reused by
+// clubs.js's own inline editor, and pre-entries.js calls renderPeople() directly after merging new
+// SI entries in — this file's row markup/IDs are relied on from outside too.
+
 const PEOPLE_COLS = tableColumns(TABLES.people, {
   select:       () => '<input type="checkbox" class="person-select">',
   name:         ({ p }) => escHtml(p.name || '') + (isBanned(p) ? ' (banned)' : ''),

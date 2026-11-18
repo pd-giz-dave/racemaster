@@ -5,6 +5,11 @@ import { today } from '../utils.js';
 import { formatResults } from '../results.js';
 import { openPopup } from './preview.js';
 
+// Printable prize list built from results.js's formatResults() prize data — a wide table variant
+// for A4 and a narrow variant (openPrizeListPreview's isNarrow) sized to a receipt-width thermal
+// printer for handing out at presentations. Dev%/time column switches on event.isHandicap, the
+// same convention as results-html.js's own seniors table.
+
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

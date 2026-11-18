@@ -1,5 +1,7 @@
 'use strict';
 
+import { deriveRaceLabel, findCurrentRaceProgress } from './mobile-files-shared.js';
+
 // Device adoption — the Mobile Files Devices tab's own row tick, for a device whose race label
 // isn't one of the loaded event's course labels (a phone set up with an arbitrary name, e.g.
 // "unknown-26-09-23"), also tells that phone which real race it belongs to. Three routes out:
@@ -10,8 +12,6 @@
 //   - progress, via the tick itself (it's the same selection Update Progress already reads).
 // Identity is (owner, fromRaceLabel, deviceName) — rowKey()'s own triple — never a deviceId,
 // which the server never learns. No DOM here; js/views/mobile-files.js does the wiring.
-
-import { deriveRaceLabel, findCurrentRaceProgress } from './mobile-files-shared.js';
 
 // Adoptions the server hasn't confirmed yet — ticked while offline, or a write that failed.
 // { [key]: { owner, fromRaceLabel, deviceName, raceLabel|null } } (null = clear).

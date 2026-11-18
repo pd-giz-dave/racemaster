@@ -10,6 +10,11 @@ import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
+// Renders the Beacons admin screen — add/edit/import/export the pool of safety tracking beacons
+// loaned to runners, tracked by stable beacon number (not array index). Battery/"lost" status here
+// is a point-in-time admin record, separate from the live loan state mobile-files-beacons.js
+// derives per-race from beacons.json reports.
+
 const BEACON_COLS = tableColumns(TABLES.beacons, {
   number:       ({ b }) => b.number || '',
   owner:        ({ b }) => escHtml(b.owner || ''),

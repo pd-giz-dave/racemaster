@@ -8,6 +8,11 @@ import { isBanned } from '../entries.js';
 import { personEditCells, readPersonCells } from './people.js';
 import { getClubs, findDuplicateClubPairs } from '../clubs.js';
 
+// Renders the Clubs screen — a read-only roll-up of clubs derived from state.people (see
+// clubs.js's getClubs()), not a stored list of its own. Clicking a club drills into its member
+// list, reusing people.js's shared cell renderers/editors so a person edited here stays in sync
+// with the main People/Entries views.
+
 const CLUBS_COLS = tableColumns(TABLES.clubs, {
   select:    ([name]) => `<input type="checkbox" data-club="${escHtml(name)}"${selectedClubs.has(name) ? ' checked' : ''}>`,
   name:      ([name]) => name ? escHtml(name) : '<em style="color:var(--muted)">(no club)</em>',

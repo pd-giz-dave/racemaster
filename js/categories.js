@@ -4,6 +4,12 @@ import { state } from './state.js';
 import { GENDER, COURSE } from './constants.js';
 import { normaliseDate, parseDate, ciEq } from './utils.js';
 
+// Age-category and course classification, built on whichever category table is actually
+// configured for the event. FRA_CATEGORIES/WFRA_CATEGORIES are only the two built-in presets —
+// applyFRAPreset()/applyWFRAPreset() copy them into the event's own editable state.categories,
+// which calculateCategory()/calculateCourse() classify people against, not these constants
+// directly.
+
 // [minAge, maleCat, femaleCat, ref, maxDist]
 export const FRA_CATEGORIES = [
   [6,  'U10B', 'U10G', 'EOY', 1.5],

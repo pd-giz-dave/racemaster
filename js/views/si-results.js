@@ -5,6 +5,11 @@ import { importSIResults, clearSIResults } from '../si-results.js';
 import { on, setHTML, showStatus, pickFile, wireTabBar, showConfirmDialog } from '../ui.js';
 import { showBusy, escHtml } from '../utils.js';
 
+// SI Results tab — a thin, mostly-raw view of whatever rows importSIResults() (../si-results.js,
+// the pure import/parsing module one level down, confusingly the same basename) last stored in
+// state.siResults, plus any issues found on import. No column config here — headers/cells are
+// just whatever keys happen to be on the first row, since the raw punch format varies by SI unit.
+
 export function renderSIResults() {
   const tbody = document.getElementById('si-results-tbody');
   const thead = document.getElementById('si-results-head');

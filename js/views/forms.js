@@ -8,6 +8,10 @@ import {
 import { state } from '../state.js';
 import { on } from '../ui.js';
 
+// Renders the Forms (print) screen — thin button-wiring only; every actual form layout/preview
+// (blank/pre-filled entry forms, pairs forms, helpers list, finish sheets, number matrix, bibs)
+// lives in the forms/ directory and is just invoked here on click.
+
 export function renderForms() {
   // Static — buttons wired in wireForms
 }

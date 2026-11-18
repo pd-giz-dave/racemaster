@@ -6,6 +6,12 @@ import { buildProgressRows } from './mobile-files-progress.js';
 import { deriveRaceLabel } from './mobile-files-shared.js';
 import { coursesInUse } from './categories.js';
 
+// Pushes this browser's Progress-tab data (every entry, from buildProgressRows()) to the server
+// per-course as mobile/:owner/:raceLabel/progress.json, which is what a phone in Bibs or
+// Checkpoint mode reads to know which bib runs which course. Debounced 2s after any
+// 'racemaster-dirty-change' event (see startProgressSync below), diffed against the last-pushed
+// snapshot so only changed/removed entries are sent — see diffEntries' own comment for why.
+
 // The last payload actually pushed for each owner+raceLabel, keyed by "owner:raceLabel" (not
 // raceLabel alone — an admin can push the same-looking label for two different owners' datasets
 // in one session, and those must never be treated as the same cache entry) — this session's own

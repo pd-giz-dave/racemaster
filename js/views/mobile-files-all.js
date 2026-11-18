@@ -1,16 +1,5 @@
 'use strict';
 
-// All Files tab — small, self-contained, pure rendering (never calls back into mobile-files.js's
-// renderMobileFiles(), so this stays a safe leaf module with no circular-import risk). Unlike the
-// Devices tab, this one deliberately does NOT go through filterStaleRaces()/mergePendingIntoRaces()
-// — it's the one place every server-stored file (device or progress) is browsable and deletable
-// regardless of age, with a stale one highlighted rather than hidden (see isDeviceStale()/
-// isProgressStale() in mobile-files-shared.js for why that's per-file, not per-race, and
-// deliberately allowed to disagree with the Devices tab's own staleness filtering).
-// Rows are sorted newest-first by their own last-activity date (see flattenAllFiles()'s own doc
-// in mobile-files-devices.js) — that order is what a stale row's own "Delete from here" button
-// (js/views/mobile-files.js's deleteFromHere()) means by "below it".
-
 import { state } from '../state.js';
 import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
@@ -20,6 +9,12 @@ import {
   formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, isDeviceStale, isProgressStale,
 } from '../mobile-files-shared.js';
 import { formatCount, flattenAllFiles } from '../mobile-files-devices.js';
+
+// Renders the Mobile Files "All Files" tab — a flat list of every server-stored device/progress
+// file. Deliberately skips the Devices tab's filterStaleRaces()/mergePendingIntoRaces() logic:
+// every file here stays browsable/deletable regardless of age, with stale ones highlighted (see
+// isDeviceStale()/isProgressStale() in mobile-files-shared.js) rather than hidden. A safe leaf
+// module — never calls back into mobile-files.js's renderMobileFiles().
 
 // Mirrors the Progress tab's own fobNumber cell (js/views/mobile-files-progress.js) — same
 // "N — returned"/"N — not returned" suffix and color:var(--danger) highlight for a beacon still

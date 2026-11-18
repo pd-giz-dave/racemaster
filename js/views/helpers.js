@@ -12,6 +12,10 @@ import { TABLES } from '../strings.js';
 import { capitalise, ciEq, showBusy, normaliseClub, normaliseGender, escHtml } from '../utils.js';
 import { isBanned } from '../entries.js';
 
+// Renders the Helpers screen — add/edit/delete race helpers/marshals, each with one or more
+// role tags (rendered as removable chips, see renderRoleTags()) rather than a single role field.
+// Cross-checks each helper's name against state.people to flag one who's also a banned runner.
+
 const HELPER_COLS = tableColumns(TABLES.helpers, {
   number:  h => h.number,
   name:    h => escHtml(h.name || '') + (isBanned(state.people.find(p => ciEq(p.name, h.name || ''))) ? ' (banned)' : ''),

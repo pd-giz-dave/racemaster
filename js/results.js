@@ -11,6 +11,11 @@ import { getSIBib, getSIRaceTime, getSIFinishTime, getSIStartTime, getSICourse, 
 import { getMobileCheckpointNumbers, getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, getMobileCheckpointBib } from './mobile-checkpoints.js';
 import { getSortedMobileProgress } from './mobile-progress.js';
 
+// Builds the actual Results & Prize List output — resolveFinishSources() below reconciles SI
+// results, the stopwatch Finishers list and Mobile Files' Update Progress into one winning
+// verdict per bib, then formatResults() turns those into placed/categorised results, pairs,
+// prizes and the helpers report. safety.js's own conflict surfacing is built on the same
+// resolveFinishSources() so Results and Safety Check can never disagree about who's finished.
 
 const SOURCE_PRIORITY = ['SI', 'stopwatch', 'mobile'];
 const STATUS_VERB = { Finish: 'finished', DNF: 'retired' };

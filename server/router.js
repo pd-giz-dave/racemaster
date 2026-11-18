@@ -9,6 +9,10 @@ import { handleUserRoutes } from './routes/users.js';
 import { handleResultsRoutes } from './routes/results.js';
 import { handleStaticRoutes } from './routes/static.js';
 
+// Top-level HTTP request dispatcher — the single handler passed to http.createServer() in
+// server.js. Delegates to each route module in turn, falling through to the next on a false
+// return (see http-utils.js's "Returns true if ... handled" convention each one follows).
+
 // Route groups are tried in this exact order — datasets/mobile/users/results/static are each
 // internally ordered the same way the original single-file handler was (e.g. the progress POST
 // route in routes/mobile.js is checked before the general mobile POST route it would otherwise

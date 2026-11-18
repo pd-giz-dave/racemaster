@@ -9,6 +9,11 @@ import { TABLES } from '../strings.js';
 import { formatCSV, parseCSV } from '../csv.js';
 import { BUILTIN_ROLES } from '../roles.js';
 
+// Roles tab — CRUD for the event's own custom roles (used as the Role field on Helpers), shown
+// alongside a read-only reference table of BUILTIN_ROLES (../roles.js) that can't be edited or
+// deleted here. Saving calls updateDatalistRoles() so Helpers' role typeahead picks up the change
+// immediately, without needing that tab re-rendered.
+
 const ROLE_COLS = tableColumns(TABLES.roles, {
   role:        r => escHtml(r.role || ''),
   description: r => escHtml(r.description || ''),

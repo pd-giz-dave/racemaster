@@ -14,6 +14,11 @@ import { timeToSeconds, showBusy, escHtml } from '../utils.js';
 import { on, setHTML, showStatus, showConfirmDialog, showChoiceDialog, wireFormFocusTrap, renderTable, tableColumns, wireTypeahead } from '../ui.js';
 import { TABLES } from '../strings.js';
 
+// Renders the Finishers screen — the manual stopwatch/clock entry log of finish lines, kept as
+// state.finishers, a deliberately separate source from mobile-derived and SI-derived finishes
+// (see results.js/safety.js for how all three get reconciled). Supports inserting a line or a
+// bare time above an existing row to fix a missed punch without renumbering everything below it.
+
 const FINISHER_COLS = tableColumns(TABLES.finishers, {
   line:    r => r.lineDisplay,
   event:   r => r.eventLabel,

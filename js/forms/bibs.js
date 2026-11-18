@@ -3,6 +3,11 @@
 import { openPopup } from './preview.js';
 import { showStatus } from '../ui.js';
 
+// Generates printable race-bib numbers as inline SVG text (crisp at any size, unlike a raster
+// image) laid out two per A5 half-sheet for a single guillotine cut down the A4 stack — see
+// buildHTML's top/bottom pile pairing below. Rendered via preview.js's openPopup, which also
+// triggers the actual print() call.
+
 // Margin keeps the printer in its normal (fast) mode: a 0mm @page margin
 // requests borderless printing, which many inkjets (e.g. Canon Pixma/TS
 // series) only support via a slow, high-quality mode — tens of seconds per

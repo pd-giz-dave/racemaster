@@ -1,14 +1,14 @@
 'use strict';
 
-// Devices tab — pure data logic: segment-view derivation and the device-list building it feeds.
-// No DOM at all (not even a call to js/ui.js's renderTable) — js/views/mobile-files-devices.js
-// is the thin rendering layer on top of this that actually puts these rows on screen.
-
 import { escHtml } from './utils.js';
 import { effectiveAdoptions } from './mobile-files-adoption.js';
 import {
   byLineNumber, computeIncorporationStatus, getBleContact, latestEntryTimestamp, latestLineIso, parsePhoneTimestamp,
 } from './mobile-files-shared.js';
+
+// Devices tab — pure data logic: segment-view derivation and the device-list building it feeds.
+// No DOM at all (not even a call to js/ui.js's renderTable) — js/views/mobile-files-devices.js
+// is the thin rendering layer on top of this that actually puts these rows on screen.
 
 // ---- Location resolution (mirrors racemaster-mobile's SyncRecordMapping's own doc) ----
 //

@@ -8,6 +8,11 @@ import { getLastBibNumber, getLastDibberNumber, getLastBeaconNumber } from '../d
 import { setHTML } from '../ui.js';
 import { COURSE } from '../constants.js';
 
+// Renders the Home screen's event-summary dashboard — a read-only digest of state.event plus
+// live counts (entries on course, outstanding finishers, helpers, last-issued bib/fob/beacon
+// numbers). Pure read/render: it derives everything from other modules' state and never writes
+// to it itself.
+
 function eventDetails(ev) {
   const rows = [];
   const row = (label, value) => rows.push(`<tr><td class="home-ev-label">${label}</td><td>${value}</td></tr>`);

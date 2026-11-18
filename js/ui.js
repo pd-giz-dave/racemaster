@@ -4,6 +4,11 @@ import { state } from './state.js';
 import { getMaleCategories, getFemaleCategories } from './categories.js';
 import { normaliseDate, normaliseTime, escHtml, toISODate, fromISODate } from './utils.js';
 
+// Generic DOM helper grab-bag used throughout js/views/* — getEl/on/val/fillForm/setHTML etc. for
+// wiring up simple forms, plus showStatus() and the showConfirmDialog()/showChoiceDialog() modal
+// helpers that replace window.confirm/alert everywhere in the app. Kept deliberately
+// DOM-dependent; pure helpers that must stay usable from DOM-free contexts live in utils.js.
+
 // ---- DOM helpers ----
 
 // Pulled in from js/views/mobile-files.js and mobile-files-ble.js's own former duplicates —

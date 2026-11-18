@@ -17,6 +17,12 @@ import { isServerHidden, setServerHidden } from '../server-hide.js';
 import { isZoomLocked, setZoomLocked } from '../zoom-lock.js';
 import { TABLES } from '../strings.js';
 
+// Renders the Data File screen — login/account creation, and picking, creating, renaming,
+// copying or deleting a dataset once logged in. One of the few views that imports from app.js
+// directly (renderAll/showView) rather than firing rm:navigate, since connecting to or switching
+// a dataset has to drive a full app reload itself. See hasUnconfirmedLogin() below for the
+// in-memory-login-not-yet-connected state app.js's confirmLeaveDatafile() guards against.
+
 let activeToken    = null;
 let activeUsername = null;
 let isAdminUser    = false;

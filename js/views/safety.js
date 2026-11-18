@@ -16,6 +16,12 @@ import {
 import { getLatestCheckpoint } from '../mobile-checkpoints.js';
 import { removeMobileProgressRecord } from '../mobile-progress.js';
 
+// Safety tab — the "where is everyone" board: outstanding starters, DNFs, finished, early starters,
+// no-shows and bib-number conflicts, built from js/safety.js's pure row-building (getOutstandingRows()
+// etc.) plus mobile-checkpoints.js/mobile-progress.js data. toTimeOfDay() below prefers a mobile
+// device's own reported time-of-day over one computed from elapsed+race-start, since it doesn't
+// depend on the race's start time being set correctly. Some actions here re-render home.js's summary.
+
 // Every time-of-day field here is really about judging how long ago someone was actually last
 // seen. `rawTimeOfDay`, when given, is the phone's own device clock reading for the moment in
 // question (see mobile-files-progress.js's deviceTimeOfDay doc) and always wins — it doesn't

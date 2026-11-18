@@ -4,6 +4,11 @@ import { readBody, jsonReply } from '../http-utils.js';
 import { sanitiseName } from '../datasets.js';
 import { getAuthUser, isAdmin, readUsers, writeUsers, readAdmins, writeAdmins, deleteSessionsForUser, saveSessions, hashPw } from '../auth.js';
 
+// /api/users/* route handlers — admin-only account management (list/create users, grant or
+// revoke admin, delete a user). Distinct from /api/auth/create: these never issue the target a
+// session token, since it's an admin provisioning another person's account, not that person
+// signing themself in.
+
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleUserRoutes(req, res, pathname) {
   // GET /api/users  — admin only, list all users

@@ -1,5 +1,8 @@
 'use strict';
 
+// Barrel re-exporting each forms/*.js module's print/popup entry points, so views can import
+// everything from this one file rather than reaching into individual forms/*.js modules.
+
 export { openPrintPreview }                                 from './preview.js';
 export { generateBlankEntryFormHTML, generateEntryFormHTML, openBlankEntryFormPreview, openPreFilledEntryFormPreview } from './entry-form.js';
 export { openBlankPairsEntryFormPreview, openPreFilledPairsEntryFormPreview } from './pairs-entry-form.js';

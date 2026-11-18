@@ -4,6 +4,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Centralises every path/constant the server needs to agree on: PORT, HOST, the on-disk roots
+// for datasets/mobile/results, the users/admins/sessions files, and the one MIME-type table
+// every static/dataset response uses. Every other server module imports these from here rather
+// than deriving them itself, so they only ever need to be right in one place.
+
 // ROOT defaults to the repo directory (one level up from server/), but is overridable via
 // RACEMASTER_ROOT so tests can point the whole server at a scratch directory instead of the
 // real data/users.txt/etc. in this checkout — nothing else in this module (or anything that

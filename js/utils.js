@@ -2,6 +2,11 @@
 
 import { GENDER } from './constants.js';
 
+// Pure, DOM-free utility functions (string/date/time normalisation, case-insensitive compare,
+// etc.) shared across the app — kept free of any `document` access so DOM-free contexts (e.g.
+// js/mobile-files-devices.js) can import them without dragging in ui.js. escHtml() and ts() were
+// both pulled out of ui.js's and mobile-files-ble.js's own former duplicates for that reason.
+
 // Moved here from ui.js — pure string manipulation, no DOM, so callers that need it but must
 // stay DOM-free themselves (e.g. js/mobile-files-devices.js) can import it without dragging in
 // ui.js's own module-level `document` access.

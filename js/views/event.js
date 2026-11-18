@@ -11,6 +11,12 @@ import { resetEntryForm } from './entries.js';
 import { resetHelperForm } from './helpers.js';
 import { resetFinisherForm } from './finishers.js';
 
+// Renders the Event Settings screen — the race-wide config form (name, date, category scheme,
+// handicap/pairs mode, bib/fob numbering start, prize depths, etc). Saving here can cascade:
+// switching category scheme reapplies every entry's category (entries.js), and changing
+// numbering/forms/finishers config resets those views' own in-progress edit state so stale
+// field references don't linger.
+
 function populateJuniorLimitDropdown() {
   const el = document.getElementById('ev-junior-limit');
   if (!el) return;

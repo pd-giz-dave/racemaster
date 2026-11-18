@@ -31,7 +31,11 @@ import { installServerHideInterceptor } from './server-hide.js';
 import { installZoomLock } from './zoom-lock.js';
 
 // ============================================================
-// Application bootstrap and UI wiring
+// Application entry point: init() connects/loads the active dataset, wires every views/*.js
+// render+wire pair plus nav, and starts the background watchers (connect.js's server ping/update/
+// conflict checks, presence.js, progress-sync.js) that can touch the UI outside any user action.
+// currentView is the one source of truth for "what's on screen", so a background event like
+// racemaster-progress-updated knows what to re-render without the view itself being asked.
 // ============================================================
 
 let currentView = 'home';

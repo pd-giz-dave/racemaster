@@ -3,6 +3,10 @@
 import { state } from './state.js';
 import { findSimilarPairs } from './utils.js';
 
+// Clubs are not their own stored table — this derives the whole list, counts and last-seen dates
+// straight from state.people's club field. findDuplicateClubPairs() reuses utils.js's generic
+// findSimilarPairs() to flag likely-typo'd near-duplicate club names for manual merging.
+
 export function getClubs() {
   const map = new Map();
   for (const p of state.people) {

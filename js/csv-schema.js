@@ -1,5 +1,7 @@
 'use strict';
 
+import { createDibber, createBeacon, createPerson, createRole, createCategory } from './schema.js';
+
 // ----------------------------------------------------------------
 // CSV format definitions for all internally-managed data files.
 // fields:  derived from schema.js factory functions — field order
@@ -7,8 +9,6 @@
 // aliases: accepted column names on import (first entry = canonical)
 // Excludes SI Timing formats — those are in si-schema.js.
 // ----------------------------------------------------------------
-
-import { createDibber, createBeacon, createPerson, createRole, createCategory } from './schema.js';
 
 export const CSV = {
   dibbers: {

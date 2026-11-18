@@ -1,5 +1,8 @@
 'use strict';
 
+// Catalogue of the stock helper roles offered on the Roles page — state.js seeds state.roles
+// from this list, and js/views/roles.js resets back to it on demand.
+
 export const BUILTIN_ROLES = [
   { role: 'HELPER',      description: 'General helper' },
   { role: 'RO',          description: 'Race Organiser' },

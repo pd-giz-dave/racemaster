@@ -14,6 +14,12 @@ import {
 import { MOBILE_DIR } from '../config.js';
 import path from 'path';
 
+// /api/mobile/* route handlers for Mule Mode sync, race-wide progress, and beacon reports — by
+// far the largest route module, since most of these endpoints exist purely to let a phone (or a
+// mule relaying for one) send/fetch only the delta since its last sync rather than a full
+// re-send. Storage format, merge/classify logic, and the field invariants live in
+// server/mobile.js; this module is routing, auth/ownership checks, and payload sanitising only.
+
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 // `since` is only read by GET .../progress below (a query-string value, extracted once in
 // server/router.js the same way that file already extracts `force` for handleDatasetRoutes) —

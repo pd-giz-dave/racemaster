@@ -7,6 +7,10 @@ import { normaliseDate, cleanName } from './utils.js';
 import { parseSICSV } from './csv.js';
 import { SI } from './si-schema.js';
 
+// Import/verify pre-entries from SI Entries or EntryCentral CSV exports into state.preEntries.
+// Column names differ between the two export formats, so every field is looked up through
+// SI.entriesImport's alias lists (si-schema.js) rather than a fixed header shape. Dedup on
+// import prefers participantNumber, falling back to name+dob when it's absent.
 
 /**
  * Parse raw pre-entries CSV text into preEntries array.

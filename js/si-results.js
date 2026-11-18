@@ -7,6 +7,11 @@ import { parseSICSV } from './csv.js';
 import { getEntry, getEntryName } from './entries.js';
 import { SI } from './si-schema.js';
 
+// Import/verify SI Timing results CSV into state.siResults, kept as raw row objects rather than
+// a fixed shape — every caller reads fields back out through the getSI*() accessor helpers below,
+// which resolve column names via SI.resultsImport's alias lists (si-schema.js) to tolerate the
+// different headers/ordering real SI exports use. mobile-checkpoints.js mirrors this same
+// thin-accessor-over-a-dynamic-array pattern.
 
 /**
  * Import an SI results CSV file into state.siResults.

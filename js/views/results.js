@@ -13,6 +13,12 @@ import { CSV } from '../csv-schema.js';
 import { publishResultsHTML, makePublishedUrl, buildSeniorsBodyHTML, buildJuniorsBodyHTML, buildPairsBodyHTML, buildHelpersBodyHTML, buildSplitsColumns, buildSplitsBodyHTML } from '../forms/results-html.js';
 import { buildPrizeRowsHTML } from '../forms/prize-list.js';
 
+// Results tab — computes/renders the senior/junior/pairs results tables, prize list and splits,
+// built from formatResults()/getSplitsRows() in the pure results.js module one level down
+// (confusingly, the same basename as this file). Opening this view first silently re-runs Mobile
+// Files' own Update Progress (autoUpdateProgress(), imported from mobile-files.js) so results
+// stay current without an extra network call when nothing's changed.
+
 let _seniors      = [];
 let _juniors      = [];
 let _prizes       = [];

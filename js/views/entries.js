@@ -23,6 +23,12 @@ import { TABLES } from '../strings.js';
 import { renderHome } from './home.js';
 import { openStartSlipPreview, computeHandicapStart } from '../forms/handicap-start-slip.js';
 
+// Renders the Entries screen — add/edit/delete runners and renumber bibs, including the
+// pairs-race case where an entry carries a second "partner" runner shown stacked under the
+// primary in each cell. Category/course are recalculated here (categories.js) on every edit
+// rather than trusted from stored data, and handicap races route through
+// forms/handicap-start-slip.js for the printable start slip.
+
 const ENTRY_COLS = tableColumns(TABLES.entries, {
   bib:     e => e.bibNumber,
   name:    e => {

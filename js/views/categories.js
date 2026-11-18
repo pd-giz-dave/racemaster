@@ -9,6 +9,11 @@ import { on, showStatus, showConfirmDialog, wireTabBar, renderThead, pickFile, d
 import { TABLES } from '../strings.js';
 import { normaliseTime, escHtml } from '../utils.js';
 
+// Renders the Categories screen: a tab bar switching between the read-only built-in FRA and
+// WFRA category tables (from categories.js) and an editable Custom table, plus whichever scheme
+// is this event's active one (state.event.categories). Only the Custom table is ever persisted
+// here — the FRA/WFRA tabs are reference data for comparison, not edited.
+
 const FIELDS = CSV.categories.fields;
 const WIDTHS = CSV.categories.widths;
 

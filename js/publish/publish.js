@@ -1,6 +1,12 @@
 (function () {
   'use strict';
 
+  // Client-side script bundled with every published static results page (see
+  // results-html.js/publishResultsHTML, which copies this file alongside the generated HTML) —
+  // adds search filtering and click-to-sort tables entirely in the browser, since a published
+  // page has no server or app state behind it. Not a module: loaded via a plain <script> tag in
+  // the static HTML itself.
+
   // ---- Search ----
   // Filters rows across all tables. If any row in a collapsed section matches,
   // that section is opened so the match is visible.

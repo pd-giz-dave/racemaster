@@ -5,6 +5,11 @@ import path from 'path';
 import { DATA_DIR, RESULTS_DIR, ROOT } from './config.js';
 import { readUsers } from './auth.js';
 
+// Server-side dataset storage layer: owns the on-disk data/<owner>/<name>-{public|private}.json
+// layout, name validation/visibility-conflict rules, and the published-results asset sync
+// (publish.css/publish.js). The one module every dataset route (server/routes/datasets.js) and
+// the results listing (server/routes/results.js) builds on rather than touching fs directly.
+
 // Sanitise to lowercase alphanumeric / hyphen / underscore, max 64 chars
 export function sanitiseName(s) {
   return (s || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64).toLowerCase();

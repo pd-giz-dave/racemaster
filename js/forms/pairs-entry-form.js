@@ -6,6 +6,12 @@ import { escHtml } from '../utils.js';
 import { calculateCategory } from '../categories.js';
 import { openPopup } from './preview.js';
 
+// Printable pairs-race entry form — entry-form.js's sibling for events run as pairs: one half-A5
+// form per pair (a named entrant plus a blank partner section, since a pair's second runner is
+// rarely known at pre-entry time), two halves per A4 sheet with a cut-guide between them. Blank
+// (openBlankPairsEntryFormPreview) and pre-filled (openPreFilledPairsEntryFormPreview, from
+// state.preEntries) variants mirror entry-form.js's own interleaving/guillotine layout.
+
 const PAIRS_DECLS = [
   'We accept the hazards inherent in fell running and acknowledge that we are entering and running this race at our own risk.',
   'We confirm that we are aware of the rules imposed on us by the Race Organiser and that we will comply with them.',

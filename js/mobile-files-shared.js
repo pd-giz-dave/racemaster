@@ -1,13 +1,13 @@
 'use strict';
 
+import { getSession } from './storage.js';
+import { getRaceStaleAfterDays, raceLabelAgeDays, sanitiseName } from './mule-ble.js';
+
 // Pure data/storage helpers shared across the Mobile Files feature's own split-out modules —
 // both the pure-logic ones (mobile-files-devices.js, mobile-files-progress.js) and the view
 // layer that renders them (js/views/mobile-files*.js). No DOM rendering, and deliberately no
 // dependency on any of those other modules, so this stays a true leaf every one of them can
 // safely import from without any risk of a circular import.
-
-import { getSession } from './storage.js';
-import { getRaceStaleAfterDays, raceLabelAgeDays, sanitiseName } from './mule-ble.js';
 
 // Ticked checkboxes, keyed by identity rather than row index — row indices are reassigned on
 // every render (races/devices can appear in a different order once sorted), so persisting

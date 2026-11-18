@@ -7,6 +7,9 @@ import { normaliseDate, cleanName } from './utils.js';
 import { calculateCategory } from './categories.js';
 import { addPerson, sortPeople } from './data.js';
 
+// Event helper (marshal) roster: add/find/sort helpers by number. addHelper() piggybacks on
+// data.js's addPerson() so a helper is also recorded as a person — shared name/gender/dob
+// identity, lastHelped/helpedTotal — the same addPerson() entries.js uses for runners.
 
 /** Get total number of helpers */
 export function getNumberOfHelpers() {

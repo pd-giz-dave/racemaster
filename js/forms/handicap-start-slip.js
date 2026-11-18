@@ -3,6 +3,12 @@
 import { state } from '../state.js';
 import { escHtml, timeToSeconds, secondsToTime } from '../utils.js';
 
+// Printable handicap-race start slip: one runner's individual start clock-time, computed from
+// their predicted time versus the event's handicap target (see computeHandicapStart), handed to
+// them at registration. Printed straight to a hidden iframe's print() rather than preview.js's
+// popup — see openStartSlipPreview's own comment — since live registration has no time for a
+// popup dialog to be dismissed.
+
 const SECONDS_PER_DAY = 86400;
 
 /**

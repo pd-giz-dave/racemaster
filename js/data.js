@@ -9,7 +9,11 @@ import { normaliseDate, cleanName, sortBy, today, normaliseGender, toISODate } f
 import { usingDibbers, usingBeacons } from './time-utils.js';
 
 // ====================================
-// People, clubs and dibbers management
+// People roster plus the next-number allocators (bib/dibber/beacon) that entries.js and
+// helpers.js both call into. addPerson()'s name+gender+dob key (see makePersonKey()) is the one
+// identity match shared by every Entries/Helpers add or CSV import, so the same runner isn't
+// duplicated across both. normalise*Rows() turn a raw CSV import into schema.js-shaped rows using
+// csv-schema.js's column aliases, before any addPerson/createDibber/createBeacon call happens.
 // ====================================
 
 /** Find a person by name, gender and DoB. Returns index or -1. */

@@ -6,6 +6,13 @@ import { escHtml } from '../utils.js';
 import { calculateCategory } from '../categories.js';
 import { openPopup } from './preview.js';
 
+// Printable race entry form: two half-A5 forms per A4 sheet with a cut-guide between them,
+// either blank (openBlankEntryFormPreview) or pre-filled per entrant
+// (openPreFilledEntryFormPreview, mapping state.preEntries via preEntryToFormData). Halves are
+// interleaved by pagesFromHalves/generatePreFilledEntryFormHTML so a single guillotine cut of the
+// printed stack yields two piles already in alphabetical order. pairs-entry-form.js is this
+// form's sibling for pairs races.
+
 const DECLS = [
   'I accept the hazards inherent in fell running and acknowledge that I am entering and running this race at my own risk.',
   'I confirm that I am aware of the rules imposed on me by the Race Organiser and that I will comply with them.',

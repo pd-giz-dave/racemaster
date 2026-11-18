@@ -8,6 +8,12 @@ import { ciEq, normaliseTime } from './utils.js';
 import { getEntry } from './entries.js';
 import { getSIAccountedBibs } from './si-results.js';
 
+// Stopwatch/manual finisher-time recording and lookup. SPECIAL_BIB_LABELS are the non-bib rows a
+// timekeeper can log alongside real splits (Clock, Seniors/Juniors/Male/Female start, Ignore).
+// buildFinishNumbersMap()/buildSplitNumbers() key every finisher by course+bib so repeat splits
+// for the same runner resolve to one entry. Deliberately kept separate from mobile-progress.js's
+// mobile-derived records (see that file's own header) so neither source can clobber the other.
+
 export const SPECIAL_BIB_LABELS = [
   ['Clock',   'No time=relative to 0; ss or mm:ss=late-start offset; hh:mm:ss=time of day'],
   ['Seniors', 'Record actual stopwatch time for seniors race start'],

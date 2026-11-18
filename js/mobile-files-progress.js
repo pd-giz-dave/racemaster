@@ -1,10 +1,5 @@
 'use strict';
 
-// Compute Results (formerly "Add to Finishers") + the Progress tab — pure logic and the
-// non-DOM state mutations it drives (state.mobileProgress/state.mobileCheckpoints). No DOM at
-// all — js/views/mobile-files-progress.js is the thin layer on top that wires buttons, shows
-// confirm dialogs/status toasts, and renders the actual table.
-
 import { getSortedEntries } from './entries.js';
 import { entryInfo, getConflictedBibs } from './safety.js';
 import { getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, CP_RETIRE } from './mobile-checkpoints.js';
@@ -13,6 +8,11 @@ import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
 import { byLineNumber, setLastSyncedLineNumber, deriveRaceLabel } from './mobile-files-shared.js';
 import { usingBeacons } from './time-utils.js';
 import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
+
+// Compute Results (formerly "Add to Finishers") + the Progress tab — pure logic and the
+// non-DOM state mutations it drives (state.mobileProgress/state.mobileCheckpoints). No DOM at
+// all — js/views/mobile-files-progress.js is the thin layer on top that wires buttons, shows
+// confirm dialogs/status toasts, and renders the actual table.
 
 // Maps a mobile Bibs-mode action onto the equivalent finishers.js action — "Pass" (Checkpoint
 // mode) is treated as a Finish, since it only makes sense here at all when the CP happened to

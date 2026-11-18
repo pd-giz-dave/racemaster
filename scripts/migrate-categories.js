@@ -1,21 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 
-// Migrates all data JSON files:
-//
-// 1. Category rows: old 8-field format → new 5-field format (idempotent)
-//    Old: { maleMinAge, maleCat, maleRef, maleMaxDist,
-//           femaleMinAge, femaleCat, femaleRef, femaleMaxDist }
-//    New: { minAge, maleCat, femaleCat, ref, maxDist }
-//
-// 2. Removes redundant tables: fraPreset, wfraPreset
-//    (presets are now built-in constants, not stored in data files)
-//
-// Safe to run more than once.
-// Usage: node scripts/migrate-categories.js
-
 const fs   = require('fs');
 const path = require('path');
+
+// One-off migration over every data/ JSON file: converts category rows from the old 8-field
+// per-gender shape (maleMinAge/maleCat/maleRef/maleMaxDist + female...) to the new 5-field
+// shared shape (minAge/maleCat/femaleCat/ref/maxDist — see js/schema.js's createCategory), and
+// drops the fraPreset/wfraPreset tables, now built-in constants rather than stored data.
+// Idempotent — safe to rerun. Usage: node scripts/migrate-categories.js
 
 const REMOVE_KEYS = ['fraPreset', 'wfraPreset'];
 

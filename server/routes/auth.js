@@ -4,6 +4,10 @@ import { readBody, jsonReply } from '../http-utils.js';
 import { sanitiseName } from '../datasets.js';
 import { readUsers, writeUsers, readAdmins, writeAdmins, hashPw, newToken, addSession, isAdmin } from '../auth.js';
 
+// POST /api/auth/* route handlers — login and self-service account creation. Mounted by
+// server/router.js ahead of the other route groups; all credential/session logic itself lives
+// in server/auth.js, this module only validates the request and shapes the response.
+
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleAuthRoutes(req, res, pathname) {
   // POST /api/auth/login

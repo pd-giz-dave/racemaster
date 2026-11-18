@@ -4,6 +4,10 @@ import { state } from '../state.js';
 import { escHtml } from '../utils.js';
 import { openPrintPreview } from './preview.js';
 
+// Printable blank Helpers List form for recording event helpers/volunteers (name/club/gender/DOB/
+// role) on race day, since FRA category points can also be awarded to helpers — filled in by
+// hand, not from any app data. Printed via preview.js's openPrintPreview.
+
 const PAGE_CSS = '@page { size: A4 portrait; margin: 0; }';
 
 const INFO_LINE = 'This information is required so points can be awarded to the person in the appropriate category';

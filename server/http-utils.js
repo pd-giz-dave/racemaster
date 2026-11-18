@@ -2,6 +2,10 @@
 
 import { sanitiseName } from './datasets.js';
 
+// Small HTTP helpers shared by every module under server/routes/: buffering a request body,
+// sending a uniform JSON reply, and parsing /api/data/:owner/:fullName's path shape. Kept here
+// rather than duplicated per-route so each handler stays focused on its own request logic.
+
 export function readBody(req) {
   return new Promise((res, rej) => {
     const chunks = [];

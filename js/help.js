@@ -2,6 +2,12 @@
 
 import { TOOLTIPS, HELP, PAGES } from './strings.js';
 
+// Wires the static help content from strings.js onto the DOM. wireTooltips() sets title attrs
+// from TOOLTIPS (on the control and its <label>, explicit or wrapping, not just the bare
+// control), wireViewHelp() adds each view's collapsible "?" panel from HELP, and
+// wireStaticPages() injects PAGES (About, What's New, etc.) and makes What's New's version
+// sections collapsible, newest open first.
+
 export function wireTooltips() {
   for (const [id, tip] of Object.entries(TOOLTIPS)) {
     const el = document.getElementById(id);

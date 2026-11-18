@@ -5,6 +5,12 @@ import { readBody, jsonReply, parseDataPath } from '../http-utils.js';
 import { sanitiseName, validDatasetName, conflictingDatasetName, dataFilePath, readDataset, writeDataset, emptyDataset, getDatasetsForUser } from '../datasets.js';
 import { getAuthUser, isAdmin, readUsers } from '../auth.js';
 
+// /api/datasets and /api/data/:owner/:fullName route handlers — create/copy/rename/delete a
+// dataset and read/write its JSON contents. Name validation, visibility-conflict checks, and
+// the actual file I/O all live in server/datasets.js; this module only enforces per-route
+// auth/ownership rules and shapes responses. PUT's `_version` check is this app's only
+// optimistic-concurrency guard against two sessions overwriting each other's save.
+
 // Returns true if this request was matched and handled (a response was sent), false otherwise.
 export async function handleDatasetRoutes(req, res, pathname, force) {
   // GET /api/datasets  —  list datasets visible to the authenticated user

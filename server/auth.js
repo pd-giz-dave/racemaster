@@ -4,6 +4,12 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { USERS_FILE, ADMINS_FILE, SESSIONS_FILE, SESSION_TTL } from './config.js';
 
+// User/session storage and auth: reads/writes the flat colon-delimited users.txt/admins.txt/
+// sessions.txt files, and is the one place getAuthUser() (called by every protected route)
+// checks a Bearer token against. `sessions` is an in-memory Map, persisted to SESSIONS_FILE on
+// every change rather than re-read per request — deleteSessionsForUser() is the one way another
+// module can reach into it (for revoking a deleted user's sessions).
+
 const sessions = new Map(); // token → { username, expires }
 
 export function loadSessions() {

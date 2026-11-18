@@ -15,6 +15,11 @@ import { loadSessions } from './server/auth.js';
 import { route } from './server/router.js';
 import { walkFiles } from './server/service-worker.js';
 
+// Process entry point — bootstraps on-disk state (ensureDirs/loadSessions), installs
+// console/file logging, and starts the one http.createServer(route) listener that
+// server/router.js then dispatches every request through. The dev-mode auto-restart watch
+// below is this file's own separate concern; see its own comment for why it's fs.watchFile-based.
+
 ensureDirs();
 installConsoleLogging();
 loadSessions();

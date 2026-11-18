@@ -1,21 +1,14 @@
 'use strict';
 
-// Mobile (Mule Mode) helpers.
-//
-// Scoped per logged-in user, mirroring data/<owner>/ —
-// data/mobile/<username>/<raceLabel>/<deviceName>.json. One file per physical phone (not one
-// shared file per race), holding that device's own lines as a single flat, chronological
-// array — a Bibs line and a Time line are told apart by which family's own ModeStart marker
-// most recently declared it (that marker's own `note` states the mode explicitly, e.g. "Time"/
-// "Bibs"/"CP" — see racemaster-mobile's SyncRecord doc), not by inspecting bibNumber/splitTime
-// nullness on individual records (hence there's no need to repeat deviceName per line, or split
-// the array by category, either). Append-merged on every sync (new lineNumbers added, existing
-// ones left alone; see server/routes/mobile.js's merge loop), since the app sends only the
-// lineNumber delta, not its full current record set, each time.
-
 import fs from 'fs';
 import path from 'path';
 import { MOBILE_DIR } from './config.js';
+
+// Mobile (Mule Mode) file storage: data/mobile/<owner>/<raceLabel>/<deviceName>.json holds one
+// device's full chronological record array — Bibs/Time/CP lines are told apart by the most
+// recent ModeStart marker's own `note` (see racemaster-mobile's SyncRecord doc), not by field
+// nullness — and are append-merged by lineNumber on every sync. progress.json (race-wide) and
+// beacons.json (full-snapshot) live alongside it but are excluded from per-device enumeration.
 
 export function mobileRaceDir(username, raceLabel) {
   return path.join(MOBILE_DIR, username, raceLabel);

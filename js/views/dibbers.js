@@ -10,6 +10,11 @@ import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
 
+// Renders the Dibbers (SI timing fobs) admin screen — add/edit/import/export the pool of fobs
+// loaned to runners, tracked by stable short code (not array index). Mirrors beacons.js's own
+// shape almost exactly; "lost" status here is a point-in-time admin record, separate from the
+// live per-race loan state the Mobile Files Progress tab derives from entry.dibberNumber.
+
 const DIBBER_COLS = tableColumns(TABLES.dibbers, {
   short_code: ({ d }) => d.shortCode || '',
   long_code:  ({ d }) => d.longCode  || '',

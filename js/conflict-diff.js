@@ -7,6 +7,7 @@
 // <table>: [...rows], ... } for every table in js/state.js's state — so no per-table key
 // knowledge is needed: each table's two row arrays are set-diffed by JSON.stringify(row) identity.
 // A row edited on one side naturally shows up as one "only local" + one "only remote" entry.
+
 export function buildConflictDiff(local, remote) {
   const localVersion  = local?._version  || 0;
   const remoteVersion = remote?._version || 0;

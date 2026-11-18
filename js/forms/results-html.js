@@ -8,6 +8,12 @@ import { toISODate, escHtml }  from '../utils.js';
 import { sanitise }            from '../ui.js';
 import { TABLES }              from '../strings.js';
 
+// Shared row/column HTML builders for results tables, used both by the live app's on-screen
+// results view and by publishResultsHTML() below, which renders the same markup into a
+// standalone static page (served with publish.css/publish.js, this file's sibling in js/publish/)
+// for publishing results with no server-side app running. Keeping one set of builders means the
+// published page can never drift out of sync with what's shown on screen.
+
 function wrap(title, body) {
   const org  = escHtml(state.event.organisation || '');
   const name = escHtml(state.event.name         || '');

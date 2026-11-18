@@ -1,5 +1,11 @@
 'use strict';
 
+// Shared print-popup plumbing used by every forms/*.js module: openPopup() opens a blank window,
+// injects the given CSS/HTML, and calls print() once all stylesheets have loaded; openPrintPreview
+// layers css/print.css plus a form-specific stylesheet on top for the common case. Forms that
+// can't use a visible popup (e.g. handicap-start-slip.js, for silent registration-desk printing)
+// bypass this and build their own hidden iframe instead.
+
 function openPopup({ title, cssLinks = [], inlineCSS = null, html }) {
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) { alert('Pop-up blocked — please allow pop-ups for this site.'); return null; }

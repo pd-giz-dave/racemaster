@@ -3,6 +3,10 @@
 import { state } from '../state.js';
 import { openPrintPreview } from './preview.js';
 
+// Printable bib-number cross-reference matrix: a grid of every three-digit number in the
+// relevant hundred-range, letting registration staff find any bib's fob/sheet quickly during
+// manual bib allocation. Numbers below event.firstBibNumber are crossed out as unused.
+
 const PAGE_CSS = '@page { size: A4 portrait; margin: 0; }';
 const DIGITS   = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const GROUPS   = 4;

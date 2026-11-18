@@ -5,6 +5,11 @@ import path from 'path';
 import crypto from 'crypto';
 import { ROOT } from './config.js';
 
+// Builds the service worker actually served at GET /sw.js (server/routes/static.js), by
+// rewriting sw.js's CACHE name (content-fingerprinted) and PRECACHE list to match whatever
+// static/css/js files currently exist on disk — so a deploy is picked up without hand-editing
+// sw.js's own placeholders. walkFiles() is also reused by server.js's dev-mode file watcher.
+
 export function walkFiles(dir, exts, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);

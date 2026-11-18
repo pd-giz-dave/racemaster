@@ -4,6 +4,12 @@ import { state } from './state.js';
 import { COURSE } from './constants.js';
 import { normaliseTime, timeToSeconds, secondsToTime, ciEq } from './utils.js';
 
+// Timing-method lookups and the core "adjusted finish time" calculation — converts a raw finish
+// time into elapsed race time for Stopwatch/Beacons courses by resolving the nearest Start/Clock/
+// category marker above it in state.finishers (falling back to state.mobileProgress when there's
+// no manual entry at all). Dibbers courses skip all of this: a dibber read is already elapsed
+// time. See adjustedFinishTime()'s own doc comment below for the full source-priority list.
+
 /** Returns the timing method string ('Stopwatch', 'Dibbers', or 'None') for a course. */
 export function getTimingMethod(course) {
   const isJunior = course && ciEq(course, COURSE.JUNIORS);
