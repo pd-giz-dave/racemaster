@@ -20,6 +20,7 @@ beforeEach(() => {
   ];
   state.mobileProgress = [];
   state.mobileCheckpoints = [];
+  state.mobileBeaconOps = [];
   state.finishers = [];
   state.siResults = [];
 });
@@ -367,6 +368,148 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     ]);
   });
 
+  // racemaster-mobile's newer Close recording mode — a dedicated phone presents each beacon,
+  // logging a 'Close' row (battery read, then powered off) rather than any Bib/Time entry.
+  // Before the classification fix (mobile-files-devices.js's own rowFamily), this fell into the
+  // Bibs family's default and then got silently dropped (not in TRANSFERABLE_BIBS_ACTIONS) —
+  // confirmed in the field as beacon close data never showing up anywhere once pulled.
+  describe('Close/Count-mode devices', () => {
+    function closeRow(overrides = {}) {
+      const merged = {
+        owner: 'alice', raceLabel: 'race-a',
+        device: {
+          name: 'Close Phone',
+          lines: [
+            { lineNumber: 1, action: 'Location', note: 'Close', location: 'Close' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null, location: 'Close' },
+            { lineNumber: 3, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:10:00', location: 'Close' },
+          ],
+        },
+        ...overrides,
+      };
+      if (!merged.device.resolvedLines) merged.device.resolvedLines = merged.device.lines;
+      return merged;
+    }
+
+    function countRow(overrides = {}) {
+      const merged = {
+        owner: 'alice', raceLabel: 'race-a',
+        device: {
+          name: 'Count Phone',
+          lines: [
+            { lineNumber: 1, action: 'Location', note: 'Start', location: 'Start' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, location: 'Start' },
+            { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:15:00', location: 'Start' },
+          ],
+        },
+        ...overrides,
+      };
+      if (!merged.device.resolvedLines) merged.device.resolvedLines = merged.device.lines;
+      return merged;
+    }
+
+    it('extracts a Close row\'s beacon number, closedAt and battery into closeByBeacon, without erroring', async () => {
+      const result = await validateAndCompute([closeRow()]);
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.closeByBeacon.get(5), {
+        at: '2026/08/30 09:10:00', closedAt: '2026/08/30 09:10:00', batteryPercent: 80, closeCount: 1,
+      });
+      assert.equal(result.countByBeacon.size, 0);
+      // Diverted entirely before location bucketing — never counted as a Finish/Start/CP file.
+      assert.equal(result.finishRows.length, 0);
+      assert.equal(result.startRows.length, 0);
+      assert.equal(result.cpBuckets.size, 0);
+      assert.deepEqual(result.expected, []);
+    });
+
+    it('extracts a CountSeen row\'s beacon number and countedAt into countByBeacon, without erroring', async () => {
+      const result = await validateAndCompute([countRow()]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:15:00');
+      assert.equal(result.closeByBeacon.size, 0);
+    });
+
+    // The actual bug the peer session flagged: Count's forced "Start" location is identical to a
+    // genuine Bibs-mode early/late-starters phone's own "Start" location, but the two must never
+    // be conflated — a Count-mode device's beacon sightings must not feed expectedFinisherEntries
+    // as if they were early/late-starter bibs.
+    it('does not sweep a Count-mode device into the Start-location early-starters bucket', async () => {
+      const result = await validateAndCompute([countRow()]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.startRows.length, 0);
+      assert.deepEqual(result.expected, []);
+    });
+
+    it('keeps a Close-mode selection alongside an ordinary Finish-location selection, both computed independently', async () => {
+      const result = await validateAndCompute([finishRow(), closeRow()]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.expected.length, 1);
+      assert.equal(result.expected[0].action, 'Finish');
+      assert.deepEqual(result.closeByBeacon.get(5), {
+        at: '2026/08/30 09:10:00', closedAt: '2026/08/30 09:10:00', batteryPercent: 80, closeCount: 1,
+      });
+    });
+
+    it('takes the latest close by lineNumber when a beacon is re-presented to the same device', async () => {
+      const reclosed = closeRow();
+      reclosed.device.lines.push(
+        { lineNumber: 4, action: 'Close', note: 'beacon=5 battery=60', bibNumber: null, splitTime: null, timestamp: '2026/08/30 10:00:00', location: 'Close' },
+      );
+      const result = await validateAndCompute([reclosed]);
+      assert.equal(result.error, undefined);
+      // closeCount is a running count of every Close row for this beacon this segment (never
+      // deduplicated client-side — see computeCloseByBeacon's own doc), so a re-presentation
+      // bumps it to 2 even though only the latest closedAt/batteryPercent wins.
+      assert.deepEqual(result.closeByBeacon.get(5), {
+        at: '2026/08/30 10:00:00', closedAt: '2026/08/30 10:00:00', batteryPercent: 60, closeCount: 2,
+      });
+    });
+
+    it('sums closeCount across two selected devices that both closed the same beacon, keeping the later one\'s closedAt/batteryPercent', async () => {
+      const secondClosePhone = closeRow({
+        device: {
+          name: 'Second Close Phone',
+          lines: [
+            { lineNumber: 1, action: 'Location', note: 'Close', location: 'Close' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null, location: 'Close' },
+            { lineNumber: 3, action: 'Close', note: 'beacon=5 battery=50', bibNumber: null, splitTime: null, timestamp: '2026/08/30 11:00:00', location: 'Close' },
+          ],
+        },
+      });
+      const result = await validateAndCompute([closeRow(), secondClosePhone]);
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.closeByBeacon.get(5), {
+        at: '2026/08/30 11:00:00', closedAt: '2026/08/30 11:00:00', batteryPercent: 50, closeCount: 2,
+      });
+    });
+
+    // The feature this session added: a closed beacon heard advertising again (racemaster-mobile's
+    // own HistoryAction.CLOSE_REOPENED) must be reinstated as outstanding here, not still "closed"
+    // — see computeCloseByBeacon's own doc.
+    it('a CloseReopened row after a Close reinstates the beacon as outstanding (no closedAt/batteryPercent), keeping its closeCount', async () => {
+      const reopened = closeRow();
+      reopened.device.lines.push(
+        { lineNumber: 4, action: 'CloseReopened', note: 'beacon=5', bibNumber: null, splitTime: null, timestamp: '2026/08/30 10:30:00', location: 'Close' },
+      );
+      const result = await validateAndCompute([reopened]);
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.closeByBeacon.get(5), { at: '2026/08/30 10:30:00', closeCount: 1 });
+    });
+
+    it('a Close after a CloseReopened re-closes the beacon normally, bumping closeCount again', async () => {
+      const reclosedAfterReopen = closeRow();
+      reclosedAfterReopen.device.lines.push(
+        { lineNumber: 4, action: 'CloseReopened', note: 'beacon=5', bibNumber: null, splitTime: null, timestamp: '2026/08/30 10:30:00', location: 'Close' },
+        { lineNumber: 5, action: 'Close', note: 'beacon=5 battery=55', bibNumber: null, splitTime: null, timestamp: '2026/08/30 11:00:00', location: 'Close' },
+      );
+      const result = await validateAndCompute([reclosedAfterReopen]);
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.closeByBeacon.get(5), {
+        at: '2026/08/30 11:00:00', closedAt: '2026/08/30 11:00:00', batteryPercent: 55, closeCount: 2,
+      });
+    });
+  });
+
   it('does not add a duplicate DNF when the CP-retired bib already has its own Finish-location record', async () => {
     // Bib 1 both finishes at Finish *and* has a (presumably stray/inconsistent) DNF row at CP1 —
     // Finish is authoritative, so no second entry should be added for it.
@@ -459,6 +602,101 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
     const cpTimesByCp = new Map([[1, new Map([[1, '00:10:00']])]]);
     await applyComputedResults([], cpTimesByCp, [finishRow()]);
     assert.deepEqual(state.mobileCheckpoints[0], { bibNumber: 1, cpTimes: { 1: '00:10:00' } });
+  });
+
+  describe('mobileBeaconOps (Close/Count-mode persistence)', () => {
+    it('rebuilds mobileBeaconOps from closeByBeacon/countByBeacon, one row per distinct beacon', async () => {
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]]);
+      const countByBeacon = new Map([[9, '2026/08/30 09:15:00']]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon, countByBeacon);
+      assert.deepEqual(state.mobileBeaconOps, [
+        { beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 },
+        { beaconNumber: 9, countedAt: '2026/08/30 09:15:00' },
+      ]);
+    });
+
+    it('a beacon both closed and counted (by two different selected devices) carries both sets of fields in one row', async () => {
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]]);
+      const countByBeacon = new Map([[5, '2026/08/30 08:00:00']]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon, countByBeacon);
+      assert.deepEqual(state.mobileBeaconOps, [
+        { beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80, countedAt: '2026/08/30 08:00:00' },
+      ]);
+    });
+
+    it('clearProgressData wipes mobileBeaconOps too', async () => {
+      state.mobileBeaconOps = [{ beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }];
+      await clearProgressData();
+      assert.deepEqual(state.mobileBeaconOps, []);
+    });
+
+    it('leaves an identical beaconOps rebuild unsaved, same as mobileProgress/mobileCheckpoints', async () => {
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon);
+      localStorage.removeItem('racemaster-dirty');
+
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon);
+
+      assert.equal(isDirty(), false);
+    });
+
+    it('saves when only the beaconOps rebuild changed, even with mobileProgress/mobileCheckpoints identical', async () => {
+      await applyComputedResults([], new Map(), [finishRow()]);
+      localStorage.removeItem('racemaster-dirty');
+
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon);
+
+      assert.equal(isDirty(), true);
+      assert.deepEqual(state.mobileBeaconOps, [{ beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]);
+    });
+
+    // A beacon whose closeByBeacon entry has no closedAt (computeCloseByBeacon's own shape for a
+    // reopened beacon — see its own doc) must come out of beaconOps with neither closedAt nor
+    // batteryPercent, but still carrying whatever closeCount it has, so buildProgressRows()' own
+    // overlay shows it as outstanding again instead of still-closed.
+    it('omits closedAt/batteryPercent from beaconOps for a beacon with no closedAt (reopened), but keeps its closeCount', async () => {
+      const closeByBeacon = new Map([[5, { closeCount: 2 }]]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon);
+      assert.deepEqual(state.mobileBeaconOps, [{ beaconNumber: 5, closeCount: 2 }]);
+    });
+  });
+
+  // ToDo.MD: "Beacons tab still has read beacons report, now redundant as update progress should
+  // do it from entries in the selected device files" + "beacons page not updating with progress
+  // results - total hours" — applyComputedResults() now calls js/mobile-beacons.js directly with
+  // this run's own closeByBeacon, rather than that being a separate, manually-triggered action.
+  describe('Beacons catalogue housekeeping (Close-mode data applied directly, no separate report-read step)', () => {
+    beforeEach(() => {
+      state.beacons = [{ number: 5, owner: '', dateAcquired: '', totalHours: 2, batteryLevel: 100, lastUsed: '', lost: '', notes: '' }];
+      state.beaconReports = [];
+      state.event = {
+        date: '30/08/2026', startTime: '09:00:00', juniorStartTime: '', juniorLimit: 'None',
+        timingMethod: 'Beacons', juniorTimingMethod: 'Stopwatch',
+      };
+    });
+
+    it('updates the catalogue\'s battery/lastUsed/totalHours straight from this run\'s closeByBeacon', async () => {
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 45, closeCount: 1 }]]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon);
+      assert.equal(state.beacons[0].batteryLevel, 45);
+      assert.equal(state.beacons[0].lastUsed, '30/08/2026');
+      assert.ok(state.beacons[0].totalHours > 2); // accumulated on top of the existing 2, not just overwritten
+    });
+
+    it('populates state.beaconReports for this race, so the Beacons tab reflects it with no manual read', async () => {
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 45, closeCount: 1 }]]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon);
+      const report = state.beaconReports.find(r => r.raceLabel === 'race-a'); // finishRow()'s own raceLabel
+      assert.ok(report);
+      assert.deepEqual(report.returned, [5]);
+    });
+
+    it('leaves the catalogue and state.beaconReports untouched when this run has no Close-mode data', async () => {
+      await applyComputedResults([{ action: 'Finish', number: 1, time: '00:20:00' }], new Map(), [finishRow()]);
+      assert.equal(state.beacons[0].totalHours, 2);
+      assert.equal(state.beaconReports.length, 0);
+    });
   });
 });
 
@@ -636,5 +874,51 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
     const row2 = rows.find(r => r.bibNumber === 2);
     assert.equal(row2.finishTime, 'DNF');
     assert.deepEqual(row2.cpTimes, { 1: CP_RETIRE });
+  });
+
+  describe('beaconClosedAt/beaconBatteryPercent/beaconCountedAt (Close/Count-mode overlay)', () => {
+    it('defaults all three to blank/null when state.mobileBeaconOps has nothing for this entry\'s beacon', () => {
+      state.event.timingMethod = 'Beacons';
+      state.entries[0].dibberNumber = 5;
+      const rows = buildProgressRows();
+      const row1 = rows.find(r => r.bibNumber === 1);
+      assert.equal(row1.beaconClosedAt, '');
+      assert.equal(row1.beaconBatteryPercent, null);
+      assert.equal(row1.beaconCountedAt, '');
+    });
+
+    it('stamps beaconClosedAt/beaconBatteryPercent from mobileBeaconOps, matched by beacon number', () => {
+      state.event.timingMethod = 'Beacons';
+      state.entries[0].dibberNumber = 5;
+      state.mobileBeaconOps = [{ beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }];
+      const rows = buildProgressRows();
+      const row1 = rows.find(r => r.bibNumber === 1);
+      assert.equal(row1.beaconClosedAt, '2026/08/30 09:10:00');
+      assert.equal(row1.beaconBatteryPercent, 80);
+    });
+
+    it('stamps beaconCountedAt from mobileBeaconOps independently of beaconClosedAt', () => {
+      state.event.timingMethod = 'Beacons';
+      state.entries[1].dibberNumber = 9;
+      state.mobileBeaconOps = [{ beaconNumber: 9, countedAt: '2026/08/30 09:15:00' }];
+      const rows = buildProgressRows();
+      const row2 = rows.find(r => r.bibNumber === 2);
+      assert.equal(row2.beaconCountedAt, '2026/08/30 09:15:00');
+      assert.equal(row2.beaconClosedAt, '');
+    });
+
+    // beaconNumber is only ever non-zero for a Beacons-timed entry (buildProgressRows()'s own
+    // doc) — a dibber-timed entry must never pick up a stray match even if a mobileBeaconOps row
+    // happens to share the same number by coincidence (dibber short codes and beacon numbers are
+    // drawn from unrelated pools).
+    it('never stamps a dibber-timed entry, even if its own fobNumber happens to match a beaconNumber in mobileBeaconOps', () => {
+      state.event.timingMethod = 'Dibbers';
+      state.entries[0].dibberNumber = 5;
+      state.mobileBeaconOps = [{ beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }];
+      const rows = buildProgressRows();
+      const row1 = rows.find(r => r.bibNumber === 1);
+      assert.equal(row1.fobNumber, 5);
+      assert.equal(row1.beaconClosedAt, '');
+    });
   });
 });

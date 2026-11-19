@@ -140,24 +140,29 @@ export async function updateProgress() {
     syncAutoProgressCheckbox();
     return;
   }
-  const { finishRows, startRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp } = result;
+  const { finishRows, startRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp, closeByBeacon, countByBeacon } = result;
 
   const existingCount = state.mobileProgress.length;
   // Built from parts, not a fixed "N Finish file(s)[ and checkpoint times from M CP file(s)]"
   // template — a Finish file is no longer required (a phone may not have relocated there yet),
   // so finishRows.length can genuinely be 0; omitting that clause entirely reads naturally
   // ("Add 3 progress record(s) from checkpoint times from 2 CP file(s)?") rather than saying
-  // "from 0 Finish file(s)".
+  // "from 0 Finish file(s)". closePart/countPart are the Close/Count-mode equivalent — a
+  // selection can legitimately be nothing BUT Close/Count devices (expected.length === 0, nothing
+  // Finish/Start/CP-derived at all), so these two are included in the same summary rather than
+  // silently going unmentioned.
   const finishPart = finishRows.length ? `${finishRows.length} Finish file(s)` : null;
   const startPart = startRows.length ? `${startRows.length} Start file(s)` : null;
   const cpPart = cpBuckets.size ? `checkpoint times from ${cpBuckets.size} CP file(s)` : null;
-  const sourceSummary = [finishPart, startPart, cpPart].filter(Boolean).join(' and ');
+  const closePart = closeByBeacon.size ? `${closeByBeacon.size} beacon close(s)` : null;
+  const countPart = countByBeacon.size ? `${countByBeacon.size} beacon count(s)` : null;
+  const sourceSummary = [finishPart, startPart, cpPart, closePart, countPart].filter(Boolean).join(' and ');
   const confirmMsg = existingCount
     ? `This replaces ${existingCount} existing progress record(s) with ${expected.length} from ${sourceSummary}. Continue?`
     : `Add ${expected.length} progress record(s) from ${sourceSummary}?`;
   if (!await showConfirmDialog(confirmMsg, 'Update Progress')) return;
 
-  const { added } = await applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp);
+  const { added } = await applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp, closeByBeacon, countByBeacon);
 
   // A successful manual run is exactly the proof #mf-auto-progress needs to unlock — see this
   // file's own AUTO_PROGRESS_KEY doc above. Set before the re-render below so
@@ -178,6 +183,7 @@ export async function updateProgress() {
   showStatus(
     `Progress updated: ${added} record${added === 1 ? '' : 's'}`
       + `${cpBuckets.size ? `, checkpoint times computed for ${state.mobileCheckpoints.length} bib(s)` : ''}`
+      + `${(closeByBeacon.size || countByBeacon.size) ? `, beacon status recorded for ${state.mobileBeaconOps.length} beacon(s)` : ''}`
       + `${invalidCount ? `. ${invalidCount} bib(s) not in Entries — flagged on Progress and Safety Check` : '.'}`
   );
 }
@@ -211,7 +217,7 @@ export async function autoUpdateProgress() {
   const result = await validateAndCompute(selected);
   if (result.error) { console.warn('[mobile-files] Progress auto-update skipped:', result.error); return; }
 
-  await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp);
+  await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp, result.closeByBeacon, result.countByBeacon);
   renderMobileProgressTable();
 }
 
@@ -243,7 +249,7 @@ export async function maybeAutoUpdateProgress() {
     return;
   }
 
-  await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp);
+  await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp, result.closeByBeacon, result.countByBeacon);
   renderMobileProgressTable();
 }
 
@@ -263,12 +269,19 @@ export function renderMobileProgressTable() {
     // beacon-timed one shows "returned"/"not returned" once a beacons.json report has actually
     // been read for its course, highlighted red while still outstanding — same
     // color:var(--danger) convention the Beacons/Dibbers data pages already use for their own
-    // "needs attention" cells.
+    // "needs attention" cells. beaconClosedAt/beaconCountedAt (a second, independent beacon-
+    // housekeeping source — racemaster-mobile's newer Close/Count recording modes, not the older
+    // beacons.json report) append their own "closed"/"counted" note alongside whichever of
+    // those applies, rather than replacing it — a beacon can be both reported missing by the old
+    // report AND already closed by the new workflow at the same time.
     fobNumber:  r => {
       if (!r.fobNumber) return '';
-      const suffix = r.fobReturned === 'missing' ? ' — not returned'
-        : r.fobReturned === 'returned' ? ' — returned' : '';
-      const text = escHtml(`${r.fobNumber}${suffix}`);
+      const bits = [];
+      if (r.fobReturned === 'missing') bits.push('not returned');
+      else if (r.fobReturned === 'returned') bits.push('returned');
+      if (r.beaconClosedAt) bits.push(`closed${r.beaconBatteryPercent != null ? ` ${r.beaconBatteryPercent}%` : ''}`);
+      if (r.beaconCountedAt) bits.push('counted');
+      const text = escHtml(`${r.fobNumber}${bits.length ? ` — ${bits.join(', ')}` : ''}`);
       return r.fobReturned === 'missing' ? `<span style="color:var(--danger)">${text}</span>` : text;
     },
     // Time-of-day, not elapsed — the raw device reading, straight out of the file (this tab's own

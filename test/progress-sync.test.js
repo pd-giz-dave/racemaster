@@ -41,6 +41,7 @@ describe('progress-sync.js:startProgressSync', () => {
       bibNumber: 1, name: 'Dave', category: 'MSEN', course: 'Seniors',
       startTime: '00:00:00', finishTime: '00:45:00', startTimeOfDay: '', finishTimeOfDay: '',
       cpTimes: { 1: '00:10:00' }, cpTimesOfDay: {}, beaconNumber: 0,
+      beaconClosedAt: '', beaconBatteryPercent: null, beaconCountedAt: '',
     }]);
   });
 
@@ -191,6 +192,7 @@ describe('progress-sync.js:startProgressSync', () => {
       bibNumber: 1, name: 'Dave', category: 'MSEN', course: 'Seniors',
       startTime: '', finishTime: '', startTimeOfDay: '', finishTimeOfDay: '',
       cpTimes: {}, cpTimesOfDay: {}, beaconNumber: 0,
+      beaconClosedAt: '', beaconBatteryPercent: null, beaconCountedAt: '',
     }]);
   });
 

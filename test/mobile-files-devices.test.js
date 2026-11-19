@@ -9,6 +9,7 @@ import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
   distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt, withResolvedLocations,
+  deviceViewOptions, collapsePingRuns,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -191,6 +192,64 @@ describe('mobile-files-devices.js:buildSegmentView', () => {
     assert.deepEqual(bibsSegment.map(r => r.bibNumber).filter(b => b != null).sort(), [1, 2, 3]);
   });
 
+  // racemaster-mobile's two newer recording modes — Close (beacon battery read + power-off) and
+  // Count (beacon sighted only) — each write their own action ('Close'/'CountSeen') with a
+  // splitTime of null, same as a Bibs/CP row. Before this fix, both silently fell into the Bibs
+  // family's own default (splitTime == null => Bibs) and then got dropped outright downstream
+  // (mobile-files-progress.js's TRANSFERABLE_BIBS_ACTIONS doesn't include either action) —
+  // confirmed in the field as beacon close/count data recorded on a phone never showing up
+  // anywhere once pulled. Each must land in its own segment, not bibsSegment.
+  it('classifies a Close row into its own closeSegment, not bibsSegment', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Close' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null },
+    ];
+    const { closeSegment, bibsSegment, timeSegment } = buildSegmentView(lines);
+    assert.equal(closeSegment.filter(r => r.action === 'Close').length, 1);
+    assert.equal(bibsSegment.length, 0);
+    assert.equal(timeSegment.length, 0);
+  });
+
+  // Same fix, same bug shape, for racemaster-mobile's own auto-reinstatement marker
+  // (HistoryAction.CLOSE_REOPENED) — a CloseReopened row has a null splitTime too, same as a
+  // real Close row, so without its own rowFamily case it falls into the Bibs default exactly like
+  // the ones above did before their own fix.
+  it('classifies a CloseReopened row into its own closeSegment, not bibsSegment', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Close' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null },
+      { lineNumber: 4, action: 'CloseReopened', note: 'beacon=5', bibNumber: null, splitTime: null },
+    ];
+    const { closeSegment, bibsSegment, timeSegment } = buildSegmentView(lines);
+    assert.equal(closeSegment.filter(r => r.action === 'CloseReopened').length, 1);
+    assert.equal(bibsSegment.length, 0);
+    assert.equal(timeSegment.length, 0);
+  });
+
+  it('classifies a CountSeen row into its own countSegment, not bibsSegment', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Start' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+    ];
+    const { countSegment, bibsSegment, timeSegment } = buildSegmentView(lines);
+    assert.equal(countSegment.filter(r => r.action === 'CountSeen').length, 1);
+    assert.equal(bibsSegment.length, 0);
+    assert.equal(timeSegment.length, 0);
+  });
+
+  it('classifies a Close-mode Location/ModeStart boundary pair into closeSegment via the ModeStart note, same as Time/Bibs', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Close' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null },
+    ];
+    const { closeSegment } = buildSegmentView(lines);
+    assert.equal(closeSegment.filter(r => r.action === 'Location').length, 1);
+    assert.equal(closeSegment.filter(r => r.action === 'ModeStart').length, 1);
+  });
+
   it('a Reset closes only the one visit its own refLineNumber targets, leaving every other open visit untouched', () => {
     const lines = [
       { lineNumber: 1, action: 'Location', note: 'Finish' },
@@ -332,6 +391,16 @@ describe('mobile-files-devices.js:resolveLocationKey', () => {
   it('returns null for free text with no recognisable Finish/CP convention', () => {
     assert.equal(resolveLocationKey('Somewhere'), null);
     assert.equal(resolveLocationKey(''), null);
+  });
+
+  // racemaster-mobile's Close recording mode forces a dedicated phone's location to the literal
+  // string "Close" (Count's own forced "Start" already matches the existing 'start' case just
+  // above) — recognised defensively here even though nothing actually buckets by it (a Close/
+  // Count device is diverted to its own handling before location-based bucketing ever runs, see
+  // mobile-files-progress.js's own validateAndCompute()), so it's never reported as unrecognised.
+  it('recognises "Close" case-insensitively', () => {
+    assert.deepEqual(resolveLocationKey('Close'), { kind: 'close' });
+    assert.deepEqual(resolveLocationKey('close'), { kind: 'close' });
   });
 });
 
@@ -776,6 +845,167 @@ describe('mobile-files-devices.js:flattenDevices', () => {
       assert.equal(rows.length, 1);
       assert.equal(rows[0].bibsVisible, 1);
     });
+  });
+});
+
+describe('mobile-files-devices.js:flattenDevices — Close/Count-mode devices', () => {
+  // Before this fix, a pure Close-mode device (never writes a Bib/Time entry — see
+  // buildSegmentView's own closeSegment/countSegment doc) had `visible` built only from
+  // timeSegment/bibsSegment, which are always empty for such a device — so its own real,
+  // resolved Location/ModeStart rows never showed up anywhere: location fell back to "Unknown"
+  // and mode to "—", despite the data being perfectly real.
+  it('reports a Close-mode device\'s own forced "Close" location, not Unknown', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Close Phone', lines: [
+        { lineNumber: 1, action: 'Location', note: 'Close' },
+        { lineNumber: 2, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null, timestamp: '2026/08/30 09:00:00' },
+        { lineNumber: 3, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].rawLocation, 'Close');
+    assert.deepEqual(rows[0].locations, ['Close']);
+    // startedAt is read from the current segment's own latest ModeStart (latestModeStart()) —
+    // only populated at all if the Close-mode ModeStart row was actually folded into `visible`.
+    assert.equal(rows[0].startedAt, '2026/08/30 09:00:00');
+  });
+
+  it('reports a Count-mode device\'s own forced "Start" location', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Count Phone', lines: [
+        { lineNumber: 1, action: 'Location', note: 'Start' },
+        { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, timestamp: '2026/08/30 09:00:00' },
+        { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].rawLocation, 'Start');
+    assert.equal(rows[0].startedAt, '2026/08/30 09:00:00');
+  });
+});
+
+describe('mobile-files-devices.js:deviceViewOptions', () => {
+  // ToDo.MD: "I want the devices view to be split by location + mode ... these should be
+  // options on the view selector not sub-sections within the view" — js/views/mobile-files.js's
+  // own viewDeviceRow() calls this to build its own choice-dialog options.
+  it('returns exactly one option for an ordinary single-location, single-mode device', () => {
+    const lines = withResolvedLocations([
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+    ]);
+    const options = deviceViewOptions(lines);
+    assert.equal(options.length, 1);
+    assert.equal(options[0].mode, 'Bibs');
+    assert.equal(options[0].location, 'Finish');
+    assert.equal(options[0].label, 'Bibs'); // single location, so no "Finish — " prefix
+    assert.equal(options[0].empty, false);
+  });
+
+  it('splits one location into separate Bibs(empty)/Close/Count options when the device switched mode with no Reset between', () => {
+    const lines = withResolvedLocations([
+      { lineNumber: 1, action: 'Location', note: 'Start' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'Location', note: 'Start' },
+      { lineNumber: 4, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null },
+      { lineNumber: 5, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null },
+      { lineNumber: 6, action: 'Location', note: 'Start' },
+      { lineNumber: 7, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
+      { lineNumber: 8, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+    ]);
+    const options = deviceViewOptions(lines);
+    assert.deepEqual(options.map(o => o.label).sort(), ['Bibs (empty)', 'Close', 'Count']);
+    // All three share the one location ("Start"), so no location prefix on any of them.
+    assert.ok(options.every(o => o.location === 'Start'));
+    const bibsOption = options.find(o => o.mode === 'Bibs');
+    assert.equal(bibsOption.empty, true); // the ModeStart/Location pair, no real bib ever recorded
+  });
+
+  it('prefixes the label with location only once the options actually span more than one', () => {
+    const lines = withResolvedLocations([
+      { lineNumber: 1, action: 'Location', note: 'Finish' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+      { lineNumber: 4, action: 'Location', note: 'CP1' },
+      { lineNumber: 5, action: 'ModeStart', note: 'CP', splitTime: null, bibNumber: null },
+      { lineNumber: 6, action: 'Pass', bibNumber: '5' },
+    ]);
+    const options = deviceViewOptions(lines);
+    assert.deepEqual(options.map(o => o.label).sort(), ['CP1 — Bibs', 'Finish — Bibs']);
+  });
+
+  it('returns no options at all for a brand-new device with nothing pulled yet', () => {
+    assert.deepEqual(deviceViewOptions([]), []);
+  });
+});
+
+describe('mobile-files-devices.js:collapsePingRuns', () => {
+  // ToDo.MD: "collapse multiple consecutive pings into a line of the form 'N - M' in the line
+  // number column, similarly 'N - M' in the timestamp column" — js/views/mobile-files-devices.js's
+  // own showRawModal() uses this.
+  it('collapses 2+ consecutive Ping rows into one summary row', () => {
+    const rows = [
+      { lineNumber: 1, action: 'Finish', bibNumber: '5' },
+      { lineNumber: 2, action: 'Ping', timestamp: '2026/08/30 09:10:00' },
+      { lineNumber: 3, action: 'Ping', timestamp: '2026/08/30 09:10:15' },
+      { lineNumber: 4, action: 'Ping', timestamp: '2026/08/30 09:10:30' },
+      { lineNumber: 5, action: 'Finish', bibNumber: '6' },
+    ];
+    const grouped = collapsePingRuns(rows, 'timestamp');
+    assert.equal(grouped.length, 3); // Finish, collapsed-Ping, Finish
+    assert.deepEqual(grouped[0], rows[0]);
+    assert.deepEqual(grouped[2], rows[4]);
+    assert.equal(grouped[1].lineNumber, '2 - 4');
+    assert.equal(grouped[1].action, 'Ping');
+    assert.equal(grouped[1].timestamp, '2026/08/30 09:10:00 - 2026/08/30 09:10:30');
+  });
+
+  it('leaves an isolated Ping (no adjacent one) exactly as-is', () => {
+    const rows = [
+      { lineNumber: 1, action: 'Finish', bibNumber: '5' },
+      { lineNumber: 2, action: 'Ping', timestamp: '2026/08/30 09:10:00' },
+      { lineNumber: 3, action: 'Finish', bibNumber: '6' },
+    ];
+    const grouped = collapsePingRuns(rows, 'timestamp');
+    assert.equal(grouped.length, 3);
+    assert.deepEqual(grouped[1], rows[1]);
+  });
+
+  it('handles a run that starts at the very first row and/or ends at the very last row', () => {
+    const rows = [
+      { lineNumber: 1, action: 'Ping', timestamp: '2026/08/30 09:00:00' },
+      { lineNumber: 2, action: 'Ping', timestamp: '2026/08/30 09:00:15' },
+      { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+      { lineNumber: 4, action: 'Ping', timestamp: '2026/08/30 09:01:00' },
+      { lineNumber: 5, action: 'Ping', timestamp: '2026/08/30 09:01:15' },
+    ];
+    const grouped = collapsePingRuns(rows, 'timestamp');
+    assert.equal(grouped.length, 3);
+    assert.equal(grouped[0].lineNumber, '1 - 2');
+    assert.deepEqual(grouped[1], rows[2]);
+    assert.equal(grouped[2].lineNumber, '4 - 5');
+  });
+
+  it('omits the synthetic timestamp field entirely when tsField is null', () => {
+    const rows = [
+      { lineNumber: 1, action: 'Ping' },
+      { lineNumber: 2, action: 'Ping' },
+    ];
+    const grouped = collapsePingRuns(rows, null);
+    assert.equal(grouped.length, 1);
+    assert.equal(grouped[0].lineNumber, '1 - 2');
+    assert.equal('timestamp' in grouped[0], false);
+    assert.equal('timestampMillis' in grouped[0], false);
+  });
+
+  it('leaves rows untouched when there are no Pings at all', () => {
+    const rows = [
+      { lineNumber: 1, action: 'Finish', bibNumber: '5' },
+      { lineNumber: 2, action: 'Finish', bibNumber: '6' },
+    ];
+    assert.deepEqual(collapsePingRuns(rows, 'timestamp'), rows);
   });
 });
 

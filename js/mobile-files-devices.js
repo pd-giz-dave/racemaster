@@ -126,7 +126,7 @@ function currentSegment(rows) {
   // racemaster-mobile's own live mode-screen view, 'ModeStart'/'NewRace' rows are deliberately
   // NOT excluded here — this segment still feeds locationSegmentsOf()/Compute Results
   // (mobile-files-progress.js), which read a bucket's own ModeStart row for baseline/context;
-  // hasRealBib/hasRealSplit/isTimeFamilyRow already separately keep them out of visible COUNTS
+  // hasRealBib/hasRealSplit/rowFamily already separately keep them out of visible COUNTS
   // without needing them gone from the row list itself.
   const displayFiltered = rows.filter(r => r.action !== 'Reset' && r.action !== 'Ping');
   const folded = foldLatestVisible(displayFiltered).sort(byLineNumber);
@@ -207,10 +207,13 @@ function isTimeExpected(modeStart) {
 // Returns the record itself (not just its timestamp — contrast latestStartedAt() below, which is
 // this same lookup for just that one field), so callers can also read its own bibNumber/splitTime
 // (isBibsExpected/isTimeExpected above), location (flattenDevices below), or mode declaration
-// (its own `note` — 'Time'/'Bibs'/'CP', see SyncRecord's own doc — read directly by
-// js/views/mobile-files-devices.js's showDeviceModal() for its own "Mode:" summary line).
-export function latestModeStart(timeSegment, bibsSegment) {
-  const candidates = [...timeSegment, ...bibsSegment].filter(r => r.action === 'ModeStart');
+// (its own `note` — 'Time'/'Bibs'/'CP'/'Close'/'Count', see SyncRecord's own doc — read directly
+// by js/views/mobile-files-devices.js's showDeviceModal() for its own "Mode:" summary line).
+// Takes every segment buildSegmentView() produced (timeSegment, bibsSegment, and now
+// closeSegment/countSegment) as separate arguments — a plain rest-spread, so an older call site
+// passing only two segments still works unchanged.
+export function latestModeStart(...segments) {
+  const candidates = segments.flat().filter(r => r.action === 'ModeStart');
   if (!candidates.length) return null;
   return candidates.reduce((a, b) => (b.lineNumber ?? 0) > (a.lineNumber ?? 0) ? b : a);
 }
@@ -223,24 +226,45 @@ export function latestModeStart(timeSegment, bibsSegment) {
 // the segment. Exported: mobile-files-progress.js's own validateAndCompute() resolves each
 // selected file's segment the same way js/views/mobile-files-devices.js's showDeviceModal() does.
 // A real (non-marker) row's own splitTime nullness is still the genuine structural signal for
-// which family it belongs to (a real Time row always has one, a real Bibs/CP row never does) —
-// unchanged. A ModeStart row's own splitTime is always null now regardless of mode (see
-// SyncRecord's own doc), so its placement instead reads its own explicit mode declaration.
-// 'Location'/'Reset'/'NewRace' are NOT handled here any more (see rowIsTimeFamily's own doc for
+// Time vs. everything else (a real Time row always has one, nothing else ever does) — unchanged.
+// A real Close row (action:'Close', racemaster-mobile's own Close recording mode) or CountSeen
+// row (action:'CountSeen', Count mode) is told apart by its own action string instead, not
+// splitTime (both are always null, same as a Bibs/CP row) — without this, either would silently
+// fall into the Bibs family's default and then get dropped outright downstream, since neither
+// action is in TRANSFERABLE_BIBS_ACTIONS (mobile-files-progress.js) — confirmed in the field:
+// beacon close/count data recorded on a phone never showing up anywhere once pulled. A ModeStart
+// row's own splitTime is always null regardless of mode (see SyncRecord's own doc), so its
+// placement instead reads its own explicit mode declaration ('Time'/'Bibs'/'CP'/'Close'/'Count').
+// 'Location'/'Reset'/'NewRace' are NOT handled here any more (see resolveRowFamily's own doc for
 // why they need context this per-row function doesn't have) — every other action is still
 // classified purely from its own fields.
-function isTimeFamilyRow(r) {
-  if (r.action === 'ModeStart') return r.note === 'Time';
-  return r.splitTime != null;
+function familyFromModeNote(note) {
+  if (note === 'Time') return 'time';
+  if (note === 'Close') return 'close';
+  if (note === 'Count') return 'count';
+  return 'bibs'; // 'Bibs'/'CP', or an unrecognised mode — the pre-Close/Count default
+}
+
+function rowFamily(r) {
+  if (r.action === 'ModeStart') return familyFromModeNote(r.note);
+  if (r.action === 'Close') return 'close';
+  // racemaster-mobile's own auto-reinstatement marker (HistoryAction.CLOSE_REOPENED) — a
+  // previously-closed beacon heard advertising again. Must bucket into 'close' the same as a
+  // real Close row, for the same reason CountSeen must (see this function's own doc) — without
+  // this it falls into the Bibs family's default (splitTime is null, same as Close) and silently
+  // vanishes, the exact bug that doc already warns about for Close/CountSeen.
+  if (r.action === 'CloseReopened') return 'close';
+  if (r.action === 'CountSeen') return 'count';
+  return r.splitTime != null ? 'time' : 'bibs';
 }
 
 // A 'Location'/'Reset'/'NewRace' row's own splitTime is now always null regardless of family
 // (racemaster-mobile's SyncRecordMapping.toSyncRecord: a boundary marker is never a real timed
 // split, same treatment as ModeStart/Ping) — so unlike every other shared-action row, none of
-// these three can be told apart from a Bibs/CP one by splitTime alone any more. Each is resolved
-// from its own structural neighbour instead, walking toward whichever Location row anchors that
-// segment, then reading that Location's own next-row ModeStart the same way isTimeFamilyRow
-// already reads a ModeStart row's note directly:
+// these three can be told apart from a Bibs/CP/Close/Count one by splitTime (or, for Close/Count,
+// by action string) alone any more. Each is resolved from its own structural neighbour instead,
+// walking toward whichever Location row anchors that segment, then reading that Location's own
+// next-row ModeStart the same way rowFamily already reads a ModeStart row's note directly:
 //  - 'Location': the very next row by lineNumber is always that Location's own ModeStart, in the
 //    same write transaction (racemaster-mobile's RaceRepository.recordModeStart writes the pair
 //    back to back).
@@ -250,36 +274,47 @@ function isTimeFamilyRow(r) {
 //  - 'NewRace': always immediately followed by that race's own very first Location row, in the
 //    same write transaction (racemaster-mobile's RaceRepository.recordModeStart's own NEW_RACE
 //    branch) — resolved the same way, one hop further out.
-// Falls back to "not Time" (grouped with Bibs/CP, matching isTimeFamilyRow's own default) if the
-// expected neighbour is missing — shouldn't happen on real data, but degrades harmlessly rather
-// than throwing.
-function rowIsTimeFamily(r, index, sortedRows, byLineNumber) {
+// Falls back to 'bibs' (matching rowFamily's own default) if the expected neighbour is missing —
+// shouldn't happen on real data, but degrades harmlessly rather than throwing.
+function resolveRowFamily(r, index, sortedRows, byLineNumber) {
   if (r.action === 'Location') {
     const next = sortedRows[index + 1];
-    return next?.action === 'ModeStart' && next.note === 'Time';
+    return next?.action === 'ModeStart' ? familyFromModeNote(next.note) : 'bibs';
   }
   if (r.action === 'Reset' && r.refLineNumber != null) {
     const target = byLineNumber.get(r.refLineNumber);
-    return target?.action === 'Location' && rowIsTimeFamily(target, sortedRows.indexOf(target), sortedRows, byLineNumber);
+    return target?.action === 'Location' ? resolveRowFamily(target, sortedRows.indexOf(target), sortedRows, byLineNumber) : 'bibs';
   }
   if (r.action === 'NewRace') {
     const next = sortedRows[index + 1];
-    return next?.action === 'Location' && rowIsTimeFamily(next, index + 1, sortedRows, byLineNumber);
+    return next?.action === 'Location' ? resolveRowFamily(next, index + 1, sortedRows, byLineNumber) : 'bibs';
   }
-  return isTimeFamilyRow(r);
+  return rowFamily(r);
 }
 
+// Four independent, separately-numbered families now share one device file: Time (splitTime),
+// Bibs/CP (bibNumber), and the two newer beacon-housekeeping ones, Close and CountSeen (see
+// rowFamily's own doc) — a dedicated Close/Count phone never writes a Bib/Time entry of its own
+// (racemaster-mobile's own convention), so in practice a given device's closeSegment/countSegment
+// is only ever populated when its timeSegment/bibsSegment are both empty, and vice versa, but all
+// four are always computed uniformly here regardless.
 export function buildSegmentView(lines) {
   const sorted = [...lines].sort(byLineNumber);
   const byLineNum = new Map(sorted.map(r => [r.lineNumber, r]));
   const timeRows = [];
   const bibsRows = [];
+  const closeRows = [];
+  const countRows = [];
   sorted.forEach((r, i) => {
-    (rowIsTimeFamily(r, i, sorted, byLineNum) ? timeRows : bibsRows).push(r);
+    const family = resolveRowFamily(r, i, sorted, byLineNum);
+    const bucket = family === 'time' ? timeRows : family === 'close' ? closeRows : family === 'count' ? countRows : bibsRows;
+    bucket.push(r);
   });
   return {
     timeSegment: currentSegment(timeRows).sort(byLineNumber),
     bibsSegment: currentSegment(bibsRows).sort(byLineNumber),
+    closeSegment: currentSegment(closeRows).sort(byLineNumber),
+    countSegment: currentSegment(countRows).sort(byLineNumber),
   };
 }
 
@@ -289,6 +324,42 @@ export function buildSegmentView(lines) {
 // Exported: js/views/mobile-files-devices.js's showDeviceModal() uses this directly.
 export function whenOf(r) {
   return ((r.timestamp ?? r.timestampMillis) || '').split(' ')[1] || '';
+}
+
+// ---- Raw view (the Raw modal's own Ping-collapsing) ----
+//
+// Collapses a run of 2+ consecutive (adjacent in lineNumber order, nothing else between them)
+// 'Ping' heartbeat rows into a single summary row — "<first> - <last>" in both the line number
+// and timestamp columns — a busy device can log dozens of these with nothing else going on,
+// which otherwise buries the genuinely interesting rows around them in js/views/
+// mobile-files-devices.js's own showRawModal(). An isolated Ping (no other one immediately
+// before/after it) is left exactly as-is; there's nothing to collapse it with. `sorted` must
+// already be lineNumber-ascending (showRawModal's own raw, unfolded listing — unlike
+// buildSegmentView() above, nothing here folds/filters anything else); `tsField` is whichever of
+// 'timestamp'/'timestampMillis' these particular lines actually carry (see whenOf()'s own doc for
+// why it's not always the same one), or null when neither is present at all.
+export function collapsePingRuns(sorted, tsField) {
+  const groups = [];
+  let i = 0;
+  while (i < sorted.length) {
+    if (sorted[i].action === 'Ping') {
+      let j = i;
+      while (j + 1 < sorted.length && sorted[j + 1].action === 'Ping') j++;
+      if (j > i) {
+        const first = sorted[i], last = sorted[j];
+        groups.push({
+          lineNumber: `${first.lineNumber ?? ''} - ${last.lineNumber ?? ''}`,
+          action: 'Ping',
+          ...(tsField ? { [tsField]: `${first[tsField] ?? ''} - ${last[tsField] ?? ''}` } : {}),
+        });
+        i = j + 1;
+        continue;
+      }
+    }
+    groups.push(sorted[i]);
+    i++;
+  }
+  return groups;
 }
 
 // The device's own most recent "session start" marker — action:'ModeStart', written the moment a
@@ -309,8 +380,8 @@ export function whenOf(r) {
 // device has no such record at all (nothing pulled yet, every visit closed, or an old file
 // predating this marker convention).
 export function latestStartedAt(lines) {
-  const { timeSegment, bibsSegment } = buildSegmentView(lines);
-  const latest = latestModeStart(timeSegment, bibsSegment);
+  const { timeSegment, bibsSegment, closeSegment, countSegment } = buildSegmentView(lines);
+  const latest = latestModeStart(timeSegment, bibsSegment, closeSegment, countSegment);
   return latest ? (latest.timestamp ?? latest.timestampMillis ?? '') : '';
 }
 
@@ -357,6 +428,60 @@ export function distinctLocationsOf(visibleRows) {
   });
 }
 
+// ---- Device view options (one per distinct location+mode combination) ----
+//
+// ToDo.MD: "I want the devices view to be split by location + mode ... these should be options
+// on the view selector not sub-sections within the view" — a device that's switched mode without
+// an intervening Reset (so more than one of buildSegmentView()'s four segments is genuinely open
+// at once — see that function's own doc) previously had every one of those rows shown together.
+// js/views/mobile-files.js's own viewDeviceRow() calls this first and offers each option
+// returned here as a separate choice (prompting only when there's more than one), always handing
+// showDeviceModal() lines already narrowed to exactly one location+mode — the modal itself never
+// needs to merge or separate anything.
+//
+// A family with rows but no real entry of its own (e.g. a Bibs session opened, then the device
+// switched to Close before ever recording an actual bib) is still offered as its own option — it
+// genuinely happened and the operator may want to see the raw Location/ModeStart pair that opened
+// it — just labelled "(empty)" so it reads at a glance as the one with nothing useful in it.
+const FAMILY_LABELS = ['Time', 'Bibs', 'Close', 'Count'];
+function hasRealEntry(label, r) {
+  if (label === 'Time') return hasRealSplit(r);
+  if (label === 'Bibs') return hasRealBib(r);
+  if (label === 'Close') return r.action === 'Close' || r.action === 'CloseReopened';
+  return r.action === 'CountSeen'; // 'Count'
+}
+
+export function deviceViewOptions(resolvedLines) {
+  const whole = buildSegmentView(resolvedLines);
+  const allVisible = [...whole.timeSegment, ...whole.bibsSegment, ...whole.closeSegment, ...whole.countSegment];
+  const locations = distinctLocationsOf(allVisible);
+  // No location recorded at all (older/degraded data, or a test fixture — see
+  // withResolvedLocations' own doc) still gets exactly one pass, over the whole file unfiltered,
+  // same "no location-narrowing possible" degradation flattenDevices()/locationSegmentsOf()
+  // already use elsewhere.
+  const locationList = locations.length ? locations : [null];
+  const options = [];
+  for (const location of locationList) {
+    const lines = location === null ? resolvedLines : resolvedLines.filter(l => l.location === location);
+    const segments = buildSegmentView(lines);
+    const familyRows = { Time: segments.timeSegment, Bibs: segments.bibsSegment, Close: segments.closeSegment, Count: segments.countSegment };
+    for (const mode of FAMILY_LABELS) {
+      const rows = familyRows[mode];
+      if (!rows.length) continue;
+      options.push({ location, mode, empty: !rows.some(r => hasRealEntry(mode, r)), lines: rows });
+    }
+  }
+  // Location only earns a place in the label when it actually distinguishes two options from
+  // each other — the common "one location, several modes" case (this ToDo item's own example:
+  // "for the start location there are 3 views - bibs (empty), close and count") reads as plain
+  // mode names, with which location they're all at left to the dialog's own prompt/context.
+  const multiLocation = new Set(options.map(o => o.location)).size > 1;
+  return options.map(o => ({
+    ...o,
+    label: (multiLocation && o.location != null ? `${o.location} — ${o.mode}` : o.mode) + (o.empty ? ' (empty)' : ''),
+  }));
+}
+
 // Every location is free text set by the phone operator (RaceMaster Mobile's own
 // RaceEntity.location — e.g. "Finish", "Start", "1 - Polebank", "Hadden 2", "CP3", "cp 3"). The
 // phone app itself enforces that a non-Finish, non-Start location contains exactly one number,
@@ -367,10 +492,17 @@ export function distinctLocationsOf(visibleRows) {
 // phones relocate to Finish for the main event — see mobile-files-progress.js's own
 // validateAndCompute() for how a 'start' bucket is used. Used both by locationSortKey() below
 // and by mobile-files-progress.js's own validateAndCompute().
+// "Close" is recognised the same defensive way "Start" already was — not because anything here
+// actually buckets by it (a Close-mode device is diverted to its own handling entirely before
+// location-based bucketing ever runs, in mobile-files-progress.js's own validateAndCompute(), the
+// same way a Count-mode device's forced "Start" location never reaches the 'start' bucket either —
+// see that function's own doc), just so this never reports it as unrecognised if one somehow
+// slips through to here regardless.
 export function resolveLocationKey(location) {
   const loc = (location || '').trim();
   if (/^finish$/i.test(loc)) return { kind: 'finish' };
   if (/^start$/i.test(loc)) return { kind: 'start' };
+  if (/^close$/i.test(loc)) return { kind: 'close' };
   const m = loc.match(/(\d+)/);
   return m ? { kind: 'cp', number: +m[1] } : null; // null = unrecognised
 }
@@ -420,16 +552,20 @@ export function flattenDevices(races) {
     const prepared = race.devices.map(rawDevice => {
       const resolvedLines = withResolvedLocations(rawDevice.lines);
       const device = { ...rawDevice, resolvedLines };
-      const { timeSegment, bibsSegment } = buildSegmentView(resolvedLines);
-      const modeStart = latestModeStart(timeSegment, bibsSegment);
+      const { timeSegment, bibsSegment, closeSegment, countSegment } = buildSegmentView(resolvedLines);
+      const modeStart = latestModeStart(timeSegment, bibsSegment, closeSegment, countSegment);
       // No separate folding-in needed any more — modeStart, when it exists at all, is already one
       // of the rows currentSegment() itself returned (see that function's own doc: a ModeStart row
-      // is never excluded from its output), so it's already present in timeSegment/bibsSegment.
+      // is never excluded from its output), so it's already present in one of the four segments.
       // Once every visit's been properly closed (a completely reset device), modeStart is
       // correctly null and `visible` is just the (now empty) segments — Where/Mode/Bibs/Time/
       // Started At all then report blank/unknown together, not some blank and some stale (ToDo.MD:
-      // "when a mobile file is completely reset ... that should be blank too").
-      const visible = [...timeSegment, ...bibsSegment];
+      // "when a mobile file is completely reset ... that should be blank too"). closeSegment/
+      // countSegment are folded into `visible` here too, even though neither contributes to
+      // bibsVisible/timeVisible below (a Close/CountSeen row is never a real bib or split) — a
+      // pure Close/Count device would otherwise show no Where/Mode/Started At at all, despite its
+      // own Location/ModeStart rows being perfectly real and resolved.
+      const visible = [...timeSegment, ...bibsSegment, ...closeSegment, ...countSegment];
       return {
         device, timeSegment, bibsSegment, modeStart,
         rawLocation: rawLocationOf(visible), location: locationSummary(visible),

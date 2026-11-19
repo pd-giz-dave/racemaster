@@ -102,7 +102,10 @@ function buildPayloadForCourse(course, inUse) {
     // mobile-files-progress.js) are Progress-tab display metadata, dropped here rather than sent
     // on: a phone's own bib-allocation logic has no use for any of them, and none is part of the
     // wire format racemaster-mobile already expects (which still gets `beaconNumber` itself,
-    // unaffected by this).
+    // unaffected by this). `beaconClosedAt`/`beaconBatteryPercent`/`beaconCountedAt` are NOT
+    // dropped here, unlike those four — they're genuine wire fields racemaster-mobile's own
+    // Close/Count recording modes expect back (see buildProgressRows()'s own doc), not display-
+    // only metadata.
     entries: buildProgressRows()
       .filter(r => inUse.length === 1 || r.course === course)
       .map(({ invalid, conflict, fobNumber, fobReturned, ...entry }) => entry),

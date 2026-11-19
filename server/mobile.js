@@ -159,10 +159,12 @@ export function isReservedMobileFile(file) {
 // beacons.json — a race-wide post-race housekeeping report the mobile app puts in the same
 // mobile/<owner>/<raceLabel>/ folder as the per-device history files (see ToDo.MD "Add a new
 // timing method"): {raceLabel, generatedAt, powerOffBatch: [{beaconNumber, batteryLevel,
-// poweredOffAt}]} — the FULL current snapshot of beacons processed so far this race (grows as
-// late returns are housekept), not a delta, so this is a plain replace-on-write; idempotency and
-// incremental pickup of late returns is handled by the web app's own apply step
-// (js/mobile-beacons.js), not here.
+// poweredOffAt, closeCount}]} — the FULL current snapshot of beacons processed so far this race
+// (grows as late returns are housekept), not a delta, so this is a plain replace-on-write;
+// idempotency and incremental pickup of late returns is handled by the web app's own apply step
+// (js/mobile-beacons.js), not here. closeCount (how many times racemaster-mobile's own
+// CloseBeaconsEntity recorded that beacon being closed this race) is purely informational —
+// surfaced on the web app's Beacons tab, never applied to the catalogue.
 export function beaconsFilePath(username, raceLabel) {
   return path.join(mobileRaceDir(username, raceLabel), BEACONS_FILE);
 }

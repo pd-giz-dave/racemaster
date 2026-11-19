@@ -189,7 +189,6 @@ export const TOOLTIPS = {
   'btn-connect-phone':           "Connect to a nearby phone running the RaceMaster mobile app over Bluetooth and pull its history — no network needed. Offers a direct reconnect for a phone connected to before; otherwise confirms the phone's name before connecting and rejects anything not running the app. Pushes straight to the server if reachable, otherwise saves locally to push later.",
   'btn-update-progress':         'Rebuild the finishers list from the selected Finish location file(s), if any, (as if entered manually) and compute raw (unadjusted) checkpoint times from any selected checkpoint file(s), shown on the Progress tab — a Finish file is not required, checkpoint files alone still populate what they can; requires valid bib numbers, the same race, no empty files, and no more than one file per location',
   'btn-clear-progress':          'Delete the finishers list and all checkpoint data computed by Update Progress — also clears their effects elsewhere, e.g. Safety Check',
-  'btn-read-beacons-report':     'Read this race\'s post-race beacons housekeeping report (battery levels and power-off times) — tries a connected phone over Bluetooth first, then falls back to the server. Safe to re-read a growing report: already-processed power-offs aren\'t double-counted, and late returns update the missing list',
   'mobile-beacon-threshold':     'Battery level (%) below which a beacon is highlighted as needing attention',
   'btn-ble-logging':             'Log routine Bluetooth connect/pull activity to the browser console — off by default; a genuine connect/pull failure is always logged regardless',
 
@@ -1597,8 +1596,8 @@ export const TABLES = {
   ],
   'mobile-beacons': [
     { id: 'number',       label: 'Beacon',  title: 'Beacon number', sticky: true },
-    { id: 'status',       label: 'Status',  title: 'Returned (seen in the latest report) or still missing' },
-    { id: 'batteryLevel', label: 'Battery', title: 'Battery level (%) as of this report — highlighted below the low battery threshold set here, next to Read Beacons Report' },
+    { id: 'status',       label: 'Status',  title: 'Returned (closed, per the last Update Progress run) or still missing' },
+    { id: 'batteryLevel', label: 'Battery', title: 'Battery level (%) as of the last Update Progress run — highlighted below the low battery threshold set here' },
     { id: 'lastUsed',     label: 'Last Used', title: 'Date this beacon was last used, from the Beacons catalogue' },
     { id: 'owner',        label: 'Owner',   title: 'Who owns this beacon, from the Beacons catalogue' },
   ],

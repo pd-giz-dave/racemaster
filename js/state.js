@@ -31,9 +31,15 @@ export const state = {
   mobileProgress:   [],  // {action, number, time} — Start/Finish/DNF/Clock/etc from Mobile Files'
                           // Update Progress, kept genuinely separate from finishers (manual entry
                           // only) so a mobile pull can never overwrite/clobber it — see js/mobile-progress.js
-  beaconReports:    [],  // {raceLabel, generatedAt, processedAt, returned, missing} — one entry
-                          // per race, replaced wholesale each time a beacons.json report is
-                          // (re-)processed, see js/mobile-beacons.js
+  beaconReports:    [],  // {raceLabel, processedAt, returned, missing, appliedCloseAt, closeCounts}
+                          // — one entry per race, replaced wholesale each time Update Progress
+                          // extracts Close-mode beacon data from the selected device files, see
+                          // js/mobile-beacons.js
+  mobileBeaconOps:  [],  // {beaconNumber, closedAt?, batteryPercent?, countedAt?} — the Close/
+                          // Count-mode equivalent of mobileCheckpoints above, from racemaster-
+                          // mobile's newer beacon-housekeeping recording modes, rebuilt wholesale
+                          // by Update Progress alongside mobileProgress/mobileCheckpoints, see
+                          // js/mobile-files-progress.js
 
   // Runtime-only (not persisted)
   finishNumbersMap: {},  // 'S101' -> ['5','7'] (course-prefix + bib -> array of finisher indices)
@@ -58,6 +64,7 @@ export async function loadAll() {
     loadList('mobileCheckpoints'),
     loadList('mobileProgress'),
     loadList('beaconReports'),
+    loadList('mobileBeaconOps'),
     loadPreset('roles', BUILTIN_ROLES, r => ({ ...r })),
   ]);
   if (state.categories.length === 0) {
@@ -113,6 +120,7 @@ export async function saveSIResults()        { await writeTable('siResults',    
 export async function saveMobileCheckpoints() { await writeTable('mobileCheckpoints', state.mobileCheckpoints); }
 export async function saveMobileProgress()    { await writeTable('mobileProgress',    state.mobileProgress); }
 export async function saveBeaconReports()     { await writeTable('beaconReports',     state.beaconReports); }
+export async function saveMobileBeaconOps()   { await writeTable('mobileBeaconOps',   state.mobileBeaconOps); }
 
 export function applyFRACategories() {
   _applyPreset(FRA_CATEGORIES);

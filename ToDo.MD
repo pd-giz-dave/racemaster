@@ -307,8 +307,8 @@ To that end:
       beacon number and its battery staus and the date/time the beacon was powered off
   - [x] This app must be able to read that report, either from the server, or via the bluetooth link, or both
     - [x] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
-    - [ ] The mobile app will be put the file on the server in the mobile/owner/race folder as beacons.json in a
-          similar manner to the device.json files
+    - [ ] The mobile app will put the file on the server in the mobile/owner/race folder as beacons.json in a
+          similar manner to the device.json files when it has internet access
   - [x] The report must be processed such that:
     - [x] this app can verify every beacon issued has been returned and highlight missing ones
     - [x] update the battery level, last used date, and total hours in the beacons data page
@@ -318,3 +318,60 @@ To that end:
   - [x] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
         persisted as part of the dataset
 - [x] the CP and finish records received from the mobile app, or read from the server, is unaffected
+- [ ] when no time mode device is selected on the Mobile Files page, appropriate times must be extracted from the
+      bibs mode devices instead (when using beacons there will usually be no time mode phone in use)
+- [x] the beacons tab should list issued beacons even before a report is read (similar to the progress tab), the
+      initial status should show as 'issued', the other columns should be pre-filled from the beacons page pending
+      a real update from beacon status report
+- [ ] if a beacon is recorded as closed but has no finish scan, interpret that as a DNF
+- [x] beacons.json's powerOffBatch now carries closeCount (how many times racemaster-mobile
+      recorded that beacon being closed this race, e.g. re-presented after an early close) through
+      end to end — mobile app wire format, the server route's field whitelist, and the Beacons tab,
+      which shows "Returned (closed ×N)" for N>1, mirroring the phone's own "closed ×N" wording
+- [x] racemaster-mobile: a beacon-close report push that fails (offline, logged out, server error)
+      no longer disappears silently — unpushed closes are tracked (BeaconCloseEntity.pushedAt) and
+      retried automatically every 15s while any are pending, with a "N not yet synced" indicator
+      on the Close Beacons screen
+- [x] racemaster-mobile's newer Close/Count device recording modes (a dedicated phone presenting
+      each beacon in turn — Close reads battery then powers off, Count only logs it seen) are now
+      consumed: a 'Close'/'CountSeen' row (and its own ModeStart/'Close'|'Count' marker) is
+      classified into its own segment rather than silently falling into Bibs and getting dropped;
+      Count's forced "Start" location no longer gets swept into the Bibs-mode early-starters
+      bucket. Update Progress now also extracts beacon close/count data (matched by beacon
+      number, not bib, since bibNumber may be null) into state.mobileBeaconOps, stamped onto the
+      Progress tab's own rows as beaconClosedAt/beaconBatteryPercent/beaconCountedAt and sent on
+      to the phone in progress.json
+
+## Tweaks
+
+- [x] Beacons tab's own "Read Beacons Report" button/action removed — redundant now that Update
+      Progress applies this race's own Close-mode data straight from the selected device files:
+      js/mobile-files-progress.js's applyComputedResults() calls js/mobile-beacons.js's new
+      computeBeaconCatalogueUpdates/applyBeaconCatalogueUpdates directly (closeByBeacon's own
+      closedAt/batteryPercent, idempotent per beacon per race the same way the old report-driven
+      version was). The Beacons tab (js/views/mobile-files-beacons.js) just reads state.
+      beaconReports/state.beacons now, with nothing left to trigger by hand. The old bespoke
+      beacons.json endpoint/apiReadBeaconsReport/pullBeaconsReportFromConnectedPhone are left in
+      place server-side, unused — a separate cleanup decision.
+- [x] beacons page not updating with progress results - total hours — fixed by the above: battery
+      level, last-used date and accumulated total hours on the Beacons catalogue (state.beacons)
+      are now written directly by Update Progress, not left waiting on a report that was never
+      being read any more.
+- [x] viewing device file was getting muddled wrt close and count entries — the Devices tab's own
+      "View" action is now split by location AND mode: js/mobile-files-devices.js's new
+      deviceViewOptions() returns one option per distinct (location, mode) combination actually
+      present (e.g. a device sharing one "Start" location across Bibs/Close/Count sessions with
+      no Reset between them shows 3 separate options: "Bibs (empty)", "Close", "Count" — location
+      only joins the label once it genuinely varies across the options), and
+      js/views/mobile-files.js's viewDeviceRow() prompts with these whenever there's more than
+      one, always handing showDeviceModal() lines already narrowed to exactly one combination.
+      These are options on the view selector, not sub-sections within one modal — the modal itself
+      (js/views/mobile-files-devices.js) stays a single plain table, same as before any of this
+      Close/Count-mode work existed.
+- [x] Raw device view now collapses a run of 2+ consecutive Ping heartbeat rows into one summary
+      row — "<from line> - <to line>" in the line number column, "<from time> - <to time>" in the
+      timestamp column — via js/mobile-files-devices.js's new collapsePingRuns(), used by
+      js/views/mobile-files-devices.js's showRawModal(). The per-mode views
+      (showDeviceModal()) now lead every row with its own line number too, so a row shown there
+      can be manually matched back to its own line in the Raw view for diagnostic purposes.
+- [ ] 

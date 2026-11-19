@@ -39,6 +39,7 @@ import {
 import { state } from '../state.js';
 import { coursesInUse } from '../categories.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
+import { deviceViewOptions } from '../mobile-files-devices.js';
 import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
 import {
   renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
@@ -300,24 +301,28 @@ async function activateRace() {
 }
 
 // "View" on a device row — a relocated device's file can hold more than one location's own
-// records (see mobile-files-devices.js's own flattenDevices() doc), but the modal itself still
-// shows just one segment at a time, so this asks first when there's a real choice to make. Reads
-// `r.device.resolvedLines` (the current, interpreted picture — each row's own `.location` already
-// resolved by flattenDevices()'s own withResolvedLocations() call), never `r.device.lines` (the
-// genuinely raw array — see that function's own doc for why the two are kept apart) — a Reset
-// that happened at a given station carries that station's own location too, so filtering straight
-// on `.location` naturally keeps buildSegmentView()'s own RESET-boundary logic scoped to just the
-// chosen location, with no separate segment-extraction step needed here.
+// records, and a device that's switched mode without an intervening Reset can have more than one
+// mode genuinely open at once too (see mobile-files-devices.js's own buildSegmentView() doc) —
+// the modal itself only ever shows one location+mode combination at a time (ToDo.MD: "I want the
+// devices view to be split by location + mode ... these should be options on the view selector
+// not sub-sections within the view"), so this asks first whenever deviceViewOptions() finds more
+// than one. Reads `r.device.resolvedLines` (the current, interpreted picture — each row's own
+// `.location` already resolved by flattenDevices()'s own withResolvedLocations() call), never
+// `r.device.lines` (the genuinely raw array — see that function's own doc for why the two are
+// kept apart).
 async function viewDeviceRow(r) {
-  const locations = r.locations ?? [];
-  let location = locations[0] ?? null;
-  if (locations.length > 1) {
-    const choices = locations.map(loc => ({ label: loc, value: loc }));
-    location = await showChoiceDialog(`View which location for ${r.device.name}?`, choices, { vertical: true });
-    if (location === null) return;
+  const options = deviceViewOptions(r.device.resolvedLines);
+  // No location+mode combination found at all (a brand-new device with nothing pulled yet) —
+  // same graceful "show whatever's there" fallback showDeviceModal() already has for an empty
+  // file, rather than a dialog with nothing to actually choose between.
+  if (!options.length) { showDeviceModal(r.owner, r.raceLabel, r.device.name, r.device.resolvedLines); return; }
+  let chosen = options[0];
+  if (options.length > 1) {
+    const choices = options.map(o => ({ label: o.label, value: o }));
+    chosen = await showChoiceDialog(`View which for ${r.device.name}?`, choices, { vertical: true });
+    if (chosen === null) return;
   }
-  const lines = location === null ? r.device.resolvedLines : r.device.resolvedLines.filter(l => l.location === location);
-  showDeviceModal(r.owner, r.raceLabel, r.device.name, lines);
+  showDeviceModal(r.owner, r.raceLabel, r.device.name, chosen.lines);
 }
 
 export function wireMobileFiles() {

@@ -4,15 +4,17 @@ import { getSortedEntries } from './entries.js';
 import { entryInfo, getConflictedBibs } from './safety.js';
 import { getMobileCheckpointTimes, getMobileCheckpointTimesOfDay, CP_RETIRE } from './mobile-checkpoints.js';
 import { secondsToTime, formatElapsedSeconds } from './utils.js';
-import { state, saveMobileCheckpoints, saveMobileProgress } from './state.js';
+import { state, saveMobileCheckpoints, saveMobileProgress, saveMobileBeaconOps } from './state.js';
 import { byLineNumber, setLastSyncedLineNumber, deriveRaceLabel } from './mobile-files-shared.js';
 import { usingBeacons } from './time-utils.js';
 import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
+import { computeBeaconCatalogueUpdates, applyBeaconCatalogueUpdates } from './mobile-beacons.js';
 
 // Compute Results (formerly "Add to Finishers") + the Progress tab — pure logic and the
-// non-DOM state mutations it drives (state.mobileProgress/state.mobileCheckpoints). No DOM at
-// all — js/views/mobile-files-progress.js is the thin layer on top that wires buttons, shows
-// confirm dialogs/status toasts, and renders the actual table.
+// non-DOM state mutations it drives (state.mobileProgress/state.mobileCheckpoints/
+// state.mobileBeaconOps, the last for racemaster-mobile's newer Close/Count recording modes). No
+// DOM at all — js/views/mobile-files-progress.js is the thin layer on top that wires buttons,
+// shows confirm dialogs/status toasts, and renders the actual table.
 
 // Maps a mobile Bibs-mode action onto the equivalent finishers.js action — "Pass" (Checkpoint
 // mode) is treated as a Finish, since it only makes sense here at all when the CP happened to
@@ -247,22 +249,25 @@ function findDuplicateSplitNumbers(rows) {
   return [...dupes].sort((a, b) => a - b);
 }
 
-// Wipes both data sources an Update Progress run produces — state.mobileProgress (Start/Finish/
-// DNF/etc, genuinely separate from the manually-entered Finishers list, see js/mobile-progress.js)
-// and state.mobileCheckpoints — as one explicit step. Used both by the standalone Clear Progress
-// button and by applyComputedResults() below, which always clears before rebuilding rather than
-// leaving the old arrays in place until the very end and relying on the final assignment to
-// replace them; this way there's no ambiguity about the old set being gone before anything new
-// is written. Everything downstream — the Progress tab itself, Safety Check's finished/
-// outstanding counts and "Last CP" hint, the Results & Prize List page — reads live from
-// state.mobileProgress/state.mobileCheckpoints, so clearing these two arrays is itself what
-// "undoes the effects" of a previous run everywhere else in the app; no other state needs
-// touching, and the manually-entered Finishers list is never affected either way.
+// Wipes every data source an Update Progress run produces — state.mobileProgress (Start/Finish/
+// DNF/etc, genuinely separate from the manually-entered Finishers list, see js/mobile-progress.js),
+// state.mobileCheckpoints, and state.mobileBeaconOps (the Close/Count-mode equivalent, see
+// computeCloseByBeacon/computeCountByBeacon below) — as one explicit step. Used both by the
+// standalone Clear Progress button and by applyComputedResults() below, which always clears before
+// rebuilding rather than leaving the old arrays in place until the very end and relying on the
+// final assignment to replace them; this way there's no ambiguity about the old set being gone
+// before anything new is written. Everything downstream — the Progress tab itself, Safety Check's
+// finished/outstanding counts and "Last CP" hint, the Results & Prize List page — reads live from
+// these arrays, so clearing them is itself what "undoes the effects" of a previous run everywhere
+// else in the app; no other state needs touching, and the manually-entered Finishers list is never
+// affected either way.
 export async function clearProgressData() {
   state.mobileProgress = [];
   state.mobileCheckpoints = [];
+  state.mobileBeaconOps = [];
   await saveMobileProgress();
   await saveMobileCheckpoints();
+  await saveMobileBeaconOps();
 }
 
 // Combines the selected files' current-segment Bibs/Time entries (each device's own segment
@@ -290,6 +295,100 @@ export async function clearProgressData() {
 // Finish Start row but sightings don't), and a checkpoint retire still promotes to a DNF entry
 // in `expected` below. FinishTime itself, and elapsed (as opposed to time-of-day) checkpoint
 // times, simply stay empty until a Finish file exists to select.
+// ---- Close/Count (beacon housekeeping) ----
+//
+// racemaster-mobile's two newer recording modes, Close and Count — a dedicated phone presents
+// each beacon in turn, logging a 'Close' row (battery read, then powered off) or a 'CountSeen'
+// row (sighted, nothing else) rather than any Bib/Time entry. Both carry the beacon number in
+// their own free-text `note` ("beacon=<n> battery=<pct>" / "beacon=<n>"), never in bibNumber
+// (which may be null — a beacon can be closed/counted before its bib pairing is even known), so
+// matching downstream (buildProgressRows() below) is by beacon number, via entries[].beaconNumber,
+// not bib. A beacon can be re-presented to the same Close-mode device more than once — each close
+// is its own separate row, never deduplicated/upserted client-side — so the LAST one by lineNumber
+// (the segment's own rows are already lineNumber-sorted, see buildSegmentView) is its current
+// status; CountSeen has no such re-presentation concern, but is read the same way regardless.
+//
+// A closed beacon heard advertising again (powered back on) gets its own 'CloseReopened' row
+// (racemaster-mobile's own HistoryAction.CLOSE_REOPENED), note "beacon=<n>" only — no battery,
+// since nothing was actually read this time. Whichever of 'Close'/'CloseReopened' is latest by
+// lineNumber for a beacon is its current status — never "has it ever had a Close row" — so a
+// reopened beacon's own Map entry below deliberately carries no closedAt/batteryPercent at all,
+// which is what lets applyComputedResults()/buildProgressRows() below naturally show it as
+// outstanding again (an absent closedAt, not a present-but-empty one).
+const CLOSE_NOTE_RE = /beacon=(\d+)\s+battery=(\d+)/;
+const CLOSE_REOPENED_NOTE_RE = /^beacon=(\d+)$/;
+const COUNT_NOTE_RE = /beacon=(\d+)/;
+
+function computeCloseByBeacon(closeSegmentRows) {
+  const result = new Map();
+  for (const r of closeSegmentRows) {
+    if (r.action === 'Close') {
+      const m = CLOSE_NOTE_RE.exec(r.note || '');
+      if (!m) continue;
+      const beacon = +m[1];
+      if (!Number.isFinite(beacon) || beacon <= 0) continue;
+      // A later row for the same beacon (a re-presentation) simply overwrites the earlier Map
+      // entry's closedAt/batteryPercent — rows arrive here already lineNumber-ascending, so "last
+      // write wins" is exactly "latest by lineNumber", with no extra bookkeeping needed. closeCount
+      // (how many times this beacon was closed this segment, never deduplicated client-side — see
+      // this file's own Close/Count section doc) is a running count instead, surfaced on the
+      // Beacons tab (js/views/mobile-files-beacons.js) via js/mobile-beacons.js's own closeCounts.
+      const closeCount = (result.get(beacon)?.closeCount || 0) + 1;
+      const at = r.timestamp ?? r.timestampMillis ?? '';
+      result.set(beacon, { at, closedAt: at, batteryPercent: +m[2], closeCount });
+    } else if (r.action === 'CloseReopened') {
+      const m = CLOSE_REOPENED_NOTE_RE.exec(r.note || '');
+      if (!m) continue;
+      const beacon = +m[1];
+      if (!Number.isFinite(beacon) || beacon <= 0) continue;
+      // closeCount survives a reopen (how many times it's EVER been closed this segment stays
+      // meaningful while it's outstanding again) — closedAt/batteryPercent deliberately don't,
+      // per this function's own doc above. `at` still updates so mergeLatestByBeacon (below) can
+      // correctly pick this as the winner across multiple selected devices when it's genuinely
+      // the most recent event, even though it carries no closedAt of its own to compare by.
+      result.set(beacon, { at: r.timestamp ?? r.timestampMillis ?? '', closeCount: result.get(beacon)?.closeCount || 0 });
+    }
+  }
+  return result;
+}
+
+function computeCountByBeacon(countSegmentRows) {
+  const result = new Map();
+  for (const r of countSegmentRows) {
+    if (r.action !== 'CountSeen') continue;
+    const m = COUNT_NOTE_RE.exec(r.note || '');
+    if (!m) continue;
+    const beacon = +m[1];
+    if (!Number.isFinite(beacon) || beacon <= 0) continue;
+    result.set(beacon, r.timestamp ?? r.timestampMillis ?? '');
+  }
+  return result;
+}
+
+// Merges one device's own per-beacon map into the running selection-wide total — needed because
+// more than one Close/Count-mode device could in principle be selected at once, each recording an
+// overlapping set of beacons; unlike within a single device's own file (where lineNumber order
+// settles it), there's no shared ordering across two different phones' own files to rely on, so
+// this compares actual timestamps instead, falling back to "keep the existing entry" when either
+// side's timestamp doesn't parse (the conservative choice — an unparseable timestamp is no reason
+// to prefer the newly-seen entry over whatever's already there).
+function mergeLatestByBeacon(target, source, tsOf) {
+  for (const [beacon, entry] of source) {
+    const existing = target.get(beacon);
+    if (!existing) { target.set(beacon, entry); continue; }
+    const a = parseTimestamp(tsOf(existing));
+    const b = parseTimestamp(tsOf(entry));
+    const winner = (b != null && (a == null || b >= a)) ? entry : existing;
+    // closeCount (object entries only — countByBeacon's own entries are plain timestamp strings,
+    // see computeCountByBeacon) is a running total across every selected device, not just
+    // whichever one's closedAt/batteryPercent wins — a beacon could in principle be closed on
+    // more than one of the selected phones.
+    target.set(beacon, typeof entry === 'object'
+      ? { ...winner, closeCount: (existing.closeCount || 0) + (entry.closeCount || 0) }
+      : winner);
+  }
+}
+
 // Splits one selected row's own lines into one segment per location it's recorded at — a
 // relocated device's file can span more than one (see mobile-files-devices.js's own
 // flattenDevices() doc) — so each location buckets independently below, exactly as if it were
@@ -321,7 +420,30 @@ export async function validateAndCompute(selected) {
   const finishRows = []; // segments ({ r, location, lines }), not raw selected rows — see locationSegmentsOf
   const startRows = []; // same shape, for the 'start' location kind — see this function's own doc below
   const cpBuckets = new Map(); // cp number -> segment
+  const closeByBeacon = new Map(); // beacon -> { closedAt, batteryPercent } — see Close/Count section above
+  const countByBeacon = new Map(); // beacon -> countedAt
   for (const r of selected) {
+    // A Close/Count-mode device is diverted here, before any location-based bucketing runs at
+    // all — neither mode is actually location-aware (see mobile-files-devices.js's own
+    // withResolvedLocations doc), Close's own forced location ("Close") has no bucket of its own
+    // to join anyway, and Count's forced "Start" must NOT be swept into the 'start' bucket just
+    // below (an early/late-starters Bibs-mode phone also uses "Start", a completely different
+    // HistoryMode) — checking the device's own current-segment family first, rather than its
+    // resolved location string, is what actually tells the two apart. racemaster-mobile's own
+    // convention is that a Close/Count device never writes a real Bib/Time entry at all, so in
+    // practice at most one of these two segments is ever non-empty for a given device.
+    const { closeSegment, countSegment } = buildSegmentView(r.device.resolvedLines);
+    if (closeSegment.length) {
+      // `at`, not `closedAt` — a reopened entry carries no closedAt of its own to compare by
+      // (see computeCloseByBeacon's own doc), but still needs a timestamp so it can correctly
+      // win this cross-device comparison when it's genuinely the most recent event.
+      mergeLatestByBeacon(closeByBeacon, computeCloseByBeacon(closeSegment), e => e.at);
+      continue;
+    }
+    if (countSegment.length) {
+      mergeLatestByBeacon(countByBeacon, computeCountByBeacon(countSegment), e => e);
+      continue;
+    }
     for (const seg of locationSegmentsOf(r)) {
       const { timeSegment, bibsSegment } = buildSegmentView(seg.lines);
       const visibleRows = [...timeSegment, ...bibsSegment];
@@ -465,7 +587,7 @@ export async function validateAndCompute(selected) {
     expected.push(entry);
   }
 
-  return { finishRows, startRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp };
+  return { finishRows, startRows, cpBuckets, expected, cpTimesByCp, cpTimeOfDayByCp, closeByBeacon, countByBeacon };
 }
 
 // The actual mutation, shared by both the button handler and the silent auto-update path —
@@ -480,7 +602,9 @@ export async function validateAndCompute(selected) {
 // adjustedFinishTime() in results.js/formatResults(), not this page; this page's job is only to
 // provide the raw information that needs. Never touches the manually-entered Finishers list.
 // Returns { added } for the caller's own status message.
-export async function applyComputedResults(expected, cpTimesByCp, selected, cpTimeOfDayByCp = new Map()) {
+export async function applyComputedResults(
+  expected, cpTimesByCp, selected, cpTimeOfDayByCp = new Map(), closeByBeacon = new Map(), countByBeacon = new Map(),
+) {
   const progress = expected.map(({ action, number, time, timeOfDay }) =>
     timeOfDay ? { action, number, time, timeOfDay } : { action, number, time });
 
@@ -494,6 +618,26 @@ export async function applyComputedResults(expected, cpTimesByCp, selected, cpTi
     return Object.keys(cpTimesOfDay).length ? { bibNumber: bib, cpTimes, cpTimesOfDay } : { bibNumber: bib, cpTimes };
   });
 
+  // state.mobileBeaconOps — the Close/Count-mode equivalent of mobileCheckpoints above, one row
+  // per distinct beacon seen by either map, each field only present when that map actually has an
+  // entry for it (a beacon can be closed without ever being counted, or vice versa, by a different
+  // selection of devices on a different run).
+  const beaconOps = [...new Set([...closeByBeacon.keys(), ...countByBeacon.keys()])].sort((a, b) => a - b).map(beaconNumber => {
+    const close = closeByBeacon.get(beaconNumber);
+    const countedAt = countByBeacon.get(beaconNumber);
+    return {
+      beaconNumber,
+      // Gated on close.closedAt itself, not just `close` being present — a beacon reopened since
+      // its last close (closeByBeacon's own entry then carries no closedAt — see
+      // computeCloseByBeacon's own doc) must come out with neither field here, which is what lets
+      // buildProgressRows()' own overlay below naturally show it as outstanding again rather than
+      // still-closed.
+      ...(close?.closedAt ? { closedAt: close.closedAt, batteryPercent: close.batteryPercent } : {}),
+      ...(close?.closeCount != null ? { closeCount: close.closeCount } : {}),
+      ...(countedAt ? { countedAt } : {}),
+    };
+  });
+
   // Mark every selected file as "seen as of now" — this run covered whatever these files held at
   // this moment. See mobile-files-shared.js's own tracking block for why a lineNumber is enough.
   for (const r of selected) setLastSyncedLineNumber(r);
@@ -503,7 +647,8 @@ export async function applyComputedResults(expected, cpTimesByCp, selected, cpTi
   // anyway (a clear, then the same arrays back) marked the dataset changed and re-uploaded it,
   // bumping its version every few seconds with no real change (confirmed in the field).
   if (JSON.stringify(progress) === JSON.stringify(state.mobileProgress) &&
-      JSON.stringify(checkpoints) === JSON.stringify(state.mobileCheckpoints)) {
+      JSON.stringify(checkpoints) === JSON.stringify(state.mobileCheckpoints) &&
+      JSON.stringify(beaconOps) === JSON.stringify(state.mobileBeaconOps)) {
     return { added: expected.length };
   }
 
@@ -512,6 +657,23 @@ export async function applyComputedResults(expected, cpTimesByCp, selected, cpTi
   await saveMobileProgress();
   state.mobileCheckpoints = checkpoints;
   await saveMobileCheckpoints();
+  state.mobileBeaconOps = beaconOps;
+  await saveMobileBeaconOps();
+
+  // Beacons catalogue housekeeping (ToDo.MD: "Beacons tab still has read beacons report, now
+  // redundant as update progress should do it from entries in the selected device files") — this
+  // run's own closeByBeacon is the same, more current source a separate beacons.json report used
+  // to be read for, so there's no longer a separate action needed to apply it: battery level,
+  // last-used date and accumulated hours on state.beacons, plus this race's own
+  // state.beaconReports summary (the Beacons tab's own data source), are both kept current
+  // directly off this selection. raceLabel is the same single value validateAndCompute() already
+  // enforced across every selected file (an adopted phone's own target race, when it's one) —
+  // `selected` is never empty here (every caller already checked before validateAndCompute ran).
+  if (closeByBeacon.size) {
+    const raceLabel = selected[0].adoptedInto ?? selected[0].raceLabel;
+    const plan = computeBeaconCatalogueUpdates(closeByBeacon, raceLabel);
+    await applyBeaconCatalogueUpdates(plan, raceLabel);
+  }
 
   // Home/Safety Check/Results & Prize List all read state.mobileProgress/state.mobileCheckpoints
   // live (see this function's own doc above) — correct the moment this function returns, but
@@ -589,10 +751,20 @@ export function buildProgressColumns(baseColumns, cpNumbers) {
 // course's own timing method, see createEntry()'s own doc in schema.js) — "Fob" being the
 // universal on-screen label for either (see js/views/entries.js's own entry-form field).
 // fobReturned is only ever meaningful for a beacon (a dibber has no equivalent housekeeping
-// report to check against): '' until a beacons.json report has actually been read for this
-// entry's own course (state.beaconReports, keyed by raceLabel — see js/mobile-beacons.js), then
-// 'returned' or 'missing' once validateAndComputeBeaconReport() has sorted every issued beacon
-// into exactly one of those two lists.
+// report to check against): '' until Update Progress has actually extracted Close-mode data for
+// this entry's own course at least once (state.beaconReports, keyed by raceLabel — see
+// js/mobile-beacons.js), then 'returned' or 'missing' once computeBeaconCatalogueUpdates() has
+// sorted every issued beacon into exactly one of those two lists.
+//
+// `beaconClosedAt`/`beaconBatteryPercent`/`beaconCountedAt` are a second, independent beacon-
+// housekeeping source — racemaster-mobile's own Close/Count recording modes (see the Close/Count
+// section above validateAndCompute()) rather than the older beacons.json report fobReturned reads.
+// Stamped from state.mobileBeaconOps (this function's own trailing loop below) by beacon number,
+// not bib — matching `row.beaconNumber`, the same Beacons-timed-only field fobReturnedStatus()
+// above keys its own report lookup against, so a dibber-timed entry (beaconNumber always 0) never
+// picks up a stray match. Unlike fobReturned/fobNumber, these three are NOT stripped by
+// buildPayloadForCourse() (progress-sync.js) — they're meant to actually reach the phone's own
+// progress.json, not just this tab's own display.
 function fobReturnedStatus(e) {
   if (!usingBeacons(e.course)) return '';
   const beaconNumber = +e.dibberNumber || 0;
@@ -618,6 +790,7 @@ export function buildProgressRows() {
         bibNumber: bib, name: info.name, category: info.category, course: info.course,
         startTime: '', finishTime: '', startTimeOfDay: '', finishTimeOfDay: '',
         cpTimes: {}, cpTimesOfDay: {}, beaconNumber: 0, fobNumber: 0, fobReturned: '',
+        beaconClosedAt: '', beaconBatteryPercent: null, beaconCountedAt: '',
         invalid: info.invalid, conflict: conflictedBibs.has(bib),
       });
     }
@@ -660,6 +833,19 @@ export function buildProgressRows() {
     const row = ensure(+r.bibNumber);
     row.cpTimes = getMobileCheckpointTimes(r);
     row.cpTimesOfDay = getMobileCheckpointTimesOfDay(r);
+  }
+  // Close/Count beacon-housekeeping overlay — matched by beacon number (row.beaconNumber, set
+  // above from entry.dibberNumber, only for a Beacons-timed course), not bib, since the device's
+  // own Close/CountSeen row may carry no bib pairing at all yet (see this function's own doc).
+  if (state.mobileBeaconOps.length) {
+    const opsByBeacon = new Map(state.mobileBeaconOps.map(o => [+o.beaconNumber, o]));
+    for (const row of rowsByBib.values()) {
+      if (!row.beaconNumber) continue;
+      const op = opsByBeacon.get(row.beaconNumber);
+      if (!op) continue;
+      if (op.closedAt) { row.beaconClosedAt = op.closedAt; row.beaconBatteryPercent = op.batteryPercent ?? null; }
+      if (op.countedAt) row.beaconCountedAt = op.countedAt;
+    }
   }
   return [...rowsByBib.values()].sort((a, b) => a.bibNumber - b.bibNumber);
 }

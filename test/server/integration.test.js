@@ -488,6 +488,33 @@ describe('server integration: progress', () => {
     assert.equal(race.progress.entries[0].beaconNumber, 7);
   });
 
+  // Same class of bug as beaconNumber above — these three were being computed by
+  // js/mobile-files-progress.js's buildProgressRows() and sent by js/progress-sync.js, but had no
+  // entry at all in this route's own field-by-field sanitisedEntries whitelist, so they were
+  // silently dropped before ever reaching progress.json on disk.
+  it('passes an entry\'s beaconClosedAt/beaconBatteryPercent/beaconCountedAt through the push', async () => {
+    const token = await createAndLogin('prog-beacon-ops-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'prog-beacon-ops-race-26-08-23';
+
+    await fetch(`${base}/api/mobile/prog-beacon-ops-owner/${raceLabel}/progress`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        raceName: 'X', raceDate: '23/08/2026',
+        entries: [{
+          bibNumber: 1, name: 'A', category: 'MSEN', course: 'Seniors', startTime: '', finishTime: '', cpTimes: {},
+          beaconNumber: 7, beaconClosedAt: '2026/08/30 09:10:00', beaconBatteryPercent: 80, beaconCountedAt: '2026/08/30 08:00:00',
+        }],
+      }),
+    });
+
+    const list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    const race = list.find(r => r.raceLabel === raceLabel);
+    assert.equal(race.progress.entries[0].beaconClosedAt, '2026/08/30 09:10:00');
+    assert.equal(race.progress.entries[0].beaconBatteryPercent, 80);
+    assert.equal(race.progress.entries[0].beaconCountedAt, '2026/08/30 08:00:00');
+  });
+
   it('rejects pushing progress under a dataset owned by a different, non-admin user', async () => {
     const victimToken = await createAndLogin('prog-victim');
     await fetch(`${base}/api/mobile/prog-victim/some-race/progress`, {
@@ -528,7 +555,10 @@ describe('server integration: beacons', () => {
     const push = await fetch(`${base}/api/mobile/beacon-report-owner/${raceLabel}/beacons`, {
       method: 'POST', headers: auth,
       body: JSON.stringify({
-        powerOffBatch: [{ beaconNumber: 7, batteryLevel: 55, poweredOffAt: '2026-08-23T16:00:00.000Z' }],
+        powerOffBatch: [
+          { beaconNumber: 7, batteryLevel: 55, poweredOffAt: '2026-08-23T16:00:00.000Z', closeCount: 2 },
+          { beaconNumber: 8, batteryLevel: 60, poweredOffAt: '2026-08-23T16:01:00.000Z' },
+        ],
       }),
     });
     assert.equal(push.status, 200);
@@ -536,6 +566,9 @@ describe('server integration: beacons', () => {
     const got = await (await fetch(`${base}/api/mobile/beacon-report-owner/${raceLabel}/beacons`, { headers: auth })).json();
     assert.equal(got.powerOffBatch[0].beaconNumber, 7);
     assert.equal(got.powerOffBatch[0].batteryLevel, 55);
+    assert.equal(got.powerOffBatch[0].closeCount, 2);
+    // Defaults to 1 for a beacon reported with no closeCount at all (an older mobile build).
+    assert.equal(got.powerOffBatch[1].closeCount, 1);
   });
 
   it('does not surface beacons.json as a device in the mobile files listing', async () => {

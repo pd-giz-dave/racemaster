@@ -1,26 +1,31 @@
 'use strict';
 
 // Beacons tab (ToDo.MD "Add a new timing method" — Beacons) — DOM/orchestration only, mirroring
-// mobile-files-progress.js's own split: the actual report validation/apply logic is pure and
-// lives in js/mobile-beacons.js, with no DOM in it at all.
+// mobile-files-progress.js's own split: the actual validation/apply logic is pure and lives in
+// js/mobile-beacons.js, with no DOM in it at all.
 //
-// Unlike Progress, there's nothing here to select rows for — a beacons.json report is read
-// whole, for one race, straight from the server (or, once the mobile side ships the real GATT
-// characteristic, over Bluetooth first). initBeaconsTab() still takes the same
-// { renderAll } injection mobile-files.js's other sibling tab modules do, purely for
-// consistency with that pattern (see mobile-files.js's own doc on why it's injected rather than
-// imported directly) — kept even though this tab doesn't currently need to trigger a full
-// mobile-files re-render itself.
+// This tab is purely a read-out of state.beaconReports/state.beacons now — mirroring
+// mobile-files-progress.js's own "seed from the registry, then merge in report data" pattern,
+// buildBeaconRows() below seeds one row per issuedBeaconNumbers() first (status 'issued', other
+// columns pre-filled from the Beacons catalogue page) so the tab lists every beacon out on course
+// even before any Close-mode data has been extracted, then overlays returned/missing status once
+// it has. There's deliberately no button/action of its own any more (ToDo.MD: "Beacons tab still
+// has read beacons report, now redundant as update progress should do it from entries in the
+// selected device files") — js/mobile-files-progress.js's own applyComputedResults() calls
+// js/mobile-beacons.js directly as part of every Update Progress run, so this tab just reflects
+// whatever that last computed; there's nothing left here to trigger by hand.
+// initBeaconsTab() still takes the same { renderAll } injection mobile-files.js's other sibling
+// tab modules do, purely for consistency with that pattern (see mobile-files.js's own doc on why
+// it's injected rather than imported directly) — kept even though this tab doesn't currently need
+// to trigger a full mobile-files re-render itself.
 
-import { on, val, showConfirmDialog, showStatus, renderTable, tableColumns } from '../ui.js';
+import { on, val, renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { state, saveEvent } from '../state.js';
 import { coursesInUse } from '../categories.js';
 import { deriveRaceLabel } from '../mobile-files-shared.js';
-import { getSession, getUsername, apiReadBeaconsReport } from '../storage.js';
-import { pullBeaconsReportFromConnectedPhone } from '../mule-ble.js';
-import { validateAndComputeBeaconReport, applyBeaconReportResults } from '../mobile-beacons.js';
+import { issuedBeaconNumbers } from '../mobile-beacons.js';
 
 let renderAll = null;
 export function initBeaconsTab({ renderAll: r }) {
@@ -35,13 +40,18 @@ function currentBeaconsRaceLabel() {
 }
 
 function buildBeaconRows(report) {
-  const missing = new Set(report.missing);
-  const numbers = [...new Set([...report.returned, ...report.missing])].sort((a, b) => a - b);
+  const missing = new Set(report ? report.missing : []);
+  const returned = new Set(report ? report.returned : []);
+  const numbers = [...new Set([...issuedBeaconNumbers(), ...returned, ...missing])].sort((a, b) => a - b);
   return numbers.map(number => {
     const beacon = state.beacons.find(b => +b.number === number);
+    const status = missing.has(number) ? 'missing' : returned.has(number) ? 'returned' : 'issued';
     return {
       number,
-      status: missing.has(number) ? 'missing' : 'returned',
+      status,
+      // Mirrors racemaster-mobile's own CloseBeaconsScreen "closed ×N" wording — a beacon
+      // re-presented and closed more than once this race, not just a plain return.
+      closeCount: report?.closeCounts?.[number] || 0,
       batteryLevel: beacon ? +beacon.batteryLevel : null,
       lastUsed: beacon?.lastUsed || '',
       owner: beacon?.owner || '',
@@ -53,14 +63,15 @@ export function renderMobileBeaconsTab() {
   const raceLabel = currentBeaconsRaceLabel();
   const report = raceLabel ? state.beaconReports.find(r => r.raceLabel === raceLabel) : null;
   const threshold = +state.event.beaconLowBatteryThreshold || 20;
-  const rows = report ? buildBeaconRows(report) : [];
+  const rows = buildBeaconRows(report);
 
   const thresholdEl = document.getElementById('mobile-beacon-threshold');
   if (thresholdEl && document.activeElement !== thresholdEl) thresholdEl.value = threshold;
 
   renderTable('mobile-beacons-tbody', tableColumns(TABLES['mobile-beacons'], {
     number:       r => String(r.number),
-    status:       r => r.status === 'missing' ? '<span style="color:var(--danger)">Missing</span>' : 'Returned',
+    status:       r => (r.status === 'missing' ? '<span style="color:var(--danger)">Missing</span>'
+      : r.status === 'issued' ? 'Issued' : 'Returned') + (r.closeCount > 1 ? ` (closed ×${r.closeCount})` : ''),
     batteryLevel: r => r.batteryLevel == null ? '' : (r.batteryLevel < threshold
       ? `<span style="color:var(--danger)">${r.batteryLevel}%</span>` : `${r.batteryLevel}%`),
     lastUsed:     r => escHtml(r.lastUsed || ''),
@@ -73,37 +84,10 @@ export function renderMobileBeaconsTab() {
   if (statusEl) {
     statusEl.hidden = !report;
     if (report) {
-      statusEl.textContent = `Last read: ${report.missing.length} missing, ${report.returned.length} returned`
-        + (report.processedAt ? ` (processed ${new Date(report.processedAt).toLocaleString()})` : '');
+      statusEl.textContent = `From last Update Progress: ${report.missing.length} missing, ${report.returned.length} returned`
+        + (report.processedAt ? ` (${new Date(report.processedAt).toLocaleString()})` : '');
     }
   }
-}
-
-export async function readBeaconsReport() {
-  const session = getSession();
-  if (!session) { showStatus('Sign in on the Datasets page to read a beacons report.', true); return; }
-  const raceLabel = currentBeaconsRaceLabel();
-  if (!raceLabel) { showStatus('Set the event name and date first.', true); return; }
-
-  showStatus('Reading beacons report…');
-  const bt = await pullBeaconsReportFromConnectedPhone();
-  const report = bt.supported ? bt.report : await apiReadBeaconsReport(session.token, getUsername(), raceLabel);
-  if (!report) {
-    showStatus('No beacons report found for this race yet.', true);
-    return;
-  }
-
-  const plan = validateAndComputeBeaconReport(report, raceLabel);
-  const parts = [];
-  if (plan.toApply.length) parts.push(`${plan.toApply.length} beacon(s) to update`);
-  if (plan.missing.length) parts.push(`${plan.missing.length} beacon(s) still missing`);
-  const summary = parts.length ? parts.join(', ') : 'nothing new';
-  if (!await showConfirmDialog(`Apply this beacons report (${summary})?`, 'Read Beacons Report')) return;
-
-  await applyBeaconReportResults(plan, report, raceLabel);
-  renderMobileBeaconsTab();
-  document.querySelector('#mobile-files-tab-bar [data-mf-tab="beacons"]')?.click();
-  showStatus(`Beacons report applied: ${summary}.`);
 }
 
 async function saveBeaconThreshold() {
@@ -115,6 +99,5 @@ async function saveBeaconThreshold() {
 }
 
 export function wireBeaconsTab() {
-  on('btn-read-beacons-report', 'click', readBeaconsReport);
   on('mobile-beacon-threshold', 'change', saveBeaconThreshold);
 }

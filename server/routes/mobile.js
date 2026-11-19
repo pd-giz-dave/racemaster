@@ -79,6 +79,15 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
         finishTime: typeof e?.finishTime === 'string' ? e.finishTime : '',
         cpTimes: sanitiseCpTimes(e?.cpTimes),
         beaconNumber: Number(e?.beaconNumber) || 0,
+        // Close/Count beacon-housekeeping fields (js/mobile-files-progress.js's own
+        // buildProgressRows()) — the client already computes and sends these (see
+        // js/progress-sync.js's buildPayloadForCourse doc), but this whitelist previously had no
+        // entries for them at all, so they were silently dropped before ever reaching
+        // progress.json on disk (the same class of bug beaconNumber itself once had — see that
+        // field's own regression test).
+        beaconClosedAt: typeof e?.beaconClosedAt === 'string' ? e.beaconClosedAt : '',
+        beaconBatteryPercent: Number.isFinite(e?.beaconBatteryPercent) ? e.beaconBatteryPercent : null,
+        beaconCountedAt: typeof e?.beaconCountedAt === 'string' ? e.beaconCountedAt : '',
       }))
       .filter(e => e.bibNumber > 0);
     const removed = Array.isArray(body?.removed) ? body.removed.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
@@ -137,6 +146,7 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
             beaconNumber: Number(r?.beaconNumber) || 0,
             batteryLevel: Number.isFinite(Number(r?.batteryLevel)) ? Number(r.batteryLevel) : 0,
             poweredOffAt: typeof r?.poweredOffAt === 'string' ? r.poweredOffAt : '',
+            closeCount: Number(r?.closeCount) || 1,
           }))
           .filter(r => r.beaconNumber > 0)
       : [];
