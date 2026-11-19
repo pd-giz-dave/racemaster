@@ -411,3 +411,12 @@ To that end:
       that button should open a form to allow the last used date/time (default to now) and battery
       level to be entered, it should auto calculate the hours and update the total, that facility
       should also be available via the beacons tab on the mobile files page
+- [x] when speaking bib numbers that arrive on mass later ones truncate earlier ones, can they be
+      queued so all are fully spoken — **done** (racemaster-mobile, not this repo): BibSpeaker.kt's
+      speakNow() called `tts.speak()` with `QUEUE_FLUSH`, which cuts off whatever's currently being
+      read the moment the next bib commits — both BibsModeViewModel's own rapid manual entry and
+      BeaconScanEngine's own automatic checkpoint detections (several runners passing close
+      together) can genuinely out-pace one utterance's reading time. Switched to `QUEUE_ADD` so
+      every bib is read in full, in arrival order, instead of truncating whatever was still playing.
+- [ ] progress tab is not being updated by checkpoint passes
+- [ ] when auto update progress is checked, show an indication that its happening, e.g. as at and a count
