@@ -264,25 +264,31 @@ export function renderMobileProgressTable() {
     name:       r => escHtml(r.invalid ? '--entry missing--' : r.name),
     category:   r => escHtml(r.category),
     course:     r => escHtml(r.course),
-    // fobNumber/fobReturned (buildProgressRows()'s own doc) — a dibber-timed entry (or one with
-    // no fob allocated yet) has fobReturned === '' and shows the bare number with no suffix; a
-    // beacon-timed one shows "returned"/"not returned" once a beacons.json report has actually
-    // been read for its course, highlighted red while still outstanding — same
-    // color:var(--danger) convention the Beacons/Dibbers data pages already use for their own
-    // "needs attention" cells. beaconClosedAt/beaconCountedAt (a second, independent beacon-
-    // housekeeping source — racemaster-mobile's newer Close/Count recording modes, not the older
-    // beacons.json report) append their own "closed"/"counted" note alongside whichever of
-    // those applies, rather than replacing it — a beacon can be both reported missing by the old
-    // report AND already closed by the new workflow at the same time.
-    fobNumber:  r => {
-      if (!r.fobNumber) return '';
-      const bits = [];
-      if (r.fobReturned === 'missing') bits.push('not returned');
-      else if (r.fobReturned === 'returned') bits.push('returned');
-      if (r.beaconClosedAt) bits.push(`closed${r.beaconBatteryPercent != null ? ` ${r.beaconBatteryPercent}%` : ''}`);
-      if (r.beaconCountedAt) bits.push('counted');
-      const text = escHtml(`${r.fobNumber}${bits.length ? ` — ${bits.join(', ')}` : ''}`);
-      return r.fobReturned === 'missing' ? `<span style="color:var(--danger)">${text}</span>` : text;
+    // fobNumber is just the bare allocated dibber/beacon number now — ToDo.MD: "Progress tab ...
+    // should have separate columns for 'Counted' and 'Closed' ... use these instead of
+    // annotating the fob column". Counted/closed status/detail (below) carries those instead.
+    fobNumber:  r => r.fobNumber ? String(r.fobNumber) : '',
+    // beaconCountedAt — racemaster-mobile's own Count-mode recording (buildProgressRows()'s own
+    // doc) — straight device time-of-day, same convention start/finishTime below already use.
+    // beaconCountNotSeen (buildProgressRows()'s own doc) highlights a beacon Count mode genuinely
+    // ran for this race but never actually saw — same color:var(--danger) "needs attention"
+    // convention Closed/the Beacons/Dibbers data pages already use.
+    counted:    r => r.beaconCountedAt ? escHtml(r.beaconCountedAt.split(' ')[1] || '')
+      : r.beaconCountNotSeen ? '<span style="color:var(--danger)">not seen</span>' : '',
+    // beaconClosedAt/beaconBatteryPercent — racemaster-mobile's own Close-mode recording — take
+    // priority over the older beacons.json-report-derived fobReturned (buildProgressRows()'s own
+    // doc) whenever both exist, since they're the more current, more detailed source; fobReturned
+    // alone only ever still matters for a beacon this run's own selection didn't touch. Highlighted
+    // red while still outstanding — same color:var(--danger) convention the Beacons/Dibbers data
+    // pages already use for their own "needs attention" cells.
+    closed:     r => {
+      if (r.beaconClosedAt) {
+        const time = r.beaconClosedAt.split(' ')[1] || '';
+        return escHtml(`${time}${r.beaconBatteryPercent != null ? ` ${r.beaconBatteryPercent}%` : ''}`);
+      }
+      if (r.fobReturned === 'missing') return '<span style="color:var(--danger)">not returned</span>';
+      if (r.fobReturned === 'returned') return 'returned';
+      return '';
     },
     // Time-of-day, not elapsed — the raw device reading, straight out of the file (this tab's own
     // job, per buildProgressRows()'s doc; adjusted elapsed times are the Results & Prize List

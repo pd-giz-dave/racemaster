@@ -508,6 +508,34 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
         at: '2026/08/30 11:00:00', closedAt: '2026/08/30 11:00:00', batteryPercent: 55, closeCount: 2,
       });
     });
+
+    // The bug this test guards: closeSegment/countSegment used to be checked with an if/continue
+    // each, so a device with BOTH non-empty (repurposed mid-race — Count mode for the pre-start
+    // headcount, then relocated into Close mode afterwards, same physical phone/file) only ever
+    // had its close data counted, since that check ran first and `continue`d before the count
+    // check ever ran — confirmed in the field: Count data never reaching the Progress tab's own
+    // Counted column whenever a device had also been used for Close.
+    it('processes both segments of a device repurposed from Count to Close mode, not just whichever is checked first', async () => {
+      const repurposed = countRow({
+        device: {
+          name: 'Repurposed Phone',
+          lines: [
+            { lineNumber: 1, action: 'Location', note: 'Start', location: 'Start' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, location: 'Start' },
+            { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:15:00', location: 'Start' },
+            { lineNumber: 4, action: 'Location', note: 'Close', location: 'Close' },
+            { lineNumber: 5, action: 'ModeStart', note: 'Close', splitTime: null, bibNumber: null, location: 'Close' },
+            { lineNumber: 6, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:20:00', location: 'Close' },
+          ],
+        },
+      });
+      const result = await validateAndCompute([repurposed]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:15:00');
+      assert.deepEqual(result.closeByBeacon.get(5), {
+        at: '2026/08/30 09:20:00', closedAt: '2026/08/30 09:20:00', batteryPercent: 80, closeCount: 1,
+      });
+    });
   });
 
   it('does not add a duplicate DNF when the CP-retired bib already has its own Finish-location record', async () => {
@@ -919,6 +947,38 @@ describe('mobile-files-progress.js:buildProgressRows', () => {
       const row1 = rows.find(r => r.bibNumber === 1);
       assert.equal(row1.fobNumber, 5);
       assert.equal(row1.beaconClosedAt, '');
+    });
+
+    // ToDo.MD: "when there is no count record for a [row] the counted column should highlight
+    // 'not seen'".
+    describe('beaconCountNotSeen', () => {
+      it('flags a beacon-timed entry with no countedAt once Count mode has genuinely run this race (some other beacon has a countedAt)', () => {
+        state.event.timingMethod = 'Beacons';
+        state.entries[0].dibberNumber = 5; // never counted
+        state.entries[1].dibberNumber = 9;
+        state.mobileBeaconOps = [{ beaconNumber: 9, countedAt: '2026/08/30 09:15:00' }];
+        const rows = buildProgressRows();
+        assert.equal(rows.find(r => r.bibNumber === 1).beaconCountNotSeen, true);
+        assert.equal(rows.find(r => r.bibNumber === 2).beaconCountNotSeen, false);
+      });
+
+      it('leaves beaconCountNotSeen false for every entry when Count mode never ran this race at all (mobileBeaconOps has no countedAt anywhere)', () => {
+        state.event.timingMethod = 'Beacons';
+        state.entries[0].dibberNumber = 5; // never counted
+        state.entries[1].dibberNumber = 9;
+        state.mobileBeaconOps = [{ beaconNumber: 9, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }];
+        const rows = buildProgressRows();
+        assert.equal(rows.find(r => r.bibNumber === 1).beaconCountNotSeen, false);
+        assert.equal(rows.find(r => r.bibNumber === 2).beaconCountNotSeen, false);
+      });
+
+      it('never flags a dibber-timed entry, even once Count mode has run this race', () => {
+        state.event.timingMethod = 'Dibbers';
+        state.entries[0].dibberNumber = 5;
+        state.mobileBeaconOps = [{ beaconNumber: 9, countedAt: '2026/08/30 09:15:00' }];
+        const rows = buildProgressRows();
+        assert.equal(rows.find(r => r.bibNumber === 1).beaconCountNotSeen, false);
+      });
     });
   });
 });

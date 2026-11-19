@@ -24,7 +24,7 @@ import { escHtml } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { state, saveEvent } from '../state.js';
 import { coursesInUse } from '../categories.js';
-import { deriveRaceLabel } from '../mobile-files-shared.js';
+import { deriveRaceLabel, formatStoredTimestamp } from '../mobile-files-shared.js';
 import { issuedBeaconNumbers } from '../mobile-beacons.js';
 
 let renderAll = null;
@@ -52,6 +52,11 @@ function buildBeaconRows(report) {
       // Mirrors racemaster-mobile's own CloseBeaconsScreen "closed ×N" wording — a beacon
       // re-presented and closed more than once this race, not just a plain return.
       closeCount: report?.closeCounts?.[number] || 0,
+      // ToDo.MD: "add an 'As At' column ... that reflects the time of last status change" — the
+      // one status change this report actually timestamps per-beacon (computeBeaconCatalogueUpdates()'s
+      // own appliedCloseAt, phone-clock closedAt, mobile-beacons.js), present only once a beacon's
+      // actually been closed; missing/issued has had no status change to report a time for.
+      asAt: report?.appliedCloseAt?.[number] || '',
       batteryLevel: beacon ? +beacon.batteryLevel : null,
       lastUsed: beacon?.lastUsed || '',
       owner: beacon?.owner || '',
@@ -72,6 +77,7 @@ export function renderMobileBeaconsTab() {
     number:       r => String(r.number),
     status:       r => (r.status === 'missing' ? '<span style="color:var(--danger)">Missing</span>'
       : r.status === 'issued' ? 'Issued' : 'Returned') + (r.closeCount > 1 ? ` (closed ×${r.closeCount})` : ''),
+    asAt:         r => formatStoredTimestamp(r.asAt),
     batteryLevel: r => r.batteryLevel == null ? '' : (r.batteryLevel < threshold
       ? `<span style="color:var(--danger)">${r.batteryLevel}%</span>` : `${r.batteryLevel}%`),
     lastUsed:     r => escHtml(r.lastUsed || ''),

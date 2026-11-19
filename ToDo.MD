@@ -374,4 +374,40 @@ To that end:
       js/views/mobile-files-devices.js's showRawModal(). The per-mode views
       (showDeviceModal()) now lead every row with its own line number too, so a row shown there
       can be manually matched back to its own line in the Raw view for diagnostic purposes.
-- [ ] 
+- [x] Progress tab on the mobile files page should have separate columns for "Counted" and "Closed",
+      counted before the start column, closed after the finish column, use these instead of annotating
+      the fob column — **done**: js/strings.js's 'mobile-progress' table gained 'counted' (before
+      'start') and 'closed' (after 'finishTime') columns; js/views/mobile-files-progress.js's
+      renderMobileProgressTable() now renders Fob as the bare number again, Counted from
+      row.beaconCountedAt's own device time-of-day, and Closed from row.beaconClosedAt (+ battery
+      %), falling back to the older fobReturned 'missing'/'returned' text (still red while missing)
+      only when there's no beaconClosedAt of its own.
+- [x] beacons tab add an "As At" column between status and battery that reflects the time of last
+      status change — **done**: js/strings.js's 'mobile-beacons' table gained an 'asAt' column
+      between 'status' and 'batteryLevel'; js/views/mobile-files-beacons.js's buildBeaconRows() now
+      reads each beacon's own closedAt straight off computeBeaconCatalogueUpdates()'s own
+      appliedCloseAt map (mobile-beacons.js) — the one per-beacon status-change timestamp this
+      report actually carries — and renders it via formatStoredTimestamp(), blank for a beacon still
+      missing or merely issued (neither has had a status change to time yet).
+- [x] progress tab not showing Counted when the device file has CountSeen records — **done**:
+      js/mobile-files-progress.js's validateAndCompute() checked closeSegment/countSegment with an
+      if/continue each, so a device repurposed mid-race (Count mode for the pre-start headcount,
+      then relocated into Close mode afterwards, same physical phone/file) had both segments
+      non-empty at once, but the Close check ran first and `continue`d before the Count check ever
+      ran — silently dropping that device's countByBeacon entirely. Now checks both independently,
+      only `continue`ing once both have had their chance.
+- [x] on the Progress tab, when there is no count record for a beacon-timed entry the Counted
+      column should highlight "not seen" — **done**: js/mobile-files-progress.js's
+      buildProgressRows() now sets a new `beaconCountNotSeen` flag whenever a beacon-timed entry's
+      own beacon has no countedAt in state.mobileBeaconOps, but ONLY once Count mode has genuinely
+      run this race at all (some other beacon in mobileBeaconOps does have a countedAt) — a race
+      that never used Count mode doesn't flag every beacon-timed entry for a check that was simply
+      never attempted. js/views/mobile-files-progress.js's Counted column renders this the same
+      color:var(--danger) way Closed/the Beacons/Dibbers pages already flag "needs attention".
+      beaconCountNotSeen is display-only — js/progress-sync.js's buildPayloadForCourse() strips it
+      before pushing to the phone, same footing as fobReturned/fobNumber/invalid/conflict.
+- [ ] need a way to manually return a beacon via an action on the beacons page (to allow for the case
+      where a runner went home with it and returned it some time later after the race was all over)
+      that button should open a form to allow the last used date/time (default to now) and battery
+      level to be entered, it should auto calculate the hours and update the total, that facility
+      should also be available via the beacons tab on the mobile files page

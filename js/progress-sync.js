@@ -98,17 +98,17 @@ function buildPayloadForCourse(course, inUse) {
   return {
     raceName: state.event.name,
     raceDate: state.event.date,
-    // `invalid`/`conflict`/`fobNumber`/`fobReturned` (buildProgressRows()'s own doc in
-    // mobile-files-progress.js) are Progress-tab display metadata, dropped here rather than sent
-    // on: a phone's own bib-allocation logic has no use for any of them, and none is part of the
-    // wire format racemaster-mobile already expects (which still gets `beaconNumber` itself,
-    // unaffected by this). `beaconClosedAt`/`beaconBatteryPercent`/`beaconCountedAt` are NOT
-    // dropped here, unlike those four — they're genuine wire fields racemaster-mobile's own
+    // `invalid`/`conflict`/`fobNumber`/`fobReturned`/`beaconCountNotSeen` (buildProgressRows()'s
+    // own doc in mobile-files-progress.js) are Progress-tab display metadata, dropped here rather
+    // than sent on: a phone's own bib-allocation logic has no use for any of them, and none is
+    // part of the wire format racemaster-mobile already expects (which still gets `beaconNumber`
+    // itself, unaffected by this). `beaconClosedAt`/`beaconBatteryPercent`/`beaconCountedAt` are
+    // NOT dropped here, unlike those five — they're genuine wire fields racemaster-mobile's own
     // Close/Count recording modes expect back (see buildProgressRows()'s own doc), not display-
     // only metadata.
     entries: buildProgressRows()
       .filter(r => inUse.length === 1 || r.course === course)
-      .map(({ invalid, conflict, fobNumber, fobReturned, ...entry }) => entry),
+      .map(({ invalid, conflict, fobNumber, fobReturned, beaconCountNotSeen, ...entry }) => entry),
   };
 }
 

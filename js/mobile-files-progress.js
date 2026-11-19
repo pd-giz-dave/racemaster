@@ -429,21 +429,30 @@ export async function validateAndCompute(selected) {
     // to join anyway, and Count's forced "Start" must NOT be swept into the 'start' bucket just
     // below (an early/late-starters Bibs-mode phone also uses "Start", a completely different
     // HistoryMode) — checking the device's own current-segment family first, rather than its
-    // resolved location string, is what actually tells the two apart. racemaster-mobile's own
-    // convention is that a Close/Count device never writes a real Bib/Time entry at all, so in
-    // practice at most one of these two segments is ever non-empty for a given device.
+    // resolved location string, is what actually tells the two apart. The two are checked
+    // independently, NOT else/else-if — a device repurposed mid-race (Count mode for the
+    // pre-start headcount, then relocated into Close mode afterwards, same physical phone/file)
+    // genuinely has both segments non-empty at once; checking only the first and `continue`-ing
+    // silently dropped the other's beacon data entirely (confirmed in the field: Count data never
+    // reaching the Progress tab's own Counted column whenever a device had also been used for
+    // Close). `continue` still only ever fires once, after both have had their chance, so a
+    // Close/Count device of either flavour still never falls through into the location-based
+    // bucketing below (racemaster-mobile's own convention: neither mode ever writes a real
+    // Bib/Time entry of its own).
     const { closeSegment, countSegment } = buildSegmentView(r.device.resolvedLines);
+    let isBeaconDevice = false;
     if (closeSegment.length) {
       // `at`, not `closedAt` — a reopened entry carries no closedAt of its own to compare by
       // (see computeCloseByBeacon's own doc), but still needs a timestamp so it can correctly
       // win this cross-device comparison when it's genuinely the most recent event.
       mergeLatestByBeacon(closeByBeacon, computeCloseByBeacon(closeSegment), e => e.at);
-      continue;
+      isBeaconDevice = true;
     }
     if (countSegment.length) {
       mergeLatestByBeacon(countByBeacon, computeCountByBeacon(countSegment), e => e);
-      continue;
+      isBeaconDevice = true;
     }
+    if (isBeaconDevice) continue;
     for (const seg of locationSegmentsOf(r)) {
       const { timeSegment, bibsSegment } = buildSegmentView(seg.lines);
       const visibleRows = [...timeSegment, ...bibsSegment];
@@ -790,7 +799,7 @@ export function buildProgressRows() {
         bibNumber: bib, name: info.name, category: info.category, course: info.course,
         startTime: '', finishTime: '', startTimeOfDay: '', finishTimeOfDay: '',
         cpTimes: {}, cpTimesOfDay: {}, beaconNumber: 0, fobNumber: 0, fobReturned: '',
-        beaconClosedAt: '', beaconBatteryPercent: null, beaconCountedAt: '',
+        beaconClosedAt: '', beaconBatteryPercent: null, beaconCountedAt: '', beaconCountNotSeen: false,
         invalid: info.invalid, conflict: conflictedBibs.has(bib),
       });
     }
@@ -839,12 +848,19 @@ export function buildProgressRows() {
   // own Close/CountSeen row may carry no bib pairing at all yet (see this function's own doc).
   if (state.mobileBeaconOps.length) {
     const opsByBeacon = new Map(state.mobileBeaconOps.map(o => [+o.beaconNumber, o]));
+    // Whether Count mode was actually used at all this run — gates beaconCountNotSeen below so a
+    // race that never ran a Count-mode device doesn't flag every single beacon-timed entry as
+    // "not seen" for a check that was simply never attempted.
+    const anyCounted = state.mobileBeaconOps.some(o => o.countedAt);
     for (const row of rowsByBib.values()) {
       if (!row.beaconNumber) continue;
       const op = opsByBeacon.get(row.beaconNumber);
-      if (!op) continue;
-      if (op.closedAt) { row.beaconClosedAt = op.closedAt; row.beaconBatteryPercent = op.batteryPercent ?? null; }
-      if (op.countedAt) row.beaconCountedAt = op.countedAt;
+      if (op?.closedAt) { row.beaconClosedAt = op.closedAt; row.beaconBatteryPercent = op.batteryPercent ?? null; }
+      if (op?.countedAt) row.beaconCountedAt = op.countedAt;
+      // ToDo.MD: "when there is no count record for a [row] the counted column should highlight
+      // 'not seen'" — this beacon's own op (if any at all) carries no countedAt, yet Count mode
+      // genuinely ran this race (anyCounted), so it really was missed, not just "never checked".
+      else if (anyCounted) row.beaconCountNotSeen = true;
     }
   }
   return [...rowsByBib.values()].sort((a, b) => a.bibNumber - b.bibNumber);
