@@ -411,12 +411,30 @@ To that end:
       that button should open a form to allow the last used date/time (default to now) and battery
       level to be entered, it should auto calculate the hours and update the total, that facility
       should also be available via the beacons tab on the mobile files page
-- [x] when speaking bib numbers that arrive on mass later ones truncate earlier ones, can they be
-      queued so all are fully spoken — **done** (racemaster-mobile, not this repo): BibSpeaker.kt's
-      speakNow() called `tts.speak()` with `QUEUE_FLUSH`, which cuts off whatever's currently being
-      read the moment the next bib commits — both BibsModeViewModel's own rapid manual entry and
-      BeaconScanEngine's own automatic checkpoint detections (several runners passing close
-      together) can genuinely out-pace one utterance's reading time. Switched to `QUEUE_ADD` so
-      every bib is read in full, in arrival order, instead of truncating whatever was still playing.
-- [ ] progress tab is not being updated by checkpoint passes
-- [ ] when auto update progress is checked, show an indication that its happening, e.g. as at and a count
+- [x] progress tab is not being updated by checkpoint passes — **done**: two compounding bugs in
+      a device repurposed mid-race (same physical phone/file, e.g. Count mode for the pre-start
+      headcount, then relocated to run CP1 afterwards). (1) js/mobile-files-devices.js's
+      `rowFamily()` had no case for `CountComplete`/`CountStopped` (racemaster-mobile's own
+      Count-only markers, both null bibNumber/splitTime like `CountSeen`/`CloseReopened` before
+      them), so they fell into the Bibs family's own default and stranded a phantom "Pen" (or
+      whatever the old Count location was) segment alongside the device's real CP segment —
+      `resolveLocationKey('Pen')` returning null then made `validateAndCompute()` reject the
+      ENTIRE selected batch with "location 'Pen' isn't recognised", silently blocking every
+      other selected device's progress too, not just this one's. (2) even with that fixed,
+      `validateAndCompute()`'s own per-device loop still unconditionally `continue`d past the
+      location-bucketing step whenever the device's (per-family, not per-device) countSegment/
+      closeSegment was non-empty at all — true forever once a device has ANY never-explicitly-
+      Reset Count/Close visit in its history, even long after it's moved on to genuine CP/Bibs
+      work — so the device's real CP passes were silently dropped with no error at all. Now only
+      skips the location loop when there's truly no Bibs/Time segment to bucket (a dedicated,
+      location-less Close/Count phone); a device with both now gets its beacon data recorded
+      AND its CP/Finish/Start segments bucketed normally.
+- [x] when auto update progress is checked, show an indication that its happening, e.g. as at and
+      a count — **done**: index.html gained a `#mf-auto-progress-status` span next to the
+      checkbox; js/views/mobile-files-progress.js's new `updateAutoProgressStatus()` stamps it
+      "As at HH:MM:SS — N record(s)" from `maybeAutoUpdateProgress()` every time that actually
+      runs (gated on the checkbox being enabled, not on whether anything was new this tick), so an
+      operator watching it can tell the background poll is genuinely still alive even on a quiet
+      check. `syncAutoProgressCheckbox()` hides it again the moment the checkbox isn't ticked
+      (unticked, or locked back down after a failed run), same as every other state that
+      control already reflects.

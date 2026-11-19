@@ -240,6 +240,30 @@ describe('mobile-files-devices.js:buildSegmentView', () => {
     assert.equal(timeSegment.length, 0);
   });
 
+  // Same fix, same bug shape, for racemaster-mobile's own CountComplete/CountStopped markers —
+  // both carry a null splitTime/bibNumber too, same as CloseReopened above, so without their own
+  // rowFamily case they fell into the Bibs default. Confirmed in the field: a device repurposed
+  // from Count mode to Bibs/CP mode (same physical phone/file) left a stray CountComplete row
+  // stranding its own phantom "Pen" location segment alongside the real CP segment —
+  // resolveLocationKey('Pen') returns null (unrecognised), which made validateAndCompute() reject
+  // the entire selected batch, silently blocking the device's genuine CP passes from ever
+  // reaching the Progress tab too (ToDo.MD: "progress tab is not being updated by checkpoint
+  // passes").
+  it('classifies CountComplete/CountStopped rows into countSegment, not bibsSegment', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Pen' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+      { lineNumber: 4, action: 'CountComplete', note: 'of=1', bibNumber: null, splitTime: null },
+      { lineNumber: 5, action: 'CountStopped', note: 'outstanding=0', bibNumber: null, splitTime: null },
+    ];
+    const { countSegment, bibsSegment, timeSegment } = buildSegmentView(lines);
+    assert.equal(countSegment.filter(r => r.action === 'CountComplete').length, 1);
+    assert.equal(countSegment.filter(r => r.action === 'CountStopped').length, 1);
+    assert.equal(bibsSegment.length, 0);
+    assert.equal(timeSegment.length, 0);
+  });
+
   it('classifies a Close-mode Location/ModeStart boundary pair into closeSegment via the ModeStart note, same as Time/Bibs', () => {
     const lines = [
       { lineNumber: 1, action: 'Location', note: 'Close' },

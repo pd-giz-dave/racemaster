@@ -254,7 +254,17 @@ function rowFamily(r) {
   // this it falls into the Bibs family's default (splitTime is null, same as Close) and silently
   // vanishes, the exact bug that doc already warns about for Close/CountSeen.
   if (r.action === 'CloseReopened') return 'close';
-  if (r.action === 'CountSeen') return 'count';
+  // CountComplete/CountStopped (racemaster-mobile's own HistoryAction.COUNT_COMPLETE/
+  // COUNT_STOPPED) are Count-only markers, same shape/same bug-prone default as CloseReopened
+  // above: both carry no bibNumber/splitTime of their own, so without this they fall into the
+  // Bibs family's default and silently pollute it — confirmed in the field, a device repurposed
+  // from Count to Bibs/CP mode (same physical phone/file) ended up with a leftover CountComplete
+  // row stranding a phantom "Pen" location segment alongside the real CP one, and
+  // resolveLocationKey('Pen') returning null (unrecognised) made validateAndCompute() reject the
+  // ENTIRE selected batch with "location 'Pen' isn't recognised" — silently blocking the real
+  // CP1 passes from ever reaching the Progress tab too (ToDo.MD: "progress tab is not being
+  // updated by checkpoint passes").
+  if (r.action === 'CountSeen' || r.action === 'CountComplete' || r.action === 'CountStopped') return 'count';
   return r.splitTime != null ? 'time' : 'bibs';
 }
 

@@ -423,36 +423,48 @@ export async function validateAndCompute(selected) {
   const closeByBeacon = new Map(); // beacon -> { closedAt, batteryPercent } — see Close/Count section above
   const countByBeacon = new Map(); // beacon -> countedAt
   for (const r of selected) {
-    // A Close/Count-mode device is diverted here, before any location-based bucketing runs at
-    // all — neither mode is actually location-aware (see mobile-files-devices.js's own
-    // withResolvedLocations doc), Close's own forced location ("Close") has no bucket of its own
-    // to join anyway, and Count's forced "Start" must NOT be swept into the 'start' bucket just
-    // below (an early/late-starters Bibs-mode phone also uses "Start", a completely different
-    // HistoryMode) — checking the device's own current-segment family first, rather than its
-    // resolved location string, is what actually tells the two apart. The two are checked
-    // independently, NOT else/else-if — a device repurposed mid-race (Count mode for the
-    // pre-start headcount, then relocated into Close mode afterwards, same physical phone/file)
-    // genuinely has both segments non-empty at once; checking only the first and `continue`-ing
-    // silently dropped the other's beacon data entirely (confirmed in the field: Count data never
-    // reaching the Progress tab's own Counted column whenever a device had also been used for
-    // Close). `continue` still only ever fires once, after both have had their chance, so a
-    // Close/Count device of either flavour still never falls through into the location-based
-    // bucketing below (racemaster-mobile's own convention: neither mode ever writes a real
-    // Bib/Time entry of its own).
-    const { closeSegment, countSegment } = buildSegmentView(r.device.resolvedLines);
-    let isBeaconDevice = false;
+    // A Close/Count-mode device's own beacon data is extracted here, before any location-based
+    // bucketing runs at all — neither mode is actually location-aware (see
+    // mobile-files-devices.js's own withResolvedLocations doc), Close's own forced location
+    // ("Close") has no bucket of its own to join anyway, and Count's forced "Start" must NOT be
+    // swept into the 'start' bucket just below (an early/late-starters Bibs-mode phone also uses
+    // "Start", a completely different HistoryMode) — checking the device's own current-segment
+    // family first, rather than its resolved location string, is what actually tells the two
+    // apart. closeSegment/countSegment are checked independently, NOT else/else-if — a device
+    // repurposed mid-race (Count mode for the pre-start headcount, then relocated into Close mode
+    // afterwards, same physical phone/file) genuinely has both segments non-empty at once;
+    // checking only the first and skipping the second entirely silently dropped the other's
+    // beacon data (confirmed in the field: Count data never reaching the Progress tab's own
+    // Counted column whenever a device had also been used for Close).
+    //
+    // Whether to fall through into the location-based bucketing below is a SEPARATE question from
+    // whether there's beacon data to extract — gated on timeSegment/bibsSegment being genuinely
+    // non-empty, not on closeSegment/countSegment being empty. A once-Close/Count-only device
+    // that's since been fully repurposed to Bibs/CP (same physical phone/file, a new NewRace/
+    // Location/ModeStart cycle) keeps its EARLIER, never-explicitly-Reset Close/Count visit
+    // "current" forever in its own family bucket (buildSegmentView()'s own per-family, not
+    // per-device, Reset scoping) — `continue`ing just because that old segment is still non-empty
+    // used to silently drop its genuinely current CP/Bibs passes too (ToDo.MD: "progress tab is
+    // not being updated by checkpoint passes"). A device with no Bibs/Time segment at ALL (the
+    // ordinary, dedicated Close/Count phone) still skips the loop below exactly as before — it
+    // has no location data to bucket, and running it through unconditionally would wrongly report
+    // it as an empty, unselectable location.
+    const { timeSegment, bibsSegment, closeSegment, countSegment } = buildSegmentView(r.device.resolvedLines);
     if (closeSegment.length) {
       // `at`, not `closedAt` — a reopened entry carries no closedAt of its own to compare by
       // (see computeCloseByBeacon's own doc), but still needs a timestamp so it can correctly
       // win this cross-device comparison when it's genuinely the most recent event.
       mergeLatestByBeacon(closeByBeacon, computeCloseByBeacon(closeSegment), e => e.at);
-      isBeaconDevice = true;
     }
     if (countSegment.length) {
       mergeLatestByBeacon(countByBeacon, computeCountByBeacon(countSegment), e => e);
-      isBeaconDevice = true;
     }
-    if (isBeaconDevice) continue;
+    // A device with no Bibs/Time segment at all AND some Close/Count data is a dedicated,
+    // genuinely location-less Close/Count phone — skip the loop below, which has nothing to
+    // bucket for it and would otherwise wrongly report it as an empty, unselectable location. A
+    // device with NEITHER (no Bibs/Time, no Close/Count — an actually empty selection) still
+    // falls through, so the loop's own "empty" error below still fires for that genuine mistake.
+    if (!timeSegment.length && !bibsSegment.length && (closeSegment.length || countSegment.length)) continue;
     for (const seg of locationSegmentsOf(r)) {
       const { timeSegment, bibsSegment } = buildSegmentView(seg.lines);
       const visibleRows = [...timeSegment, ...bibsSegment];

@@ -536,6 +536,38 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
         at: '2026/08/30 09:20:00', closedAt: '2026/08/30 09:20:00', batteryPercent: 80, closeCount: 1,
       });
     });
+
+    // The bug this test guards: a once-Close/Count-only device that's since been fully
+    // repurposed to Bibs/CP (same physical phone/file, a new NewRace/Location/ModeStart cycle)
+    // keeps its EARLIER, never-explicitly-Reset Count visit "current" forever in its own family
+    // bucket (buildSegmentView()'s own per-family Reset scoping) — `continue`ing out of the
+    // per-device loop just because that old segment was still non-empty used to silently drop
+    // its genuinely current CP passes too, never even reaching cpBuckets (confirmed in the
+    // field, ToDo.MD: "progress tab is not being updated by checkpoint passes").
+    it('still buckets a device\'s genuine CP location data after it was repurposed from a never-reset Count session', async () => {
+      const repurposed = countRow({
+        device: {
+          name: 'Repurposed CP Phone',
+          lines: [
+            // The earlier Count session — deliberately never Reset, same as the real-world case.
+            { lineNumber: 1, action: 'Location', note: 'Pen', location: 'Pen' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, location: 'Pen' },
+            { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:15:00', location: 'Pen' },
+            { lineNumber: 4, action: 'CountComplete', note: 'of=1', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:15:00', location: 'Pen' },
+            // Repurposed to CP1 — a genuinely new NewRace/Location/ModeStart cycle.
+            { lineNumber: 5, action: 'NewRace', bibNumber: null, splitTime: null, location: null },
+            { lineNumber: 6, action: 'Location', note: 'CP1', location: 'CP1' },
+            { lineNumber: 7, action: 'ModeStart', note: 'CP', bibNumber: null, splitTime: null, location: 'CP1' },
+            { lineNumber: 8, action: 'Pass', bibNumber: 101, splitNumber: 1, timestamp: '2026/08/30 09:20:00', location: 'CP1' },
+          ],
+        },
+      });
+      const result = await validateAndCompute([repurposed]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:15:00');
+      assert.equal(result.cpBuckets.size, 1);
+      assert.ok(result.cpBuckets.has(1));
+    });
   });
 
   it('does not add a duplicate DNF when the CP-retired bib already has its own Finish-location record', async () => {

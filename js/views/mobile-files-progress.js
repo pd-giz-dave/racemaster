@@ -94,6 +94,28 @@ function syncAutoProgressCheckbox() {
   cb.title = unlocked
     ? 'Automatically re-run Update Progress whenever a ticked file\'s data changes — a Bluetooth pull, Refresh, Push, or Discard. Ticking this checks immediately too, to catch up on anything missed while it was off.'
     : 'Run Update Progress successfully at least once for this dataset to unlock this option';
+  // #mf-auto-progress-status (updateAutoProgressStatus()'s own doc) only ever means anything
+  // while the checkbox is actually ticked — hide it the moment it isn't, rather than leaving a
+  // stale "as at" reading on screen once auto-update's been turned off or locked back down.
+  const statusEl = document.getElementById('mf-auto-progress-status');
+  if (statusEl && !cb.checked) statusEl.hidden = true;
+}
+
+// ToDo.MD: "when auto update progress is checked, show an indication that its happening, e.g.
+// as at and a count" — called from maybeAutoUpdateProgress() every time it actually runs (not
+// just renders), so an operator watching #mf-auto-progress-status can tell the background poll
+// is genuinely still alive and ticking, not silently stalled, even on a tick that found nothing
+// new to incorporate. Same "As at <time> — N record(s)" shape the Beacons tab's own status line
+// (js/views/mobile-files-beacons.js) already uses for the same reassurance.
+function updateAutoProgressStatus() {
+  const el = document.getElementById('mf-auto-progress-status');
+  if (!el) return;
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const count = state.mobileProgress.length;
+  el.hidden = false;
+  el.textContent = `As at ${time} — ${count} record${count === 1 ? '' : 's'}`;
 }
 
 export async function clearProgress() {
@@ -233,6 +255,11 @@ export async function autoUpdateProgress() {
 // the progress table.
 export async function maybeAutoUpdateProgress() {
   if (!isProgressAutoEnabled()) return;
+  // Stamped unconditionally from here on — every call past this point is a genuine tick of the
+  // mechanism, whether or not it finds anything new, so #mf-auto-progress-status's own "as at"
+  // proves the background poll is still alive even on a quiet tick (updateAutoProgressStatus()'s
+  // own doc).
+  updateAutoProgressStatus();
   const selected = getSelectedRows();
   if (!selected.length) return;
   if (!selected.some(r => computeIncorporationStatus(r) === 'outstanding')) return; // nothing new since the last run
@@ -251,6 +278,9 @@ export async function maybeAutoUpdateProgress() {
 
   await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp, result.closeByBeacon, result.countByBeacon);
   renderMobileProgressTable();
+  // Re-stamped so the count reflects whatever this run actually just wrote, not the pre-run
+  // figure the call above already captured.
+  updateAutoProgressStatus();
 }
 
 export function renderMobileProgressTable() {
