@@ -1,4 +1,4 @@
-# ToDo
+# Done
 
 ## Handicap race mode
 
@@ -33,7 +33,7 @@ affect normal races. Full plan: `/home/dave/.claude/plans/i-would-like-to-swirli
 
 Implemented and verified end-to-end (v0.0.24-alpha): unit tests added in
 test/schema.test.js, test/entries.test.js, test/results.test.js (763 total,
-all passing); manually exercised in a browser against a scratch dataset —
+all passing); manually exercised in a browser against a scratch dataset -
 registered entries with predicted times, printed paper form + entries table,
 recorded staggered starts/finishes via Finishers, confirmed Results & Prize
 List places by crossing order with DSQ correctly flagged and excluded from
@@ -195,50 +195,10 @@ user's own measured ~3mm unprintable margin, i.e. zero buffer — any overshoot 
 
 - [x] JS logic
 - [x] server logic
-- [ ] view logic?
-
-## Add importing results from other sources?
-
-- [ ] CSV file - make SI Results a generic CSV import as long as the file has required columns (in any order)
-
-## Security improvement
-
-- [ ] introduce a 2-tier log-in system: web-app and mobile,
-- [ ] a user created in the web-app also creates a mobile user with
-      that name but with a "-mobile" suffix
-- [ ] the mobile user must have a password but it must be different to its web-app user
-- [ ] when a web-app user logs in and its corresponding mobile user does not exist the
-      user must be prompted to supply that password and the mobile user created with that password
-- [ ] the mobile users show in the user list in admin mode
-- [ ] an admin may delete any mobile user, including self (just triggers its re-generation)
-- [ ] allow the admin user to create other web-app users and their mobile version and their passwords
-- [ ] provide a means for users to change their password and their mobile one too
-- [ ] an admin user can change any password
-- [ ] the mobile password must be different to the web-app and its constraint must always be applied (a-zA-Z0-9)
-
-## Race details to mimic SI wrt course CPs?
-
-- [ ] in event settings add a section that lists CP numbers that must be passed and in what order
-- [ ] if the list is empty CP records are optional and purely for safety purposes
-- [ ] if the list is populated those CP are compulsory and a runner missing one is disqualified 
-      and flagged as such in the results
-- [ ] such disqualifications appear in the splits tab on the results page as DSQ
-- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a compulsory 
-      CP add a button in that 'slot' - "Grant" - that when selected considers that runner to have passed that
-      CP, this is intended to correct genuine mis-recordings at the CP, such corrections must be preserved
-      across "Update progress" actions, the rest of the system must react as if there was a time there
-      (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
 
 ## Re-test BT stuff wrt auto progress update
 
 - [x] make sure BT pulls of progress behave same as a server pull (update server, propagate to phones)
-
-## Using same clock for both juniors and seniors
-
-In this context the phones see bibs for both senior and junior courses.
-We need a way to do this and still create junior results separately.
-Use an event setting of 'shared stopwatch' for juniors timing.
-When set the race id becomes racename-mixed-date and the progress record contains all bibs.
 
 ## Mobile-app changes to reflect through to Mobile Files processing
 
@@ -251,11 +211,6 @@ When set the race id becomes racename-mixed-date and the progress record contain
 - [x] if the modestart record is 'time' (ie. split time is n/a) and there are no splits show a split count of 0
 - [x] when a race has been reset in a device file, the latest modestart record is still valid wrt the location and mode
 - [x] drop the 'Setup' record from the device file, its no longer created, there will always be a modestart record
-
-## Re-write the help
-
-Claude's version is too verbose.
-Needs re-structuring so people will actually read it and understand it.
 
 ## Random tweaks
 
@@ -284,7 +239,6 @@ Needs re-structuring so people will actually read it and understand it.
 - [x] Some print formatting, e.g. type size on the handicap start ticket, gets lost when there is no internet connection
 - [x] Add a start time column to the entries list after the predicted time column, that reflects the start time on their start ticket
 - [x] When entering a predicted time in the entry form if a single number is entered assume it is minutes and allow for >60, adjust the hint text to mm or mm:ss
-- [ ] server/service-worker.js should be caching everything, so working offline is identical to working online, check this is so, their evidence some files are being missed
 
 ## Add a new timing method
 
@@ -302,28 +256,10 @@ To that end:
     - [x] Actions will be Edit, Del from here
     - [x] Page header will be as Dibbers - (?), Beacons, count
     - [x] Page actions will be as Dibbers - Add, import, export, merge, clear
-- [ ] The racemaster-mobile app will provide a facility to read the battery status and power off the beacons as part
-      of its post race housekeeping. This will produce a report of a list of beacons so processed that records the
-      beacon number and its battery staus and the date/time the beacon was powered off
-  - [x] This app must be able to read that report, either from the server, or via the bluetooth link, or both
-    - [x] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
-    - [ ] The mobile app will put the file on the server in the mobile/owner/race folder as beacons.json in a
-          similar manner to the device.json files when it has internet access
-  - [x] The report must be processed such that:
-    - [x] this app can verify every beacon issued has been returned and highlight missing ones
-    - [x] update the battery level, last used date, and total hours in the beacons data page
-    - [x] total hours to be an accumulation of each race usage which is to be calculated as the time between 2 hours 
-          before the race started and the power-off time reported from the mobile app
-    - [x] battery level will be a % (0-100), a battery below a certain threshold must be highlighted
-  - [x] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
-        persisted as part of the dataset
 - [x] the CP and finish records received from the mobile app, or read from the server, is unaffected
-- [ ] when no time mode device is selected on the Mobile Files page, appropriate times must be extracted from the
-      bibs mode devices instead (when using beacons there will usually be no time mode phone in use)
 - [x] the beacons tab should list issued beacons even before a report is read (similar to the progress tab), the
       initial status should show as 'issued', the other columns should be pre-filled from the beacons page pending
       a real update from beacon status report
-- [ ] if a beacon is recorded as closed but has no finish scan, interpret that as a DNF
 - [x] beacons.json's powerOffBatch now carries closeCount (how many times racemaster-mobile
       recorded that beacon being closed this race, e.g. re-presented after an early close) through
       end to end — mobile app wire format, the server route's field whitelist, and the Beacons tab,
@@ -406,11 +342,44 @@ To that end:
       color:var(--danger) way Closed/the Beacons/Dibbers pages already flag "needs attention".
       beaconCountNotSeen is display-only — js/progress-sync.js's buildPayloadForCourse() strips it
       before pushing to the phone, same footing as fobReturned/fobNumber/invalid/conflict.
-- [ ] need a way to manually return a beacon via an action on the beacons page (to allow for the case
+- [x] need a way to manually return a beacon via an action on the beacons tab (to allow for the case
       where a runner went home with it and returned it some time later after the race was all over)
       that button should open a form to allow the last used date/time (default to now) and battery
-      level to be entered, it should auto calculate the hours and update the total, that facility
-      should also be available via the beacons tab on the mobile files page
+      level to be entered, it should auto calculate the hours and update the total on the beacons
+      page just as if report had been received from a phone — **done**: Mobile Files Beacons tab
+      gained a Return button per row (js/views/mobile-files-beacons.js), opening an inline panel
+      (date/time defaulting to now, battery defaulting to the beacon's last known reading) that
+      calls js/mobile-beacons.js's new `applyManualBeaconReturn()` — the same battery/lastUsed/
+      totalHours math a real Close report gets (computeBeaconCatalogueUpdates's own raceStartMs()-
+      based hoursDelta), without touching state.beaconReports (a whole-race snapshot keyed by every
+      other beacon too — see that function's own doc for why overwriting it here would be wrong).
+- [x] beacons tap should show a status of "On-course" if its been counted, and as at reflects when
+      — **done**: folded into the status/asAt work below — the tab now reads status/asAt straight
+      off the catalogue (state.beacons[].status/asAt) rather than re-deriving its own, so this and
+      the next item share one source of truth.
+- [x] beacons page should have status and as at columns, status should be 'issued' when it has been
+      allocated, 'on-course' when it has been counted and 'returned' when it has been closed, those
+      states can cross race boundaries, and should be editable via the edit action — **done**:
+      schema.js's createBeacon() gained `status`/`asAt`. js/mobile-beacons.js's new
+      `computeBeaconStatusUpdates()`/`applyBeaconStatusUpdates()` derive them from the same
+      closeByBeacon/countByBeacon maps Update Progress already extracts (priority returned >
+      on-course > issued), called from js/mobile-files-progress.js's applyComputedResults() every
+      run. A beacon untouched by this race's own live data (not issued, not counted, not closed)
+      is left out of the update entirely, which is what lets status/asAt cross race boundaries
+      rather than resetting every time a new race starts. Both the standalone Beacons page
+      (js/views/beacons.js) and the Mobile Files Beacons tab now render these straight off the
+      catalogue. The Beacons page's own Edit form gained a Status dropdown — changing it by hand
+      stamps asAt to now, for a status change noticed some other way than Update Progress.
+- [x] when a new race is setup (i.e. clear previous event is checked) using beacons timing the operator
+      should be warned if any beacons are still in an 'issued' or 'on-course' state — **done**:
+      js/views/event.js's saveEventForm() adds a line to the existing clear-previous confirmation
+      dialog listing any beacon still marked issued/on-course. Checked against the catalogue's own
+      persisted status, not issuedBeaconNumbers() — that needs state.entries, which this same
+      clear is about to wipe, so order no longer matters.
+- [x] on the beacons page when a beacon is edited the total hours field should only show 1 dp —
+      **done**: js/views/beacons.js's fillBeaconFormForEdit() now formats totalHours with
+      `.toFixed(1)` when populating the Edit form (it already accumulates as a float via
+      +=hoursDelta, routinely landing on screen as something like 3.7333333333333334 without this).
 - [x] progress tab is not being updated by checkpoint passes — **done**: two compounding bugs in
       a device repurposed mid-race (same physical phone/file, e.g. Count mode for the pre-start
       headcount, then relocated to run CP1 afterwards). (1) js/mobile-files-devices.js's
@@ -438,3 +407,85 @@ To that end:
       check. `syncAutoProgressCheckbox()` hides it again the moment the checkbox isn't ticked
       (unticked, or locked back down after a failed run), same as every other state that
       control already reflects.
+
+# To Do
+
+## Add test suite
+
+- [ ] view logic?
+
+## Add importing results from other sources?
+
+- [ ] CSV file - make SI Results a generic CSV import as long as the file has required columns (in any order)
+
+## Security improvement
+
+- [ ] introduce a 2-tier log-in system: web-app and mobile,
+- [ ] a user created in the web-app also creates a mobile user with
+      that name but with a "-mobile" suffix
+- [ ] the mobile user must have a password but it must be different to its web-app user
+- [ ] when a web-app user logs in and its corresponding mobile user does not exist the
+      user must be prompted to supply that password and the mobile user created with that password
+- [ ] the mobile users show in the user list in admin mode
+- [ ] an admin may delete any mobile user, including self (just triggers its re-generation)
+- [ ] allow the admin user to create other web-app users and their mobile version and their passwords
+- [ ] provide a means for users to change their password and their mobile one too
+- [ ] an admin user can change any password
+- [ ] the mobile password must be different to the web-app and its constraint must always be applied (a-zA-Z0-9)
+
+## Race details to mimic SI wrt course CPs?
+
+- [ ] in event settings add a section that lists CP numbers that must be passed and in what order
+- [ ] if the list is empty CP records are optional and purely for safety purposes
+- [ ] if the list is populated those CP are compulsory and a runner missing one is disqualified 
+      and flagged as such in the results
+- [ ] such disqualifications appear in the splits tab on the results page as DSQ
+- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a compulsory 
+      CP add a button in that 'slot' - "Grant" - that when selected considers that runner to have passed that
+      CP, this is intended to correct genuine mis-recordings at the CP, such corrections must be preserved
+      across "Update progress" actions, the rest of the system must react as if there was a time there
+      (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
+- [ ] also need to mimic the Trigs race time allowance between 2 CP's, and being able to visit a CP more than once
+
+## Using same clock for both juniors and seniors
+
+In this context the phones see bibs for both senior and junior courses.
+We need a way to do this and still create junior results separately.
+Use an event setting of 'shared stopwatch' for juniors timing.
+When set the race id becomes racename-mixed-date and the progress record contains all bibs.
+
+## Re-write the help
+
+Claude's version is too verbose.
+Needs re-structuring so people will actually read it and understand it.
+
+## Tweaks noted when doing a handicap race
+
+- [ ] server/service-worker.js should be caching everything, so working offline is identical to working online, 
+      check this is so, there is evidence some files are being missed
+
+## Add a new timing method
+
+Racemaster-mobile is being updated to use bluetooth beacons to record runners at CPs and the finish.
+This will completely automate CP tracking, finishers and race results; potentially replacing the SI dibber system.
+To that end:
+
+- [ ] The racemaster-mobile app will provide a facility to read the battery status and power off the beacons as part
+      of its post race housekeeping. This will produce a report of a list of beacons so processed that records the
+      beacon number and its battery staus and the date/time the beacon was powered off
+  - [x] This app must be able to read that report, either from the server, or via the bluetooth link, or both
+    - [x] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
+    - [ ] The mobile app will put the file on the server in the mobile/owner/race folder as beacons.json in a
+          similar manner to the device.json files when it has internet access
+  - [x] The report must be processed such that:
+    - [x] this app can verify every beacon issued has been returned and highlight missing ones
+    - [x] update the battery level, last used date, and total hours in the beacons data page
+    - [x] total hours to be an accumulation of each race usage which is to be calculated as the time between 2 hours 
+          before the race started and the power-off time reported from the mobile app
+    - [x] battery level will be a % (0-100), a battery below a certain threshold must be highlighted
+  - [x] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
+        persisted as part of the dataset
+- [ ] when no time mode device is selected on the Mobile Files page, appropriate times must be extracted from the
+      bibs mode devices instead (when using beacons there will usually be no time mode phone in use)
+- [ ] if a beacon is recorded as closed but has no finish scan, interpret that as a DNF
+- [ ] is there a way to print splits for runners as the beacon is closed to mimic what SI Timing does

@@ -255,21 +255,27 @@ export async function autoUpdateProgress() {
 // the progress table.
 export async function maybeAutoUpdateProgress() {
   if (!isProgressAutoEnabled()) return;
-  // Stamped unconditionally from here on — every call past this point is a genuine tick of the
-  // mechanism, whether or not it finds anything new, so #mf-auto-progress-status's own "as at"
-  // proves the background poll is still alive even on a quiet tick (updateAutoProgressStatus()'s
-  // own doc).
-  updateAutoProgressStatus();
   const selected = getSelectedRows();
-  if (!selected.length) return;
-  if (!selected.some(r => computeIncorporationStatus(r) === 'outstanding')) return; // nothing new since the last run
+  if (!selected.length) return; // nothing to check at all — no real check happened, so no "as at" claim below
+  if (!selected.some(r => computeIncorporationStatus(r) === 'outstanding')) {
+    // Stamped here, not unconditionally at the top of this function — this is the earliest point
+    // a genuine conclusion has actually been reached ("checked, confirmed current"), so it's the
+    // earliest point #mf-auto-progress-status can honestly claim an "as at" for. Stamping it as
+    // soon as the enabled check passed (an earlier version of this function did) meant the very
+    // first tick after opening Mobile Files — before selectedKeys/currentRows have necessarily
+    // settled — could show "As at just now" despite this function bailing out right here or at
+    // the `!selected.length` return above, having genuinely checked nothing at all yet.
+    updateAutoProgressStatus();
+    return; // nothing new since the last run
+  }
 
   const result = await validateAndCompute(selected);
   if (result.error) {
     // Same "any failed attempt clears the trust" rule as updateProgress()'s own manual failure
     // paths — an unattended run that's started failing shouldn't just keep silently failing
     // again on every future change with nobody watching; lock it back down and let a manual
-    // Update Progress re-prove it once whatever's wrong is fixed.
+    // Update Progress re-prove it once whatever's wrong is fixed. Deliberately not stamped here
+    // either — a failed attempt is not a successful "as at" to report.
     console.warn('[mobile-files] Progress auto-update skipped:', result.error);
     clearAutoProgressState();
     syncAutoProgressCheckbox();
@@ -278,8 +284,8 @@ export async function maybeAutoUpdateProgress() {
 
   await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp, result.closeByBeacon, result.countByBeacon);
   renderMobileProgressTable();
-  // Re-stamped so the count reflects whatever this run actually just wrote, not the pre-run
-  // figure the call above already captured.
+  // Stamped only now that the run has genuinely succeeded, so the count reflects whatever it
+  // actually just wrote.
   updateAutoProgressStatus();
 }
 

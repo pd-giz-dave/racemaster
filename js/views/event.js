@@ -168,6 +168,19 @@ export async function saveEventForm() {
       counts.forEach(([label, n]) => lines.push(`  • ${label}: ${n}`));
       lines.push('\nThis cannot be undone.');
     }
+
+    // ToDo.MD: "when a new race is setup ... the operator should be warned if any beacons are
+    // still in an 'issued' or 'on-course' state" — these are real beacons genuinely still out
+    // with a runner (or confirmed on-course but not yet closed) from before the clear. Checked
+    // against the catalogue's own persisted status (schema.js's createBeacon() doc), not
+    // issuedBeaconNumbers() — that needs state.entries, which this same clear is about to wipe.
+    const outstanding = state.beacons
+      .filter(b => b.status === 'issued' || b.status === 'on-course')
+      .sort((a, b) => +a.number - +b.number);
+    if (outstanding.length) {
+      lines.push(`\n${outstanding.length} beacon${outstanding.length === 1 ? '' : 's'} still marked `
+        + `issued/on-course, not yet returned: ${outstanding.map(b => b.number).join(', ')}.`);
+    }
   }
 
   if (!await showConfirmDialog(lines.join('\n'), 'Save', doClear)) return;

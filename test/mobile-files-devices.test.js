@@ -9,7 +9,7 @@ import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
   distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt, withResolvedLocations,
-  deviceViewOptions, collapsePingRuns,
+  deviceViewOptions, collapsePingRuns, isDeviceOffline,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -541,6 +541,69 @@ describe('mobile-files-devices.js:flattenDevices — Last Seen / Last Update', (
     const [row] = flattenDevices(races);
     assert.equal(row.lastSeen, new Date(2026, 8, 20, 10, 0, 0).toISOString());
     assert.equal(row.lastUpdate, '2026/09/20 09:00:00');
+  });
+});
+
+// ToDo.MD: "devices tab on mobile files page should indicate a device has gone off-line if it
+// does not see regular pings"
+describe('mobile-files-devices.js:isDeviceOffline', () => {
+  it('is not offline when lastSeen is blank/unparseable — nothing to judge staleness from yet', () => {
+    assert.equal(isDeviceOffline(''), false);
+    assert.equal(isDeviceOffline(null), false);
+    assert.equal(isDeviceOffline('not a date'), false);
+  });
+
+  it('is not offline within the threshold', () => {
+    const now = Date.parse('2026/09/20 10:00:00');
+    const lastSeen = new Date(now - 60 * 1000).toISOString(); // 1 minute ago
+    assert.equal(isDeviceOffline(lastSeen, now), false);
+  });
+
+  it('is offline once the silence reaches the threshold', () => {
+    const now = Date.parse('2026/09/20 10:00:00');
+    const lastSeen = new Date(now - 3 * 60 * 1000).toISOString(); // exactly 3 minutes ago
+    assert.equal(isDeviceOffline(lastSeen, now), true);
+  });
+});
+
+// flattenDevices() has no injectable `now` of its own (isDeviceOffline()'s wiring inside it
+// always judges against the real Date.now()) — so unlike the describe block above, these lines
+// are timestamped relative to whenever the suite actually runs, not a fixed fictional date, or
+// row.offline would be judged against the wrong "now" entirely.
+describe('mobile-files-devices.js:flattenDevices — offline flag', () => {
+  function phoneTimestamp(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  it('flags a device whose newest line (a Ping included) is old as offline', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{
+        name: 'quiet-phone',
+        lines: [
+          { action: 'NewRace', lineNumber: 1, timestamp: phoneTimestamp(new Date(Date.now() - 20 * 60 * 1000)) },
+          { action: 'Ping', lineNumber: 2, timestamp: phoneTimestamp(new Date(Date.now() - 10 * 60 * 1000)) },
+        ],
+      }],
+    }];
+    const [row] = flattenDevices(races);
+    assert.equal(row.offline, true);
+  });
+
+  it('does not flag a device that has pinged recently', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{
+        name: 'live-phone',
+        lines: [
+          { action: 'NewRace', lineNumber: 1, timestamp: phoneTimestamp(new Date(Date.now() - 20 * 60 * 1000)) },
+          { action: 'Ping', lineNumber: 2, timestamp: phoneTimestamp(new Date(Date.now() - 30 * 1000)) },
+        ],
+      }],
+    }];
+    const [row] = flattenDevices(races);
+    assert.equal(row.offline, false);
   });
 });
 

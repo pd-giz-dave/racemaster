@@ -1560,6 +1560,8 @@ export const TABLES = {
   beacons: [
     { id: 'number',       label: 'Num',          title: 'Beacon number', sticky: true },
     { id: 'owner',        label: 'Owner',        title: 'Who owns this beacon' },
+    { id: 'status',       label: 'Status',       title: '\'Issued\' once allocated to an entry, \'On-course\' once a Count-mode device has confirmed it since, \'Returned\' once closed (or manually returned here) — kept up to date by Update Progress, and can be corrected by hand via Edit. Carries across races until something changes it.' },
+    { id: 'asAt',         label: 'As At',        title: 'Date of this beacon\'s current status — blank for \'Issued\', since allocation itself has no device event of its own' },
     { id: 'dateAcquired', label: 'Acquired',     title: 'Date this beacon was acquired' },
     { id: 'usageCount',   label: 'Uses',         title: 'Number of race registrations this beacon has been allocated to' },
     { id: 'totalHours',   label: 'Tot Hrs',      title: 'Accumulated hours in use across every race (2h before start to power-off)' },
@@ -1598,11 +1600,12 @@ export const TABLES = {
   ],
   'mobile-beacons': [
     { id: 'number',       label: 'Beacon',  title: 'Beacon number', sticky: true },
-    { id: 'status',       label: 'Status',  title: 'Returned (closed, per the last Update Progress run) or still missing' },
-    { id: 'asAt',         label: 'As At',   title: 'Date/time this beacon was last closed/returned, from the last Update Progress run — blank while still missing or merely issued, since neither has had a status change yet' },
+    { id: 'status',       label: 'Status',  title: '\'On-course\' once a Count-mode device has confirmed it this race, \'Returned\' once closed, or \'Missing\' if still issued with neither — from the Beacons catalogue, kept up to date by Update Progress' },
+    { id: 'asAt',         label: 'As At',   title: 'Date/time of this beacon\'s current status (counted or closed), from the Beacons catalogue — blank while still issued/missing, since neither has had a status change yet' },
     { id: 'batteryLevel', label: 'Battery', title: 'Battery level (%) as of the last Update Progress run — highlighted below the low battery threshold set here' },
     { id: 'lastUsed',     label: 'Last Used', title: 'Date this beacon was last used, from the Beacons catalogue' },
     { id: 'owner',        label: 'Owner',   title: 'Who owns this beacon, from the Beacons catalogue' },
+    { id: 'actions',      label: 'Actions', title: 'Manually mark this beacon returned — e.g. a runner who went home with it and returned it after the race was over' },
   ],
   datasets: [
     { id: 'name',       label: 'Dataset',    title: 'Dataset name', sticky: true, wrap: true },

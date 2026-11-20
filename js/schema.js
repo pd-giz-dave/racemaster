@@ -23,11 +23,21 @@ export function createDibber({
 
 // dateAcquired/lastUsed/lost are plain dates, DD/MM/YYYY — the same convention every other date
 // field in the app uses (state.event.date, a person's dob, etc.) — never an ISO instant.
+//
+// status/asAt (ToDo.MD: "beacons page should have status and as at columns ... those states can
+// cross race boundaries") track this beacon's own real-world state across races — '' until first
+// allocated, then 'issued' once allocated to an entry, 'on-course' once Count mode has actually
+// seen it this race, 'returned' once Close mode (or a manual return) has closed it. Kept current
+// by js/mobile-beacons.js's applyBeaconStatusUpdates(), called from every Update Progress run —
+// hand-editable on the Beacons page's own Edit form for a return noticed some other way. asAt is
+// that status's own device timestamp ("yyyy/mm/dd HH:mm:ss", the phone-clock convention every
+// Close/Count row uses, see mobile-files-shared.js's parsePhoneTimestamp) — blank for 'issued',
+// since allocation itself has no device event to timestamp.
 export function createBeacon({
   number = 0, owner = '', dateAcquired = '', usageCount = 0, totalHours = 0, batteryLevel = 100,
-  lastUsed = '', lost = '', notes = '',
+  lastUsed = '', lost = '', notes = '', status = '', asAt = '',
 } = {}) {
-  return { number, owner, dateAcquired, usageCount, totalHours, batteryLevel, lastUsed, lost, notes };
+  return { number, owner, dateAcquired, usageCount, totalHours, batteryLevel, lastUsed, lost, notes, status, asAt };
 }
 
 export function createEntry({

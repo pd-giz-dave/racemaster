@@ -9,15 +9,31 @@ import { escHtml, normaliseDate } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { parseCSV } from '../csv.js';
 import { getSession, apiListDatasets, apiReadDataset } from '../storage.js';
+// asAt's date only (ToDo.MD: "the as at column on the beacons page only needs to be the date, not
+// date and time — time is irrelevant by the time this facility is required") — same "yyyy/mm/dd
+// HH:mm:ss" phone-clock source js/mobile-files-shared.js's formatStoredTimestamp() parses for the
+// Mobile Files Beacons tab's own full timestamp, just without the time portion this page has no
+// use for. Used for both the table column and the Edit form's own prefill, full 4-digit year —
+// the same convention every other date column/field on this page already displays.
+function asAtDate(ts) {
+  const m = /^(\d{4})\/(\d{2})\/(\d{2})/.exec(ts || '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
 
 // Renders the Beacons admin screen — add/edit/import/export the pool of safety tracking beacons
 // loaned to runners, tracked by stable beacon number (not array index). Battery/"lost" status here
-// is a point-in-time admin record, separate from the live loan state mobile-files-beacons.js
-// derives per-race from beacons.json reports.
+// is a point-in-time admin record. status/asAt (schema.js's createBeacon() doc), by contrast, are
+// kept live across races by js/mobile-beacons.js's applyBeaconStatusUpdates() — the same fields
+// the Mobile Files Beacons tab (js/views/mobile-files-beacons.js) reads for its own display — and
+// hand-editable here via the Edit form for a status change noticed some other way.
+
+const BEACON_STATUS_LABELS = { issued: 'Issued', 'on-course': 'On-course', returned: 'Returned' };
 
 const BEACON_COLS = tableColumns(TABLES.beacons, {
   number:       ({ b }) => b.number || '',
   owner:        ({ b }) => escHtml(b.owner || ''),
+  status:       ({ b }) => BEACON_STATUS_LABELS[b.status] || '',
+  asAt:         ({ b }) => escHtml(asAtDate(b.asAt)),
   dateAcquired: ({ b }) => escHtml(b.dateAcquired || ''),
   usageCount:   ({ b }) => +b.usageCount || 0,
   totalHours:   ({ b }) => (+b.totalHours || 0).toFixed(1),
@@ -73,8 +89,13 @@ function fillBeaconFormForEdit(number) {
     'beacon-form-number':   b.number,
     'beacon-form-owner':    b.owner || '',
     'beacon-form-acquired': b.dateAcquired || '',
+    'beacon-form-status':   b.status || '',
+    'beacon-form-asat':     asAtDate(b.asAt),
     'beacon-form-uses':     b.usageCount || 0,
-    'beacon-form-hours':    b.totalHours || 0,
+    // 1dp — ToDo.MD: "when a beacon is edited the total hours field should only show 1 dp" —
+    // totalHours accumulates via +=hoursDelta (js/mobile-beacons.js's applyBeaconCatalogueUpdates)
+    // and so is routinely a long float on screen (e.g. 3.7333333333333334) without this.
+    'beacon-form-hours':    (+b.totalHours || 0).toFixed(1),
     'beacon-form-battery':  b.batteryLevel ?? '',
     'beacon-form-lastused': normaliseDate(b.lastUsed) || b.lastUsed || '',
     'beacon-form-lost':     normaliseDate(b.lost) || b.lost || '',
@@ -93,6 +114,13 @@ function fillBeaconFormForEdit(number) {
   const row = document.getElementById(`beacon-row-${idx}`);
   row?.classList.add('row-editing');
   row?.scrollIntoView({ block: 'nearest' });
+  // ToDo.MD: "when edit is selected the page should be auto scrolled to the left to ensure the
+  // edit form is fully visible" — the Edit button sits in the table's own far-right Actions
+  // column, which can leave .app-main scrolled right (table-panel's 1fr grid column is wide
+  // enough, with this many beacon columns now, to push the page past .table-scroll's own
+  // overflow-x) with the Add/Edit form's fixed-width card, the first grid column, scrolled out
+  // of view off to the left.
+  document.querySelector('.app-main')?.scrollTo({ left: 0, behavior: 'smooth' });
   document.getElementById('beacon-form-owner')?.focus();
 }
 
@@ -148,6 +176,17 @@ export async function submitBeaconForm() {
     b.lastUsed     = normaliseDate(val('beacon-form-lastused').trim());
     b.lost         = normaliseDate(val('beacon-form-lost').trim());
     b.notes        = val('beacon-form-notes').trim();
+    // ToDo.MD: "those states ... should be editable via the edit action" + "the as at column
+    // should also be editable" — both just write straight through from their own form fields now,
+    // same as every other field on this form; no separate "only stamp asAt when status changes"
+    // special case any more now that there's a direct field for it. asAt itself is stored as
+    // "yyyy/mm/dd 00:00:00" (createBeacon()'s own doc: the same phone-clock shape every other
+    // asAt write uses, formatStoredTimestamp()'s regex, not an ISO string) even though this page
+    // only ever shows/edits its date portion — ToDo.MD: "time is irrelevant by the time this
+    // facility is required", so midnight is as good a placeholder as any.
+    b.status = val('beacon-form-status');
+    const asAtDateInput = normaliseDate(val('beacon-form-asat').trim());
+    b.asAt = asAtDateInput ? `${asAtDateInput.split('/').reverse().join('/')} 00:00:00` : '';
     await saveBeacons();
     showStatus(`Beacon ${b.number} updated.`);
     resetBeaconForm();

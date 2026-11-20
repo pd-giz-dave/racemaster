@@ -8,7 +8,7 @@ import { state, saveMobileCheckpoints, saveMobileProgress, saveMobileBeaconOps }
 import { byLineNumber, setLastSyncedLineNumber, deriveRaceLabel } from './mobile-files-shared.js';
 import { usingBeacons } from './time-utils.js';
 import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
-import { computeBeaconCatalogueUpdates, applyBeaconCatalogueUpdates } from './mobile-beacons.js';
+import { computeBeaconCatalogueUpdates, applyBeaconCatalogueUpdates, computeBeaconStatusUpdates, applyBeaconStatusUpdates, issuedBeaconNumbers } from './mobile-beacons.js';
 
 // Compute Results (formerly "Add to Finishers") + the Progress tab — pure logic and the
 // non-DOM state mutations it drives (state.mobileProgress/state.mobileCheckpoints/
@@ -694,6 +694,14 @@ export async function applyComputedResults(
     const raceLabel = selected[0].adoptedInto ?? selected[0].raceLabel;
     const plan = computeBeaconCatalogueUpdates(closeByBeacon, raceLabel);
     await applyBeaconCatalogueUpdates(plan, raceLabel);
+  }
+
+  // ToDo.MD: "beacons page should have status and as at columns ... those states can cross race
+  // boundaries" — kept current from the same closeByBeacon/countByBeacon this run already
+  // extracted, independent of the closeByBeacon.size gate above (a beacon can be freshly issued
+  // or counted with no Close data at all yet).
+  if (closeByBeacon.size || countByBeacon.size || issuedBeaconNumbers().size) {
+    await applyBeaconStatusUpdates(computeBeaconStatusUpdates(closeByBeacon, countByBeacon));
   }
 
   // Home/Safety Check/Results & Prize List all read state.mobileProgress/state.mobileCheckpoints

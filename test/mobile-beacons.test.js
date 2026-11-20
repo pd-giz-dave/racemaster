@@ -7,7 +7,7 @@ import { state } from '../js/state.js';
 import { isDirty } from '../js/storage.js';
 import { installLocalStorageMock, installWindowMock } from './helpers/mock-browser.js';
 import { parseDate, timeToSeconds } from '../js/utils.js';
-import { computeBeaconCatalogueUpdates, applyBeaconCatalogueUpdates } from '../js/mobile-beacons.js';
+import { computeBeaconCatalogueUpdates, applyBeaconCatalogueUpdates, computeBeaconStatusUpdates, applyBeaconStatusUpdates, applyManualBeaconReturn, toPhoneTimestamp } from '../js/mobile-beacons.js';
 
 // Computed the same way js/mobile-beacons.js's own raceStartMs() does, so test timestamps are
 // timezone-agnostic — both sides use the same local-time arithmetic rather than a hardcoded ISO
@@ -243,5 +243,103 @@ describe('mobile-beacons.js:applyBeaconCatalogueUpdates', () => {
     await applyBeaconCatalogueUpdates(computeBeaconCatalogueUpdates(second, 'race-26-08-23'), 'race-26-08-23');
     assert.equal(isDirty(), true);
     assert.equal(state.beaconReports.find(r => r.raceLabel === 'race-26-08-23').closeCounts[1], 2);
+  });
+});
+
+describe('mobile-beacons.js:computeBeaconStatusUpdates/applyBeaconStatusUpdates', () => {
+  it('derives \'issued\' for an allocated beacon with no close/count data at all', () => {
+    state.beacons = [beacon(1)];
+    state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
+    const updates = computeBeaconStatusUpdates(new Map(), new Map());
+    assert.deepEqual(updates.get(1), { status: 'issued', asAt: '' });
+  });
+
+  it('derives \'on-course\' for a counted beacon', () => {
+    state.beacons = [beacon(1)];
+    state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
+    const countedAt = closedAtAfterHours(1);
+    const updates = computeBeaconStatusUpdates(new Map(), new Map([[1, countedAt]]));
+    assert.deepEqual(updates.get(1), { status: 'on-course', asAt: countedAt });
+  });
+
+  it('derives \'returned\' for a closed beacon, taking priority over issued/counted', () => {
+    state.beacons = [beacon(1)];
+    state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
+    const closedAt = closedAtAfterHours(2);
+    const updates = computeBeaconStatusUpdates(closeMap([[1, { closedAt }]]), new Map([[1, closedAtAfterHours(1)]]));
+    assert.deepEqual(updates.get(1), { status: 'returned', asAt: closedAt });
+  });
+
+  it('leaves out a beacon untouched this race (not issued, not counted, not closed)', () => {
+    state.beacons = [beacon(1), beacon(2)];
+    state.entries = [{ bibNumber: 1, dibberNumber: 1 }]; // beacon 2 not allocated this race
+    const updates = computeBeaconStatusUpdates(new Map(), new Map());
+    assert.equal(updates.has(2), false);
+  });
+
+  it('a reopened beacon (no closedAt in its map entry) falls through to on-course/issued, not returned', () => {
+    state.beacons = [beacon(1)];
+    state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
+    const updates = computeBeaconStatusUpdates(new Map([[1, { closeCount: 1 }]]), new Map());
+    assert.deepEqual(updates.get(1), { status: 'issued', asAt: '' });
+  });
+
+  it('applyBeaconStatusUpdates persists status and asAt onto the catalogue', async () => {
+    state.beacons = [beacon(1)];
+    const countedAt = closedAtAfterHours(1);
+    const changed = await applyBeaconStatusUpdates(new Map([[1, { status: 'on-course', asAt: countedAt }]]));
+    assert.equal(changed, true);
+    assert.equal(state.beacons[0].status, 'on-course');
+    assert.equal(state.beacons[0].asAt, countedAt);
+  });
+
+  // The behaviour that lets status/asAt cross race boundaries (ToDo.MD): a beacon this race
+  // never touches at all (absent from the updates Map entirely) keeps whatever an earlier race
+  // already left on its catalogue record, rather than being reset to blank.
+  it('does not touch a beacon absent from the updates Map at all', async () => {
+    state.beacons = [beacon(1, { status: 'returned', asAt: '2026/08/01 12:00:00' })];
+    const changed = await applyBeaconStatusUpdates(new Map());
+    assert.equal(changed, false);
+    assert.equal(state.beacons[0].status, 'returned');
+    assert.equal(state.beacons[0].asAt, '2026/08/01 12:00:00');
+  });
+
+  it('an \'issued\' update (blank asAt) does not overwrite an earlier, still-relevant asAt', async () => {
+    state.beacons = [beacon(1, { status: 'returned', asAt: '2026/08/01 12:00:00' })];
+    const changed = await applyBeaconStatusUpdates(new Map([[1, { status: 'issued', asAt: '' }]]));
+    assert.equal(changed, true); // status itself did change
+    assert.equal(state.beacons[0].status, 'issued');
+    assert.equal(state.beacons[0].asAt, '2026/08/01 12:00:00'); // untouched
+  });
+
+  it('reports no change and does not save when nothing actually differs', async () => {
+    state.beacons = [beacon(1, { status: 'on-course', asAt: '2026/08/01 12:00:00' })];
+    const changed = await applyBeaconStatusUpdates(new Map([[1, { status: 'on-course', asAt: '2026/08/01 12:00:00' }]]));
+    assert.equal(changed, false);
+  });
+});
+
+describe('mobile-beacons.js:applyManualBeaconReturn', () => {
+  it('marks the beacon returned, applying the same battery/lastUsed/hours math a real close would', async () => {
+    state.beacons = [beacon(1, { totalHours: 1 })];
+    const closedAt = closedAtAfterHours(4);
+    await applyManualBeaconReturn(1, closedAt, 65);
+    const b = state.beacons[0];
+    assert.equal(b.status, 'returned');
+    assert.equal(b.asAt, closedAt);
+    assert.equal(b.batteryLevel, 65);
+    assert.equal(b.lastUsed, closedAtToDMY(closedAt));
+    assert.ok(Math.abs(b.totalHours - 5) < 0.01); // 1 existing + 4 new
+  });
+
+  it('does nothing for a beacon not in the catalogue', async () => {
+    state.beacons = [];
+    await applyManualBeaconReturn(99, closedAtAfterHours(1), 50); // must not throw
+    assert.equal(state.beacons.length, 0);
+  });
+
+  it('toPhoneTimestamp round-trips through parsePhoneTimestamp-shaped consumers', () => {
+    const ts = toPhoneTimestamp(new Date(2026, 7, 23, 14, 5, 9)); // month is 0-based: August
+    assert.equal(ts, '2026/08/23 14:05:09');
   });
 });

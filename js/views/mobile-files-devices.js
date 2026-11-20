@@ -144,7 +144,13 @@ function buildColumns(isAdminUser) {
     location:  r => `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || 'Unknown')}</span>`,
     bibs:      r => formatCount(r.bibsVisible, r.bibsExpected),
     time:      r => formatCount(r.timeVisible, r.timeExpected),
-    lastSeen:   r => formatDateTime(r.lastSeen),
+    // ToDo.MD: "devices tab ... should indicate a device has gone off-line if it does not see
+    // regular pings" — r.offline (js/mobile-files-devices.js's isDeviceOffline(), via
+    // flattenDevices()) flags it; shown as a danger-colored badge right next to the timestamp
+    // that's actually stale, not a separate column, and not a row-wide highlight — that red
+    // background is already spoken for by incorporationStatus (renderRaceList()'s own rowAttrs
+    // below), a different, more important signal this shouldn't compete with.
+    lastSeen:   r => formatDateTime(r.lastSeen) + (r.offline ? ' <span style="color:var(--danger)">Offline</span>' : ''),
     bleContact: r => r.bleContact
       ? `${formatDateTime(r.bleContact.at)} ${r.bleContact.via === 'direct' ? 'direct' : `via ${escHtml(r.bleContact.via)}`}`
       : '<span style="color:var(--muted)">—</span>',

@@ -552,6 +552,29 @@ function locationSortKey(rawLocation) {
 // and one wanting "the current, interpreted picture" (View, Update Progress's own
 // locationSegmentsOf() in mobile-files-progress.js) each read the one that's actually theirs,
 // rather than both being handed the same post-processed array with no way to tell which they got.
+// A device genuinely still connected pings often enough (racemaster-mobile's own configurable
+// heartbeat — HistoryAction.PING, MuleSyncEngine.kt's startPingLoop(), 60s by default) that a much
+// longer silence than one interval is a real connectivity concern, not just an unlucky sync
+// moment — 3x the phone's own 60s default comfortably covers one missed beat plus normal sync lag
+// without flagging a perfectly healthy device. The web app has no way to know a given phone's own
+// configured interval (a local phone setting, never uploaded), so this is a single fixed
+// threshold rather than per-device.
+const DEVICE_OFFLINE_THRESHOLD_MS = 3 * 60 * 1000;
+
+// ToDo.MD: "devices tab on mobile files page should indicate a device has gone off-line if it
+// does not see regular pings" — [lastSeenIso] is the row's own lastSeen (latestLineIso(lines) in
+// flattenDevices() below — the newest line of ANY kind, Ping included, so a device with heartbeat
+// disabled still reads as offline once real activity itself goes quiet this long). A device with
+// no lines/timestamp at all is never flagged offline — nothing to judge staleness from yet, the
+// same "unknown, not alarming" convention formatDateTime()'s own muted em-dash already uses for a
+// blank timestamp. [now] is injectable for tests, same convention raceLabelAgeDays() etc. use.
+export function isDeviceOffline(lastSeenIso, now = Date.now()) {
+  if (!lastSeenIso) return false;
+  const t = new Date(lastSeenIso).getTime();
+  if (isNaN(t)) return false;
+  return now - t >= DEVICE_OFFLINE_THRESHOLD_MS;
+}
+
 export function flattenDevices(races) {
   const rows = [];
   // Where each device has been adopted (js/mobile-files-adoption.js) — carried on its row as
@@ -591,6 +614,7 @@ export function flattenDevices(races) {
     });
     for (const { device, timeSegment, bibsSegment, modeStart, rawLocation, location, locations } of prepared) {
       const r = { owner: race.owner, raceLabel: race.raceLabel, device, rawLocation };
+      const lastSeen = latestLineIso(device.lines);
       rows.push({
         idx: rows.length,
         ...r,
@@ -603,7 +627,8 @@ export function flattenDevices(races) {
         timeVisible: timeSegment.filter(hasRealSplit).length,
         bibsExpected: isBibsExpected(modeStart),
         timeExpected: isTimeExpected(modeStart),
-        lastSeen: latestLineIso(device.lines),
+        lastSeen,
+        offline: isDeviceOffline(lastSeen),
         bleContact: getBleContact(race.owner, race.raceLabel, device.name),
         lastUpdate: latestEntryTimestamp(device.lines),
         // Reuses the modeStart already resolved above rather than calling latestStartedAt(lines)

@@ -1190,6 +1190,21 @@
               <input type="text" id="beacon-form-acquired" placeholder="DD/MM/YY" data-normalise="date">
             </div>
             <div id="beacon-form-edit-fields" hidden>
+              <div class="form-grid mb-8" style="grid-template-columns:1fr 1fr">
+                <div class="form-field">
+                  <label for="beacon-form-status">Status</label>
+                  <select id="beacon-form-status">
+                    <option value="">—</option>
+                    <option value="issued">Issued</option>
+                    <option value="on-course">On-course</option>
+                    <option value="returned">Returned</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="beacon-form-asat">As At (DD/MM/YY)</label>
+                  <input type="text" id="beacon-form-asat" placeholder="DD/MM/YY" data-normalise="date">
+                </div>
+              </div>
               <div class="form-grid mb-8" style="grid-template-columns:1fr 1fr 1fr">
                 <div class="form-field">
                   <label for="beacon-form-uses">Uses</label>

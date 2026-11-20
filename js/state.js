@@ -18,7 +18,9 @@ export const state = {
   people:           [],  // {name, gender, dob, club, fraNumber, lastSeen, seenTotal, lastHelped, helpedTotal, banned}
   // clubs derived from people — not persisted
   dibbers:          [],  // {shortCode, longCode, owner, lost, notes}
-  beacons:          [],  // {number, owner, dateAcquired, totalHours, batteryLevel, lastUsed, lost, notes}
+  beacons:          [],  // {number, owner, dateAcquired, totalHours, batteryLevel, lastUsed, lost,
+                          // notes, status, asAt} — status/asAt cross race boundaries, see
+                          // schema.js's createBeacon() doc and js/mobile-beacons.js
   categories:       [],  // {minAge, maleCat, femaleCat, ref, maxDist} — active set (derived from event setting)
   customCategories: [],  // user-defined custom categories (edited on the Custom tab)
   roles:            [],  // {role, description}

@@ -7,11 +7,21 @@ import { parseDate, timeToSeconds, normaliseDate } from './utils.js';
 import { parsePhoneTimestamp } from './mobile-files-shared.js';
 
 // Applies the Close/Count-mode beacon housekeeping data Update Progress already extracts from the
-// selected device files (js/mobile-files-progress.js's own closeByBeacon map, built from 'Close'
-// rows' note field) to the Beacons catalogue (state.beacons) and the entries currently allocated a
-// beacon number for this race — the pure-logic half, mirroring js/mobile-files-progress.js's own
-// validateAndCompute/applyComputedResults split. The DOM/orchestration half lives in
-// js/views/mobile-files-beacons.js.
+// selected device files (js/mobile-files-progress.js's own closeByBeacon/countByBeacon maps,
+// built from 'Close'/'CountSeen' rows) to the Beacons catalogue (state.beacons) and the entries
+// currently allocated a beacon number for this race — the pure-logic half, mirroring
+// js/mobile-files-progress.js's own validateAndCompute/applyComputedResults split. The DOM/
+// orchestration half lives in js/views/mobile-files-beacons.js (the Mobile Files Beacons tab) and
+// js/views/beacons.js (the Beacons catalogue page itself).
+//
+// Two independent things get kept current here from the same closeByBeacon/countByBeacon maps:
+// battery/lastUsed/totalHours + the race's own beaconReports summary
+// (computeBeaconCatalogueUpdates/applyBeaconCatalogueUpdates, Close-mode only, the original
+// feature), and each beacon's own cross-race status/asAt (computeBeaconStatusUpdates/
+// applyBeaconStatusUpdates, added later — ToDo.MD: "beacons page should have status and as at
+// columns"). applyManualBeaconReturn() is the one exception that isn't derived from a device file
+// at all — a hand correction for a beacon that comes back too late for any Update Progress run to
+// ever see a real Close report for.
 //
 // Formerly driven by a separate beacons.json post-race report, read on demand via its own "Read
 // Beacons Report" button (server/mobile.js's own doc still describes that wire shape) — now
@@ -127,6 +137,90 @@ export function computeBeaconCatalogueUpdates(closeByBeacon, raceLabel) {
  * computeBeaconCatalogueUpdates() reads back) is a point-in-time snapshot derived fresh from the
  * latest selection each call, not an accumulation across calls.
  */
+/**
+ * Derives this race's status/asAt for the Beacons catalogue (ToDo.MD: "beacons page should have
+ * status and as at columns, status should be 'issued' when it has been allocated, 'on-course'
+ * when it has been counted and 'returned' when it has been closed") from the same closeByBeacon/
+ * countByBeacon maps Update Progress already extracts — priority returned > on-course > issued,
+ * since a beacon can be both issued and counted (or counted then closed) in the same run and only
+ * its most-advanced state should win. Only ever covers a beacon this race's own live data
+ * actually touches (issued, counted, or closed) — one untouched by any of the three this race
+ * (not currently allocated, never counted, never closed) is left out of the returned Map
+ * entirely, so applyBeaconStatusUpdates() below leaves its catalogue entry exactly as an earlier
+ * race last left it — this is what lets status cross race boundaries rather than resetting every
+ * time a new race starts.
+ */
+export function computeBeaconStatusUpdates(closeByBeacon, countByBeacon) {
+  const updates = new Map();
+  for (const [number, { closedAt }] of closeByBeacon) {
+    if (closedAt) updates.set(number, { status: 'returned', asAt: closedAt });
+  }
+  for (const [number, countedAt] of countByBeacon) {
+    if (!updates.has(number)) updates.set(number, { status: 'on-course', asAt: countedAt });
+  }
+  for (const number of issuedBeaconNumbers()) {
+    if (!updates.has(number)) updates.set(number, { status: 'issued', asAt: '' });
+  }
+  return updates;
+}
+
+/** Applies computeBeaconStatusUpdates()'s plan to the catalogue — asAt only ever moves forward
+ *  (a blank 'issued' asAt never overwrites an earlier on-course/returned timestamp still worth
+ *  keeping), status always takes whatever this run determined. Saves once, only if anything
+ *  actually changed — the same "don't re-upload for no reason" care applyComputedResults()'s own
+ *  own caller already takes for mobileProgress/mobileCheckpoints/mobileBeaconOps. */
+export async function applyBeaconStatusUpdates(updates) {
+  let changed = false;
+  for (const [number, { status, asAt }] of updates) {
+    const beacon = state.beacons.find(b => +b.number === number);
+    if (!beacon) continue;
+    if (beacon.status !== status) { beacon.status = status; changed = true; }
+    if (asAt && beacon.asAt !== asAt) { beacon.asAt = asAt; changed = true; }
+  }
+  if (changed) await saveBeacons();
+  return changed;
+}
+
+// "yyyy/mm/dd HH:mm:ss" — the phone-clock convention every Close/Count row uses (see
+// mobile-files-shared.js's parsePhoneTimestamp) — built from a local Date rather than typed by
+// hand, for applyManualBeaconReturn() below.
+export function toPhoneTimestamp(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} `
+    + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * Manually marks [number] returned right now (ToDo.MD: "need a way to manually return a beacon
+ * ... to allow for the case where a runner went home with it and returned it some time later
+ * after the race was all over") — applies the exact same battery/lastUsed/totalHours math a real
+ * Close report would (computeBeaconCatalogueUpdates's own raceStartMs()-based hoursDelta), plus
+ * the same status/asAt a genuinely-closed beacon gets. Deliberately does NOT touch
+ * state.beaconReports, unlike applyBeaconCatalogueUpdates — that's a whole-race snapshot keyed by
+ * every OTHER beacon's own real device data too (see its own doc), and this is a single
+ * out-of-band correction for one beacon, not a fresh device-file scan; overwriting it here would
+ * wrongly blank out every other beacon's own already-recorded returned/missing state until the
+ * next real Update Progress run. [closedAt] takes the operator's own chosen date/time, already
+ * built via toPhoneTimestamp — js/views/mobile-files-beacons.js's own return form.
+ */
+export async function applyManualBeaconReturn(number, closedAt, batteryPercent) {
+  const beacon = state.beacons.find(b => +b.number === number);
+  if (!beacon) return;
+  const startMs = raceStartMs();
+  const activeFromMs = startMs !== null ? startMs - TWO_HOURS_MS : null;
+  let hoursDelta = 0;
+  if (activeFromMs !== null) {
+    const offMs = parsePhoneTimestamp(closedAt);
+    if (offMs != null) hoursDelta = Math.max(0, (offMs - activeFromMs) / 3600000);
+  }
+  beacon.batteryLevel = batteryPercent;
+  beacon.lastUsed = normaliseDate(closedAt.slice(0, 10)) || beacon.lastUsed;
+  beacon.totalHours = (+beacon.totalHours || 0) + hoursDelta;
+  beacon.status = 'returned';
+  beacon.asAt = closedAt;
+  await saveBeacons();
+}
+
 export async function applyBeaconCatalogueUpdates(plan, raceLabel) {
   for (const { number, batteryLevel, closedAt, hoursDelta } of plan.toApply) {
     const beacon = state.beacons.find(b => +b.number === number);

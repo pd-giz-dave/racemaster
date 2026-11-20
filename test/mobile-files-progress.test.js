@@ -758,6 +758,50 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
       assert.equal(state.beaconReports.length, 0);
     });
   });
+
+  // ToDo.MD: "beacons page should have status and as at columns ... those states can cross race
+  // boundaries" — applyComputedResults() also keeps the catalogue's own status/asAt current from
+  // this run's closeByBeacon/countByBeacon, independently of the beaconReports housekeeping above.
+  describe('Beacon status/asAt (crosses race boundaries)', () => {
+    beforeEach(() => {
+      state.beacons = [{ number: 5, owner: '', dateAcquired: '', totalHours: 2, batteryLevel: 100, lastUsed: '', lost: '', notes: '', status: '', asAt: '' }];
+      state.beaconReports = [];
+      state.entries = [{ bibNumber: 1, dibberNumber: 5 }];
+      state.event = {
+        date: '30/08/2026', startTime: '09:00:00', juniorStartTime: '', juniorLimit: 'None',
+        timingMethod: 'Beacons', juniorTimingMethod: 'Stopwatch',
+      };
+    });
+
+    it('marks an allocated beacon with no close/count data this run as issued', async () => {
+      await applyComputedResults([{ action: 'Finish', number: 1, time: '00:20:00' }], new Map(), [finishRow()]);
+      assert.equal(state.beacons[0].status, 'issued');
+    });
+
+    it('marks a counted beacon on-course, stamping asAt from countByBeacon', async () => {
+      const countByBeacon = new Map([[5, '2026/08/30 08:15:00']]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), new Map(), countByBeacon);
+      assert.equal(state.beacons[0].status, 'on-course');
+      assert.equal(state.beacons[0].asAt, '2026/08/30 08:15:00');
+    });
+
+    it('marks a closed beacon returned, taking priority over counted', async () => {
+      const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 45, closeCount: 1 }]]);
+      const countByBeacon = new Map([[5, '2026/08/30 08:15:00']]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon, countByBeacon);
+      assert.equal(state.beacons[0].status, 'returned');
+      assert.equal(state.beacons[0].asAt, '2026/08/30 09:10:00');
+    });
+
+    it('leaves a previous race\'s status alone when this race\'s selection never touches the beacon', async () => {
+      state.beacons[0].status = 'returned';
+      state.beacons[0].asAt = '2026/07/01 12:00:00';
+      state.entries = []; // not allocated this race either
+      await applyComputedResults([{ action: 'Finish', number: 1, time: '00:20:00' }], new Map(), [finishRow()]);
+      assert.equal(state.beacons[0].status, 'returned');
+      assert.equal(state.beacons[0].asAt, '2026/07/01 12:00:00');
+    });
+  });
 });
 
 describe('mobile-files-progress.js:buildProgressColumns', () => {
