@@ -100,7 +100,12 @@ export function renderAllFilesList(races, isAdminUser) {
     raceLabel:  r => `<span title="${escHtml(r.raceLabel)}">${escHtml(raceNameOf(r.raceLabel))}</span>`,
     raceDate:   r => formatRaceDate(r.raceDate),
     device:     r => r.kind === 'progress' ? 'Progress' : escHtml(r.device.name),
-    location:   r => r.kind === 'progress' ? '' : `<span title="${escHtml(r.location)}">${escHtml(r.location)}</span>`,
+    // ToDo.MD-reported bug: this used to render r.location (locationSummary() — collapsed down to
+    // just the device's current location), not every location it's actually recorded at within
+    // its current segment, unlike the Devices tab's own column (js/views/mobile-files-devices.js)
+    // which has always used r.locations (distinctLocationsOf()) for exactly that reason. Matching
+    // it here too, 'Unknown' fallback included.
+    location:   r => r.kind === 'progress' ? '' : `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || 'Unknown')}</span>`,
     bibs:       r => r.kind === 'progress' ? formatCount(r.bibsVisible) : formatCount(r.bibsVisible, r.bibsExpected),
     time:       r => r.kind === 'progress' ? '' : formatCount(r.timeVisible, r.timeExpected),
     lastSeen:   r => r.kind === 'progress' ? '' : formatDateTime(r.lastSeen),

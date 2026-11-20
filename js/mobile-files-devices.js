@@ -150,6 +150,22 @@ export function formatCount(visible, expected) {
   return (expected || visible > 0) ? String(visible) : '';
 }
 
+// A CountComplete row's raw note is racemaster-mobile's own terse "of=<m>" encoding
+// (CountModeRepository.kt) — shown as-is this read as just "of=1" with no seen count at all,
+// since the row itself IS the "every issued beacon seen" moment, so the total doubles as the
+// seen count. Mirrors that app's own HistoryActionLabels.displayNote, which turns the same note
+// into "All <m> beacons seen" on-device; this table's plainer "<m> of <m>" instead matches the
+// Bibs/Time columns' own "<visible> of <expected>" convention (formatCount above).
+const COUNT_COMPLETE_NOTE_RE = /^of=(\d+)$/;
+
+export function displayNote(action, note) {
+  if (action === 'CountComplete') {
+    const m = COUNT_COMPLETE_NOTE_RE.exec(note ?? '');
+    if (m) return `${m[1]} of ${m[1]}`;
+  }
+  return note;
+}
+
 // A Bibs-family row with no real bib of its own — the family's own ModeStart marker (bibNumber
 // always null now — see SyncRecord's own doc, mode is declared in `note` instead) must not
 // inflate the "Bibs" visible count as if a bib had actually been recorded. A brand new, not-yet-

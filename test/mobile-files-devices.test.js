@@ -7,7 +7,7 @@ import { state } from '../js/state.js';
 import { installLocalStorageMock } from './helpers/mock-browser.js';
 import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
-  formatCount, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
+  formatCount, displayNote, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
   distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt, withResolvedLocations,
   deviceViewOptions, collapsePingRuns, isDeviceOffline,
 } from '../js/mobile-files-devices.js';
@@ -33,6 +33,18 @@ describe('mobile-files-devices.js:formatCount', () => {
   it('expected:false shows blank for a genuine zero, but a real non-zero count always wins — never hide actually-recorded data', () => {
     assert.equal(formatCount(0, false), '');
     assert.equal(formatCount(3, false), '3');
+  });
+});
+
+describe('mobile-files-devices.js:displayNote', () => {
+  it('rewrites a CountComplete row\'s terse "of=<m>" note into "<m> of <m>"', () => {
+    assert.equal(displayNote('CountComplete', 'of=5'), '5 of 5');
+  });
+
+  it('leaves every other action\'s note untouched, including a malformed CountComplete note', () => {
+    assert.equal(displayNote('CountSeen', 'beacon=1 seen=1 of=5'), 'beacon=1 seen=1 of=5');
+    assert.equal(displayNote('CountComplete', 'garbage'), 'garbage');
+    assert.equal(displayNote('CountComplete', null), null);
   });
 });
 

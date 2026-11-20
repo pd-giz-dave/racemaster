@@ -12,7 +12,7 @@ import { renderTable, tableColumns } from '../ui.js';
 import { escHtml, formatElapsedSeconds } from '../utils.js';
 import { TABLES } from '../strings.js';
 import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, byLineNumber } from '../mobile-files-shared.js';
-import { buildSegmentView, whenOf, locationSummary, formatCount, flattenDevices, latestModeStart, collapsePingRuns } from '../mobile-files-devices.js';
+import { buildSegmentView, whenOf, locationSummary, formatCount, displayNote, flattenDevices, latestModeStart, collapsePingRuns } from '../mobile-files-devices.js';
 
 // ToDo.MD's "Random tweaks": the segment view used to pair a Bibs-family row and a Time-family
 // row side by side by splitNumber, because a device's current segment could genuinely hold both
@@ -50,7 +50,7 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
       <td>${escHtml(r.action)}</td>
       <td>${r.splitTime != null ? formatElapsedSeconds(r.splitTime) : escHtml(r.bibNumber ?? '')}</td>
       <td>${whenOf(r)}</td>
-      <td>${escHtml(r.note ?? '')}</td>
+      <td>${escHtml(displayNote(r.action, r.note) ?? '')}</td>
     </tr>`).join('');
 
   const overlay = document.createElement('div');
