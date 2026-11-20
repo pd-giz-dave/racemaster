@@ -85,3 +85,44 @@ export function completedAdoptions(races, pending = loadPendingAdoptions()) {
     races.some(r => r.owner === a.owner && r.raceLabel === a.raceLabel &&
       r.devices.some(d => d.name === a.deviceName && !d.pending)));
 }
+
+// ---- Auto-deselect notices ----
+//
+// js/views/mobile-files.js's own finishCompletedAdoptions() used to carry a device's own
+// Update-Progress tick straight across to its new row the moment an adoption landed — the right
+// call for the real use case (a phone relocating mid-race genuinely renames once, and whatever
+// was already ticked for it should keep feeding progress without the operator re-ticking it).
+// Confirmed as actively wrong during rapid testing, though: repeatedly starting a fresh test
+// race on the same physical phone re-adopts it (the server/pending marker from the previous
+// round is still sitting there) every time, silently re-selecting a brand new generation's row
+// the operator never looked at — exactly the kind of change that should NEVER happen without
+// the operator noticing (see js/mobile-files-progress.js's own maybeAutoUpdateProgress(), which
+// would then quietly start recomputing progress from a file nobody meant to include). The tick
+// is now dropped instead of carried over, and this records why, persistently (localStorage, not
+// just an in-memory flag) so a banner can keep showing it even if the operator was on a
+// different Mobile Files tab, or away from the page entirely, when the adoption completed —
+// same durability reasoning as PENDING_ADOPTIONS_KEY above, just for "tell the operator", not
+// "retry the write". Keyed like rowKey() (owner/raceLabel/deviceName) — one notice per device
+// per target race, so a device re-adopted into the same race twice in a row (another round of
+// rapid test restarts) just refreshes its own single entry's `at` rather than piling up dupes.
+const AUTO_DESELECT_NOTICES_KEY = 'racemaster-auto-deselect-notices';
+
+export function loadAutoDeselectNotices() {
+  try { return JSON.parse(localStorage.getItem(AUTO_DESELECT_NOTICES_KEY) || '[]'); } catch { return []; }
+}
+
+function saveAutoDeselectNotices(notices) {
+  try { localStorage.setItem(AUTO_DESELECT_NOTICES_KEY, JSON.stringify(notices)); } catch { /* best effort */ }
+}
+
+export function addAutoDeselectNotice({ owner, raceLabel, deviceName, fromRaceLabel, at }) {
+  const notices = loadAutoDeselectNotices()
+    .filter(n => !(n.owner === owner && n.raceLabel === raceLabel && n.deviceName === deviceName));
+  notices.push({ owner, raceLabel, deviceName, fromRaceLabel, at });
+  saveAutoDeselectNotices(notices);
+}
+
+export function dismissAutoDeselectNotice(owner, raceLabel, deviceName) {
+  saveAutoDeselectNotices(loadAutoDeselectNotices()
+    .filter(n => !(n.owner === owner && n.raceLabel === raceLabel && n.deviceName === deviceName)));
+}

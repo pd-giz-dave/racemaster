@@ -28,7 +28,9 @@ import {
 } from '../storage.js';
 import {
   eventCourseLabels, adoptionFor, completedAdoptions, loadPendingAdoptions, setPendingAdoption, clearPendingAdoption,
+  loadAutoDeselectNotices, addAutoDeselectNotice, dismissAutoDeselectNotice,
 } from '../mobile-files-adoption.js';
+import { escHtml } from '../utils.js';
 import { showConfirmDialog, showChoiceDialog, showStatus, wireTabBar, getEl } from '../ui.js';
 import { isBluetoothAvailable, resetLastPulledLineNumber, resetAllLastPulledLineNumbers } from '../mule-ble.js';
 import {
@@ -334,6 +336,12 @@ export function wireMobileFiles() {
   wireBeaconsTab();
   wireTabBar('mobile-files-tab-bar', 'mobile-files-tab-', 'data-mf-tab');
   document.getElementById('btn-activate-race')?.addEventListener('click', activateRace);
+  document.getElementById('mf-auto-deselect-notices')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action="dismiss-auto-deselect"]');
+    if (!btn) return;
+    dismissAutoDeselectNotice(btn.dataset.owner, btn.dataset.raceLabel, btn.dataset.deviceName);
+    renderAutoDeselectNotices();
+  });
   document.getElementById('mobile-files-tbody')?.addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -450,8 +458,11 @@ async function flushPendingAdoptions(token) {
 }
 
 // Once an adopted phone has re-pushed under its real race label, its old file and marker are
-// redundant (the phone no longer pushes to the old folder) — remove both, and carry the tick
-// across to the new row so it keeps feeding progress. Returns whether anything changed.
+// redundant (the phone no longer pushes to the old folder) — remove both. The tick is
+// deliberately NOT carried across to the new row any more (it used to be) — see
+// addAutoDeselectNotice's own doc in js/mobile-files-adoption.js for the real-world testing
+// scenario that made silently auto-re-selecting a brand new row the wrong call. Returns whether
+// anything changed.
 async function finishCompletedAdoptions(token, races) {
   const done = completedAdoptions(races);
   for (const a of done) {
@@ -461,13 +472,44 @@ async function finishCompletedAdoptions(token, races) {
       if (oldRace?.devices.some(d => d.name === a.deviceName)) {
         await apiDeleteMobileFile(token, a.owner, a.fromRaceLabel, a.deviceName);
       }
-      if (selectedKeys.delete(rowKey({ owner: a.owner, raceLabel: a.fromRaceLabel, device: { name: a.deviceName } }))) {
-        selectedKeys.add(rowKey({ owner: a.owner, raceLabel: a.raceLabel, device: { name: a.deviceName } }));
+      const wasSelected = selectedKeys.delete(rowKey({ owner: a.owner, raceLabel: a.fromRaceLabel, device: { name: a.deviceName } }));
+      // Defensive, not redundant: a leftover key here (from an earlier round of exactly this
+      // same re-adoption churn) would otherwise show the new row as already ticked with no
+      // notice at all, since it was never ticked just now.
+      selectedKeys.delete(rowKey({ owner: a.owner, raceLabel: a.raceLabel, device: { name: a.deviceName } }));
+      // Only worth telling the operator about when there was actually a tick to lose — an
+      // adoption completing for a device nobody had selected for progress is routine and silent,
+      // same as before.
+      if (wasSelected) {
+        addAutoDeselectNotice({
+          owner: a.owner, raceLabel: a.raceLabel, deviceName: a.deviceName,
+          fromRaceLabel: a.fromRaceLabel, at: new Date().toISOString(),
+        });
       }
     } catch { /* not permitted or offline — retried on the next render */ }
   }
   if (done.length) saveSelectedKeys();
   return done.length > 0;
+}
+
+// Persistent, not a showStatus() toast — the whole point (see addAutoDeselectNotice's own doc
+// in js/mobile-files-adoption.js) is that the operator may not be looking at the Devices tab, or
+// even this page, at the moment a re-adoption drops their tick, so this has to still be visible
+// whenever they do come back. Lives above the tab bar (index.html), outside every tab-panel, so
+// it stays shown across Devices/Progress/Beacons/All Files rather than only on whichever tab
+// happened to be open when it appeared. Purely local (loadAutoDeselectNotices() reads
+// localStorage, no server round trip), so this is safe to call unconditionally, even before
+// renderMobileFiles()'s own session/fetch logic below has done anything.
+function renderAutoDeselectNotices() {
+  const el = document.getElementById('mf-auto-deselect-notices');
+  if (!el) return;
+  const notices = loadAutoDeselectNotices();
+  if (!notices.length) { el.innerHTML = ''; return; }
+  el.innerHTML = notices.map(n => `
+    <div class="mf-auto-deselect-notice" style="background:var(--row-error-bg);color:var(--danger);border-left:3px solid var(--danger);padding:4px 8px;margin-bottom:4px;font-size:0.8rem;display:flex;align-items:center;gap:8px">
+      <span>⚠ "${escHtml(n.deviceName)}" was de-selected for Update Progress — it was ticked under "${escHtml(n.fromRaceLabel)}", which has just been adopted into "${escHtml(n.raceLabel)}". Re-tick it on the Devices tab if this new file should keep feeding progress.</span>
+      <button type="button" class="btn-sm" data-action="dismiss-auto-deselect" data-owner="${escHtml(n.owner)}" data-race-label="${escHtml(n.raceLabel)}" data-device-name="${escHtml(n.deviceName)}" style="margin-left:auto;white-space:nowrap">Dismiss</button>
+    </div>`).join('');
 }
 
 export async function renderMobileFiles({ silent = false } = {}) {
@@ -476,6 +518,7 @@ export async function renderMobileFiles({ silent = false } = {}) {
   // needed here specifically (previously only autoUpdateProgress() ever restored it, and only
   // when the Results page happened to be opened).
   restoreSelectedKeysOnce();
+  renderAutoDeselectNotices();
   const session  = getSession();
   const count    = getEl('mobile-files-count');
   const connectBtn = getEl('btn-connect-phone');

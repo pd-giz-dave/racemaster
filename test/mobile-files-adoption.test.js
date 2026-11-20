@@ -7,6 +7,7 @@ import { installLocalStorageMock } from './helpers/mock-browser.js';
 import {
   adoptionKey, loadPendingAdoptions, setPendingAdoption, clearPendingAdoption, eventCourseLabels,
   effectiveAdoptions, adoptionFor, buildAdoptedTargets, completedAdoptions,
+  loadAutoDeselectNotices, addAutoDeselectNotice, dismissAutoDeselectNotice,
 } from '../js/mobile-files-adoption.js';
 
 beforeEach(() => installLocalStorageMock());
@@ -76,5 +77,39 @@ describe('mobile-files-adoption.js:completedAdoptions', () => {
     assert.deepEqual(completedAdoptions(rs, {}), []);
     rs[1].devices = [{ name: 'brave-reef', lines: [] }];
     assert.deepEqual(completedAdoptions(rs, {}).map(a => a.deviceName), ['brave-reef']);
+  });
+});
+
+// Field report: repeatedly starting a fresh test race on the same physical phone kept
+// re-adopting it (the previous round's marker was still sitting there), and
+// js/views/mobile-files.js's own finishCompletedAdoptions() used to carry the Update-Progress
+// tick straight across to the new row every time — silently re-selecting a file the operator
+// never looked at. These notices are what that file now records instead, for a persistent
+// banner (js/views/mobile-files.js's renderAutoDeselectNotices()) rather than carrying the tick.
+describe('mobile-files-adoption.js:auto-deselect notices', () => {
+  it('starts empty', () => {
+    assert.deepEqual(loadAutoDeselectNotices(), []);
+  });
+
+  it('records a notice, readable back by loadAutoDeselectNotices', () => {
+    addAutoDeselectNotice({ owner: 'alice', raceLabel: 'lmv-seniors', deviceName: 'brave-reef', fromRaceLabel: 'unknown-26-09-23', at: '2026-09-23T10:00:00.000Z' });
+    assert.deepEqual(loadAutoDeselectNotices(), [
+      { owner: 'alice', raceLabel: 'lmv-seniors', deviceName: 'brave-reef', fromRaceLabel: 'unknown-26-09-23', at: '2026-09-23T10:00:00.000Z' },
+    ]);
+  });
+
+  it('re-adding the same owner/raceLabel/deviceName replaces the earlier entry rather than duplicating it', () => {
+    addAutoDeselectNotice({ owner: 'alice', raceLabel: 'lmv-seniors', deviceName: 'brave-reef', fromRaceLabel: 'unknown-26-09-23', at: '2026-09-23T10:00:00.000Z' });
+    addAutoDeselectNotice({ owner: 'alice', raceLabel: 'lmv-seniors', deviceName: 'brave-reef', fromRaceLabel: 'unknown-26-09-24', at: '2026-09-24T10:00:00.000Z' });
+    const notices = loadAutoDeselectNotices();
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0].fromRaceLabel, 'unknown-26-09-24');
+  });
+
+  it('dismissAutoDeselectNotice drops only the matching entry', () => {
+    addAutoDeselectNotice({ owner: 'alice', raceLabel: 'lmv-seniors', deviceName: 'brave-reef', fromRaceLabel: 'unknown-26-09-23', at: 'x' });
+    addAutoDeselectNotice({ owner: 'alice', raceLabel: 'lmv-juniors', deviceName: 'quiet-fox', fromRaceLabel: 'unknown-26-09-23', at: 'y' });
+    dismissAutoDeselectNotice('alice', 'lmv-seniors', 'brave-reef');
+    assert.deepEqual(loadAutoDeselectNotices().map(n => n.deviceName), ['quiet-fox']);
   });
 });
