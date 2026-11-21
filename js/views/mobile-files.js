@@ -41,7 +41,7 @@ import {
 import { state } from '../state.js';
 import { coursesInUse } from '../categories.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
-import { deviceViewOptions } from '../mobile-files-devices.js';
+import { deviceViewOptions, anyRowNewlyOffline } from '../mobile-files-devices.js';
 import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
 import {
   renderMobileProgressTable, wireProgressTab, initProgressActions, autoUpdateProgress, maybeAutoUpdateProgress,
@@ -613,10 +613,13 @@ export async function renderMobileFiles({ silent = false } = {}) {
 async function pollServerForChanges() {
   const session = getSession();
   if (!session) return;
-  let status;
-  try { status = await apiGetMobileStatus(session.token); }
-  catch { return; } // offline — try again next tick, same as any other silent background failure
-  if (!Array.isArray(status) || !hasNewMobileData(status, lastKnownRaces)) return;
+  let status = null;
+  // A failed fetch here must NOT skip the staleness check below — going offline is exactly when a
+  // device the operator's already watching is most likely to also cross its own Offline threshold,
+  // and that's purely a function of elapsed time, not of anything the server has to say about it.
+  try { status = await apiGetMobileStatus(session.token); } catch { /* offline — checked below regardless */ }
+  const dataChanged = Array.isArray(status) && hasNewMobileData(status, lastKnownRaces);
+  if (!dataChanged && !anyRowNewlyOffline(currentRows)) return;
   await renderMobileFiles({ silent: true });
 }
 

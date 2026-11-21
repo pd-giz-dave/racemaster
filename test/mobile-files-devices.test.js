@@ -9,7 +9,7 @@ import { selectedKeys, rowKey } from '../js/mobile-files-shared.js';
 import {
   formatCount, displayNote, buildSegmentView, whenOf, locationSummary, rawLocationOf, resolveLocationKey,
   distinctLocationsOf, flattenDevices, flattenAllFiles, latestStartedAt, withResolvedLocations,
-  deviceViewOptions, collapsePingRuns, isDeviceOffline,
+  deviceViewOptions, collapsePingRuns, isDeviceOffline, anyRowNewlyOffline,
 } from '../js/mobile-files-devices.js';
 
 beforeEach(() => {
@@ -575,6 +575,36 @@ describe('mobile-files-devices.js:isDeviceOffline', () => {
     const now = Date.parse('2026/09/20 10:00:00');
     const lastSeen = new Date(now - 3 * 60 * 1000).toISOString(); // exactly 3 minutes ago
     assert.equal(isDeviceOffline(lastSeen, now), true);
+  });
+});
+
+// Field report: the Devices tab (and its "as at" indicator) froze well past a device's own
+// last-seen threshold with no Offline tag — js/views/mobile-files.js's own background poll only
+// re-renders when hasNewMobileData() sees a file actually change, which never happens for a
+// device that's simply gone quiet. anyRowNewlyOffline() is the poll's own extra trigger for
+// exactly that case.
+describe('mobile-files-devices.js:anyRowNewlyOffline', () => {
+  it('is false when every row\'s own offline flag already matches reality', () => {
+    const now = Date.parse('2026/09/20 10:00:00');
+    const rows = [
+      { lastSeen: new Date(now - 60 * 1000).toISOString(), offline: false }, // 1 min ago, correctly not offline
+      { lastSeen: new Date(now - 10 * 60 * 1000).toISOString(), offline: true }, // 10 min ago, correctly offline
+    ];
+    assert.equal(anyRowNewlyOffline(rows, now), false);
+  });
+
+  it('is true once a row still flagged not-offline has since crossed the threshold', () => {
+    const now = Date.parse('2026/09/20 10:00:00');
+    const rows = [
+      { lastSeen: new Date(now - 60 * 1000).toISOString(), offline: false },
+      // Rendered a while ago when this was within the threshold; `now` has since moved past it.
+      { lastSeen: new Date(now - 5 * 60 * 1000).toISOString(), offline: false },
+    ];
+    assert.equal(anyRowNewlyOffline(rows, now), true);
+  });
+
+  it('is false on an empty row list', () => {
+    assert.equal(anyRowNewlyOffline([]), false);
   });
 });
 

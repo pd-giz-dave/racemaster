@@ -108,7 +108,12 @@ export function renderAllFilesList(races, isAdminUser) {
     location:   r => r.kind === 'progress' ? '' : `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || 'Unknown')}</span>`,
     bibs:       r => r.kind === 'progress' ? formatCount(r.bibsVisible) : formatCount(r.bibsVisible, r.bibsExpected),
     time:       r => r.kind === 'progress' ? '' : formatCount(r.timeVisible, r.timeExpected),
-    lastSeen:   r => r.kind === 'progress' ? '' : formatDateTime(r.lastSeen),
+    // Same Offline badge as the Devices tab's own column (js/views/mobile-files-devices.js) —
+    // r.offline is already computed by flattenDevices()/isDeviceOffline() for every device row
+    // here too (flattenAllFiles() just wraps flattenDevices()'s own rows), this column simply
+    // wasn't rendering it. Bug report: hearty-ridge's "last seen" read many hours stale here with
+    // no Offline tag, while the Devices tab correctly flagged the same device.
+    lastSeen:   r => r.kind === 'progress' ? '' : formatDateTime(r.lastSeen) + (r.offline ? ' <span style="color:var(--danger)">Offline</span>' : ''),
     lastUpdate: r => r.kind === 'progress' ? formatDateTime(r.lastUpdate) : formatStoredTimestamp(r.lastUpdate),
     startedAt:  r => formatStoredTimestamp(r.startedAt),
     // "Delete from here" only offered on an already-stale row — see this file's own top doc for

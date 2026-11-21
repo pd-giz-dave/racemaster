@@ -591,6 +591,20 @@ export function isDeviceOffline(lastSeenIso, now = Date.now()) {
   return now - t >= DEVICE_OFFLINE_THRESHOLD_MS;
 }
 
+// Exported for js/views/mobile-files.js's own pollServerForChanges() — that background poll only
+// triggers a re-render when hasNewMobileData() says a file itself changed (new lines/mtime),
+// which by design never fires for the one case Offline detection exists to catch: a device that's
+// simply gone quiet, with nothing new to compare. Field report that prompted this: the Devices tab
+// (and its "as at" indicator, also only refreshed inside a render) sat frozen well past a device's
+// own last-seen threshold with no Offline tag — not because the poll timer had stopped, but
+// because nothing ever gave it a reason to re-render once the device stopped producing new data.
+// `rows` is js/views/mobile-files-devices.js's own currentRows (the last-rendered Devices tab
+// rows, each already carrying its own `offline` as of that render) — true as soon as any of them
+// would now compute differently from what's still on screen.
+export function anyRowNewlyOffline(rows, now = Date.now()) {
+  return rows.some(r => !r.offline && isDeviceOffline(r.lastSeen, now));
+}
+
 export function flattenDevices(races) {
   const rows = [];
   // Where each device has been adopted (js/mobile-files-adoption.js) — carried on its row as
