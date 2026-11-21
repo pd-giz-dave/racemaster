@@ -37,12 +37,28 @@ describe('progress-sync.js:startProgressSync', () => {
     assert.match(fetchMock.calls[0].url, /\/api\/mobile\/me\/testfellrace-seniors-26-06-15\/progress/);
     const body = JSON.parse(fetchMock.calls[0].opts.body);
     assert.equal(body.raceName, 'Test Fell Race');
+    // ToDo.MD: "add a line to the progress.json that indicates the timing method of the race" —
+    // getTimingMethod()'s own default when Event Settings hasn't set one at all.
+    assert.equal(body.timingMethod, 'Stopwatch');
     assert.deepEqual(body.entries, [{
       bibNumber: 1, name: 'Dave', category: 'MSEN', course: 'Seniors',
       startTime: '00:00:00', finishTime: '00:45:00', startTimeOfDay: '', finishTimeOfDay: '',
       cpTimes: { 1: '00:10:00' }, cpTimesOfDay: {}, beaconNumber: 0,
       beaconClosedAt: '', beaconBatteryPercent: null, beaconCountedAt: '',
     }]);
+  });
+
+  it('sends this course\'s own configured timing method, not just the default', async (t) => {
+    state.event.timingMethod = 'Beacons';
+    const fetchMock = installFetchMock(() => jsonResponse({ ok: true }));
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    startProgressSync();
+    t.mock.timers.tick(2000);
+    await flushMicrotasks();
+
+    const body = JSON.parse(fetchMock.calls[0].opts.body);
+    assert.equal(body.timingMethod, 'Beacons');
   });
 
   it('uses the dataset\'s own owner, not the logged-in username, when they differ (e.g. an admin working on someone else\'s dataset)', async (t) => {

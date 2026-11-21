@@ -5,6 +5,7 @@ import { getSession, apiPushProgress } from './storage.js';
 import { buildProgressRows } from './mobile-files-progress.js';
 import { deriveRaceLabel } from './mobile-files-shared.js';
 import { coursesInUse } from './categories.js';
+import { getTimingMethod } from './time-utils.js';
 
 // Pushes this browser's Progress-tab data (every entry, from buildProgressRows()) to the server
 // per-course as mobile/:owner/:raceLabel/progress.json, which is what a phone in Bibs or
@@ -98,6 +99,12 @@ function buildPayloadForCourse(course, inUse) {
   return {
     raceName: state.event.name,
     raceDate: state.event.date,
+    // ToDo.MD: "add a line to the progress.json that indicates the timing method of the race" —
+    // this course's own Event Settings timing method ('Stopwatch'/'Dibbers'/'Beacons' — see
+    // getTimingMethod()'s own doc), not a hardcoded guess, so a phone reading this can tell
+    // whether to expect Bibs/CP mode (Stopwatch/Beacons) or treat a dibber read as already-elapsed
+    // time (Dibbers), the same distinction adjustedFinishTime() already makes client-side.
+    timingMethod: getTimingMethod(course),
     // `invalid`/`conflict`/`fobNumber`/`fobReturned`/`beaconCountNotSeen` (buildProgressRows()'s
     // own doc in mobile-files-progress.js) are Progress-tab display metadata, dropped here rather
     // than sent on: a phone's own bib-allocation logic has no use for any of them, and none is
@@ -135,7 +142,7 @@ async function pushProgress() {
     // background auto-push. A course that HAD entries and now has none must still fall through
     // and push, so `removed` actually reaches the server — see diffEntries' own doc.
     if (!changed.length && !removed.length) continue;
-    const payload = { raceName: fresh.raceName, raceDate: fresh.raceDate, entries: changed, removed };
+    const payload = { raceName: fresh.raceName, raceDate: fresh.raceDate, timingMethod: fresh.timingMethod, entries: changed, removed };
     try {
       await apiPushProgress(session.token, owner, raceLabel, payload);
       // Only the freshly-pushed snapshot advances on success — a failed push (server

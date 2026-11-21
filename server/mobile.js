@@ -39,8 +39,9 @@ export function writeMobileDeviceFile(username, raceLabel, deviceName, lines) {
   fs.writeFileSync(mobileDeviceFilePath(username, raceLabel, deviceName), JSON.stringify(lines, null, 2), 'utf8');
 }
 
-// progress.json — a race-wide {raceName, raceDate, entries: [{bibNumber, name, course, category,
-// startTime, finishTime, cpTimes, beaconNumber}]} file the web app pushes (see POST .../progress) — the Mobile
+// progress.json — a race-wide {raceName, raceDate, timingMethod, entries: [{bibNumber, name,
+// course, category, startTime, finishTime, cpTimes, beaconNumber}]} file the web app pushes (see
+// POST .../progress) — the Mobile
 // Files page's own Progress tab contents, covering every entry regardless of mobile activity
 // (see js/mobile-files-progress.js's buildProgressRows()), so this is also what a phone in Bibs
 // or Checkpoint mode reads to know which bib is on which course. Not a per-device sync file, so
@@ -75,12 +76,12 @@ export function writeProgress(username, raceLabel, payload) {
 // if the progress file does not exist and we're writing nothing, do not create it, this is the
 // context when "Clear previous event" was pressed. We only want the progress file to be created
 // when the "Activate race" button was pressed.
-export function mergeProgress(username, raceLabel, { raceName, raceDate, entries, removed }) {
+export function mergeProgress(username, raceLabel, { raceName, raceDate, timingMethod, entries, removed }) {
   var existing = readProgress(username, raceLabel)
   if (!existing) {
     // if it does not exist and we're writing nothing, do not create it
     if (!entries.length && !removed?.length) return null;
-    existing = { raceName: '', raceDate: '', entries: [] };
+    existing = { raceName: '', raceDate: '', timingMethod: '', entries: [] };
   }
   const now = new Date().toISOString();
   const byBib = new Map(existing.entries.map(e => [e.bibNumber, e]));
@@ -89,6 +90,7 @@ export function mergeProgress(username, raceLabel, { raceName, raceDate, entries
   const merged = {
     raceName: raceName || existing.raceName,
     raceDate: raceDate || existing.raceDate,
+    timingMethod: timingMethod || existing.timingMethod || '',
     generatedAt: now,
     entries: [...byBib.values()],
   };
@@ -100,7 +102,7 @@ export function mergeProgress(username, raceLabel, { raceName, raceDate, entries
 // without requiring the caller to send entries at all, so the operator can signal "this race
 // is current, mobile phones should notice it" as a lightweight, minimal-payload action.
 export function touchProgress(username, raceLabel) {
-  const existing = readProgress(username, raceLabel) || { raceName: '', raceDate: '', entries: [] };
+  const existing = readProgress(username, raceLabel) || { raceName: '', raceDate: '', timingMethod: '', entries: [] };
   const touched = { ...existing, generatedAt: new Date().toISOString() };
   writeProgress(username, raceLabel, touched);
   return touched;

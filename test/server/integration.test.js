@@ -515,6 +515,52 @@ describe('server integration: progress', () => {
     assert.equal(race.progress.entries[0].beaconCountedAt, '2026/08/30 08:00:00');
   });
 
+  // ToDo.MD: "add a line to the progress.json that indicates the timing method of the race".
+  it('passes a valid timingMethod through the push, and drops an invalid one', async () => {
+    const token = await createAndLogin('prog-timing-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'prog-timing-race-26-08-23';
+
+    await fetch(`${base}/api/mobile/prog-timing-owner/${raceLabel}/progress`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        raceName: 'X', raceDate: '23/08/2026', timingMethod: 'Beacons',
+        entries: [{ bibNumber: 1, name: 'A', category: 'MSEN', course: 'Seniors', startTime: '', finishTime: '', cpTimes: {} }],
+      }),
+    });
+    let list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    assert.equal(list.find(r => r.raceLabel === raceLabel).progress.timingMethod, 'Beacons');
+
+    await fetch(`${base}/api/mobile/prog-timing-owner/${raceLabel}/progress`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        raceName: 'X', raceDate: '23/08/2026', timingMethod: 'NotARealMethod',
+        entries: [{ bibNumber: 2, name: 'B', category: 'MSEN', course: 'Seniors', startTime: '', finishTime: '', cpTimes: {} }],
+      }),
+    });
+    list = await (await fetch(`${base}/api/mobile`, { headers: auth })).json();
+    // Dropped, not stored verbatim — falls back to whatever was already there (same convention
+    // as raceName/raceDate), not the bogus value.
+    assert.equal(list.find(r => r.raceLabel === raceLabel).progress.timingMethod, 'Beacons');
+  });
+
+  it('GET .../progress includes timingMethod alongside raceName/raceDate', async () => {
+    const token = await createAndLogin('prog-timing-get-owner');
+    const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const raceLabel = 'prog-timing-get-race-26-08-23';
+
+    await fetch(`${base}/api/mobile/prog-timing-get-owner/${raceLabel}/progress`, {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({
+        raceName: 'X', raceDate: '23/08/2026', timingMethod: 'Dibbers',
+        entries: [{ bibNumber: 1, name: 'A', category: 'MSEN', course: 'Seniors', startTime: '', finishTime: '', cpTimes: {} }],
+      }),
+    });
+
+    const got = await (await fetch(`${base}/api/mobile/${raceLabel}/progress`, { headers: auth })).json();
+    assert.equal(got.timingMethod, 'Dibbers');
+  });
+
   it('rejects pushing progress under a dataset owned by a different, non-admin user', async () => {
     const victimToken = await createAndLogin('prog-victim');
     await fetch(`${base}/api/mobile/prog-victim/some-race/progress`, {

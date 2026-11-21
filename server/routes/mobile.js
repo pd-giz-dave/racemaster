@@ -91,9 +91,14 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       }))
       .filter(e => e.bibNumber > 0);
     const removed = Array.isArray(body?.removed) ? body.removed.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
+    // ToDo.MD: "add a line to the progress.json that indicates the timing method of the race" —
+    // js/time-utils.js's getTimingMethod() only ever returns one of these three, so anything else
+    // (a stale client, a hand-crafted request) is dropped rather than stored verbatim.
+    const VALID_TIMING_METHODS = new Set(['Stopwatch', 'Dibbers', 'Beacons']);
     const merged = mergeProgress(owner, raceLabel, {
       raceName: typeof body?.raceName === 'string' ? body.raceName : '',
       raceDate: typeof body?.raceDate === 'string' ? body.raceDate : '',
+      timingMethod: VALID_TIMING_METHODS.has(body?.timingMethod) ? body.timingMethod : '',
       entries: sanitisedEntries,
       removed,
     });
@@ -443,7 +448,8 @@ export async function handleMobileRoutes(req, res, pathname, since, maxAgeDays) 
       const entries = since ? progress.entries.filter(e => e.updatedAt && e.updatedAt > since) : progress.entries;
       jsonReply(res, 200, {
         unchanged: false, generatedAt: progress.generatedAt,
-        raceName: progress.raceName, raceDate: progress.raceDate, entries,
+        raceName: progress.raceName, raceDate: progress.raceDate, timingMethod: progress.timingMethod || '',
+        entries,
       });
     }
     return true;

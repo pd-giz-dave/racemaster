@@ -160,6 +160,24 @@ describe('server/mobile.js:mergeProgress', () => {
     assert.deepEqual(merged.entries.map(e => e.bibNumber), [1]);
   });
 
+  // ToDo.MD: "add a line to the progress.json that indicates the timing method of the race" —
+  // merged the same way raceName/raceDate already are: a fresh value overwrites, an omitted one
+  // (falsy) falls back to whatever was already stored.
+  it('stores timingMethod, carrying it over on a later push that omits it', () => {
+    mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '', timingMethod: 'Beacons',
+      entries: [{ bibNumber: 1, name: 'Dave', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    assert.equal(readProgress('alice', 'race1').timingMethod, 'Beacons');
+    const merged = mergeProgress('alice', 'race1', {
+      raceName: 'X', raceDate: '', timingMethod: '',
+      entries: [{ bibNumber: 2, name: 'Sam', category: '', course: '', startTime: '', finishTime: '', cpTimes: {} }],
+      removed: [],
+    });
+    assert.equal(merged.timingMethod, 'Beacons');
+  });
+
   it('bumps generatedAt even when entries/removed are both empty (a pure touch-like push)', async () => {
     const first = mergeProgress('alice', 'race1', {
       raceName: 'X',

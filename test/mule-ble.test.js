@@ -1094,7 +1094,10 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await pullPromise;
 
     assert.equal(device._progressDeliveries.length, 1);
-    assert.deepEqual(device._progressDeliveries[0], currentProgress);
+    // timingMethod is now always included in the delta (defaulting to '' when the cached
+    // progress doesn't carry one — see this delta's own construction) even though the fixture
+    // itself predates that field.
+    assert.deepEqual(device._progressDeliveries[0], { ...currentProgress, timingMethod: '' });
     assert.ok(device._progressWriteCount > 2, 'expected the payload to be split across more than one write');
     disconnectPhone();
   });
@@ -1156,7 +1159,10 @@ describe('mule-ble.js:pullFromConnectedPhone progress delivery', () => {
     await pullPromise;
 
     assert.equal(device._progressDeliveries.length, 1);
-    assert.deepEqual(device._progressDeliveries[0], juniorsProgress);
+    // timingMethod is now always included in the delta (defaulting to '' when the cached
+    // progress doesn't carry one — see this delta's own construction) even though the fixture
+    // itself predates that field.
+    assert.deepEqual(device._progressDeliveries[0], { ...juniorsProgress, timingMethod: '' });
     disconnectPhone();
   });
 
@@ -1361,5 +1367,15 @@ describe('mule-ble.js:adoptionTargetFor / adoptionPayload', () => {
     assert.equal(p.targetRaceLabel, 'lmv-seniors');
     assert.equal(p.fromRaceLabel, 'unknown-26-09-23');
     assert.equal(p.targetDeviceName, 'brave-reef');
+    assert.equal(p.timingMethod, '');
+  });
+
+  // ToDo.MD: "add a line to the progress.json that indicates the timing method of the race" —
+  // adoptionPayload() just forwards whatever's cached on target.progress, same as raceName/
+  // raceDate/generatedAt above it.
+  it('carries the cached progress\'s own timingMethod through', () => {
+    const withProgress = [{ ...targets[0], progress: { raceName: 'LMV', raceDate: '', timingMethod: 'Beacons', generatedAt: 'x', entries: [] } }];
+    const p = adoptionPayload(withProgress[0], 'dev-1');
+    assert.equal(p.timingMethod, 'Beacons');
   });
 });

@@ -293,6 +293,7 @@ To that end:
       number, not bib, since bibNumber may be null) into state.mobileBeaconOps, stamped onto the
       Progress tab's own rows as beaconClosedAt/beaconBatteryPercent/beaconCountedAt and sent on
       to the phone in progress.json
+- [x] add a line to the progress.json that indicates the timing method of the race
 
 ## Bugs/Tweaks
 
@@ -492,3 +493,6 @@ To that end:
       bibs mode devices instead (when using beacons there will usually be no time mode phone in use)
 - [ ] if a beacon is recorded as closed but has no finish scan, interpret that as a DNF
 - [ ] need a way to print splits for runners as the beacon is closed to mimic what SI Timing does
+- [ ] note a beacon has been counted in the progress.json file instead of saying "Not seen yet"
+- [ ] add a means to manually 'count' a beacon from the progress tab (to allow for a late starter turning
+      up after the count station had been re-deployed)

@@ -575,8 +575,8 @@ async function sendSinkAck(service, ackedOrigins) {
 // real multi-write chunking, not just "one write per logical batch."
 const PROGRESS_CHUNK_SIZE_BYTES = 400;
 
-// Writes [progress] (a {raceName, raceDate, generatedAt, entries} object, exactly progress.json's
-// own shape — see server/mobile.js) to the phone's PROGRESS characteristic as a sequence of small
+// Writes [progress] (a {raceName, raceDate, timingMethod, generatedAt, entries} object, exactly
+// progress.json's own shape — see server/mobile.js) to the phone's PROGRESS characteristic as a sequence of small
 // writes terminated by a single 0x00 byte — the reverse-direction twin of collectDataStream's own
 // framing (see its own doc: "concatenated until a single 0x00 byte marks the end"). The phone
 // reassembles these the same way this file reassembles a DATA notify stream, just receiving
@@ -790,7 +790,8 @@ export function adoptionTargetFor(adoptedTargets, deviceName, raceLabel) {
 export function adoptionPayload(target, targetDeviceId) {
   const p = target.progress;
   return {
-    raceName: p?.raceName ?? '', raceDate: p?.raceDate ?? '', generatedAt: p?.generatedAt ?? '',
+    raceName: p?.raceName ?? '', raceDate: p?.raceDate ?? '', timingMethod: p?.timingMethod ?? '',
+    generatedAt: p?.generatedAt ?? '',
     entries: p?.entries ?? [],
     targetDeviceId, targetRaceLabel: target.raceLabel,
     fromRaceLabel: target.fromRaceLabel, targetDeviceName: target.deviceName,
@@ -1558,6 +1559,7 @@ export async function pullFromConnectedPhone({ currentRaceCandidates = [], adopt
           : match.progress.entries;
         const delta = {
           raceName: match.progress.raceName, raceDate: match.progress.raceDate,
+          timingMethod: match.progress.timingMethod || '',
           generatedAt: match.progress.generatedAt, entries,
         };
         try {
