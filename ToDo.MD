@@ -246,6 +246,22 @@ Racemaster-mobile is being updated to use bluetooth beacons to record runners at
 This will completely automate CP tracking, finishers and race results; potentially replacing the SI dibber system.
 To that end:
 
+- [x] The racemaster-mobile app will provide a facility to read the battery status and power off the beacons as part
+      of its post race housekeeping. This will produce a report of a list of beacons so processed that records the
+      beacon number and its battery staus and the date/time the beacon was powered off
+  - [x] This app must be able to read that report, either from the server, or via the bluetooth link, or both
+    - [x] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
+    - [x] The mobile app will put the file on the server in the mobile/owner/race folder as beacons.json in a
+          similar manner to the device.json files when it has internet access - superseded by putting it in the
+          device file
+  - [x] The report must be processed such that:
+    - [x] this app can verify every beacon issued has been returned and highlight missing ones
+    - [x] update the battery level, last used date, and total hours in the beacons data page
+    - [x] total hours to be an accumulation of each race usage which is to be calculated as the time between 2 hours 
+          before the race started and the power-off time reported from the mobile app
+    - [x] battery level will be a % (0-100), a battery below a certain threshold must be highlighted
+  - [x] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
+        persisted as part of the dataset
 - [x] Add a new timing method - Beacons
 - [x] Add a new data page - Beacons - this is to be persisted in the same manner as the Dibbers page
 - [x] Add a field to the progress.json - beaconNum - populated from the entries Beacon field (see below)
@@ -278,7 +294,7 @@ To that end:
       Progress tab's own rows as beaconClosedAt/beaconBatteryPercent/beaconCountedAt and sent on
       to the phone in progress.json
 
-## Tweaks
+## Bugs/Tweaks
 
 - [x] Beacons tab's own "Read Beacons Report" button/action removed — redundant now that Update
       Progress applies this race's own Close-mode data straight from the selected device files:
@@ -407,6 +423,8 @@ To that end:
       check. `syncAutoProgressCheckbox()` hides it again the moment the checkbox isn't ticked
       (unticked, or locked back down after a failed run), same as every other state that
       control already reflects.
+- [x] when a page opens it should be fully scrolled left - e.g. Beacons page partially obscures the 
+      add beacon form due to the actions column being off screen
 
 # To Do
 
@@ -433,7 +451,7 @@ To that end:
 - [ ] an admin user can change any password
 - [ ] the mobile password must be different to the web-app and its constraint must always be applied (a-zA-Z0-9)
 
-## Race details to mimic SI wrt course CPs?
+## Race details to mimic SI wrt course CPs
 
 - [ ] in event settings add a section that lists CP numbers that must be passed and in what order
 - [ ] if the list is empty CP records are optional and purely for safety purposes
@@ -470,22 +488,7 @@ Racemaster-mobile is being updated to use bluetooth beacons to record runners at
 This will completely automate CP tracking, finishers and race results; potentially replacing the SI dibber system.
 To that end:
 
-- [ ] The racemaster-mobile app will provide a facility to read the battery status and power off the beacons as part
-      of its post race housekeeping. This will produce a report of a list of beacons so processed that records the
-      beacon number and its battery staus and the date/time the beacon was powered off
-  - [x] This app must be able to read that report, either from the server, or via the bluetooth link, or both
-    - [x] Add a button on the Mobile Files page to initiate that read from the BT connected phone if there is one
-    - [ ] The mobile app will put the file on the server in the mobile/owner/race folder as beacons.json in a
-          similar manner to the device.json files when it has internet access
-  - [x] The report must be processed such that:
-    - [x] this app can verify every beacon issued has been returned and highlight missing ones
-    - [x] update the battery level, last used date, and total hours in the beacons data page
-    - [x] total hours to be an accumulation of each race usage which is to be calculated as the time between 2 hours 
-          before the race started and the power-off time reported from the mobile app
-    - [x] battery level will be a % (0-100), a battery below a certain threshold must be highlighted
-  - [x] The results of that processing should be summarised in a "Beacons" tab on the Mobile Files page and it must be
-        persisted as part of the dataset
 - [ ] when no time mode device is selected on the Mobile Files page, appropriate times must be extracted from the
       bibs mode devices instead (when using beacons there will usually be no time mode phone in use)
 - [ ] if a beacon is recorded as closed but has no finish scan, interpret that as a DNF
-- [ ] is there a way to print splits for runners as the beacon is closed to mimic what SI Timing does
+- [ ] need a way to print splits for runners as the beacon is closed to mimic what SI Timing does

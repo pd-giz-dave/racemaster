@@ -226,6 +226,16 @@ export function showView(viewName) {
     el.classList.toggle('active', el.dataset.view === viewName);
   });
   renderView(viewName);
+  // ToDo.MD: "when a page opens it should be fully scrolled left" — a wide table (.table-scroll's
+  // own overflow-x, e.g. Beacons' Actions column) leaves .app-main itself scrolled right from
+  // whichever view was open before. Several renderView() cases (Beacons included) already queue
+  // their own setTimeout(0) that scrollIntoView()s a table row and/or focus()es a form field —
+  // either can trigger the browser's own horizontal auto-scroll, so resetting scrollLeft here,
+  // synchronously, was simply overridden a tick later (confirmed in the field: landed "centre
+  // scrolled", between the two). Queuing this in its own later setTimeout(0) instead means it
+  // always runs after whichever one a view's own case already queued (same-delay timeouts run in
+  // scheduling order) and gets the last word.
+  setTimeout(() => document.querySelector('.app-main')?.scrollTo({ left: 0 }), 0);
 }
 
 // ---- Render dispatcher ----
