@@ -440,6 +440,42 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       assert.deepEqual(result.expected, []);
     });
 
+    // ToDo.MD: "allow for CountEjected in the device file and remove counted from progress when
+    // seen" — mobile-files-devices.js's own buildSegmentView() already folds an ejected beacon's
+    // CountSeen row out of the current segment entirely (see its own foldLatestVisible doc), so
+    // by the time countSegment reaches here there's simply nothing left for this beacon.
+    it('a CountEjected row removes that beacon from countByBeacon', async () => {
+      const ejected = countRow();
+      ejected.device.lines.push(
+        { lineNumber: 4, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:20:00', location: 'Start', refLineNumber: 3 },
+      );
+      const result = await validateAndCompute([ejected]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.countByBeacon.has(9), false);
+    });
+
+    // ToDo.MD: "allow for reset within a count segment and remove counted from progress when
+    // seen" — racemaster-mobile's own CountModeViewModel.resetCountMode() writes a plain Reset
+    // row targeting the Count visit's own Location row (RaceRepository.closeCurrentSegment,
+    // "zero server-side changes needed" per that function's own doc), then Count mode is started
+    // again later with a fresh Location/ModeStart pair of its own (same recordModeStart
+    // transaction every mode uses) — the same generic, mode-agnostic Reset-closing
+    // mobile-files-devices.js's own currentSegment() already applies to every family closes the
+    // earlier visit out, so a beacon counted before the Reset simply isn't part of the current
+    // segment any more, and applyComputedResults()'s wholesale rebuild (see its own doc) then
+    // never re-adds it to state.mobileBeaconOps on the next Update Progress run.
+    it('a Reset that closes a Count visit removes a previously-counted beacon from countByBeacon', async () => {
+      const reset = countRow();
+      reset.device.lines.push(
+        { lineNumber: 4, action: 'Reset', refLineNumber: 1 },
+        { lineNumber: 5, action: 'Location', note: 'Start', location: 'Start' },
+        { lineNumber: 6, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, location: 'Start' },
+      );
+      const result = await validateAndCompute([reset]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.countByBeacon.has(9), false);
+    });
+
     it('keeps a Close-mode selection alongside an ordinary Finish-location selection, both computed independently', async () => {
       const result = await validateAndCompute([finishRow(), closeRow()]);
       assert.equal(result.error, undefined);

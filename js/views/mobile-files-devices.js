@@ -43,13 +43,17 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
   // segment view folds/reorders/omits rows relative to the raw file (currentSegment()'s own
   // Reset-closing, Undo-folding, Location-boundary splitting — see mobile-files-devices.js's own
   // doc), so a row's lineNumber is the only thing that still ties it back to its own line in the
-  // Raw modal once it's shown here.
+  // Raw modal once it's shown here. When (ToDo.MD: "show the timestamp on device lines when they
+  // are viewed, next to the line# column") sits right beside it for the same reason — matching a
+  // row to the Raw modal by line number alone still leaves the two side by side on screen to
+  // sanity-check against that row's own raw timestamp column there, rather than having to scan
+  // past Split #/Action/Bib first.
   const rows = visibleRows.map(r => `<tr>
       <td>${r.lineNumber ?? ''}</td>
+      <td>${whenOf(r)}</td>
       <td>${r.splitNumber ?? ''}</td>
       <td>${escHtml(r.action)}</td>
       <td>${r.splitTime != null ? formatElapsedSeconds(r.splitTime) : escHtml(r.bibNumber ?? '')}</td>
-      <td>${whenOf(r)}</td>
       <td>${escHtml(displayNote(r.action, r.note) ?? '')}</td>
     </tr>`).join('');
 
@@ -65,7 +69,7 @@ export function showDeviceModal(owner, raceLabel, deviceName, lines) {
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
-            <th>Line #</th><th>Split #</th><th>Action</th><th>Bib/Split</th><th>When</th><th>Note</th>
+            <th>Line #</th><th>When</th><th>Split #</th><th>Action</th><th>Bib/Split</th><th>Note</th>
           </tr></thead>
           <tbody>${rows || '<tr><td colspan="6" style="color:var(--muted)">No entries in the current segment.</td></tr>'}</tbody>
         </table>

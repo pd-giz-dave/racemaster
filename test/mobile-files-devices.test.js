@@ -276,6 +276,57 @@ describe('mobile-files-devices.js:buildSegmentView', () => {
     assert.equal(timeSegment.length, 0);
   });
 
+  // Same fix, same bug shape, for racemaster-mobile's own CountEjected/CountUnejected markers
+  // (ToDo.MD: "allow for CountEjected in the device file ...") — both carry a null splitTime/
+  // bibNumber too, so without their own rowFamily case they'd fall into the Bibs default and
+  // strand the same kind of phantom "Pen" location segment CountComplete/CountStopped above
+  // already guard against.
+  it('classifies CountEjected/CountUnejected rows into countSegment, not bibsSegment', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Pen' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+      { lineNumber: 4, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null, refLineNumber: 3 },
+      { lineNumber: 5, action: 'CountUnejected', note: 'beacon=9', bibNumber: null, splitTime: null },
+    ];
+    const { countSegment, bibsSegment, timeSegment } = buildSegmentView(lines);
+    assert.equal(bibsSegment.length, 0);
+    assert.equal(timeSegment.length, 0);
+    // The CountEjected row's own refLineNumber targets beacon 9's CountSeen row (line 3) — same
+    // fold-group shape Undo already uses — so that whole group (CountSeen + the CountEjected row
+    // itself) drops out of the visible segment entirely; only CountUnejected (purely
+    // informational, no refLineNumber of its own, never a fold target) remains visible alongside
+    // the Location/ModeStart pair.
+    assert.deepEqual(countSegment.map(r => r.action), ['Location', 'ModeStart', 'CountUnejected']);
+  });
+
+  // The actual ToDo.MD ask: "... and remove counted from progress when seen" — a re-presented
+  // beacon's own prior CountSeen row must not still look "seen" once it's been ejected.
+  it('a CountEjected row removes the beacon\'s own prior CountSeen row from the visible segment', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Pen' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+      { lineNumber: 4, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null, refLineNumber: 3 },
+    ];
+    const { countSegment } = buildSegmentView(lines);
+    assert.equal(countSegment.some(r => r.action === 'CountSeen'), false);
+  });
+
+  // A "re-eject" (racemaster-mobile's own re-eject of a beacon already tagged "was-ejected" — see
+  // CountModeRepository.recordEject's own doc) has no live CountSeen row to target at all, so it
+  // carries no refLineNumber — its own singleton fold group, excluded the same way, dragging
+  // nothing else down with it.
+  it('a CountEjected row with no refLineNumber (a re-eject) is excluded on its own, without erroring', () => {
+    const lines = [
+      { lineNumber: 1, action: 'Location', note: 'Pen' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null },
+    ];
+    const { countSegment } = buildSegmentView(lines);
+    assert.deepEqual(countSegment.map(r => r.action), ['Location', 'ModeStart']);
+  });
+
   it('classifies a Close-mode Location/ModeStart boundary pair into closeSegment via the ModeStart note, same as Time/Bibs', () => {
     const lines = [
       { lineNumber: 1, action: 'Location', note: 'Close' },
@@ -437,6 +488,16 @@ describe('mobile-files-devices.js:resolveLocationKey', () => {
   it('recognises "Close" case-insensitively', () => {
     assert.deepEqual(resolveLocationKey('Close'), { kind: 'close' });
     assert.deepEqual(resolveLocationKey('close'), { kind: 'close' });
+  });
+
+  // ToDo.MD: "allow for a location of 'Pen' or 'Close' when selecting device file for updating
+  // progress" — "Pen" is Count mode's own real forced Location-marker note (this file's own
+  // "Close"/"Start" comments above predate it), recognised the same defensive way, for the same
+  // reason: a stray Count-family row misclassified into Bibs/Time would otherwise strand a
+  // phantom "Pen" segment and get reported as an unrecognised location.
+  it('recognises "Pen" case-insensitively', () => {
+    assert.deepEqual(resolveLocationKey('Pen'), { kind: 'pen' });
+    assert.deepEqual(resolveLocationKey('pen'), { kind: 'pen' });
   });
 });
 

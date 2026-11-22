@@ -426,6 +426,10 @@ To that end:
       control already reflects.
 - [x] when a page opens it should be fully scrolled left - e.g. Beacons page partially obscures the 
       add beacon form due to the actions column being off screen
+- [x] allow for CountEjected in the device file and remove counted from progress when seen
+- [x] allow for reset within a count segment and remove counted from progress when seen
+- [x] allow for a location of 'Pen' or 'Close' when selecting device file for updating progress
+- [x] show the timestamp on device lines when they are viewed, next to the line# column
 
 # To Do
 
@@ -496,3 +500,28 @@ To that end:
 - [ ] note a beacon has been counted in the progress.json file instead of saying "Not seen yet"
 - [ ] add a means to manually 'count' a beacon from the progress tab (to allow for a late starter turning
       up after the count station had been re-deployed)
+
+## Fast same-mode peer sync between phones (multiple Count/multiple Finish phones)
+
+racemaster-mobile is adding a BLE-only feature (plan: `/home/dave/.claude/plans/i-would-now-like-shimmering-planet.md`
+on that machine) letting several phones running the *same* mode for the *same* race (e.g. several
+Count phones covering a start pen, several Bibs/Finish phones at the finish) converge on shared
+state fast while in close proximity, by pulling full history rows from each other over an
+accelerated Mule Mode connection rather than this server relaying between them.
+
+- Nothing here needs to change for the phone-to-phone protocol itself (a new `groupRaceId`/
+  `locationCode` pair added to the BLE scan-response payload, `ADVERTISING_FORMAT_VERSION` bumped
+  3→4): `js/mule-ble.js` never decodes that payload and structurally can't — `requestDevice()`'s
+  native picker doesn't expose scan-response/advertisement data to the page at all (see that
+  file's own "Known-device memory" doc). The web app keeps working exactly as it does today,
+  filtering by service UUID and reading `DeviceInfo` only after a real GATT connect.
+- Each phone still pushes its own rows to this server exactly as before — the new peer-merge is a
+  phone-local, on-screen-only convenience (a new `PeerSeenRecordEntity` table, never synced here)
+  so an operator mid-race can see what a nearby same-mode phone has already recorded, not a new
+  data path to this server.
+- [ ] **Future, once the mobile side's cross-device dedup lands (not built yet):** when two phones
+      both report the same beacon/bib (e.g. two Finish phones both catching bib 42), the mobile app
+      picks a default canonical record (earliest timestamp) for its own display, but the
+      *results*-facing canonical pick — which of two phones' rows actually counts for `progress.json`/
+      results when both reach this server — needs an equivalent decision here, paired with that
+      mobile change when it's ready. Not an immediate action item; flagging ahead of time only.

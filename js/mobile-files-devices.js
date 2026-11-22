@@ -60,7 +60,23 @@ function foldLatestVisible(rows) {
     const cur = latestByRoot.get(key);
     if (!cur || (r.lineNumber ?? 0) > (cur.lineNumber ?? 0)) latestByRoot.set(key, r);
   }
-  return [...latestByRoot.values()].filter(r => r.action !== 'Undo');
+  // 'CountEjected' (racemaster-mobile's own HistoryAction.COUNT_EJECTED — ToDo.MD: "allow for
+  // CountEjected in the device file and remove counted from progress when seen") is a second
+  // undo-marker shape alongside 'Undo' itself: ejecting a beacon that's currently counted writes
+  // one with refLineNumber pointing at that beacon's own 'CountSeen' row, so it shares that row's
+  // fold group above and, being later, wins it — excluding it here (rather than the CountSeen row
+  // it targets) is what makes the whole group vanish from this segment, exactly like a plain Undo
+  // makes its own target vanish. Re-ejecting a beacon with no live CountSeen row to target (the
+  // mobile app's own "was-ejected" re-eject — see CountModeRepository.recordEject's own doc) has
+  // no refLineNumber at all and so is its own singleton group — excluding it here still makes it
+  // vanish, just with nothing else dragged down alongside it. mobile-files-progress.js's own
+  // computeCountByBeacon() never needs to know about CountEjected at all as a result — by the
+  // time it sees this segment, an ejected beacon's CountSeen row is already gone, so it simply
+  // isn't counted next time Update Progress runs. 'CountUnejected' is deliberately NOT excluded
+  // here — it carries no refLineNumber of its own (nothing for it to fold away) and is purely
+  // informational on the mobile side (see HistoryAction.COUNT_UNEJECTED's own doc), so it stays
+  // visible like any other ordinary row.
+  return [...latestByRoot.values()].filter(r => r.action !== 'Undo' && r.action !== 'CountEjected');
 }
 
 // Every Location lineNumber some 'Reset' row's own refLineNumber has targeted — a visit whose own
@@ -281,6 +297,14 @@ function rowFamily(r) {
   // CP1 passes from ever reaching the Progress tab too (ToDo.MD: "progress tab is not being
   // updated by checkpoint passes").
   if (r.action === 'CountSeen' || r.action === 'CountComplete' || r.action === 'CountStopped') return 'count';
+  // 'CountEjected'/'CountUnejected' (racemaster-mobile's own HistoryAction.COUNT_EJECTED/
+  // COUNT_UNEJECTED — ToDo.MD: "allow for CountEjected in the device file ...") carry no
+  // bibNumber/splitTime of their own either, same bug-prone default as CloseReopened/
+  // CountComplete/CountStopped above: without their own case here they'd fall into the Bibs
+  // family's default and strand a phantom "Pen"/"Close" location segment for
+  // mobile-files-progress.js's own locationSegmentsOf() to stumble over, the exact bug those
+  // three already guard against.
+  if (r.action === 'CountEjected' || r.action === 'CountUnejected') return 'count';
   return r.splitTime != null ? 'time' : 'bibs';
 }
 
@@ -524,11 +548,22 @@ export function deviceViewOptions(resolvedLines) {
 // same way a Count-mode device's forced "Start" location never reaches the 'start' bucket either —
 // see that function's own doc), just so this never reports it as unrecognised if one somehow
 // slips through to here regardless.
+//
+// "Pen" (ToDo.MD: "allow for a location of 'Pen' or 'Close' when selecting device file for
+// updating progress") is Count mode's own real forced Location-marker note (racemaster-mobile's
+// own RaceRepository.recordModeStart — see CountModeRepository's own doc; this file's "Start"
+// reference above predates that and is itself now stale for Count specifically, though harmless,
+// since nothing here actually keys off it either). Recognised for exactly the same defensive
+// reason "Close" already is: a stray Count-family row misclassified into Bibs/Time (the bug
+// rowFamily()'s own CountComplete/CountStopped/CountEjected/CountUnejected cases above guard
+// against) would otherwise strand a phantom "Pen" segment here and get reported as an
+// unrecognised location, rejecting the whole selected batch outright.
 export function resolveLocationKey(location) {
   const loc = (location || '').trim();
   if (/^finish$/i.test(loc)) return { kind: 'finish' };
   if (/^start$/i.test(loc)) return { kind: 'start' };
   if (/^close$/i.test(loc)) return { kind: 'close' };
+  if (/^pen$/i.test(loc)) return { kind: 'pen' };
   const m = loc.match(/(\d+)/);
   return m ? { kind: 'cp', number: +m[1] } : null; // null = unrecognised
 }
