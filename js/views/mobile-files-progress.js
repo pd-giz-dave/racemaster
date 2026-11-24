@@ -22,7 +22,7 @@ import {
   validateAndCompute, clearProgressData, applyComputedResults,
   buildProgressColumns, buildProgressRows,
 } from '../mobile-files-progress.js';
-import { currentRows } from './mobile-files-devices.js';
+import { currentRows, repaintIncorporationStatus } from './mobile-files-devices.js';
 import { pushProgressNow } from '../progress-sync.js';
 
 // Injected by mobile-files.js's own wireMobileFiles() — see this file's own top-of-file doc for
@@ -241,6 +241,9 @@ export async function autoUpdateProgress() {
 
   await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp, result.closeByBeacon, result.countByBeacon);
   renderMobileProgressTable();
+  // See repaintIncorporationStatus()'s own doc — advancing the bookkeeping above is pointless to a
+  // watching operator until the Devices tab's red/green actually reflects it.
+  repaintIncorporationStatus();
 }
 
 // #mf-auto-progress's own trigger — called from mobile-files.js's own renderMobileFiles() once
@@ -284,6 +287,9 @@ export async function maybeAutoUpdateProgress() {
 
   await applyComputedResults(result.expected, result.cpTimesByCp, selected, result.cpTimeOfDayByCp, result.closeByBeacon, result.countByBeacon);
   renderMobileProgressTable();
+  // See repaintIncorporationStatus()'s own doc — advancing the bookkeeping above is pointless to a
+  // watching operator until the Devices tab's red/green actually reflects it.
+  repaintIncorporationStatus();
   // Stamped only now that the run has genuinely succeeded, so the count reflects whatever it
   // actually just wrote.
   updateAutoProgressStatus();

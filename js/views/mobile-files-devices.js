@@ -11,7 +11,7 @@ import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
 import { escHtml, formatElapsedSeconds } from '../utils.js';
 import { TABLES } from '../strings.js';
-import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, byLineNumber } from '../mobile-files-shared.js';
+import { rowKey, selectedKeys, formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, byLineNumber, computeIncorporationStatus } from '../mobile-files-shared.js';
 import { buildSegmentView, whenOf, locationSummary, formatCount, displayNote, flattenDevices, latestModeStart, collapsePingRuns } from '../mobile-files-devices.js';
 
 // ToDo.MD's "Random tweaks": the segment view used to pair a Bibs-family row and a Time-family
@@ -176,9 +176,13 @@ function buildColumns(isAdminUser) {
 // './mobile-files-devices.js'`, which ES modules keep live across the reassignment below.
 export let currentRows = [];
 
-export function renderRaceList(races, isAdminUser) {
-  currentRows = flattenDevices(races);
-  renderTable('mobile-files-tbody', buildColumns(isAdminUser), currentRows, {
+// Remembered purely so repaintIncorporationStatus() below can rebuild the same columns without
+// a caller having to pass isAdminUser back in — it never changes between a renderRaceList() call
+// and the repaint that follows it.
+let lastIsAdminUser = false;
+
+function paintRaceList() {
+  renderTable('mobile-files-tbody', buildColumns(lastIsAdminUser), currentRows, {
     rowAttrs: r => ({
       'data-idx': r.idx,
       class: r.incorporationStatus === 'outstanding' ? 'row-outstanding'
@@ -186,4 +190,28 @@ export function renderRaceList(races, isAdminUser) {
         : '',
     }),
   });
+}
+
+export function renderRaceList(races, isAdminUser) {
+  lastIsAdminUser = isAdminUser;
+  currentRows = flattenDevices(races);
+  paintRaceList();
+}
+
+// ToDo.MD: "when there are 2 phones recording CountSeen their colours in the devices list
+// alternate between red and green, this is confusing". Cause: a device's row only ever turns
+// green via setLastSyncedLineNumber(), called from applyComputedResults() — but
+// autoUpdateProgress()/maybeAutoUpdateProgress() (js/views/mobile-files-progress.js) only
+// re-render the Progress table afterwards, not this one, so a row stays whatever colour the last
+// *unrelated* poll render happened to catch it at until the next full renderMobileFiles() comes
+// along. Two Count-mode phones both logging CountSeen at their own unsynchronized moments means
+// there's essentially always exactly one of them "outstanding since last incorporation" at any
+// given poll tick, so which one looks red keeps changing from tick to tick even though neither
+// device is actually behind in any way that matters. Recomputing + repainting right here, called
+// immediately after applyComputedResults() actually advances the bookkeeping, closes that gap
+// without a server round-trip (nothing server-side changed, only the local last-synced map).
+export function repaintIncorporationStatus() {
+  if (!currentRows.length) return;
+  for (const r of currentRows) r.incorporationStatus = computeIncorporationStatus(r);
+  paintRaceList();
 }

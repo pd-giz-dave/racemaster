@@ -519,6 +519,27 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       });
     });
 
+    // ToDo.MD: "allow for multiple devices reporting the same thing, e.g. 2 count phones recording
+    // CountSeen" — already handled by the same generic mergeLatestByBeacon() used above for Close;
+    // this just locks in that Count gets the identical cross-device treatment.
+    it('takes the latest countedAt across two selected Count-mode devices that both saw the same beacon', async () => {
+      const secondCountPhone = countRow({
+        device: {
+          name: 'Second Count Phone',
+          lines: [
+            { lineNumber: 1, action: 'Location', note: 'Start', location: 'Start' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, location: 'Start' },
+            { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:20:00', location: 'Start' },
+          ],
+        },
+      });
+      const result = await validateAndCompute([countRow(), secondCountPhone]);
+      assert.equal(result.error, undefined);
+      // Unlike Close's closeCount, a CountSeen entry is a bare timestamp (see computeCountByBeacon's
+      // own doc) — mergeLatestByBeacon just keeps whichever device's sighting is later.
+      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:20:00');
+    });
+
     // The feature this session added: a closed beacon heard advertising again (racemaster-mobile's
     // own HistoryAction.CLOSE_REOPENED) must be reinstated as outstanding here, not still "closed"
     // — see computeCloseByBeacon's own doc.

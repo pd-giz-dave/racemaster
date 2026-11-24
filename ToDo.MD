@@ -294,6 +294,11 @@ To that end:
       Progress tab's own rows as beaconClosedAt/beaconBatteryPercent/beaconCountedAt and sent on
       to the phone in progress.json
 - [x] add a line to the progress.json that indicates the timing method of the race
+- [x] allow for multiple devices reporting the same thing, e.g. 2 count phones recording CountSeen
+      (already handled generically for Close/Count by mergeLatestByBeacon() in
+      js/mobile-files-progress.js — latest-timestamp wins per beacon, closeCount summed across
+      devices; added a test locking in the same behaviour for two Count-mode devices)
+- [x] note a beacon has been counted in the progress.json file instead of saying "Not seen yet"
 
 ## Bugs/Tweaks
 
@@ -456,20 +461,6 @@ To that end:
 - [ ] an admin user can change any password
 - [ ] the mobile password must be different to the web-app and its constraint must always be applied (a-zA-Z0-9)
 
-## Race details to mimic SI wrt course CPs
-
-- [ ] in event settings add a section that lists CP numbers that must be passed and in what order
-- [ ] if the list is empty CP records are optional and purely for safety purposes
-- [ ] if the list is populated those CP are compulsory and a runner missing one is disqualified 
-      and flagged as such in the results
-- [ ] such disqualifications appear in the splits tab on the results page as DSQ
-- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a compulsory 
-      CP add a button in that 'slot' - "Grant" - that when selected considers that runner to have passed that
-      CP, this is intended to correct genuine mis-recordings at the CP, such corrections must be preserved
-      across "Update progress" actions, the rest of the system must react as if there was a time there
-      (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
-- [ ] also need to mimic the Trigs race time allowance between 2 CP's, and being able to visit a CP more than once
-
 ## Using same clock for both juniors and seniors
 
 In this context the phones see bibs for both senior and junior courses.
@@ -496,10 +487,23 @@ To that end:
 - [ ] when no time mode device is selected on the Mobile Files page, appropriate times must be extracted from the
       bibs mode devices instead (when using beacons there will usually be no time mode phone in use)
 - [ ] if a beacon is recorded as closed but has no finish scan, interpret that as a DNF
-- [ ] need a way to print splits for runners as the beacon is closed to mimic what SI Timing does
-- [ ] note a beacon has been counted in the progress.json file instead of saying "Not seen yet"
+- [ ] need a way to print splits for runners as the beacon is closed to mimic what SI Timing does, how?
 - [ ] add a means to manually 'count' a beacon from the progress tab (to allow for a late starter turning
       up after the count station had been re-deployed)
+
+## Race details to mimic SI wrt course CPs
+
+- [ ] in event settings add a section that lists CP numbers that must be passed and in what order
+- [ ] if the list is empty CP records are optional and purely for safety purposes
+- [ ] if the list is populated those CP are compulsory and a runner missing one is disqualified
+  and flagged as such in the results
+- [ ] such disqualifications appear in the splits tab on the results page as DSQ
+- [ ] on the progress tab of the mobile files page where a record has no CP time recorded for a compulsory
+  CP add a button in that 'slot' - "Grant" - that when selected considers that runner to have passed that
+  CP, this is intended to correct genuine mis-recordings at the CP, such corrections must be preserved
+  across "Update progress" actions, the rest of the system must react as if there was a time there
+  (ie. they may longer be considered as a DSQ), such manual grants should also be revocable
+- [ ] also need to mimic the Trigs race time allowance between 2 CP's, and being able to visit a CP more than once
 
 ## Fast same-mode peer sync between phones (multiple Count/multiple Finish phones)
 
