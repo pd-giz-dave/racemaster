@@ -425,7 +425,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     it('extracts a CountSeen row\'s beacon number and countedAt into countByBeacon, without erroring', async () => {
       const result = await validateAndCompute([countRow()]);
       assert.equal(result.error, undefined);
-      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:15:00');
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:15:00', countedAt: '2026/08/30 09:15:00' });
       assert.equal(result.closeByBeacon.size, 0);
     });
 
@@ -441,17 +441,45 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
 
     // ToDo.MD: "allow for CountEjected in the device file and remove counted from progress when
-    // seen" — mobile-files-devices.js's own buildSegmentView() already folds an ejected beacon's
-    // CountSeen row out of the current segment entirely (see its own foldLatestVisible doc), so
-    // by the time countSegment reaches here there's simply nothing left for this beacon.
-    it('a CountEjected row removes that beacon from countByBeacon', async () => {
+    // seen" — the beacon still carries a countByBeacon entry (needed so a cross-device merge can
+    // compare it, see computeCountByBeacon's own doc), but with countedAt null, which is what
+    // buildProgressRows()'s own overlay (via applyComputedResults()'s beaconOps) reads as
+    // "not counted" — same as there being no entry at all.
+    it('a CountEjected row removes that beacon\'s countedAt from countByBeacon', async () => {
       const ejected = countRow();
       ejected.device.lines.push(
         { lineNumber: 4, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:20:00', location: 'Start', refLineNumber: 3 },
       );
       const result = await validateAndCompute([ejected]);
       assert.equal(result.error, undefined);
-      assert.equal(result.countByBeacon.has(9), false);
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:20:00', countedAt: null });
+    });
+
+    // The actual bug this fixes (reported live on race "callow-seniors", device "witty-warbler",
+    // beacon 1/bib 801): a second Count-mode device ("swift-puffin") had also recorded an earlier,
+    // un-ejected CountSeen for the same beacon — ejecting it on witty-warbler alone had no way to
+    // retract swift-puffin's own, older, still-"counted" entry once the two were merged, since an
+    // eject used to leave no trace at all once applied locally (no countByBeacon entry to compare
+    // against). Carrying the eject's own timestamp through to the merge is what lets a genuinely
+    // later eject on one device beat an earlier, un-ejected sighting on another.
+    it('a later CountEjected on one device beats an earlier un-ejected CountSeen on another selected device', async () => {
+      const laterEject = countRow();
+      laterEject.device.lines.push(
+        { lineNumber: 4, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:20:00', location: 'Start', refLineNumber: 3 },
+      );
+      const otherDeviceStillCounted = countRow({
+        device: {
+          name: 'Other Count Phone',
+          lines: [
+            { lineNumber: 1, action: 'Location', note: 'Start', location: 'Start' },
+            { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null, location: 'Start' },
+            { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:16:00', location: 'Start' },
+          ],
+        },
+      });
+      const result = await validateAndCompute([laterEject, otherDeviceStillCounted]);
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:20:00', countedAt: null });
     });
 
     // ToDo.MD: "allow for reset within a count segment and remove counted from progress when
@@ -535,9 +563,10 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       });
       const result = await validateAndCompute([countRow(), secondCountPhone]);
       assert.equal(result.error, undefined);
-      // Unlike Close's closeCount, a CountSeen entry is a bare timestamp (see computeCountByBeacon's
-      // own doc) — mergeLatestByBeacon just keeps whichever device's sighting is later.
-      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:20:00');
+      // Unlike Close's closeCount, a Count entry carries nothing to accumulate across devices
+      // (see computeCountByBeacon's own doc) — mergeLatestByBeacon just keeps whichever device's
+      // sighting is later.
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:20:00', countedAt: '2026/08/30 09:20:00' });
     });
 
     // The feature this session added: a closed beacon heard advertising again (racemaster-mobile's
@@ -588,7 +617,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       });
       const result = await validateAndCompute([repurposed]);
       assert.equal(result.error, undefined);
-      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:15:00');
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:15:00', countedAt: '2026/08/30 09:15:00' });
       assert.deepEqual(result.closeByBeacon.get(5), {
         at: '2026/08/30 09:20:00', closedAt: '2026/08/30 09:20:00', batteryPercent: 80, closeCount: 1,
       });
@@ -621,7 +650,7 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       });
       const result = await validateAndCompute([repurposed]);
       assert.equal(result.error, undefined);
-      assert.equal(result.countByBeacon.get(9), '2026/08/30 09:15:00');
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:15:00', countedAt: '2026/08/30 09:15:00' });
       assert.equal(result.cpBuckets.size, 1);
       assert.ok(result.cpBuckets.has(1));
     });
@@ -724,7 +753,7 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
   describe('mobileBeaconOps (Close/Count-mode persistence)', () => {
     it('rebuilds mobileBeaconOps from closeByBeacon/countByBeacon, one row per distinct beacon', async () => {
       const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]]);
-      const countByBeacon = new Map([[9, '2026/08/30 09:15:00']]);
+      const countByBeacon = new Map([[9, { at: '2026/08/30 09:15:00', countedAt: '2026/08/30 09:15:00' }]]);
       await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon, countByBeacon);
       assert.deepEqual(state.mobileBeaconOps, [
         { beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80 },
@@ -734,11 +763,19 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
 
     it('a beacon both closed and counted (by two different selected devices) carries both sets of fields in one row', async () => {
       const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 80 }]]);
-      const countByBeacon = new Map([[5, '2026/08/30 08:00:00']]);
+      const countByBeacon = new Map([[5, { at: '2026/08/30 08:00:00', countedAt: '2026/08/30 08:00:00' }]]);
       await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon, countByBeacon);
       assert.deepEqual(state.mobileBeaconOps, [
         { beaconNumber: 5, closedAt: '2026/08/30 09:10:00', batteryPercent: 80, countedAt: '2026/08/30 08:00:00' },
       ]);
+    });
+
+    // An ejected beacon's countByBeacon entry carries countedAt:null (see computeCountByBeacon's
+    // own doc) — must come out of beaconOps with no countedAt field at all, not a literal null.
+    it('omits countedAt entirely from beaconOps for a beacon with no countedAt (ejected)', async () => {
+      const countByBeacon = new Map([[9, { at: '2026/08/30 09:20:00', countedAt: null }]]);
+      await applyComputedResults([], new Map(), [finishRow()], new Map(), new Map(), countByBeacon);
+      assert.deepEqual(state.mobileBeaconOps, [{ beaconNumber: 9 }]);
     });
 
     it('clearProgressData wipes mobileBeaconOps too', async () => {
@@ -836,7 +873,7 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
     });
 
     it('marks a counted beacon on-course, stamping asAt from countByBeacon', async () => {
-      const countByBeacon = new Map([[5, '2026/08/30 08:15:00']]);
+      const countByBeacon = new Map([[5, { at: '2026/08/30 08:15:00', countedAt: '2026/08/30 08:15:00' }]]);
       await applyComputedResults([], new Map(), [finishRow()], new Map(), new Map(), countByBeacon);
       assert.equal(state.beacons[0].status, 'on-course');
       assert.equal(state.beacons[0].asAt, '2026/08/30 08:15:00');
@@ -844,7 +881,7 @@ describe('mobile-files-progress.js:clearProgressData / applyComputedResults', ()
 
     it('marks a closed beacon returned, taking priority over counted', async () => {
       const closeByBeacon = new Map([[5, { closedAt: '2026/08/30 09:10:00', batteryPercent: 45, closeCount: 1 }]]);
-      const countByBeacon = new Map([[5, '2026/08/30 08:15:00']]);
+      const countByBeacon = new Map([[5, { at: '2026/08/30 08:15:00', countedAt: '2026/08/30 08:15:00' }]]);
       await applyComputedResults([], new Map(), [finishRow()], new Map(), closeByBeacon, countByBeacon);
       assert.equal(state.beacons[0].status, 'returned');
       assert.equal(state.beacons[0].asAt, '2026/08/30 09:10:00');

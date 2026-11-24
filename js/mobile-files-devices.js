@@ -60,23 +60,25 @@ function foldLatestVisible(rows) {
     const cur = latestByRoot.get(key);
     if (!cur || (r.lineNumber ?? 0) > (cur.lineNumber ?? 0)) latestByRoot.set(key, r);
   }
-  // 'CountEjected' (racemaster-mobile's own HistoryAction.COUNT_EJECTED — ToDo.MD: "allow for
-  // CountEjected in the device file and remove counted from progress when seen") is a second
-  // undo-marker shape alongside 'Undo' itself: ejecting a beacon that's currently counted writes
-  // one with refLineNumber pointing at that beacon's own 'CountSeen' row, so it shares that row's
-  // fold group above and, being later, wins it — excluding it here (rather than the CountSeen row
-  // it targets) is what makes the whole group vanish from this segment, exactly like a plain Undo
-  // makes its own target vanish. Re-ejecting a beacon with no live CountSeen row to target (the
-  // mobile app's own "was-ejected" re-eject — see CountModeRepository.recordEject's own doc) has
-  // no refLineNumber at all and so is its own singleton group — excluding it here still makes it
-  // vanish, just with nothing else dragged down alongside it. mobile-files-progress.js's own
-  // computeCountByBeacon() never needs to know about CountEjected at all as a result — by the
-  // time it sees this segment, an ejected beacon's CountSeen row is already gone, so it simply
-  // isn't counted next time Update Progress runs. 'CountUnejected' is deliberately NOT excluded
-  // here — it carries no refLineNumber of its own (nothing for it to fold away) and is purely
-  // informational on the mobile side (see HistoryAction.COUNT_UNEJECTED's own doc), so it stays
-  // visible like any other ordinary row.
-  return [...latestByRoot.values()].filter(r => r.action !== 'Undo' && r.action !== 'CountEjected');
+  // 'CountEjected' (racemaster-mobile's own HistoryAction.COUNT_EJECTED) used to be excluded here
+  // too, the same way 'Undo' is, which (when its own refLineNumber correctly targets the beacon's
+  // 'CountSeen' row, the normal case) makes that whole fold group vanish from this segment — same
+  // as a plain Undo makes its own target vanish. That's still what happens below (CountEjected is
+  // simply the later, winning row in that shared group, and is now kept rather than filtered away
+  // — see the filter at the end of this function). The reason it must stay VISIBLE now, rather
+  // than being dropped here the way it used to be: this is a single DEVICE's own segment, but a
+  // beacon can be counted by more than one selected Count-mode device at once (ToDo.MD: "allow for
+  // multiple devices reporting the same thing, e.g. 2 count phones recording CountSeen") — and an
+  // eject recorded on THIS device has no way to retract an earlier, un-ejected CountSeen some
+  // OTHER device already recorded for the same beacon. Confirmed live (race "callow-seniors",
+  // beacon 1/bib 801): ejecting it on one Count phone left it still showing "on-course" from a
+  // different Count phone's own, older, never-ejected sighting. Fixing that cross-device case
+  // needs the eject's own timestamp to survive past this per-device fold, so mobile-files-
+  // progress.js's own computeCountByBeacon()/mergeLatestByBeacon() can compare it against every
+  // other selected device's own latest event for that beacon and let whichever is genuinely most
+  // recent win — which is only possible if CountEjected rows are still here for it to see, instead
+  // of silently vanishing (along with whatever CountSeen row they folded away) right here.
+  return [...latestByRoot.values()].filter(r => r.action !== 'Undo');
 }
 
 // Every Location lineNumber some 'Reset' row's own refLineNumber has targeted — a visit whose own

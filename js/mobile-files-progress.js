@@ -303,10 +303,10 @@ export async function clearProgressData() {
 // their own free-text `note` ("beacon=<n> battery=<pct>" / "beacon=<n>"), never in bibNumber
 // (which may be null — a beacon can be closed/counted before its bib pairing is even known), so
 // matching downstream (buildProgressRows() below) is by beacon number, via entries[].beaconNumber,
-// not bib. A beacon can be re-presented to the same Close-mode device more than once — each close
-// is its own separate row, never deduplicated/upserted client-side — so the LAST one by lineNumber
-// (the segment's own rows are already lineNumber-sorted, see buildSegmentView) is its current
-// status; CountSeen has no such re-presentation concern, but is read the same way regardless.
+// not bib. A beacon can be re-presented to the same Close/Count-mode device more than once — each
+// close/sighting is its own separate row, never deduplicated/upserted client-side — so the LAST
+// one by lineNumber (the segment's own rows are already lineNumber-sorted, see buildSegmentView)
+// is its current status.
 //
 // A closed beacon heard advertising again (powered back on) gets its own 'CloseReopened' row
 // (racemaster-mobile's own HistoryAction.CLOSE_REOPENED), note "beacon=<n>" only — no battery,
@@ -352,15 +352,29 @@ function computeCloseByBeacon(closeSegmentRows) {
   return result;
 }
 
+// A CountSeen row sets countedAt; a CountEjected row (racemaster-mobile's own
+// HistoryAction.COUNT_EJECTED) un-sets it — but, unlike the earlier design, still produces a real
+// Map entry (`{ at, countedAt: null }`) rather than simply having no entry at all. That distinction
+// matters once mergeLatestByBeacon() below compares this device's own result against every other
+// selected device's: "no entry" would be indistinguishable from "this device never saw this beacon
+// at all", so a genuinely later eject on THIS device could never beat an earlier, un-ejected
+// CountSeen some OTHER selected device still has for the same beacon — confirmed live (race
+// "callow-seniors", beacon 1/bib 801): ejecting it on one Count phone left it still "on-course"
+// from a different Count phone's own older sighting, since the eject had nowhere to register
+// against. Carrying the eject's own timestamp here is what lets it actually win that comparison
+// when it's genuinely the most recent event for that beacon, same principle as Close's own
+// CloseReopened (see computeCloseByBeacon above) — mobile-files-devices.js's own
+// foldLatestVisible() no longer drops CountEjected rows before they get here, for the same reason.
 function computeCountByBeacon(countSegmentRows) {
   const result = new Map();
   for (const r of countSegmentRows) {
-    if (r.action !== 'CountSeen') continue;
+    if (r.action !== 'CountSeen' && r.action !== 'CountEjected') continue;
     const m = COUNT_NOTE_RE.exec(r.note || '');
     if (!m) continue;
     const beacon = +m[1];
     if (!Number.isFinite(beacon) || beacon <= 0) continue;
-    result.set(beacon, r.timestamp ?? r.timestampMillis ?? '');
+    const at = r.timestamp ?? r.timestampMillis ?? '';
+    result.set(beacon, { at, countedAt: r.action === 'CountSeen' ? at : null });
   }
   return result;
 }
@@ -379,11 +393,12 @@ function mergeLatestByBeacon(target, source, tsOf) {
     const a = parseTimestamp(tsOf(existing));
     const b = parseTimestamp(tsOf(entry));
     const winner = (b != null && (a == null || b >= a)) ? entry : existing;
-    // closeCount (object entries only — countByBeacon's own entries are plain timestamp strings,
-    // see computeCountByBeacon) is a running total across every selected device, not just
-    // whichever one's closedAt/batteryPercent wins — a beacon could in principle be closed on
-    // more than one of the selected phones.
-    target.set(beacon, typeof entry === 'object'
+    // closeCount is a running total across every selected device, not just whichever one's
+    // closedAt/batteryPercent wins — a beacon could in principle be closed on more than one of the
+    // selected phones. Only Close's own entries carry it at all (computeCountByBeacon's entries
+    // never do) — guarded on the key actually being present on either side, not on typeof, since
+    // both Close's and Count's own entries are plain `{at, ...}` objects now.
+    target.set(beacon, ('closeCount' in existing || 'closeCount' in entry)
       ? { ...winner, closeCount: (existing.closeCount || 0) + (entry.closeCount || 0) }
       : winner);
   }
@@ -421,7 +436,7 @@ export async function validateAndCompute(selected) {
   const startRows = []; // same shape, for the 'start' location kind — see this function's own doc below
   const cpBuckets = new Map(); // cp number -> segment
   const closeByBeacon = new Map(); // beacon -> { closedAt, batteryPercent } — see Close/Count section above
-  const countByBeacon = new Map(); // beacon -> countedAt
+  const countByBeacon = new Map(); // beacon -> { at, countedAt } — see computeCountByBeacon's own doc
   for (const r of selected) {
     // A Close/Count-mode device's own beacon data is extracted here, before any location-based
     // bucketing runs at all — neither mode is actually location-aware (see
@@ -457,7 +472,11 @@ export async function validateAndCompute(selected) {
       mergeLatestByBeacon(closeByBeacon, computeCloseByBeacon(closeSegment), e => e.at);
     }
     if (countSegment.length) {
-      mergeLatestByBeacon(countByBeacon, computeCountByBeacon(countSegment), e => e);
+      // `at`, not `countedAt` — an ejected entry carries no countedAt of its own to compare by
+      // (see computeCountByBeacon's own doc), but still needs a timestamp so a genuinely later
+      // eject on this device can correctly win against another selected device's own, older,
+      // still-counted entry for the same beacon.
+      mergeLatestByBeacon(countByBeacon, computeCountByBeacon(countSegment), e => e.at);
     }
     // A device with no Bibs/Time segment at all AND some Close/Count data is a dedicated,
     // genuinely location-less Close/Count phone — skip the loop below, which has nothing to
@@ -645,17 +664,18 @@ export async function applyComputedResults(
   // selection of devices on a different run).
   const beaconOps = [...new Set([...closeByBeacon.keys(), ...countByBeacon.keys()])].sort((a, b) => a - b).map(beaconNumber => {
     const close = closeByBeacon.get(beaconNumber);
-    const countedAt = countByBeacon.get(beaconNumber);
+    const count = countByBeacon.get(beaconNumber);
     return {
       beaconNumber,
-      // Gated on close.closedAt itself, not just `close` being present — a beacon reopened since
-      // its last close (closeByBeacon's own entry then carries no closedAt — see
-      // computeCloseByBeacon's own doc) must come out with neither field here, which is what lets
-      // buildProgressRows()' own overlay below naturally show it as outstanding again rather than
-      // still-closed.
+      // Gated on close.closedAt/count.countedAt themselves, not just `close`/`count` being present
+      // — a beacon reopened since its last close, or ejected since its last count (both maps' own
+      // entries then carry no closedAt/countedAt — see computeCloseByBeacon's/
+      // computeCountByBeacon's own docs), must come out with neither field here, which is what
+      // lets buildProgressRows()' own overlay below naturally show it as outstanding/not-counted
+      // again rather than still-closed/still-counted.
       ...(close?.closedAt ? { closedAt: close.closedAt, batteryPercent: close.batteryPercent } : {}),
       ...(close?.closeCount != null ? { closeCount: close.closeCount } : {}),
-      ...(countedAt ? { countedAt } : {}),
+      ...(count?.countedAt ? { countedAt: count.countedAt } : {}),
     };
   });
 

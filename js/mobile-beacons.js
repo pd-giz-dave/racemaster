@@ -155,8 +155,12 @@ export function computeBeaconStatusUpdates(closeByBeacon, countByBeacon) {
   for (const [number, { closedAt }] of closeByBeacon) {
     if (closedAt) updates.set(number, { status: 'returned', asAt: closedAt });
   }
-  for (const [number, countedAt] of countByBeacon) {
-    if (!updates.has(number)) updates.set(number, { status: 'on-course', asAt: countedAt });
+  // Gated on countedAt itself, not just an entry being present — an ejected beacon still has a
+  // countByBeacon entry (see mobile-files-progress.js's own computeCountByBeacon doc) but with
+  // countedAt null, and must fall through to 'issued' below (or be left out entirely) rather than
+  // being reported on-course.
+  for (const [number, { countedAt }] of countByBeacon) {
+    if (!updates.has(number) && countedAt) updates.set(number, { status: 'on-course', asAt: countedAt });
   }
   for (const number of issuedBeaconNumbers()) {
     if (!updates.has(number)) updates.set(number, { status: 'issued', asAt: '' });

@@ -292,16 +292,19 @@ describe('mobile-files-devices.js:buildSegmentView', () => {
     const { countSegment, bibsSegment, timeSegment } = buildSegmentView(lines);
     assert.equal(bibsSegment.length, 0);
     assert.equal(timeSegment.length, 0);
-    // The CountEjected row's own refLineNumber targets beacon 9's CountSeen row (line 3) — same
-    // fold-group shape Undo already uses — so that whole group (CountSeen + the CountEjected row
-    // itself) drops out of the visible segment entirely; only CountUnejected (purely
-    // informational, no refLineNumber of its own, never a fold target) remains visible alongside
-    // the Location/ModeStart pair.
-    assert.deepEqual(countSegment.map(r => r.action), ['Location', 'ModeStart', 'CountUnejected']);
+    // foldLatestVisible() no longer drops CountEjected itself (see its own doc — its own timestamp
+    // needs to survive to mobile-files-progress.js's own computeCountByBeacon()/mergeLatestByBeacon()
+    // for the cross-device case) — it's the winning row of the fold group it shares with beacon 9's
+    // CountSeen via refLineNumber, so it appears here in CountSeen's place; CountUnejected, same as
+    // always, stays visible alongside it.
+    assert.deepEqual(countSegment.map(r => r.action), ['Location', 'ModeStart', 'CountEjected', 'CountUnejected']);
   });
 
   // The actual ToDo.MD ask: "... and remove counted from progress when seen" — a re-presented
-  // beacon's own prior CountSeen row must not still look "seen" once it's been ejected.
+  // beacon's own prior CountSeen row must not still look "seen" once it's been ejected. The
+  // CountSeen row itself still disappears from THIS segment (its fold group's winner is now the
+  // later CountEjected row sharing it via refLineNumber) — mobile-files-progress.js's own
+  // computeCountByBeacon() is what turns the surviving CountEjected row into "not counted".
   it('a CountEjected row removes the beacon\'s own prior CountSeen row from the visible segment', () => {
     const lines = [
       { lineNumber: 1, action: 'Location', note: 'Pen' },
@@ -315,16 +318,17 @@ describe('mobile-files-devices.js:buildSegmentView', () => {
 
   // A "re-eject" (racemaster-mobile's own re-eject of a beacon already tagged "was-ejected" — see
   // CountModeRepository.recordEject's own doc) has no live CountSeen row to target at all, so it
-  // carries no refLineNumber — its own singleton fold group, excluded the same way, dragging
-  // nothing else down with it.
-  it('a CountEjected row with no refLineNumber (a re-eject) is excluded on its own, without erroring', () => {
+  // carries no refLineNumber — its own singleton fold group. It stays visible here regardless (see
+  // foldLatestVisible's own doc), relying on computeCountByBeacon() downstream to be a correct,
+  // harmless no-op whether or not a live CountSeen row exists to actually un-count.
+  it('a CountEjected row with no refLineNumber (a re-eject) stays visible on its own, without erroring', () => {
     const lines = [
       { lineNumber: 1, action: 'Location', note: 'Pen' },
       { lineNumber: 2, action: 'ModeStart', note: 'Count', splitTime: null, bibNumber: null },
       { lineNumber: 3, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null },
     ];
     const { countSegment } = buildSegmentView(lines);
-    assert.deepEqual(countSegment.map(r => r.action), ['Location', 'ModeStart']);
+    assert.deepEqual(countSegment.map(r => r.action), ['Location', 'ModeStart', 'CountEjected']);
   });
 
   it('classifies a Close-mode Location/ModeStart boundary pair into closeSegment via the ModeStart note, same as Time/Bibs', () => {

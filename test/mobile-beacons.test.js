@@ -258,7 +258,7 @@ describe('mobile-beacons.js:computeBeaconStatusUpdates/applyBeaconStatusUpdates'
     state.beacons = [beacon(1)];
     state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
     const countedAt = closedAtAfterHours(1);
-    const updates = computeBeaconStatusUpdates(new Map(), new Map([[1, countedAt]]));
+    const updates = computeBeaconStatusUpdates(new Map(), new Map([[1, { at: countedAt, countedAt }]]));
     assert.deepEqual(updates.get(1), { status: 'on-course', asAt: countedAt });
   });
 
@@ -266,8 +266,19 @@ describe('mobile-beacons.js:computeBeaconStatusUpdates/applyBeaconStatusUpdates'
     state.beacons = [beacon(1)];
     state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
     const closedAt = closedAtAfterHours(2);
-    const updates = computeBeaconStatusUpdates(closeMap([[1, { closedAt }]]), new Map([[1, closedAtAfterHours(1)]]));
+    const earlierCountedAt = closedAtAfterHours(1);
+    const updates = computeBeaconStatusUpdates(closeMap([[1, { closedAt }]]), new Map([[1, { at: earlierCountedAt, countedAt: earlierCountedAt }]]));
     assert.deepEqual(updates.get(1), { status: 'returned', asAt: closedAt });
+  });
+
+  // An ejected beacon's countByBeacon entry carries countedAt:null (see
+  // mobile-files-progress.js's own computeCountByBeacon doc) — must fall through to issued, not be
+  // reported on-course with a blank/null asAt.
+  it('an ejected beacon (countedAt null in its map entry) falls through to issued, not on-course', () => {
+    state.beacons = [beacon(1)];
+    state.entries = [{ bibNumber: 1, dibberNumber: 1 }];
+    const updates = computeBeaconStatusUpdates(new Map(), new Map([[1, { at: closedAtAfterHours(1), countedAt: null }]]));
+    assert.deepEqual(updates.get(1), { status: 'issued', asAt: '' });
   });
 
   it('leaves out a beacon untouched this race (not issued, not counted, not closed)', () => {
