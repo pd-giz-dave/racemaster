@@ -138,6 +138,40 @@ describe('mobile-files-devices.js:buildSegmentView', () => {
     assert.equal(bibsSegment.filter(r => r.action === 'NewRace').length, 0);
   });
 
+  // The actual bug this fixes (confirmed live, race "callow-seniors", device "witty-warbler"): a
+  // device that only ever used Count mode before, repurposed into Bibs mode once (NewRace/
+  // Location/ModeStart, exactly like any mode switch) and then fully Reset-closed — this is the
+  // 'bibs' family's own row list, whose very FIRST row is that NewRace, since the device never
+  // touched Bibs before. Without locationVisits()'s own merge (see its doc), that NewRace was
+  // stranded in its own permanently-un-targetable "visit 0", surviving the Reset forever and
+  // leaving bibsSegment non-empty with nothing in it but a locationless row — which
+  // validateAndCompute() (mobile-files-progress.js) rejected outright with "has no location
+  // recorded", even though the device's genuinely current family (Count) was perfectly fine.
+  it('a Reset-closed Bibs visit leaves no trace at all when its own leading NewRace was this family\'s very first row', () => {
+    const lines = [
+      { lineNumber: 1, action: 'NewRace', splitTime: null },
+      { lineNumber: 2, action: 'Location', note: 'Start' },
+      { lineNumber: 3, action: 'ModeStart', note: 'Bibs', bibNumber: null, splitTime: null },
+      { lineNumber: 4, action: 'Reset', refLineNumber: 2 },
+    ];
+    const { bibsSegment } = buildSegmentView(lines);
+    assert.deepEqual(bibsSegment, []);
+  });
+
+  // The genuinely degraded-data case locationVisits()'s implicit "visit 0" doc still covers: a
+  // family with no Location row anywhere in its own row list at all. Unlike the test above, there
+  // is no following real Location row for the merge to fold into, so this must still show
+  // everything (the pre-location-grouping behaviour), not disappear.
+  it('still shows everything when a family has no Location row anywhere (degraded data)', () => {
+    const lines = [
+      { lineNumber: 1, action: 'NewRace', splitTime: null },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', bibNumber: null, splitTime: null },
+      { lineNumber: 3, action: 'Finish', bibNumber: 7 },
+    ];
+    const { bibsSegment } = buildSegmentView(lines);
+    assert.deepEqual(bibsSegment.map(r => r.action), ['NewRace', 'ModeStart', 'Finish']);
+  });
+
   it('classifies a Bibs/CP NewRace row as Bibs via its own following Location', () => {
     const lines = [
       { lineNumber: 1, action: 'NewRace' },

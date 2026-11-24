@@ -107,20 +107,37 @@ function legacyResetWallLine(rows) {
 }
 
 // Splits already fold-collapsed, ascending-by-lineNumber rows into per-Location "visits" — see
-// racemaster-mobile's HistoryFold.visits. Rows before the first real Location marker (there
-// normally are none — every real device file's very first row for a family is always its own
-// Location marker, see RaceRepository.recordModeStart — but older/degraded data, or a test
-// fixture, might have none at all) are bucketed into an implicit visit of their own
-// (locationLineNumber: 0, note: null) rather than dropped outright, so a file with no Location
-// markers at all still shows everything, exactly as before this location-grouping existed. A
-// bare `{action:'Reset'}` with no refLineNumber (the pre-this-feature convention) can never
-// target lineNumber 0, so it can't close this implicit visit either — same "no boundary marker
-// recognized, show everything" degradation.
+// racemaster-mobile's HistoryFold.visits. Rows before the first real Location marker in THIS
+// family's own row list (there normally are none — every real device file's very first row for a
+// family is always its own Location marker, see RaceRepository.recordModeStart — but older/
+// degraded data, or a test fixture, might have none at all) are bucketed into an implicit visit of
+// their own (locationLineNumber: 0, note: null) rather than dropped outright, so a file with no
+// Location markers at all still shows everything, exactly as before this location-grouping
+// existed. A bare `{action:'Reset'}` with no refLineNumber (the pre-this-feature convention) can
+// never target lineNumber 0, so it can't close this implicit visit either — same "no boundary
+// marker recognized, show everything" degradation.
+//
+// That implicit visit is folded into whichever REAL visit immediately follows it, though, rather
+// than kept as its own standalone one — confirmed live (race "callow-seniors", device "witty-
+// warbler"): a device repurposed INTO Bibs mode partway through its history (NewRace/Location/
+// ModeStart, same as any mode switch) has a NewRace row that's the first-ever row in the 'bibs'
+// family's own row list, even though the device's FILE as a whole has plenty of real Location
+// rows (just for OTHER families) — resetTargetLineNumbers() only ever targets a real Location
+// row's own lineNumber, never 0, so without this merge that lone NewRace survived every Reset of
+// its own Bibs visit forever, stranding a phantom "current" bibsSegment containing nothing but a
+// locationless NewRace row once the real Bibs visit it led into had long since been Reset-closed
+// — which validateAndCompute() (mobile-files-progress.js) then rejected outright with "has no
+// location recorded", even though the device's OTHER, genuinely current family (Count, in this
+// case) had a perfectly good Location of its own.
 function locationVisits(rows) {
   const result = [];
   let current = null;
   for (const r of rows) {
     if (r.action === 'Location') {
+      if (current && current.locationLineNumber === 0) {
+        current = { locationLineNumber: r.lineNumber, note: r.note, rows: [...current.rows, r] };
+        continue;
+      }
       if (current) result.push(current);
       current = { locationLineNumber: r.lineNumber, note: r.note, rows: [r] };
     } else {
