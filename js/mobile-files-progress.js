@@ -365,16 +365,22 @@ function computeCloseByBeacon(closeSegmentRows) {
 // when it's genuinely the most recent event for that beacon, same principle as Close's own
 // CloseReopened (see computeCloseByBeacon above) — mobile-files-devices.js's own
 // foldLatestVisible() no longer drops CountEjected rows before they get here, for the same reason.
+// CountUnejected (HistoryAction.COUNT_UNEJECTED) reverses an eject on the same device and must
+// re-set countedAt the same way CountSeen does — confirmed live (race "callow-seniors", beacon 1):
+// swift-puffin logged CountEjected then CountUnejected for it, and without this case Update
+// Progress kept treating it as ejected forever, since the row was simply skipped here. Its own
+// note still carries "beacon=N" even though its bibNumber/refLineNumber come through null from the
+// mobile app (a separate, already-known gap there) — COUNT_NOTE_RE only ever reads the note.
 function computeCountByBeacon(countSegmentRows) {
   const result = new Map();
   for (const r of countSegmentRows) {
-    if (r.action !== 'CountSeen' && r.action !== 'CountEjected') continue;
+    if (r.action !== 'CountSeen' && r.action !== 'CountEjected' && r.action !== 'CountUnejected') continue;
     const m = COUNT_NOTE_RE.exec(r.note || '');
     if (!m) continue;
     const beacon = +m[1];
     if (!Number.isFinite(beacon) || beacon <= 0) continue;
     const at = r.timestamp ?? r.timestampMillis ?? '';
-    result.set(beacon, { at, countedAt: r.action === 'CountSeen' ? at : null });
+    result.set(beacon, { at, countedAt: r.action === 'CountEjected' ? null : at });
   }
   return result;
 }

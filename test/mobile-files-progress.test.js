@@ -482,6 +482,24 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:20:00', countedAt: null });
     });
 
+    // Reported live (race "callow-seniors", device "swift-puffin", beacon 1): a CountEjected
+    // followed later by a CountUnejected (racemaster-mobile's own HistoryAction.COUNT_UNEJECTED,
+    // reversing the eject) left Update Progress still treating the beacon as ejected forever,
+    // because computeCountByBeacon used to skip CountUnejected rows entirely rather than
+    // re-setting countedAt the way CountSeen does. The mobile app's own CountUnejected row has no
+    // bibNumber/refLineNumber yet (a separate, already-known gap there), but its note still
+    // carries "beacon=N", which is all computeCountByBeacon ever reads.
+    it('a CountUnejected row restores that beacon\'s countedAt after a prior CountEjected', async () => {
+      const unejected = countRow();
+      unejected.device.lines.push(
+        { lineNumber: 4, action: 'CountEjected', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:20:00', location: 'Start', refLineNumber: 3 },
+        { lineNumber: 5, action: 'CountUnejected', note: 'beacon=9', bibNumber: null, splitTime: null, timestamp: '2026/08/30 09:25:00', location: 'Start', refLineNumber: null },
+      );
+      const result = await validateAndCompute([unejected]);
+      assert.equal(result.error, undefined);
+      assert.deepEqual(result.countByBeacon.get(9), { at: '2026/08/30 09:25:00', countedAt: '2026/08/30 09:25:00' });
+    });
+
     // ToDo.MD: "allow for reset within a count segment and remove counted from progress when
     // seen" — racemaster-mobile's own CountModeViewModel.resetCountMode() writes a plain Reset
     // row targeting the Count visit's own Location row (RaceRepository.closeCurrentSegment,
