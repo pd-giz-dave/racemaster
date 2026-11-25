@@ -1,6 +1,5 @@
 'use strict';
 
-import { state } from '../state.js';
 import { getIsAdmin } from '../storage.js';
 import { renderTable, tableColumns } from '../ui.js';
 import { escHtml } from '../utils.js';
@@ -9,28 +8,14 @@ import {
   formatRaceDate, formatDateTime, formatStoredTimestamp, raceNameOf, isDeviceStale, isProgressStale,
 } from '../mobile-files-shared.js';
 import { formatCount, flattenAllFiles } from '../mobile-files-devices.js';
+import { buildProgressColumns } from '../mobile-files-progress.js';
+import { progressTableRenderers, progressRowAttrs } from './mobile-files-progress.js';
 
 // Renders the Mobile Files "All Files" tab — a flat list of every server-stored device/progress
 // file. Deliberately skips the Devices tab's filterStaleRaces()/mergePendingIntoRaces() logic:
 // every file here stays browsable/deletable regardless of age, with stale ones highlighted (see
 // isDeviceStale()/isProgressStale() in mobile-files-shared.js) rather than hidden. A safe leaf
 // module — never calls back into mobile-files.js's renderMobileFiles().
-
-// Mirrors the Progress tab's own fobNumber cell (js/views/mobile-files-progress.js) — same
-// "N — returned"/"N — not returned" suffix and color:var(--danger) highlight for a beacon still
-// outstanding — but reads straight off this *file's* own beaconNumber (a point-in-time snapshot,
-// unlike the Progress tab's live entry.dibberNumber) against the current state.beaconReports for
-// this file's own raceLabel, which is passed in rather than re-derived per entry since every
-// entry in one progress.json file shares the one race.
-function fobCellHtml(beaconNumber, raceLabel) {
-  if (!beaconNumber) return '';
-  const report = raceLabel ? state.beaconReports.find(r => r.raceLabel === raceLabel) : null;
-  const status = report?.missing.includes(beaconNumber) ? 'missing'
-               : report?.returned.includes(beaconNumber) ? 'returned' : '';
-  const suffix = status === 'missing' ? ' — not returned' : status === 'returned' ? ' — returned' : '';
-  const text = escHtml(`${beaconNumber}${suffix}`);
-  return status === 'missing' ? `<span style="color:var(--danger)">${text}</span>` : text;
-}
 
 // Live-bound (reassigned here, not just mutated) — mobile-files.js's own click-delegation listener
 // reads this directly by index, same convention as mobile-files-devices.js's own currentRows. Each
@@ -39,26 +24,31 @@ function fobCellHtml(beaconNumber, raceLabel) {
 export let currentAllFilesRows = [];
 
 // progress.json's own contents (see js/progress-sync.js) — the web app's own race-wide bib/name/
-// course/category/start/finish/CP export, not anything pulled from a phone. CP columns are built
-// from whichever cp numbers actually appear across this file's own entries (a static snapshot of
-// what was pushed, not live state), mirroring buildProgressColumns()'s own dynamic-column idea in
-// js/mobile-files-progress.js without importing it (that one reads live getMobileCheckpointNumbers(),
-// which has nothing to do with a specific pushed file's own content).
+// course/category/start/finish/CP export, not anything pulled from a phone. Built from the exact
+// same columns and cell renderers as the live Progress tab (js/views/mobile-files-progress.js's
+// own progressTableRenderers()/progressRowAttrs(), both exported for exactly this) rather than a
+// second, independently-maintained table — this file's own entries are already that tab's
+// buildProgressRows() output, just missing the few live-only fields buildPayloadForCourse() strips
+// before writing it (see progressTableRenderers()'s own doc), so the same renderers apply as-is.
+// `fobNumber` is the one field worth bridging back: dropped by buildPayloadForCourse() same as
+// the others, but beaconNumber (NOT dropped) is the one case where it's recoverable — both are the
+// entry's own dibberNumber whenever the course is Beacons-timed, which is the only time Fob ever
+// shows anything here anyway (fobNumber is left blank for a Dibbers-timed course's own entries,
+// same already-existing gap in what buildPayloadForCourse() exports, not something to paper over
+// per-view). CP columns are built from whichever cp numbers actually appear across this file's own
+// entries (a static snapshot of what was pushed, not live state) rather than the live tab's own
+// getMobileCheckpointNumbers(), which has nothing to do with a specific pushed file's own content.
 export function showProgressFileModal(owner, raceLabel, progress) {
   const cpNumbers = [...new Set(progress.entries.flatMap(e => Object.keys(e.cpTimes || {}).map(Number)))].sort((a, b) => a - b);
-  const sorted = [...progress.entries].sort((a, b) => a.bibNumber - b.bibNumber);
-  const cpHeadCells = cpNumbers.map(n => `<th>CP${n}</th>`).join('');
-  const rows = sorted.map(e => {
-    const cpCells = cpNumbers.map(n => `<td>${escHtml(e.cpTimes?.[n] || '')}</td>`).join('');
-    return `<tr><td>${e.bibNumber}</td><td>${escHtml(e.name)}</td><td>${escHtml(e.course)}</td>`
-      + `<td>${escHtml(e.category || '')}</td><td>${fobCellHtml(+e.beaconNumber || 0, raceLabel)}</td>`
-      + `<td>${escHtml(e.startTime || '')}</td><td>${escHtml(e.finishTime || '')}</td>${cpCells}</tr>`;
-  }).join('');
+  const rows = [...progress.entries]
+    .sort((a, b) => a.bibNumber - b.bibNumber)
+    .map(e => ({ ...e, fobNumber: e.beaconNumber }));
+  const columns = tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), progressTableRenderers(cpNumbers));
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `
-    <div class="modal-box" style="width:640px">
+    <div class="modal-box" style="width:820px">
       <div class="modal-header">
         <h2>Progress — ${escHtml(raceLabel)}${getIsAdmin() ? ` (${escHtml(owner)})` : ''}</h2>
         <button class="modal-close-x" id="mobile-file-modal-close" aria-label="Close" title="Close">&times;</button>
@@ -66,12 +56,18 @@ export function showProgressFileModal(owner, raceLabel, progress) {
       <p style="margin:0 0 12px;font-size:0.875rem">Generated ${formatDateTime(progress.generatedAt, { seconds: true })}</p>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Bib</th><th>Name</th><th>Course</th><th>Cat</th><th>Fob</th><th>Start</th><th>Finish</th>${cpHeadCells}</tr></thead>
-          <tbody>${rows || `<tr><td colspan="${7 + cpNumbers.length}" style="color:var(--muted)">No entries.</td></tr>`}</tbody>
+          <thead></thead>
+          <tbody id="mobile-progress-file-modal-tbody"></tbody>
         </table>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  if (rows.length) {
+    renderTable('mobile-progress-file-modal-tbody', columns, rows, { rowAttrs: progressRowAttrs });
+  } else {
+    overlay.querySelector('#mobile-progress-file-modal-tbody').innerHTML =
+      `<tr><td colspan="${columns.length}" style="color:var(--muted)">No entries.</td></tr>`;
+  }
 
   const close = () => document.body.removeChild(overlay);
   overlay.querySelector('#mobile-file-modal-close').addEventListener('click', close);

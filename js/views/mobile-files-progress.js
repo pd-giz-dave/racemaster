@@ -295,9 +295,18 @@ export async function maybeAutoUpdateProgress() {
   updateAutoProgressStatus();
 }
 
-export function renderMobileProgressTable() {
-  const cpNumbers = getMobileCheckpointNumbers();
-  const rows = buildProgressRows();
+// Exported for js/views/mobile-files-all.js's own showProgressFileModal() — a stored
+// progress.json snapshot (viewed read-only from the All Files tab) carries exactly the row shape
+// buildProgressRows() produces, minus the live-only display fields buildPayloadForCourse() strips
+// before writing it (progress-sync.js's own doc: invalid/conflict/fobNumber/fobReturned/
+// beaconCountNotSeen all go, beaconNumber/beaconClosedAt/beaconBatteryPercent/beaconCountedAt
+// don't) — so building that modal's table from these same renderers, rather than a second
+// hand-rolled one, is what keeps the two views honestly in sync instead of silently drifting apart
+// (bug report: the All Files one was missing the Counted/Closed columns entirely, and showed raw
+// elapsed Start/Finish instead of time-of-day). A row missing invalid/conflict/fobReturned/
+// beaconCountNotSeen (every stored snapshot) reads as plain undefined — falsy, same as explicitly
+// false here — so nothing below needs a snapshot-specific branch.
+export function progressTableRenderers(cpNumbers) {
   const renderers = {
     bibNumber:  r => String(r.bibNumber),
     // A bib with real mobile activity but no matching Entry (buildProgressRows()'s own `invalid`)
@@ -352,20 +361,31 @@ export function renderMobileProgressTable() {
       return escHtml(t === CP_RETIRE ? CP_RETIRE : (r.cpTimesOfDay?.[n] || ''));
     };
   }
-  renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), renderers), rows, {
-    // See buildProgressRows()'s own doc on `invalid`/`conflict` — a bib with mobile activity but
-    // no matching Entry, or one SI Results/Finishers/Mobile Files disagree about, same row-error
-    // styling Finishers/Entries/Safety Check all use for either case. Mutually exclusive in
-    // practice (a conflict is only ever resolved between sources for a bib that already has a
-    // matching Entry), so there's no ambiguity about which tooltip applies.
-    rowAttrs: r => ({
-      class: (r.invalid || r.conflict) ? 'row-error' : '',
-      title: r.invalid
-        ? 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry'
-        : r.conflict
-          ? 'SI Results, Finishers and/or Mobile Files disagree about this bib — see the conflict warning on Results & Prize List / Safety Check'
-          : '',
-    }),
+  return renderers;
+}
+
+// Exported alongside progressTableRenderers() above for the same reason — see its own doc.
+export function progressRowAttrs(r) {
+  // See buildProgressRows()'s own doc on `invalid`/`conflict` — a bib with mobile activity but
+  // no matching Entry, or one SI Results/Finishers/Mobile Files disagree about, same row-error
+  // styling Finishers/Entries/Safety Check all use for either case. Mutually exclusive in
+  // practice (a conflict is only ever resolved between sources for a bib that already has a
+  // matching Entry), so there's no ambiguity about which tooltip applies.
+  return {
+    class: (r.invalid || r.conflict) ? 'row-error' : '',
+    title: r.invalid
+      ? 'Bib not found in Entries — check for a typo on the device, or add this bib as a new entry'
+      : r.conflict
+        ? 'SI Results, Finishers and/or Mobile Files disagree about this bib — see the conflict warning on Results & Prize List / Safety Check'
+        : '',
+  };
+}
+
+export function renderMobileProgressTable() {
+  const cpNumbers = getMobileCheckpointNumbers();
+  const rows = buildProgressRows();
+  renderTable('mobile-progress-tbody', tableColumns(buildProgressColumns(TABLES['mobile-progress'], cpNumbers), progressTableRenderers(cpNumbers)), rows, {
+    rowAttrs: progressRowAttrs,
   });
   syncAutoProgressCheckbox();
 }
