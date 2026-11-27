@@ -219,6 +219,17 @@ function hasRealBib(r) {
 // from the "Time" visible COUNT, so a Time-mode device with nothing but its own ModeStart marker
 // correctly shows a split count of 0 rather than 1. NewRace gets the same exclusion, same
 // reasoning as hasRealBib above.
+// A Count-mode beacon currently "seen" (counted in) and not ejected is, for the Devices/All Files
+// tabs' own Bibs column, exactly as real as a literal Finish/Pass bib — racemaster-mobile's own
+// TODO.md "amalgamate Bibs, Count and Close modes" means Pen is now just another Bibs location
+// (see isBibsExpected's own doc), and the whole point of counting beacons into the pen IS counting
+// bibs, just via a beacon proxy instead of punching the number in directly. Close-mode rows are
+// deliberately NOT included here — unlike an eject/un-eject, there's no "which beacons does this
+// bib-count represent right now" status for a closed beacon, just a one-off physical event.
+function countedBeaconCount(countSegmentRows) {
+  return [...computeCountByBeacon(countSegmentRows).values()].filter(e => e.countedAt != null).length;
+}
+
 function hasRealSplit(r) {
   return r.action !== 'ModeStart' && r.action !== 'NewRace' && r.splitTime != null;
 }
@@ -235,8 +246,32 @@ function hasRealSplit(r) {
 // file is completely reset ... both bibs and time columns should be blank as its mode is also now
 // unknown" (formatCount()'s own `expected:false` is what turns that into a blank cell rather than
 // a literal "0").
+//
+// A 'Bibs' note alone is no longer enough, though (see isBibsExpected's own location check
+// below): racemaster-mobile's own TODO.md "amalgamate Bibs, Count and Close modes" dropped the
+// separate COUNT/CLOSE AppMode values entirely — AppMode now only has TIME/BIBS
+// (~/racemaster-mobile's own data/settings/AppMode.kt), with Pen/Close acting as two more Bibs
+// LOCATIONS instead (AppMode.toHistoryMode(location); LocationValidation.isValidLocationForMode
+// in that same repo), so a genuine Count- or Close-role device's own ModeStart note is now always
+// literally 'Bibs' too, same as an ordinary Start/Finish/CPn phone's — it never writes 'Count'/
+// 'Close' there any more (those two strings are only still recognised below for a file recorded
+// before this app update).
 function isBibsExpected(modeStart) {
-  return modeStart?.note === 'Bibs' || modeStart?.note === 'CP';
+  if (modeStart?.note !== 'Bibs' && modeStart?.note !== 'CP') return false;
+  // A dedicated Close-role device (ModeStart note 'Bibs', but at location 'Close') never writes a
+  // real Start/Finish/Pass row of its own, nor anything countedBeaconCount() can read — its Close/
+  // CloseReopened rows are unconditionally classified into the 'close' family regardless of this
+  // note (see rowFamily()'s own doc), so its bibsSegment only ever holds the bare Location/
+  // ModeStart marker pair. Without this check it would wrongly show "0 so far, but genuinely
+  // expected" in the Bibs column — exactly the "has nothing to do with bibs" case this already
+  // correctly reports blank for an old-format file whose ModeStart note was still the literal
+  // 'Close' (now excluded above before this location check ever runs).
+  //
+  // Pen, unlike Close, genuinely IS expected now — a currently-counted (seen, not ejected) beacon
+  // counts as a bib for this same column's own purposes (see countedBeaconCount()'s own doc), so a
+  // Count-role device with nothing counted yet should still show "0", not blank.
+  const location = (modeStart.location || '').trim().toLowerCase();
+  return location !== 'close';
 }
 
 function isTimeExpected(modeStart) {
@@ -387,6 +422,46 @@ export function buildSegmentView(lines) {
   };
 }
 
+const COUNT_NOTE_RE = /beacon=(\d+)/;
+
+// A CountSeen row sets countedAt; a CountEjected row (racemaster-mobile's own
+// HistoryAction.COUNT_EJECTED) un-sets it — but, unlike the earlier design, still produces a real
+// Map entry (`{ at, countedAt: null }`) rather than simply having no entry at all. That distinction
+// matters once mobile-files-progress.js's own mergeLatestByBeacon() compares this device's own
+// result against every other selected device's: "no entry" would be indistinguishable from "this
+// device never saw this beacon at all", so a genuinely later eject on THIS device could never beat
+// an earlier, un-ejected CountSeen some OTHER selected device still has for the same beacon —
+// confirmed live (race "callow-seniors", beacon 1/bib 801): ejecting it on one Count phone left it
+// still "on-course" from a different Count phone's own older sighting, since the eject had nowhere
+// to register against. Carrying the eject's own timestamp here is what lets it actually win that
+// comparison when it's genuinely the most recent event for that beacon, same principle as Close's
+// own CloseReopened (mobile-files-progress.js's own computeCloseByBeacon) — foldLatestVisible()
+// above no longer drops CountEjected rows before they get here, for the same reason. CountUnejected
+// (HistoryAction.COUNT_UNEJECTED) reverses an eject on the same device and must re-set countedAt
+// the same way CountSeen does — confirmed live (race "callow-seniors", beacon 1): swift-puffin
+// logged CountEjected then CountUnejected for it, and without this case Update Progress kept
+// treating it as ejected forever, since the row was simply skipped here. Its own note still carries
+// "beacon=N" even though its bibNumber/refLineNumber come through null from the mobile app (a
+// separate, already-known gap there) — COUNT_NOTE_RE only ever reads the note.
+//
+// Exported: mobile-files-progress.js's own applyComputedResults()/buildProgressRows() use this for
+// the Progress tab's "Counted" column (merged across every selected device via its own
+// mergeLatestByBeacon()); flattenDevices() below uses it for the Devices/All Files tabs' own Bibs
+// column — a single device's own current segment only, no cross-device merge needed there.
+export function computeCountByBeacon(countSegmentRows) {
+  const result = new Map();
+  for (const r of countSegmentRows) {
+    if (r.action !== 'CountSeen' && r.action !== 'CountEjected' && r.action !== 'CountUnejected') continue;
+    const m = COUNT_NOTE_RE.exec(r.note || '');
+    if (!m) continue;
+    const beacon = +m[1];
+    if (!Number.isFinite(beacon) || beacon <= 0) continue;
+    const at = r.timestamp ?? r.timestampMillis ?? '';
+    result.set(beacon, { at, countedAt: r.action === 'CountEjected' ? null : at });
+  }
+  return result;
+}
+
 // "yyyy/MM/dd HH:mm:ss" (the phone's own local time) → just the "HH:mm:ss" part. Field was
 // renamed server-side from timestampMillis to timestamp (see server.js's coerce()) — files
 // written before that rename are still on disk under the old name, so read whichever is present.
@@ -512,6 +587,19 @@ export function distinctLocationsOf(visibleRows) {
 // switched to Close before ever recording an actual bib) is still offered as its own option — it
 // genuinely happened and the operator may want to see the raw Location/ModeStart pair that opened
 // it — just labelled "(empty)" so it reads at a glance as the one with nothing useful in it.
+//
+// EXCEPT at a Pen/Close location (see the loop below), where that Location/ModeStart pair is
+// merged INTO the "Count"/"Close" option instead of being offered as its own separate "Bibs"
+// option: racemaster-mobile's own TODO.md "amalgamate Bibs, Count and Close modes" means a
+// Count/Close-role device's ModeStart record is now always declared 'Bibs' (AppMode only has
+// TIME/BIBS — ~/racemaster-mobile's data/settings/AppMode.kt), with Pen/Close as two more Bibs
+// locations rather than their own mode, so that same one ModeStart record is simultaneously what
+// opens the real Count/Close session too — there's only one session there, not two. A genuinely
+// still-empty Count/Close visit (relocated here, nothing counted/closed yet) still gets its own
+// option this way, correctly labelled "Count (empty)"/"Close (empty)" and still showing the raw
+// Location/ModeStart pair that opened it — the same "it genuinely happened, show it anyway" case
+// this comment's first paragraph already describes, just under the right label now instead of the
+// always-misleading "Bibs (empty)" every single Pen/Close device used to show alongside it.
 const FAMILY_LABELS = ['Time', 'Bibs', 'Close', 'Count'];
 function hasRealEntry(label, r) {
   if (label === 'Time') return hasRealSplit(r);
@@ -534,8 +622,15 @@ export function deviceViewOptions(resolvedLines) {
     const lines = location === null ? resolvedLines : resolvedLines.filter(l => l.location === location);
     const segments = buildSegmentView(lines);
     const familyRows = { Time: segments.timeSegment, Bibs: segments.bibsSegment, Close: segments.closeSegment, Count: segments.countSegment };
+    const locLower = (location || '').trim().toLowerCase();
+    // Which single family actually owns this location under the new architecture — a Count
+    // session is always at 'Pen', a Close session always at 'Close' (CountModeRepository's own
+    // doc: "Count's own location is always the fixed 'Pen'"; Close's own equivalent), so there's
+    // never a real ambiguity between the two at one location to resolve here.
+    const roleMode = locLower === 'pen' ? 'Count' : locLower === 'close' ? 'Close' : null;
     for (const mode of FAMILY_LABELS) {
-      const rows = familyRows[mode];
+      if (mode === 'Bibs' && roleMode) continue; // merged into roleMode's own option below instead
+      const rows = mode === roleMode ? [...familyRows.Bibs, ...familyRows[mode]].sort(byLineNumber) : familyRows[mode];
       if (!rows.length) continue;
       options.push({ location, mode, empty: !rows.some(r => hasRealEntry(mode, r)), lines: rows });
     }
@@ -684,7 +779,7 @@ export function flattenDevices(races) {
       // own Location/ModeStart rows being perfectly real and resolved.
       const visible = [...timeSegment, ...bibsSegment, ...closeSegment, ...countSegment];
       return {
-        device, timeSegment, bibsSegment, modeStart,
+        device, timeSegment, bibsSegment, countSegment, modeStart,
         rawLocation: rawLocationOf(visible), location: locationSummary(visible),
         locations: distinctLocationsOf(visible),
       };
@@ -696,7 +791,7 @@ export function flattenDevices(races) {
       const ka = locationSortKey(a.rawLocation), kb = locationSortKey(b.rawLocation);
       return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
     });
-    for (const { device, timeSegment, bibsSegment, modeStart, rawLocation, location, locations } of prepared) {
+    for (const { device, timeSegment, bibsSegment, countSegment, modeStart, rawLocation, location, locations } of prepared) {
       const r = { owner: race.owner, raceLabel: race.raceLabel, device, rawLocation };
       const lastSeen = latestLineIso(device.lines);
       rows.push({
@@ -707,7 +802,22 @@ export function flattenDevices(races) {
         pending: !!device.pending,
         location,
         locations,
-        bibsVisible: bibsSegment.filter(hasRealBib).length,
+        // A Count-role device's own "bibs" are its currently-counted (seen, not ejected) beacons —
+        // see countedBeaconCount()'s own doc — added alongside bibsSegment's literal Finish/Pass
+        // bibs rather than instead of them, since the two are mutually exclusive per device/
+        // location in practice (never both nonzero at once) but there's no need to pick one over
+        // the other structurally.
+        bibsVisible: bibsSegment.filter(hasRealBib).length + countedBeaconCount(countSegment),
+        // Per-location bib counts, index-aligned with `locations` (ToDo.MD: "bibs column in
+        // devices list should show a bib count for each location in the file, aligned with the
+        // where column - 1 line per location") — a relocated device's Where column already lists
+        // every location it's recorded at (distinctLocationsOf, course-ordered); this gives the
+        // Devices tab's own Bibs column (js/views/mobile-files-devices.js) the matching per-line
+        // breakdown instead of just the combined whole-file bibsVisible total above, so an
+        // operator can tell at a glance how many bibs each individual station actually recorded.
+        bibsByLocation: locations.map(loc =>
+          bibsSegment.filter(b => b.location === loc && hasRealBib(b)).length +
+          countedBeaconCount(countSegment.filter(r => r.location === loc))),
         timeVisible: timeSegment.filter(hasRealSplit).length,
         bibsExpected: isBibsExpected(modeStart),
         timeExpected: isTimeExpected(modeStart),

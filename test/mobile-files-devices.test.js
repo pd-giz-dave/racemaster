@@ -845,6 +845,98 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     assert.equal(formatCount(rows[0].timeVisible, rows[0].timeExpected), '');
   });
 
+  // racemaster-mobile's own TODO.md "amalgamate Bibs, Count and Close modes" dropped the separate
+  // COUNT/CLOSE AppMode values entirely — AppMode now only has TIME/BIBS
+  // (~/racemaster-mobile's data/settings/AppMode.kt), with Pen/Close acting as two more Bibs
+  // LOCATIONS instead of their own mode. A genuine Close-role device's own ModeStart note is
+  // therefore now always literally 'Bibs' too, same as an ordinary Start/Finish/CPn phone's — so
+  // isBibsExpected must also check location, not just note, or this device would wrongly show "0
+  // so far, but genuinely expected" for a family it never actually records into (see rowFamily()'s
+  // own unconditional Close classification — this device's bibsSegment only ever holds the bare
+  // Location/ModeStart marker pair).
+  //
+  // Pen is NOT the same case any more (see the next describe block's own
+  // "counts a currently-seen, not-ejected beacon as a bib" tests) — a currently-counted beacon
+  // genuinely does count as a bib there, so a Pen-location device IS expected to show one.
+  it('still expects a bib count from a Bibs-mode device whose current location is Pen', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'Pen' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsExpected, true);
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '0');
+  });
+
+  // "a seen and not ejected beacon should count as a bib in the bibs column" — counting beacons
+  // into the pen IS counting bibs, just via a beacon proxy (see countedBeaconCount()'s own doc),
+  // so the Devices/All Files tabs' own Bibs column must reflect it the same as a literal bib.
+  it('counts a currently-seen, not-ejected beacon as a bib for a Pen-location device', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'Pen' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+        { lineNumber: 3, action: 'CountSeen', note: 'beacon=1 seen=1 of=3', bibNumber: null, splitTime: null },
+        { lineNumber: 4, action: 'CountSeen', note: 'beacon=2 seen=2 of=3', bibNumber: null, splitTime: null },
+        { lineNumber: 5, action: 'CountSeen', note: 'beacon=3 seen=3 of=3', bibNumber: null, splitTime: null },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsVisible, 3);
+    assert.deepEqual(rows[0].bibsByLocation, [3]);
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '3');
+  });
+
+  // An ejected beacon no longer counts — same "currently" distinction computeCountByBeacon's own
+  // doc describes for the Progress tab's "Counted" column, just read here for the Bibs column.
+  it('does not count a since-ejected beacon as a bib for a Pen-location device', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'Pen' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+        { lineNumber: 3, action: 'CountSeen', note: 'beacon=1 seen=1 of=2', bibNumber: null, splitTime: null },
+        { lineNumber: 4, action: 'CountSeen', note: 'beacon=2 seen=2 of=2', bibNumber: null, splitTime: null },
+        { lineNumber: 5, action: 'CountEjected', note: 'beacon=1', bibNumber: null, splitTime: null, refLineNumber: 3 },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsVisible, 1);
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '1');
+  });
+
+  it('does not expect real bibs from a Bibs-mode device whose current location is Close', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'Close' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsExpected, false);
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '');
+  });
+
+  // Confirms the location check above isn't just "any Location row present" — an ordinary
+  // Bibs-mode device at a ordinary CP/Start/Finish location is still expected, same as before.
+  it('still expects real bibs from a Bibs-mode device at an ordinary CP location', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'A', lines: [
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'CP1' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.equal(rows[0].bibsExpected, true);
+    assert.equal(formatCount(rows[0].bibsVisible, rows[0].bibsExpected), '0');
+  });
+
   // ToDo.MD: "drop the 'Setup' record from the device file, its no longer created, there will
   // always be a modestart record" — a brand new, not-yet-synced device is now represented by
   // having literally zero lines at all, not a placeholder record of its own; this must still show
@@ -965,6 +1057,35 @@ describe('mobile-files-devices.js:flattenDevices', () => {
     assert.equal(rows.length, 1); // still one row — same device file, not a new one
     assert.deepEqual(rows[0].locations, ['CP1', 'CP2']);
     assert.equal(rows[0].location, 'CP2'); // the single current/latest value is unchanged in meaning
+    // ToDo.MD: "bibs column in devices list should show a bib count for each location in the
+    // file, aligned with the where column - 1 line per location" — bibsByLocation[i] is this same
+    // device's own bib count at locations[i], not just the combined bibsVisible total.
+    assert.deepEqual(rows[0].bibsByLocation, [1, 1]);
+    assert.equal(rows[0].bibsVisible, 2);
+  });
+
+  // A third station, with a different bib count of its own, confirms the per-location breakdown
+  // isn't just an artifact of two equal-sized buckets.
+  it('bibsByLocation carries a different count per station for a device relocated three times', () => {
+    const races = [{
+      owner: 'alice', raceLabel: 'race-a', raceDate: null,
+      devices: [{ name: 'Roaming Phone', lines: [
+        { lineNumber: 1, action: 'Location', bibNumber: null, note: 'CP1' },
+        { lineNumber: 2, action: 'ModeStart', bibNumber: null, note: 'Bibs' },
+        { lineNumber: 3, action: 'Finish', bibNumber: '5' },
+        { lineNumber: 4, action: 'Location', bibNumber: null, note: 'CP2' },
+        { lineNumber: 5, action: 'Finish', bibNumber: '6' },
+        { lineNumber: 6, action: 'Finish', bibNumber: '7' },
+        { lineNumber: 7, action: 'Location', bibNumber: null, note: 'CP3' },
+        { lineNumber: 8, action: 'Finish', bibNumber: '8' },
+        { lineNumber: 9, action: 'Finish', bibNumber: '9' },
+        { lineNumber: 10, action: 'Finish', bibNumber: '10' },
+      ] }],
+    }];
+    const rows = flattenDevices(races);
+    assert.deepEqual(rows[0].locations, ['CP1', 'CP2', 'CP3']);
+    assert.deepEqual(rows[0].bibsByLocation, [1, 2, 3]);
+    assert.equal(rows[0].bibsVisible, 6);
   });
 
   // Not just a single relocation — a marshal can move any number of times across a race, each
@@ -1149,6 +1270,53 @@ describe('mobile-files-devices.js:deviceViewOptions', () => {
     assert.ok(options.every(o => o.location === 'Start'));
     const bibsOption = options.find(o => o.mode === 'Bibs');
     assert.equal(bibsOption.empty, true); // the ModeStart/Location pair, no real bib ever recorded
+  });
+
+  // racemaster-mobile's own TODO.md "amalgamate Bibs, Count and Close modes" dropped the separate
+  // COUNT/CLOSE AppMode values — a dedicated Count-role device's ModeStart note is now always
+  // literally 'Bibs' too (AppMode only has TIME/BIBS), same as the test right above but with a
+  // *real* current-format note. Unlike that test's deliberate "genuinely switched mode" scenario,
+  // this one ModeStart record is simultaneously what opens the real Count session — there is no
+  // separate "opened as Bibs, then switched away" event to show, so the empty 'Bibs' option itself
+  // must not appear here at all; its own Location/ModeStart rows merge into the one "Count" option
+  // instead, so the operator still sees the records that opened this session, just correctly
+  // labelled.
+  it('offers only Count (merging in its own Location/ModeStart rows) for a current-format Count-role device at Pen', () => {
+    const lines = withResolvedLocations([
+      { lineNumber: 1, action: 'Location', note: 'Pen' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'CountSeen', note: 'beacon=9', bibNumber: null, splitTime: null },
+    ]);
+    const options = deviceViewOptions(lines);
+    assert.deepEqual(options.map(o => o.label), ['Count']);
+    assert.deepEqual(options[0].lines.map(r => r.lineNumber), [1, 2, 3]);
+    assert.equal(options[0].empty, false);
+  });
+
+  it('offers only Close (merging in its own Location/ModeStart rows) for a current-format Close-role device at Close', () => {
+    const lines = withResolvedLocations([
+      { lineNumber: 1, action: 'Location', note: 'Close' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', splitTime: null, bibNumber: null },
+      { lineNumber: 3, action: 'Close', note: 'beacon=5 battery=80', bibNumber: null, splitTime: null },
+    ]);
+    const options = deviceViewOptions(lines);
+    assert.deepEqual(options.map(o => o.label), ['Close']);
+    assert.deepEqual(options[0].lines.map(r => r.lineNumber), [1, 2, 3]);
+    assert.equal(options[0].empty, false);
+  });
+
+  // A Count-role device that's just relocated to Pen, with nothing counted yet, still gets its own
+  // option — the "it genuinely happened, show it anyway" case this describe block's own top doc
+  // reserves for an empty family — just correctly labelled "Count (empty)" instead of the always-
+  // misleading "Bibs (empty)" every Pen/Close device used to show.
+  it('still offers an empty Count option (with its own Location/ModeStart rows) for a Pen-location device with nothing counted yet', () => {
+    const lines = withResolvedLocations([
+      { lineNumber: 1, action: 'Location', note: 'Pen' },
+      { lineNumber: 2, action: 'ModeStart', note: 'Bibs', splitTime: null, bibNumber: null },
+    ]);
+    const options = deviceViewOptions(lines);
+    assert.deepEqual(options.map(o => o.label), ['Count (empty)']);
+    assert.deepEqual(options[0].lines.map(r => r.lineNumber), [1, 2]);
   });
 
   it('prefixes the label with location only once the options actually span more than one', () => {

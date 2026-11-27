@@ -40,6 +40,7 @@ import {
 } from '../mobile-files-shared.js';
 import { state } from '../state.js';
 import { coursesInUse } from '../categories.js';
+import { getEntriesOnCourse } from '../entries.js';
 import { renderRaceList, currentRows, showDeviceModal, showRawModal } from './mobile-files-devices.js';
 import { deviceViewOptions, anyRowNewlyOffline } from '../mobile-files-devices.js';
 import { renderAllFilesList, currentAllFilesRows, showProgressFileModal } from './mobile-files-all.js';
@@ -254,7 +255,11 @@ function updateActivateStatus() {
     const race = owner && progressRaces().find(r => r.owner === owner && r.raceLabel === raceLabel);
     if (race?.progress && isProgressRecent(race.progress)) {
       anyActive = true;
-      parts.push(`${course} active (${formatDateTime(race.progress.generatedAt)})`);
+      // getEntriesOnCourse() here is purely informational (how many bibs this course has handed
+      // out so far) — it plays no part in deciding `anyActive`/active-vs-not above, so this still
+      // doesn't contradict this function's own "never state.entries" doc for THAT decision.
+      const bibsIssued = getEntriesOnCourse(course);
+      parts.push(`${course} active (${formatDateTime(race.progress.generatedAt)}) — ${bibsIssued} bib${bibsIssued === 1 ? '' : 's'} issued`);
     } else if (!lastFetchOk) {
       parts.push(`${course} pending — offline, can't confirm`);
     } else {
@@ -324,7 +329,7 @@ async function viewDeviceRow(r) {
     chosen = await showChoiceDialog(`View which for ${r.device.name}?`, choices, { vertical: true });
     if (chosen === null) return;
   }
-  showDeviceModal(r.owner, r.raceLabel, r.device.name, chosen.lines);
+  showDeviceModal(r.owner, r.raceLabel, r.device.name, chosen.lines, chosen.mode);
 }
 
 export function wireMobileFiles() {

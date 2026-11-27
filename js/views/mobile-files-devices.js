@@ -29,14 +29,30 @@ import { buildSegmentView, whenOf, locationSummary, formatCount, displayNote, fl
 // deviceViewOptions() (mobile-files-devices.js) first and always hands this modal lines already
 // narrowed to exactly one (location, mode) combination, so this always renders a single plain
 // table, same as before any of this Close/Count-mode work existed.
-export function showDeviceModal(owner, raceLabel, deviceName, lines) {
+export function showDeviceModal(owner, raceLabel, deviceName, lines, fallbackMode) {
   const { timeSegment, bibsSegment, closeSegment, countSegment } = buildSegmentView(lines);
   const visibleRows = [...timeSegment, ...bibsSegment, ...closeSegment, ...countSegment].sort(byLineNumber);
   // Scoped to the same current segment Location/counts already are (see latestModeStart()'s own
   // doc) — a completely-reset device (every visit properly closed) correctly shows '—' here too,
   // not whatever mode used to apply before the reset (ToDo.MD: "device view shows a blank
   // location but has retained the mode, that should be blank too").
-  const mode = latestModeStart(timeSegment, bibsSegment, closeSegment, countSegment)?.note || '—';
+  //
+  // [fallbackMode] (js/views/mobile-files.js's own viewDeviceRow(), passing deviceViewOptions()'s
+  // own `chosen.mode`) — racemaster-mobile's own TODO.md "amalgamate Bibs, Count and Close modes"
+  // means a genuine Count/Close-role device's ModeStart note is now always literally 'Bibs'
+  // (AppMode only has TIME/BIBS — ~/racemaster-mobile's data/settings/AppMode.kt), so the record's
+  // own note is no longer specific enough on its own: deviceViewOptions() merges that marker row
+  // into the "Count"/"Close" option it belongs to (see its own doc), so `noteMode` below reads
+  // back as the generic 'Bibs' even there. [fallbackMode] — the dropdown's own, more specific
+  // notion of which option this actually is — wins whenever the two disagree this way. An
+  // old-format file's own literal 'CP'/'Close'/'Count' note (predating this app update) is still
+  // shown as-is otherwise, more specific than the generic FAMILY_LABELS string fallbackMode would
+  // give for it. A completely-reset device (every visit properly closed) still correctly shows
+  // '—' here (ToDo.MD: "device view shows a blank location but has retained the mode, that should
+  // be blank too") — neither noteMode nor fallbackMode exist for it (see viewDeviceRow's own
+  // no-options fallback, which passes no fallbackMode at all).
+  const noteMode = latestModeStart(timeSegment, bibsSegment, closeSegment, countSegment)?.note;
+  const mode = (noteMode === 'Bibs' && fallbackMode && fallbackMode !== 'Bibs') ? fallbackMode : (noteMode || fallbackMode || '—');
 
   // Line # leads every row (ToDo.MD: "in the per mode views include the line number as a leadin
   // column so they can be manually matched to the raw view for diagnostic purposes") — this
@@ -144,9 +160,21 @@ function buildColumns(isAdminUser) {
       : ''),
     // 'Unknown' (not the View modal's own '—') once every visit's been properly closed — a
     // completely reset device (ToDo.MD: "the device list should show unknown in the where
-    // column"), distinct from the View modal's own blank-dash convention for the same state.
-    location:  r => `<span title="${escHtml(r.locations.join(', '))}">${escHtml(r.locations.join(', ') || 'Unknown')}</span>`,
-    bibs:      r => formatCount(r.bibsVisible, r.bibsExpected),
+    // column"), distinct from the View modal's own blank-dash convention for the same state. One
+    // line per location (ToDo.MD: "bibs column ... aligned with the where column - 1 line per
+    // location") rather than a single comma-joined line — index-aligned with the Bibs column's
+    // own per-location breakdown just below, so a relocated device's Where/Bibs rows read as
+    // matching pairs rather than requiring a mental cross-reference against one joined string.
+    location:  r => r.locations.length
+      ? r.locations.map(loc => `<div>${escHtml(loc)}</div>`).join('')
+      : '<span style="color:var(--muted)">Unknown</span>',
+    // Per-location breakdown (bibsByLocation, js/mobile-files-devices.js's own flattenDevices()),
+    // one line per entry in `locations` — falls back to a single bibsVisible line only when there
+    // are no resolved locations at all (degraded data with no location recorded anywhere), same
+    // "no location-narrowing possible" degradation the location column's own 'Unknown' case above
+    // already uses, so the two columns always carry the same number of lines, aligned.
+    bibs:      r => (r.locations.length ? r.bibsByLocation : [r.bibsVisible])
+      .map(n => `<div>${formatCount(n, r.bibsExpected)}</div>`).join(''),
     time:      r => formatCount(r.timeVisible, r.timeExpected),
     // ToDo.MD: "devices tab ... should indicate a device has gone off-line if it does not see
     // regular pings" — r.offline (js/mobile-files-devices.js's isDeviceOffline(), via

@@ -125,7 +125,11 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
-  it('rejects when one of a relocated device\'s own segments collides with another selected file\'s checkpoint', () => {
+  // Field request: "multiple devices at every location should be allowed and conflicts resolved
+  // by timestamp like pen location" — a second device genuinely stationed at an already-bucketed
+  // CP (or relocated there, as here) is no longer rejected outright; its own crossings merge in
+  // bib-by-bib instead.
+  it('merges a relocated device\'s own CP segment with another selected file\'s own crossings at the same checkpoint', () => {
     const roaming = finishRow({ device: { name: 'Roaming Phone', lines: [
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
       { lineNumber: 2, action: 'Location', bibNumber: null, splitTime: null, note: 'CP2', location: 'CP2' },
@@ -135,7 +139,28 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '999', timestamp: '2026/08/30 09:10:00.00', location: 'CP1' },
     ] } });
     return validateAndCompute([finishRow(), roaming, cp1Again]).then(result => {
-      assert.match(result.error, /more than one file selected for CP1/);
+      assert.equal(result.error, undefined);
+      assert.equal(result.cpBuckets.get(1).length, 2); // both CP1 segments kept, not collapsed to one
+      assert.equal(result.cpTimesByCp.get(1).get(1), '00:05:00'); // roaming's own bib 1
+      assert.equal(result.cpTimesByCp.get(1).get(999), '00:10:00'); // cp1Again's own bib 999
+    });
+  });
+
+  // The genuine-conflict case the merge above doesn't exercise: the SAME bib crossed the SAME
+  // checkpoint according to two different selected devices — resolved by keeping whichever
+  // device's own crossing has the later wall-clock time-of-day, same "latest wins" principle
+  // mergeLatestByBeacon() already applies to Close/Count data.
+  it('resolves two devices disagreeing about the same bib at the same checkpoint by keeping the later timestamp', () => {
+    const cpEarly = finishRow({ device: { name: 'CP1 Early', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:05:00.00', location: 'CP1' },
+    ] } });
+    const cpLate = finishRow({ device: { name: 'CP1 Late', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:08:00.00', location: 'CP1' },
+    ] } });
+    return validateAndCompute([finishRow(), cpEarly, cpLate]).then(result => {
+      assert.equal(result.error, undefined);
+      assert.equal(result.cpTimesByCp.get(1).get(1), '00:08:00');
+      assert.equal(result.cpTimeOfDayByCp.get(1).get(1), '09:08:00');
     });
   });
 
@@ -210,7 +235,11 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
     });
   });
 
-  it('rejects duplicate split numbers within the Bibs family at Finish (two bibs-recording phones)', () => {
+  // Field request: "multiple devices at every location should be allowed" — two independent
+  // bibs-recording phones both at Finish, each legitimately starting its own splitNumber count at
+  // 1, must not collide purely over that coincidence (paired per-segment now, never pooled first
+  // — see finishSegs' own doc).
+  it('does not reject two independent bibs-recording phones at Finish reusing the same small splitNumbers', () => {
     const r1 = finishRow({ device: { name: 'Bibs A', lines: [
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
     ] } });
@@ -218,7 +247,39 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
       { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:21:00.00', location: 'Finish' },
     ] } });
     return validateAndCompute([r1, r2]).then(result => {
-      assert.match(result.error, /more than one bibs-recording phone/);
+      assert.equal(result.error, undefined);
+      assert.equal(result.expected.find(e => e.number === 1).action, 'Finish');
+      assert.equal(result.expected.find(e => e.number === 2).action, 'Finish');
+    });
+  });
+
+  // A genuine duplicate splitNumber WITHIN one device's own file is still real data corruption —
+  // still rejected, just no longer confused with the legitimate multi-device case above.
+  it('still rejects a genuine duplicate splitNumber within one Finish-location device\'s own file', () => {
+    const corrupt = finishRow({ device: { name: 'Corrupt Phone', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
+      { lineNumber: 2, action: 'Finish', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 09:21:00.00', location: 'Finish' },
+    ] } });
+    return validateAndCompute([corrupt]).then(result => {
+      assert.match(result.error, /duplicate bib split number/);
+    });
+  });
+
+  // The genuine-conflict case: the SAME bib's Finish recorded by two different selected devices —
+  // resolved by keeping whichever has the later wall-clock time-of-day, same "latest wins"
+  // principle mergeLatestByBeacon() already applies to Close/Count data (ToDo.MD: "multiple
+  // devices at every location should be allowed and conflicts resolved by timestamp").
+  it('resolves two devices disagreeing about the same bib\'s Finish by keeping the later timestamp', () => {
+    const early = finishRow({ device: { name: 'Finish Early', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:20:00.00', location: 'Finish' },
+    ] } });
+    const late = finishRow({ device: { name: 'Finish Late', lines: [
+      { lineNumber: 1, action: 'Finish', splitNumber: 1, bibNumber: '1', timestamp: '2026/08/30 09:22:00.00', location: 'Finish' },
+    ] } });
+    return validateAndCompute([early, late]).then(result => {
+      assert.equal(result.error, undefined);
+      assert.equal(result.expected.length, 1);
+      assert.equal(result.expected[0].timeOfDay, '09:22:00');
     });
   });
 
@@ -290,6 +351,65 @@ describe('mobile-files-progress.js:validateAndCompute', () => {
         assert.equal(result.error, undefined);
         assert.equal(result.expected.filter(e => e.action === 'Start').length, 2);
       });
+    });
+  });
+
+  // Reported live: 3 genuine Bibs-mode devices ("humble-ibis", "mighty-bunting", "zingy-brook")
+  // all stationed at the holding-pen location "Pen" doing a pre-race headcount, selected together
+  // for Update Progress — resolveLocationKey('Pen') correctly returns { kind: 'pen' } (not null,
+  // per ToDo.MD's own earlier "allow for a location of 'Pen'" fix), but the bucketing loop above
+  // had no case of its own for it, so it fell into the cp-number `else` branch with key.number
+  // undefined for every one of them — the first file claimed cpBuckets' one `undefined` key, and
+  // every subsequent Pen-location file then collided with it: "Cannot compute results — more than
+  // one file selected for CPundefined", rejecting the whole batch the moment a second Pen phone
+  // was selected. 'pen' now joins the exact same bucket as 'start' (see that describe block just
+  // above) — a pre-race presence confirmation, not a numbered course checkpoint — so any number of
+  // them can be selected together.
+  describe('a "Pen"-location bucket', () => {
+    it('does not reject two simultaneously-selected Pen-location devices', async () => {
+      const penA = finishRow({ device: { name: 'Pen A', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Pen' },
+        { lineNumber: 2, action: 'Start', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 08:50:00.00', location: 'Pen' },
+      ] } });
+      const penB = finishRow({ device: { name: 'Pen B', lines: [
+        { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Pen' },
+        { lineNumber: 2, action: 'Start', splitNumber: 1, bibNumber: '3', timestamp: '2026/08/30 08:51:00.00', location: 'Pen' },
+      ] } });
+      const result = await validateAndCompute([finishRow(), penA, penB]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.startRows.length, 2);
+    });
+
+    // The actual bug report: 3 Pen phones, not 2 — locking in that this isn't just a two-file
+    // coincidence (the old code's `cpBuckets.has(undefined)` check only ever fires from the
+    // SECOND file onward, so a single Pen file selected alone never surfaced this at all).
+    it('does not reject three simultaneously-selected Pen-location devices', async () => {
+      const pens = ['humble-ibis', 'mighty-bunting', 'zingy-brook'].map((name, i) => finishRow({
+        device: { name, lines: [
+          { lineNumber: 1, action: 'ModeStart', bibNumber: null, splitTime: null, note: 'Bibs', location: 'Pen' },
+          { lineNumber: 2, action: 'Start', splitNumber: 1, bibNumber: String(10 + i), timestamp: '2026/08/30 08:5' + i + ':00.00', location: 'Pen' },
+        ] },
+      }));
+      const result = await validateAndCompute([finishRow(), ...pens]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.startRows.length, 3);
+      assert.equal(result.expected.filter(e => e.action === 'Start').length, 3);
+    });
+
+    // Same genuine-conflict case as Finish/CP above, here for Pen/Start: the SAME bib recorded by
+    // two different Pen devices resolves to whichever has the later timestamp, rather than two
+    // separate 'Start' entries for the one bib.
+    it('resolves two Pen devices disagreeing about the same bib by keeping the later timestamp', async () => {
+      const penA = finishRow({ device: { name: 'Pen A', lines: [
+        { lineNumber: 1, action: 'Start', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 08:50:00.00', location: 'Pen' },
+      ] } });
+      const penB = finishRow({ device: { name: 'Pen B', lines: [
+        { lineNumber: 1, action: 'Start', splitNumber: 1, bibNumber: '2', timestamp: '2026/08/30 08:52:00.00', location: 'Pen' },
+      ] } });
+      const result = await validateAndCompute([finishRow(), penA, penB]);
+      assert.equal(result.error, undefined);
+      assert.equal(result.expected.filter(e => e.action === 'Start' && e.number === 2).length, 1);
+      assert.equal(result.expected.find(e => e.action === 'Start' && e.number === 2).timeOfDay, '08:52:00');
     });
   });
 

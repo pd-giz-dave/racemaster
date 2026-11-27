@@ -7,7 +7,7 @@ import { secondsToTime, formatElapsedSeconds } from './utils.js';
 import { state, saveMobileCheckpoints, saveMobileProgress, saveMobileBeaconOps } from './state.js';
 import { byLineNumber, setLastSyncedLineNumber, deriveRaceLabel } from './mobile-files-shared.js';
 import { usingBeacons } from './time-utils.js';
-import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf } from './mobile-files-devices.js';
+import { buildSegmentView, rawLocationOf, resolveLocationKey, distinctLocationsOf, computeCountByBeacon } from './mobile-files-devices.js';
 import { computeBeaconCatalogueUpdates, applyBeaconCatalogueUpdates, computeBeaconStatusUpdates, applyBeaconStatusUpdates, issuedBeaconNumbers } from './mobile-beacons.js';
 
 // Compute Results (formerly "Add to Finishers") + the Progress tab — pure logic and the
@@ -233,12 +233,15 @@ function expectedFinisherEntries(bibs, times, startMs) {
   return out;
 }
 
-// Duplicate split numbers within one bucket mean two independent recording streams got
-// selected together (e.g. two separate bibs-recording phones) — their split numbers aren't
-// comparable, so nothing here can be safely paired or transferred. Rows with no real
-// splitNumber (DNF/Clock — see NO_SPLIT_ACTIONS in finishers.js) all carry the same null
-// sentinel and must be skipped here, or two-or-more of them (e.g. multiple retirees in one
-// pull) would falsely collide and abort the whole rebuild.
+// Called per Finish-location SEGMENT (one device's own rows), never pooled across devices —
+// multiple Finish-location phones are allowed (see validateAndCompute()'s own doc on
+// finishSegBibsTimes), each restarting its own splitNumber count from 1 independently, which
+// would falsely "collide" if ever pooled first. A genuine duplicate WITHIN one device's own
+// file is still worth rejecting outright — it means real data corruption (e.g. a stuck/duplicated
+// sync re-sent the same split twice) that can't be safely paired or transferred, not a second
+// recording stream to merge. Rows with no real splitNumber (DNF/Clock — see NO_SPLIT_ACTIONS in
+// finishers.js) all carry the same null sentinel and must be skipped here, or two-or-more of them
+// (e.g. multiple retirees in one pull) would falsely collide and abort the whole rebuild.
 function findDuplicateSplitNumbers(rows) {
   const seen = new Set(), dupes = new Set();
   for (const r of rows) {
@@ -247,6 +250,29 @@ function findDuplicateSplitNumbers(rows) {
     seen.add(r.splitNumber);
   }
   return [...dupes].sort((a, b) => a - b);
+}
+
+// Merges one expectedFinisherEntries() entry into the selection-wide `expected` list being built
+// across every Finish/Start/Pen-location segment — "more than one device reporting the same
+// thing, latest wins", the same principle mergeLatestByBeacon() already applies to Close/Count
+// data (see that function's own doc), now generalised to every location instead of just beacons.
+// An entry with `number <= 0` (Clock/Ignore/Seniors/Juniors/Male/Female — see
+// BIBS_ACTION_TO_FINISHER's own doc, none of which is ever a per-bib fact two devices could
+// genuinely disagree about) is never de-duplicated at all, just appended — only a bib-specific
+// action (Start/Finish/DNF) can actually conflict, keyed on (action, number) together so a bib's
+// own Start and Finish records never collide with each other. Compared by `timeOfDay` (every
+// bib-required entry gets one whenever its own timestamp parses — see expectedFinisherEntries' own
+// doc) since every row here is this same race day's own wall-clock reading, which sorts correctly
+// as a plain 'HH:MM:SS' string — an incoming entry with no timeOfDay to compare by (its own
+// timestamp didn't parse) never displaces whichever is already there, same conservative fallback
+// mergeLatestByBeacon uses for an unparseable timestamp.
+function mergeExpectedEntry(target, entry) {
+  if (entry.number <= 0) { target.push(entry); return; }
+  const idx = target.findIndex(e => e.number === entry.number && e.action === entry.action);
+  if (idx < 0) { target.push(entry); return; }
+  if (entry.timeOfDay && (!target[idx].timeOfDay || entry.timeOfDay >= target[idx].timeOfDay)) {
+    target[idx] = entry;
+  }
 }
 
 // Wipes every data source an Update Progress run produces — state.mobileProgress (Start/Finish/
@@ -317,7 +343,6 @@ export async function clearProgressData() {
 // outstanding again (an absent closedAt, not a present-but-empty one).
 const CLOSE_NOTE_RE = /beacon=(\d+)\s+battery=(\d+)/;
 const CLOSE_REOPENED_NOTE_RE = /^beacon=(\d+)$/;
-const COUNT_NOTE_RE = /beacon=(\d+)/;
 
 function computeCloseByBeacon(closeSegmentRows) {
   const result = new Map();
@@ -352,38 +377,11 @@ function computeCloseByBeacon(closeSegmentRows) {
   return result;
 }
 
-// A CountSeen row sets countedAt; a CountEjected row (racemaster-mobile's own
-// HistoryAction.COUNT_EJECTED) un-sets it — but, unlike the earlier design, still produces a real
-// Map entry (`{ at, countedAt: null }`) rather than simply having no entry at all. That distinction
-// matters once mergeLatestByBeacon() below compares this device's own result against every other
-// selected device's: "no entry" would be indistinguishable from "this device never saw this beacon
-// at all", so a genuinely later eject on THIS device could never beat an earlier, un-ejected
-// CountSeen some OTHER selected device still has for the same beacon — confirmed live (race
-// "callow-seniors", beacon 1/bib 801): ejecting it on one Count phone left it still "on-course"
-// from a different Count phone's own older sighting, since the eject had nowhere to register
-// against. Carrying the eject's own timestamp here is what lets it actually win that comparison
-// when it's genuinely the most recent event for that beacon, same principle as Close's own
-// CloseReopened (see computeCloseByBeacon above) — mobile-files-devices.js's own
-// foldLatestVisible() no longer drops CountEjected rows before they get here, for the same reason.
-// CountUnejected (HistoryAction.COUNT_UNEJECTED) reverses an eject on the same device and must
-// re-set countedAt the same way CountSeen does — confirmed live (race "callow-seniors", beacon 1):
-// swift-puffin logged CountEjected then CountUnejected for it, and without this case Update
-// Progress kept treating it as ejected forever, since the row was simply skipped here. Its own
-// note still carries "beacon=N" even though its bibNumber/refLineNumber come through null from the
-// mobile app (a separate, already-known gap there) — COUNT_NOTE_RE only ever reads the note.
-function computeCountByBeacon(countSegmentRows) {
-  const result = new Map();
-  for (const r of countSegmentRows) {
-    if (r.action !== 'CountSeen' && r.action !== 'CountEjected' && r.action !== 'CountUnejected') continue;
-    const m = COUNT_NOTE_RE.exec(r.note || '');
-    if (!m) continue;
-    const beacon = +m[1];
-    if (!Number.isFinite(beacon) || beacon <= 0) continue;
-    const at = r.timestamp ?? r.timestampMillis ?? '';
-    result.set(beacon, { at, countedAt: r.action === 'CountEjected' ? null : at });
-  }
-  return result;
-}
+// computeCountByBeacon() moved to mobile-files-devices.js (see its own doc there) — the Devices
+// tab's own Bibs column (flattenDevices()) now needs the same "currently seen, not ejected" count
+// too, and that module sits lower in the dependency layering than this one (this file already
+// imports FROM it, never the other way), so it's the one place both can share it from without a
+// circular import.
 
 // Merges one device's own per-beacon map into the running selection-wide total — needed because
 // more than one Close/Count-mode device could in principle be selected at once, each recording an
@@ -439,8 +437,9 @@ export async function validateAndCompute(selected) {
   }
 
   const finishRows = []; // segments ({ r, location, lines }), not raw selected rows — see locationSegmentsOf
-  const startRows = []; // same shape, for the 'start' location kind — see this function's own doc below
-  const cpBuckets = new Map(); // cp number -> segment
+  const startRows = []; // same shape, for the 'start' (and 'pen' — see below) location kind, see this function's own doc below
+  const cpBuckets = new Map(); // cp number -> segment[] — more than one device at the same CP is
+  // allowed (see the bucketing branch below), same as every other location
   const closeByBeacon = new Map(); // beacon -> { closedAt, batteryPercent } — see Close/Count section above
   const countByBeacon = new Map(); // beacon -> { at, countedAt } — see computeCountByBeacon's own doc
   for (const r of selected) {
@@ -511,65 +510,88 @@ export async function validateAndCompute(selected) {
       }
       if (key.kind === 'finish') {
         finishRows.push(seg);
-      } else if (key.kind === 'start') {
+      } else if (key.kind === 'start' || key.kind === 'pen') {
+        // 'pen' joins the SAME bucket as 'start', not a cp-number bucket of its own (key.number
+        // is undefined for it, same as 'start' — the branch below would otherwise key every
+        // selected Pen-location file into cpBuckets under that one undefined key, rejecting the
+        // batch the moment a second one was selected: "more than one file selected for
+        // CPundefined", confirmed live with 3 genuine Bibs-mode headcount phones all stationed at
+        // the Pen). Pen is racemaster-mobile's own pre-race holding-pen headcount location —
+        // exactly the same "confirm these bibs are present before the race" role Start-bucket
+        // early/late-starter phones already play (see startRows' own doc below), just recorded
+        // in Bibs mode at a different physical spot — so it gets the identical treatment:
+        // multiple simultaneously-selected files allowed, no dup-checking, feeding `expected` as
+        // a presence confirmation rather than a timed result.
         startRows.push(seg);
-      } else if (cpBuckets.has(key.number)) {
-        return { error: `Cannot compute results — more than one file selected for CP${key.number}.` };
       } else {
-        cpBuckets.set(key.number, seg);
+        // Same "more than one device reporting the same thing" allowance as Start/Pen above,
+        // just per-CP-number instead of one shared bucket — computeCpTimes() below merges every
+        // selected device's own crossings for this CP, latest timeOfDay winning per bib.
+        if (!cpBuckets.has(key.number)) cpBuckets.set(key.number, []);
+        cpBuckets.get(key.number).push(seg);
       }
     }
   }
 
-  const bibs = [], times = [];
+  // Each Finish-location segment's own bibs/times are kept apart, per segment, rather than
+  // pooled into one shared array — more than one Finish-location phone is allowed (same as every
+  // other location now), and each restarts its own splitNumber count from 1 independently (see
+  // mobile-files-devices.js's Location/ModeStart doc), so pooling them first and pairing by
+  // splitNumber would risk pairing one device's own bib row with a completely unrelated other
+  // device's split purely by splitNumber coincidence. `times` (flattened, every segment's own
+  // Time-mode rows together) is still kept too, purely for findStartTimestamp() below — the
+  // official race-start instant is one shared fact, not a per-device one.
+  const times = [];
+  const finishSegs = [];
   for (const seg of finishRows) {
     const { timeSegment, bibsSegment } = buildSegmentView(seg.lines);
-    bibs.push(...bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action)));
-    times.push(...timeSegment.filter(t => TRANSFERABLE_TIME_ACTIONS.has(t.action)));
+    const segBibs = bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action));
+    const segTimes = timeSegment.filter(t => TRANSFERABLE_TIME_ACTIONS.has(t.action));
+    times.push(...segTimes);
+    finishSegs.push({ bibs: segBibs, times: segTimes });
   }
 
   // Only an error when a Finish file WAS selected and turned out empty — no Finish file at all
-  // is now a legitimate, common state (see this function's own top-of-file doc), and bibs/times
-  // are always empty in that case by construction (the loop above only ever draws from
-  // finishRows), so this must not fire just because finishRows itself is empty.
-  if (finishRows.length && !bibs.length && !times.length) {
+  // is now a legitimate, common state (see this function's own top-of-file doc), and every
+  // segment's own bibs/times are always empty in that case by construction (finishSegs is only
+  // ever built from finishRows), so this must not fire just because finishRows itself is empty.
+  if (finishRows.length && finishSegs.every(s => !s.bibs.length && !s.times.length)) {
     return { error: 'Selected Finish file(s) have no transferable entries.' };
   }
 
-  const dupBibSplits = findDuplicateSplitNumbers(bibs);
-  if (dupBibSplits.length) {
-    return { error: `Cannot compute results — more than one bibs-recording phone selected at Finish (duplicate split number(s) ${dupBibSplits.join(', ')}).` };
-  }
-  const dupTimeSplits = findDuplicateSplitNumbers(times);
-  if (dupTimeSplits.length) {
-    return { error: `Cannot compute results — more than one time-recording phone selected at Finish (duplicate split number(s) ${dupTimeSplits.join(', ')}).` };
+  // A genuine duplicate splitNumber WITHIN one device's own file (real data corruption — see
+  // findDuplicateSplitNumbers' own doc) is still rejected, checked per segment so it can never be
+  // confused with two independent Finish-location devices each legitimately starting their own
+  // count at 1.
+  for (const { bibs: segBibs, times: segTimes } of finishSegs) {
+    const dupBibSplits = findDuplicateSplitNumbers(segBibs);
+    if (dupBibSplits.length) {
+      return { error: `Cannot compute results — a Finish-location device has duplicate bib split number(s) ${dupBibSplits.join(', ')} in its own file.` };
+    }
+    const dupTimeSplits = findDuplicateSplitNumbers(segTimes);
+    if (dupTimeSplits.length) {
+      return { error: `Cannot compute results — a Finish-location device has duplicate time split number(s) ${dupTimeSplits.join(', ')} in its own file.` };
+    }
   }
 
-  // Start-bucket bibs (a Bibs-mode phone used at the start line, e.g. to catch early/late
-  // starters before relocating to Finish for the main event — see resolveLocationKey's own doc)
-  // feed their own, deliberately isolated, expectedFinisherEntries() call below rather than
-  // joining `bibs`/`times` above: each location's own splitNumber sequence restarts
-  // independently (see mobile-files-devices.js's Location/ModeStart doc), so two unrelated
-  // Start-bucket (or Start- and Finish-bucket) devices can legitimately reuse the same small
-  // splitNumbers — merging the pools, or dup-checking across them, would risk pairing an early
-  // starter's own 'Start' row with a stranger's Finish split purely by splitNumber coincidence,
-  // or flagging two genuinely independent Start-bucket devices as a conflict. No Start-bucket
-  // time rows are collected at all for the same reason (and because nothing here needs them — a
-  // Start record's own elapsed-since-official-start is never shown; only its timeOfDay is,
-  // consumed downstream by the Start/Finish timeOfDay diff described in strings.js's
-  // 'view-mobile-bibs' help), so `expectedFinisherEntries` is always called with an empty
-  // `times` for this bucket — no splitNumber of its own is ever actually paired against
-  // anything, so unlike the Finish bucket's own dupBibSplits/dupTimeSplits checks, a duplicate
-  // splitNumber here carries no ambiguity worth rejecting over.
+  // Start/Pen-bucket bibs (a Bibs-mode phone used at the start line, e.g. to catch early/late
+  // starters before relocating to Finish for the main event, or stationed at the holding pen for
+  // a pre-race headcount — see resolveLocationKey's own doc) feed their own, deliberately
+  // isolated, expectedFinisherEntries() call below per segment, same reason as the Finish bucket
+  // just above: each location's own splitNumber sequence restarts independently, so pairing
+  // across devices/buckets by splitNumber coincidence must never happen. No Start/Pen-bucket time
+  // rows are collected at all for the same reason (and because nothing here needs them — a Start
+  // record's own elapsed-since-official-start is never shown; only its timeOfDay is, consumed
+  // downstream by the Start/Finish timeOfDay diff described in strings.js's 'view-mobile-bibs'
+  // help), so `expectedFinisherEntries` is always called with an empty `times` for this bucket —
+  // no splitNumber of its own is ever actually paired against anything, so unlike the Finish
+  // bucket's own duplicate-split check, a duplicate splitNumber here carries no ambiguity worth
+  // rejecting over.
   //
   // Deliberately NOT subject to the same "selected but empty" rejection the Finish bucket gets
-  // above: most race days have zero early/late starters, so a Start file selected and
+  // above: most race days have zero early/late starters, so a Start/Pen file selected and
   // contributing nothing is the ordinary case, not a sign of a wrong file.
-  const startBibs = [];
-  for (const seg of startRows) {
-    const { bibsSegment } = buildSegmentView(seg.lines);
-    startBibs.push(...bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action)));
-  }
+  const startSegBibs = startRows.map(seg => buildSegmentView(seg.lines).bibsSegment.filter(b => TRANSFERABLE_BIBS_ACTIONS.has(b.action)));
 
   // The Finish bucket's own Time-mode Start row is the universal t=0 reference for every
   // timestamp-based elapsed calc below — checkpoint crossings, a checkpoint retire's own "when"
@@ -588,14 +610,30 @@ export async function validateAndCompute(selected) {
   const retireElapsedByBib = new Map(); // bib -> 'HH:MM:SS', checkpoint retirees only
   const retireTimeOfDayByBib = new Map(); // bib -> 'HH:MM:SS', checkpoint retirees only
   if (cpBuckets.size) {
-    for (const [cpNumber, seg] of cpBuckets) {
-      const { bibsSegment } = buildSegmentView(seg.lines);
-      const cpRows = bibsSegment.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action));
-      // computeCpTimes() itself already drops a malformed (non-positive-integer) bib — see its
-      // own doc — so a crossing recorded for a bib that just doesn't match any current Entry
-      // passes straight through here unfiltered, same as expectedFinisherEntries() above; see
-      // this file's top-of-function doc for why that's no longer rejected.
-      const { cpTimes, cpTimeOfDay, retireElapsed } = computeCpTimes(cpRows, startMs);
+    for (const [cpNumber, segs] of cpBuckets) {
+      const cpTimes = new Map(), cpTimeOfDay = new Map(), retireElapsed = new Map();
+      for (const seg of segs) {
+        const { bibsSegment } = buildSegmentView(seg.lines);
+        const cpRows = bibsSegment.filter(b => BIB_REQUIRED_FINISHER_ACTIONS.has(b.action));
+        // computeCpTimes() itself already drops a malformed (non-positive-integer) bib — see its
+        // own doc — so a crossing recorded for a bib that just doesn't match any current Entry
+        // passes straight through here unfiltered, same as expectedFinisherEntries() above; see
+        // this file's top-of-function doc for why that's no longer rejected.
+        const seen = computeCpTimes(cpRows, startMs);
+        // More than one device at this CP — "more than one device reporting the same thing,
+        // latest wins" (see mergeExpectedEntry's own doc, same principle), compared by
+        // cpTimeOfDay rather than a raw timestamp (computeCpTimes never returns one) since every
+        // row here is this same race day's own wall-clock reading, which sorts correctly as a
+        // plain 'HH:MM:SS' string. A bib with no cpTimeOfDay to compare by (its own timestamp
+        // didn't parse) never displaces whichever is already there.
+        for (const [bib, time] of seen.cpTimes) {
+          const incomingTod = seen.cpTimeOfDay.get(bib);
+          if (cpTimes.has(bib) && !(incomingTod != null && (cpTimeOfDay.get(bib) == null || incomingTod >= cpTimeOfDay.get(bib)))) continue;
+          cpTimes.set(bib, time);
+          if (incomingTod != null) cpTimeOfDay.set(bib, incomingTod); else cpTimeOfDay.delete(bib);
+          if (seen.retireElapsed.has(bib)) retireElapsed.set(bib, seen.retireElapsed.get(bib)); else retireElapsed.delete(bib);
+        }
+      }
       cpTimesByCp.set(cpNumber, cpTimes);
       cpTimeOfDayByCp.set(cpNumber, cpTimeOfDay);
       for (const [bib, t] of retireElapsed) retireElapsedByBib.set(bib, t);
@@ -603,12 +641,18 @@ export async function validateAndCompute(selected) {
     }
   }
 
-  const expected = expectedFinisherEntries(bibs, times, startMs);
-  // Start-bucket entries (see the dupStartBibSplits doc above for why they're never paired with
-  // a `times` array of their own) join the same `expected` list Finish's own 'Start' rows already
-  // land in — an early/late starter is an early/late starter regardless of which location's phone
-  // actually caught it.
-  expected.push(...expectedFinisherEntries(startBibs, [], startMs));
+  // Every Finish segment's own bibs pair only against its own times (see finishSegs' own doc
+  // above), then every segment's own resulting entries — along with every Start/Pen segment's own
+  // (see startSegBibs' own doc) — merge into one `expected` list via mergeExpectedEntry(): "more
+  // than one device reporting the same thing, latest wins", exactly like Close/Count's own
+  // mergeLatestByBeacon(), just generalised to every location instead of just beacons.
+  const expected = [];
+  for (const { bibs: segBibs, times: segTimes } of finishSegs) {
+    for (const entry of expectedFinisherEntries(segBibs, segTimes, startMs)) mergeExpectedEntry(expected, entry);
+  }
+  for (const segBibs of startSegBibs) {
+    for (const entry of expectedFinisherEntries(segBibs, [], startMs)) mergeExpectedEntry(expected, entry);
+  }
 
   // A bib retired at a checkpoint (CP_RETIRE, see computeCpTimes' own doc) may never reach the
   // Finish location at all — exactly the safety-relevant case buildProgressRows() already
